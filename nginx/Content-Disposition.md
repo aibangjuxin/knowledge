@@ -1,3 +1,8 @@
+
+https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Headers/Content-Disposition
+
+
+
 太棒了，很高兴你的问题解决了！ 你找到的解决方案 `add header 'Access-Control-Expose-Headers' 'Content-Disposition';` 确实是解决你问题的关键，它涉及到跨域资源共享 (CORS) 的机制。
 
 **`Access-Control-Expose-Headers` 的作用**
