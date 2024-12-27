@@ -1,10 +1,38 @@
 
+- [get-iam-policy](#get-iam-policy)
 - [add-iam-policy-binding](#add-iam-policy-binding)
 - [iam.serviceAccountKeyAdmin](#iamserviceaccountkeyadmin)
 - [列出 my-service-account 服务账号所分配的所有角色：get-iam-policy](#列出-my-service-account-服务账号所分配的所有角色get-iam-policy)
 - [kms](#kms)
 - [gcloud kms decrypt](#gcloud-kms-decrypt)
+- [other](#other)
 
+
+# get-iam-policy
+查询指定 GCP 项目中，指定服务账号（例如：sa@$project）所拥有的 IAM 角色
+
+	1.	gcloud projects get-iam-policy <project_id>:
+	•	gcloud：Google Cloud CLI 的命令。
+	•	projects get-iam-policy：表示要获取指定 GCP 项目的 IAM 策略。
+	•	<project_id>：你要查询的 GCP 项目的 ID
+
+  2.	--flatten="bindings[].members":
+	•	--flatten: 将嵌套的 JSON 输出结构展平。
+	•	bindings[].members： 指定展开 IAM 策略中 bindings 数组中的 members 字段。 bindings 包含 role 以及其关联的成员。members 则包含了成员的具体信息。此操作后，可以将不同的 members 的信息提取出来，更方便地进行过滤和格式化
+	3.	--format="table(bindings.role)":
+	•	--format: 指定输出格式。
+	•	table(bindings.role)： 表示将输出格式化为表格，只显示 bindings 中的 role 字段。
+	4.	--filter="bindings.members:serviceAccount:gcesa":
+	•	--filter: 用于过滤输出结果。
+	•	bindings.members:serviceAccount:gcesa：表示只显示 bindings 中 members 字段包含特定的服务账号的条目。
+	•	serviceAccount: 指定成员的类型是服务账号。
+
+```bash
+gcloud projects get-iam-policy $project \
+  --flatten="bindings[].members" \
+  --format="table(bindings.role)" \
+  --filter="bindings.members:serviceAccount:cloud-sql-sa@$project.iam.gserviceaccount.com"
+```
 
 # add-iam-policy-binding
 于为服务账号添加身份和访问管理 (IAM) 策略绑定的命令
@@ -73,6 +101,7 @@ gcloud iam roles list --filter="roles/iam.serviceAccountKeyAdmin" --member=<serv
 gcloud iam service-accounts get-iam-policy my-service-account
 gcloud iam service-accounts get-iam-policy [SA_NAME]@[PROJECT_ID].iam.gserviceaccount.com
 gcloud iam service-accounts get-iam-policy [SERVICE_ACCOUNT_EMAIL] --format="table(bindings.role)"
+geloud projects get-iam-policy $project --flatten="bindings [].members" | --format="table(bindings.role)" -filter="bindings.members:serviceAccount:$SA_NAME@$project.com"
 这个命令会列出Service Account被赋予的所有Role。
 
 该命令将返回服务账号的 IAM 策略，其中包括指定成员及其所分配角色的绑定。在策略中，角色由名称和描述组成，如 roles/storage.admin 和 Storage Admin。如果服务账号没有分配任何角色，则输出结果为空列表。
