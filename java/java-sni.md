@@ -1,9 +1,32 @@
-# summary 
+- [Summary](#summary)
+  - [在GKE环境中部署的Java API遇到了健康检查和SNI冲突的问题。](#在gke环境中部署的java-api遇到了健康检查和sni冲突的问题)
+  - [Jetty服务器的SNI校验机制如何工作？](#jetty服务器的sni校验机制如何工作)
+- [Perplexity](#perplexity)
+  - [解决方案](#解决方案)
+  - [总结](#总结)
+  - [1. 确保使用支持SNI的Java版本](#1-确保使用支持sni的java版本)
+  - [2. 配置Jetty服务器](#2-配置jetty服务器)
+  - [3. 确保客户端请求中包含主机名](#3-确保客户端请求中包含主机名)
+  - [4. 测试和调试](#4-测试和调试)
+  - [总结](#总结-1)
+- [Chatgpt](#chatgpt)
+  - [**问题原因分析**](#问题原因分析)
+  - [**解决方案**](#解决方案-1)
+    - [**1. 配置 Host Header**](#1-配置-host-header)
+    - [**2. 禁用 Jetty 的 SNI 校验**](#2-禁用-jetty-的-sni-校验)
+      - [**操作步骤**](#操作步骤)
+    - [**3. 使用 Cluster DNS 和 Ingress Controller**](#3-使用-cluster-dns-和-ingress-controller)
+      - [**操作步骤**](#操作步骤-1)
+    - [**4. 使用 Sidecar 模式代理**](#4-使用-sidecar-模式代理)
+      - [**操作步骤**](#操作步骤-2)
+  - [**总结**](#总结-2)
+- [Gemini2](#gemini2)
+
+# Summary 
+- Describe 
 我们的GKE 环境中,部署了Java的API,现在发现这样一个问题
- 首先是我们部署api的资源文件，有一个 startupProbe（里面还有livenessProbe，readinessProbe），定时会去call我们配置的这个path:/api_name_samples/v1.1.0/.well-known/health 来check pod的一个状态的，我们目前是没有配置host的，所以k8s来call 服务器域名就用默认值了：pod ip+端口号，拼上path来 call 服务的health check
+ 首先是我们部署api的资源文件，有一个 startupProbe（里面还有livenessProbe，readinessProbe），启动或者定时会去call我们配置的这个path:/api_name_samples/v1.1.0/.well-known/health 来check pod的一个状态的，我们目前是没有配置host的，所以k8s来call 服务器域名就用默认值了：pod ip+端口号，拼上path来 call 服务的health check
 https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-
-
 
 然后Jetty服务器，里面有个SNI校验，就是客户端来访问 server的时候，https 有个TLS的握手，握手的时候是会去校验客户端的ip 和服务器cert里面配置的域名是不是匹配的，握手失败，不允许访问了
 
@@ -12,10 +35,45 @@ https://github.com/spring-projects/spring-boot/issues/36271
 
 https://github.com/maharshi95/Jetty/blob/master/jetty-server/src/main/java/org/eclipse/jetty/server/SecureRequestCustomizer.java#L67
 
+```java
+    public SecureRequestCustomizer()
+    {
+        this(true);
+    }
+
+```
+## 在GKE环境中部署的Java API遇到了健康检查和SNI冲突的问题。
+问题描述：
+● Kubernetes (k8s) 使用 startupProbe (也包含 livenessProbe 和 readinessProbe) 来检查pod的状态。
+● k8s会调用配置的路径 /api_name_samples/v1.1.0/.well-known/health 来进行健康检查。
+● 由于没有配置host，k8s 使用默认值： pod IP + 端口号 来调用服务。
+● Jetty服务器有SNI校验机制，在TLS握手时，会校验客户端IP和服务器证书中配置的域名是否匹配
+● 当客户端IP（即Pod IP）和服务器证书的域名不匹配时，握手失败，访问被拒绝。
+问题根源:
+● 健康检查使用Pod IP而非域名进行：由于Kubernetes默认使用Pod IP进行健康检查，这与Jetty服务器的SNI校验机制产生了冲突。
+● SNI校验要求域名匹配: Jetty 的 SecureRequestCustomizer 默认开启了SNI 校验
 
 
+## Jetty服务器的SNI校验机制如何工作？
+Jetty服务器的SNI（Server Name Indication）校验机制主要在TLS握手阶段起作用，其目的是为了确保客户端访问的域名与服务器提供的证书相匹配。以下是关于Jetty SNI校验机制如何工作的详细解释：
+●
+TLS握手过程中的SNI: 当客户端通过HTTPS连接服务器时，会进行TLS握手。在这个过程中，客户端会在"Client Hello"消息中发送其想要访问的域名（Server Name）。
+●
+SNI校验: Jetty服务器接收到客户端的"Client Hello"消息后，会从中提取出客户端请求的域名。然后，Jetty会检查服务器证书中配置的域名是否与客户端提供的域名匹配。
+●
+SecureRequestCustomizer: Jetty的SecureRequestCustomizer 类负责执行SNI校验。在默认情况下，这个类会启用SNI校验，这意味着如果客户端提供的域名与服务器证书中的域名不匹配，TLS握手就会失败。
+●
+握手失败: 如果客户端请求的域名与服务器证书中的任何域名都不匹配，Jetty服务器将拒绝连接，导致握手失败。
+●
+默认配置: SecureRequestCustomizer 的构造函数默认启用SNI校验。
+总结来说，Jetty的SNI校验机制通过在TLS握手阶段验证客户端请求的域名与服务器证书中的域名是否匹配，来增强服务器的安全性。当客户端使用Pod IP而非域名进行连接时，由于Pod IP通常与服务器证书中的域名不匹配，就会导致SNI校验失败，从而引发连接问题
 
-# perplexity
+
+- [配置host进行健康检查 不能解决问题](#1-配置-host-header)
+- [禁用 Jetty 的 SNI 校验](#2-禁用-jetty-的-sni-校验)
+- change https ==> http health check 可以解决问题 ?
+
+# Perplexity
 
 在您的GKE环境中，遇到的主要问题是由于Jetty服务器的SNI（Server Name Indication）校验导致的。具体来说，当Kubernetes的健康检查探针（startupProbe、livenessProbe、readinessProbe）调用API的健康检查路径时，使用的是Pod的IP和端口，而不是配置的主机名。这就导致了TLS握手失败，因为Jetty在握手过程中会验证客户端IP与服务器证书中的域名是否匹配。
 
@@ -157,8 +215,7 @@ Citations:
 ## **解决方案**
 
 ### **1. 配置 Host Header** 
-您可以通过在 Probe 配置中添加 `Host` Header，明确告知 Kubernetes 在检查时使用指定的域名。
-这个不能解决问题
+您可以通过在 Probe 配置中添加 `Host` Header，明确告知 Kubernetes 在检查时使用指定的域名。这个不能解决问题
 
 ```bash
 你提出的这个方案，使用 `Host` header 在健康检查请求中指定域名，确实是一种比较直接且看似简单的解决方式。 然而，它**并没有真正解决问题的核心矛盾，并且存在一些潜在的问题**。
