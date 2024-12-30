@@ -27,6 +27,14 @@
 	•	bindings.members:serviceAccount:gcesa：表示只显示 bindings 中 members 字段包含特定的服务账号的条目。
 	•	serviceAccount: 指定成员的类型是服务账号。
 
+
+Verify IAM policies:
+
+```bash
+gcloud iam service-accounts get-iam-policy \
+    aibang-cn-instance-sa@project-dev.iam.gserviceaccount.com
+```
+
 ```bash
 gcloud projects get-iam-policy $project \
   --flatten="bindings[].members" \

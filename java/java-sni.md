@@ -44,28 +44,23 @@ https://github.com/maharshi95/Jetty/blob/master/jetty-server/src/main/java/org/e
 ```
 ## 在GKE环境中部署的Java API遇到了健康检查和SNI冲突的问题。
 问题描述：
-● Kubernetes (k8s) 使用 startupProbe (也包含 livenessProbe 和 readinessProbe) 来检查pod的状态。
-● k8s会调用配置的路径 /api_name_samples/v1.1.0/.well-known/health 来进行健康检查。
-● 由于没有配置host，k8s 使用默认值： pod IP + 端口号 来调用服务。
-● Jetty服务器有SNI校验机制，在TLS握手时，会校验客户端IP和服务器证书中配置的域名是否匹配
-● 当客户端IP（即Pod IP）和服务器证书的域名不匹配时，握手失败，访问被拒绝。
+- ● Kubernetes (k8s) 使用 startupProbe (也包含 livenessProbe 和 readinessProbe) 来检查pod的状态。
+- ● k8s会调用配置的路径 /api_name_samples/v1.1.0/.well-known/health 来进行健康检查。
+- ● 由于没有配置host，k8s 使用默认值： pod IP + 端口号 来调用服务。
+- ● Jetty服务器有SNI校验机制，在TLS握手时，会校验客户端IP和服务器证书中配置的域名是否匹配
+- ● 当客户端IP（即Pod IP）和服务器证书的域名不匹配时，握手失败，访问被拒绝。
 问题根源:
-● 健康检查使用Pod IP而非域名进行：由于Kubernetes默认使用Pod IP进行健康检查，这与Jetty服务器的SNI校验机制产生了冲突。
-● SNI校验要求域名匹配: Jetty 的 SecureRequestCustomizer 默认开启了SNI 校验
+- ● 健康检查使用Pod IP而非域名进行：由于Kubernetes默认使用Pod IP进行健康检查，这与Jetty服务器的SNI校验机制产生了冲突。
+- ● SNI校验要求域名匹配: Jetty 的 SecureRequestCustomizer 默认开启了SNI 校验
 
 
 ## Jetty服务器的SNI校验机制如何工作？
 Jetty服务器的SNI（Server Name Indication）校验机制主要在TLS握手阶段起作用，其目的是为了确保客户端访问的域名与服务器提供的证书相匹配。以下是关于Jetty SNI校验机制如何工作的详细解释：
-●
-TLS握手过程中的SNI: 当客户端通过HTTPS连接服务器时，会进行TLS握手。在这个过程中，客户端会在"Client Hello"消息中发送其想要访问的域名（Server Name）。
-●
-SNI校验: Jetty服务器接收到客户端的"Client Hello"消息后，会从中提取出客户端请求的域名。然后，Jetty会检查服务器证书中配置的域名是否与客户端提供的域名匹配。
-●
-SecureRequestCustomizer: Jetty的SecureRequestCustomizer 类负责执行SNI校验。在默认情况下，这个类会启用SNI校验，这意味着如果客户端提供的域名与服务器证书中的域名不匹配，TLS握手就会失败。
-●
-握手失败: 如果客户端请求的域名与服务器证书中的任何域名都不匹配，Jetty服务器将拒绝连接，导致握手失败。
-●
-默认配置: SecureRequestCustomizer 的构造函数默认启用SNI校验。
+- ● TLS握手过程中的SNI: 当客户端通过HTTPS连接服务器时，会进行TLS握手。在这个过程中，客户端会在"Client Hello"消息中发送其想要访问的域名（Server Name）。
+- ● SNI校验: Jetty服务器接收到客户端的"Client Hello"消息后，会从中提取出客户端请求的域名。然后，Jetty会检查服务器证书中配置的域名是否与客户端提供的域名匹配。
+- ● SecureRequestCustomizer: Jetty的SecureRequestCustomizer 类负责执行SNI校验。在默认情况下，这个类会启用SNI校验，这意味着如果客户端提供的域名与服务器证书中的域名不匹配，TLS握手就会失败。
+- ● 握手失败: 如果客户端请求的域名与服务器证书中的任何域名都不匹配，Jetty服务器将拒绝连接，导致握手失败。
+- ● 默认配置: SecureRequestCustomizer 的构造函数默认启用SNI校验。
 总结来说，Jetty的SNI校验机制通过在TLS握手阶段验证客户端请求的域名与服务器证书中的域名是否匹配，来增强服务器的安全性。当客户端使用Pod IP而非域名进行连接时，由于Pod IP通常与服务器证书中的域名不匹配，就会导致SNI校验失败，从而引发连接问题
 
 
