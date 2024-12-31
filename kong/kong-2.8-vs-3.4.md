@@ -1,3 +1,124 @@
+针对您描述的情况，在GKE环境中运行的Kong 3.4 Deployment中遇到大量`Completed`状态的Pod问题，以下是可能的排查思路和解决建议：
+
+---
+
+## **1. 排查大量`Completed`状态Pod的原因**
+### **步骤 1: 确认Pod的OwnerReference**
+使用以下命令查看这些`Completed`状态Pod的`OwnerReference`，以确认它们是由哪些资源生成的：
+
+```bash
+kubectl get pod -n <namespace> --field-selector=status.phase=Succeeded -o json | jq '.items[].metadata.ownerReferences'
+```
+
+- 如果`OwnerReference`是`Job`，这些Pod可能是历史任务完成后留下的。
+- 如果没有明确的`OwnerReference`，可以进一步排查Kong的配置或Deployment策略。
+
+---
+
+### **步骤 2: 查看Deployment和Kong配置**
+检查Kong的Deployment配置，确保以下方面没有产生过多的临时Pod：
+
+```bash
+kubectl get deploy -n <namespace> <kong-deployment-name> -o yaml
+```
+
+- **Deployment策略**：是否存在类似`preStop`钩子或初始化操作生成了短暂Pod。
+- **Kong配置**：检查是否启用了`zero-downtime`相关的功能。
+
+```bash
+kubectl exec -n <namespace> <kong-pod-name> -- cat /etc/kong/kong.conf
+```
+
+关注类似的配置：
+- `database`（是否是DB模式）
+- `cluster_events_ttl`
+- `dns_stale_ttl`
+
+---
+
+### **步骤 3: 查找其他触发源**
+如果Pod不是由`Job`或Deployment产生，可能是由于Kong的内部机制：
+- **Zero Downtime Deployment**：如果启用了此功能，Kong可能在滚动更新过程中创建了临时Pod。
+- **Kong Gateway功能**：检查日志中是否存在滚动更新或动态配置同步相关的记录。
+
+查看相关Pod的日志：
+
+```bash
+kubectl logs -n <namespace> <completed-pod-name>
+```
+
+---
+
+## **2. 是否影响性能**
+大量`Completed`状态的Pod可能会导致以下问题：
+- **性能影响**：GKE节点的kubelet需要维护大量的Pod记录，这会增加调度负担。
+- **存储压力**：这些Pod的日志和存储数据可能会占用空间。
+
+### **清理Completed Pod**
+使用以下命令清理大量`Completed`状态的Pod：
+
+```bash
+kubectl delete pod -n <namespace> --field-selector=status.phase=Succeeded
+```
+
+---
+
+## **3. Kong 3.4中/kong_prefix/目录的限制**
+默认情况下，Kong的`/kong_prefix/`目录限制为256MB（通过tmpfs挂载）。此问题可能导致在拉取Control Plane数据时，数据量超出后Pod重启。
+
+### **验证挂载点限制**
+查看当前`/kong_prefix/`挂载点的大小：
+
+```bash
+kubectl exec -n <namespace> <kong-pod-name> -- df -h /kong_prefix
+```
+
+### **解决方法**
+1. **增加挂载点大小**：
+   修改Helm Chart的`values.yaml`，增加挂载点大小：
+
+   ```yaml
+   proxy:
+     extraVolumes:
+       - name: kong-prefix
+         emptyDir:
+           sizeLimit: 512Mi
+     extraVolumeMounts:
+       - name: kong-prefix
+         mountPath: /kong_prefix
+   ```
+
+   应用更新：
+
+   ```bash
+   helm upgrade <release-name> kong/kong -n <namespace> -f values.yaml
+   ```
+
+2. **优化DP与CP的数据同步**：
+   - 确认CP的配置同步数据量是否合理。
+   - 调整`config_cache`等参数以减少同步的数据量。
+
+3. **升级Kong版本**：
+   如果使用Kong 3.4版本，考虑升级到更高版本以获得改进的Zero Downtime配置和更好的存储管理。
+
+---
+
+## **4. 进一步分析问题**
+Kong内部Zero-Downtime配置可能引发了Pod重启问题：
+- 检查Kong的`/var/log/kong`目录中是否有异常日志。
+- 分析滚动更新时的行为，确认是否存在过多的临时配置。
+
+---
+
+## **总结**
+- **Completed Pod**：通过`kubectl`确认来源，并清理无用的历史Pod。
+- **挂载点限制**：增加`/kong_prefix/`目录大小，避免超出存储限制导致的Pod重启。
+- **优化同步配置**：减少CP到DP的数据量，避免DP存储压力。
+- **版本升级**：升级Kong版本以改善Zero Downtime功能和存储管理。
+
+如果问题依然存在，可以分享更多日志和配置细节进一步分析。
+
+
 好的，我们来对比一下 Kong 3.4 和 Kong 2.8 版本的主要功能差异。Kong 3.x 系列带来了许多改进和新特性，主要集中在以下几个方面：
 
 **1. 主要功能增强和新特性**
