@@ -28,7 +28,7 @@ Want to get started with System design interview preparation, start with these:
 25. Learn about encryption (data at rest and in transit) and rate-limiting for security.
 26. And then practice the most commonly asked questions like URL shorteners, chat systems, ride-sharing apps, search engines, video streaming, and e-commerce websites.
 
-想要开始准备系统设计面试吗？从这些开始：
+# 想要开始准备系统设计面试吗？从这些开始：
 
 1. 学习理解需求
 2. 学习横向和纵向扩展的区别。
