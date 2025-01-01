@@ -49,7 +49,7 @@ curl -v smtp://114.114.34.56
 ‹ 250-cnabcd.address.test.aibang Hello [10.72.2.222]
 < 250-SIZE 36700160
 
-验证你的虚拟机是否使用了 Cloud NAT，并找出 Cloud NAT 分配的 IP 地址。
+验证你的虚拟机是否使用了 Cloud NAT，并找出 Cloud NAT 分配的 IP 地址。GCP 网络使用了 source NAT 保留模式
 
 **如何查看和验证 Cloud NAT 的配置和 IP 地址：**
 

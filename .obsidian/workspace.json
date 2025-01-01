@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "knowledge/system-design-tradeoffs.md",
+                "file": "gcp/gcp-nat-route.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "system-design-tradeoffs"
+              "title": "gcp-nat-route"
             }
           }
         ]
@@ -93,7 +93,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "knowledge/system-design-tradeoffs.md",
+                "file": "gcp/gcp-nat-route.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -103,7 +103,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "system-design-tradeoffs 的反向链接列表"
+              "title": "gcp-nat-route 的反向链接列表"
             }
           },
           {
@@ -112,12 +112,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "knowledge/system-design-tradeoffs.md",
+                "file": "gcp/gcp-nat-route.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "system-design-tradeoffs 的出链列表"
+              "title": "gcp-nat-route 的出链列表"
             }
           },
           {
@@ -139,10 +139,10 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "knowledge/system-design-tradeoffs.md"
+                "file": "gcp/gcp-nat-route.md"
               },
               "icon": "lucide-list",
-              "title": "system-design-tradeoffs 的大纲"
+              "title": "gcp-nat-route 的大纲"
             }
           },
           {
@@ -175,6 +175,7 @@
   },
   "active": "a7b2732994fa69ae",
   "lastOpenFiles": [
+    "knowledge/system-design-tradeoffs.md",
     "k8s/affinity.md",
     "未命名.md",
     "k8s/k8s-pod-stat-completed.md"
