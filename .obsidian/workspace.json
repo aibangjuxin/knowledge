@@ -1,0 +1,182 @@
+{
+  "main": {
+    "id": "0a9d1425d13ebc41",
+    "type": "split",
+    "children": [
+      {
+        "id": "991189265733e0fc",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "a7b2732994fa69ae",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "knowledge/system-design-tradeoffs.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "system-design-tradeoffs"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "c53e4d59bd0f2e56",
+    "type": "split",
+    "children": [
+      {
+        "id": "efe4d5964bfbaffb",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "7b35c0036f564457",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-folder-closed",
+              "title": "文件列表"
+            }
+          },
+          {
+            "id": "5c69cde8a7c2c17a",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "搜索"
+            }
+          },
+          {
+            "id": "0da6c8dc5b001923",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "书签"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "a3899a016130a2d7",
+    "type": "split",
+    "children": [
+      {
+        "id": "cb3a4f640a55390b",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "4371da945e76d77a",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "knowledge/system-design-tradeoffs.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "system-design-tradeoffs 的反向链接列表"
+            }
+          },
+          {
+            "id": "bfffa5ef530f400b",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "knowledge/system-design-tradeoffs.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "system-design-tradeoffs 的出链列表"
+            }
+          },
+          {
+            "id": "b9fb217bd6cee2bc",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true
+              },
+              "icon": "lucide-tags",
+              "title": "标签"
+            }
+          },
+          {
+            "id": "c00e27fdbcc80e49",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "knowledge/system-design-tradeoffs.md"
+              },
+              "icon": "lucide-list",
+              "title": "system-design-tradeoffs 的大纲"
+            }
+          },
+          {
+            "id": "469aa650b5d193b6",
+            "type": "leaf",
+            "state": {
+              "type": "git-view",
+              "state": {},
+              "icon": "git-pull-request",
+              "title": "Source Control"
+            }
+          }
+        ],
+        "currentTab": 4
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:打开快速切换": false,
+      "graph:查看关系图谱": false,
+      "canvas:新建白板": false,
+      "daily-notes:打开/创建今天的日记": false,
+      "templates:插入模板": false,
+      "command-palette:打开命令面板": false,
+      "obsidian-git:Open Git source control": false
+    }
+  },
+  "active": "a7b2732994fa69ae",
+  "lastOpenFiles": [
+    "k8s/affinity.md",
+    "未命名.md",
+    "k8s/k8s-pod-stat-completed.md"
+  ]
+}

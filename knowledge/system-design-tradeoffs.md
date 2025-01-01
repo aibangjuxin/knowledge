@@ -1,5 +1,4 @@
-
-System design
+# System design
 Want to get started with System design interview preparation, start with these:
 
 1. Learn to understand requirements
