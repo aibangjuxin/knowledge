@@ -191,52 +191,52 @@ graph LR
 
 以下是配置内容的总结和作用解释：
 	1.	requiredDuringSchedulingIgnoredDuringExecution:
-	•	定义强制规则：
+		•	定义强制规则：
 配置了 Pod 的反亲和性规则，要求 不同主机（hostname）上的 Pod 拥有相同标签 app=nginx。
-	•	key: app
-	•	operator: In
-	•	values: 包含 nginx
-	•	topologyKey: kubernetes.io/hostname
+		•	key: app
+		•	operator: In
+		•	values: 包含 nginx
+		•	topologyKey: kubernetes.io/hostname
 	•	行为:
-该规则强制 Pod 调度时满足，不符合条件的 Node 不会被调度到。
+		该规则强制 Pod 调度时满足，不符合条件的 Node 不会被调度到。
 	2.	preferredDuringSchedulingIgnoredDuringExecution:
-	•	定义偏好规则：
-设置了调度时的偏好规则，倾向于将 Pod 调度到 相同 zone 中的节点（相对于topology.kubernetes.io/zone），但并不是强制。
-	•	权重: 1（权重越高优先级越高）
-	•	labelSelector: 与 required 相同，匹配 app=nginx
-	•	topologyKey: topology.kubernetes.io/zone
-	•	行为:
-如果有多个符合条件的节点，调度器会优先选择满足偏好条件的节点。
+		•	定义偏好规则：
+			设置了调度时的偏好规则，倾向于将 Pod 调度到 相同 zone 中的节点（相对于topology.kubernetes.io/zone），但并不是强制。
+		•	权重: 1（权重越高优先级越高）
+		•	labelSelector: 与 required 相同，匹配 app=nginx
+		•	topologyKey: topology.kubernetes.io/zone
+		•	行为:
+	如果有多个符合条件的节点，调度器会优先选择满足偏好条件的节点。
 
 规则优先级比较
 	1.	优先级顺序：
-	•	requiredDuringSchedulingIgnoredDuringExecution 有更高的优先级，因为它是强制规则，调度器必须满足它才能分配 Pod。
-	•	preferredDuringSchedulingIgnoredDuringExecution 是非强制规则，仅在强制规则满足后才会考虑。
+		•	requiredDuringSchedulingIgnoredDuringExecution 有更高的优先级，因为它是强制规则，调度器必须满足它才能分配 Pod。
+		•	preferredDuringSchedulingIgnoredDuringExecution 是非强制规则，仅在强制规则满足后才会考虑。
 	2.	多规则并存时的处理逻辑：
-	•	如果同时配置了 required 和 preferred：
-	•	首先满足 required 规则。
-	•	其次尽量满足 preferred 规则，但如果无法满足 preferred，调度仍会完成。
+		•	如果同时配置了 required 和 preferred：
+		•	首先满足 required 规则。
+		•	其次尽量满足 preferred 规则，但如果无法满足 preferred，调度仍会完成。
 
 GKE 中的实际行为分析
 
 场景：5 个节点，配置 required hostname，Pod 数量为 8。
-	•	Kubernetes 会尝试满足 required 规则，如果现有节点不足以满足调度条件，Kubernetes（在 GKE 配置自动扩缩功能时）会拉取新节点。
-	•	逻辑确认：
-	•	required 满足后，调度器再尝试按照 preferred 的权重选择最优节点。
-	•	你的说法 “required 满足之后再谈 preferred” 是正确的。
+-	•	Kubernetes 会尝试满足 required 规则，如果现有节点不足以满足调度条件，Kubernetes（在 GKE 配置自动扩缩功能时）会拉取新节点。
+-	•	逻辑确认：
+-	•	required 满足后，调度器再尝试按照 preferred 的权重选择最优节点。
+-	•	你的说法 “required 满足之后再谈 preferred” 是正确的。
 
 是否需要添加多个 required 规则？
-	•	如果已有 required 规则：
-	•	Kubernetes 会尝试满足所有 required 规则。
-	•	是否有必要添加第二个 required 规则：
-	•	如果新规则不会引起额外的调度约束（如与现有规则冲突），可以添加。
-	•	如果当前规则已满足需求，添加多余的 required 规则可能导致资源紧张或无法调度。
-	•	建议：大多数场景下，一个 required 规则已足够，更多规则可能会降低调度灵活性。
+-	•	如果已有 required 规则：
+-	•	Kubernetes 会尝试满足所有 required 规则。
+-	•	是否有必要添加第二个 required 规则：
+-	•	如果新规则不会引起额外的调度约束（如与现有规则冲突），可以添加。
+-	•	如果当前规则已满足需求，添加多余的 required 规则可能导致资源紧张或无法调度。
+-	•	建议：大多数场景下，一个 required 规则已足够，更多规则可能会降低调度灵活性。
 
 配置示例与注意事项
 
 推荐在 GKE 自动扩缩场景下使用以下配置：
-
+```yaml
 spec:
   affinity:
     podAntiAffinity:
@@ -258,6 +258,7 @@ spec:
                   values:
                     - nginx
             topologyKey: topology.kubernetes.io/zone
+```
 
 	•	要点：
 	•	确保 required 不会过于严格（避免影响 Pod 调度）。
