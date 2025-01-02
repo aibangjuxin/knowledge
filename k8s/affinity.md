@@ -190,6 +190,7 @@ graph LR
 配置总结
 
 以下是配置内容的总结和作用解释：
+```bash
 	1.	requiredDuringSchedulingIgnoredDuringExecution:
 		•	定义强制规则：
 配置了 Pod 的反亲和性规则，要求 不同主机（hostname）上的 Pod 拥有相同标签 app=nginx。
@@ -207,8 +208,9 @@ graph LR
 		•	topologyKey: topology.kubernetes.io/zone
 		•	行为:
 	如果有多个符合条件的节点，调度器会优先选择满足偏好条件的节点。
-
+```
 规则优先级比较
+```bash
 	1.	优先级顺序：
 		•	requiredDuringSchedulingIgnoredDuringExecution 有更高的优先级，因为它是强制规则，调度器必须满足它才能分配 Pod。
 		•	preferredDuringSchedulingIgnoredDuringExecution 是非强制规则，仅在强制规则满足后才会考虑。
@@ -216,7 +218,7 @@ graph LR
 		•	如果同时配置了 required 和 preferred：
 		•	首先满足 required 规则。
 		•	其次尽量满足 preferred 规则，但如果无法满足 preferred，调度仍会完成。
-
+```
 GKE 中的实际行为分析
 
 场景：5 个节点，配置 required hostname，Pod 数量为 8。
