@@ -123,6 +123,59 @@ spec:
 希望这次解释更清晰地解答了你的疑问。
 
 
+```mermaid
+graph LR
+    A[开始调度 Pod] --> B{检查 Required Anti-Affinity 规则};
+    B -- 满足 Required 规则 --> C{现有 Node 是否足够容纳所有 Pod?};
+    B -- 不满足 Required 规则 --> D[Pod 进入 Pending 状态 (无法满足 Required)];
+    C -- 是 --> E{考虑 Preferred Affinity 规则 (如果有)};
+    C -- 否 --> F[触发 GKE Node 自动伸缩器];
+    F --> G[GKE 尝试增加 Node 数量];
+    G -- 成功增加 Node --> H{重新评估 Required Anti-Affinity 规则};
+    G -- 无法增加 Node --> I[Pod 持续 Pending (资源不足)];
+    H --> C;
+    E -- 应用 Preferred 规则 --> J[选择最优 Node 进行调度];
+    E -- 没有 Preferred 规则或无法完全满足 --> K[选择满足 Required 规则的可用 Node];
+    J --> L[Pod 成功调度到 Node];
+    K --> L;
+    D --> M[运维人员介入或等待资源];
+    I --> M;
+```
+
+**Markdown 中使用 Mermaid Flow 的方法：**
+
+将上面的 Mermaid 代码块放在 Markdown 文档中，并确保你的 Markdown 编辑器或渲染器支持 Mermaid 语法。通常，你需要将代码块用反引号 ` ```mermaid ` 和 ` ``` ` 包裹起来。
+
+**流程图解释：**
+
+1. **开始调度 Pod (A):**  Kubernetes 开始尝试调度新的 Pod。
+2. **检查 Required Anti-Affinity 规则 (B):** 调度器首先严格检查 `requiredDuringSchedulingIgnoredDuringExecution` 规则。
+   * **满足 Required 规则：** 如果当前集群状态允许将 Pod 调度到不违反 `required` 规则的 Node 上，则进入下一步。
+   * **不满足 Required 规则：** 如果没有可用的 Node 能够满足 `required` 规则（例如，所有 Node 上都已经运行了带有相同 `app: nginx` 标签的 Pod），则 Pod 进入 `Pending` 状态，并且需要人工介入或等待资源。
+3. **现有 Node 是否足够容纳所有 Pod? (C):**  在满足 `required` 规则的前提下，检查当前集群的 Node 数量是否足够运行所有需要调度的 Pod。
+   * **是：** 如果 Node 数量足够，则开始考虑 `preferred` 规则。
+   * **否：** 如果 Node 数量不足以容纳所有 Pod，则触发 GKE 的 Node 自动伸缩器。
+4. **触发 GKE Node 自动伸缩器 (F):** GKE 的自动伸缩器检测到有 `Pending` 的 Pod，并且原因是资源不足。
+5. **GKE 尝试增加 Node 数量 (G):** 自动伸缩器尝试向集群中添加新的 Node。
+   * **成功增加 Node：** 新的 Node 加入集群后，重新评估 `required` 规则，回到步骤 C。
+   * **无法增加 Node：** 如果由于配额限制或其他原因无法添加新的 Node，Pod 将持续处于 `Pending` 状态。
+6. **考虑 Preferred Affinity 规则 (如果有) (E):** 如果满足 `required` 规则且有足够的 Node，调度器会考虑 `preferredDuringSchedulingIgnoredDuringExecution` 规则。
+   * **应用 Preferred 规则：** 调度器会尝试将 Pod 调度到更符合 `preferred` 规则的 Node 上（例如，不同的可用区）。
+   * **没有 Preferred 规则或无法完全满足：** 如果没有配置 `preferred` 规则，或者无法完全满足 `preferred` 规则的要求，调度器会选择一个满足 `required` 规则的可用 Node。
+7. **选择最优 Node 进行调度 (J) / 选择满足 Required 规则的可用 Node (K):** 调度器选择最终的 Node。
+8. **Pod 成功调度到 Node (L):** Pod 被成功调度到选定的 Node 上。
+9. **Pod 进入 Pending 状态 (无法满足 Required) (D) / Pod 持续 Pending (资源不足) (I):**  如果由于 `required` 规则无法满足或资源持续不足，Pod 会处于 `Pending` 状态。
+10. **运维人员介入或等待资源 (M):**  在这种情况下，可能需要运维人员介入解决问题，例如手动增加 Node 数量或修改 Pod 的调度策略。
+
+**关键点：**
+
+* `required` 规则是流程中的首要检查条件，必须满足才能继续。
+* 只有在满足 `required` 规则且资源足够的情况下，才会考虑 `preferred` 规则。
+* 当 `required` 规则无法满足时，不会跳过它去执行 `preferred` 规则。
+* Node 的自动伸缩是为了满足 `required` 规则而触发的，而不是为了满足 `preferred` 规则。
+
+这个流程图应该能更清晰地帮助你理解 Kubernetes 调度器在处理 `required` 和 `preferred` 亲和性规则时的执行顺序以及 GKE 自动伸缩器的作用。
+
 
 # Q 
 关于Kubectl path add affinity to deployment 我想了解以下几个方面
