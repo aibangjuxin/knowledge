@@ -128,7 +128,7 @@ graph LR
     A[开始调度 Pod] --> B{检查 Required Anti-Affinity 规则};
     B -- 满足 Required 规则 --> C{现有 Node 是否足够容纳所有 Pod?};
     B -- 不满足 Required 规则 --> D[Pod 进入 Pending 状态];
-    C -- 是 --> E{考虑 Preferred Affinity 规则 (如果有)};
+    C -- 是 --> E{考虑 Preferred Affinity 规则 如果有};
     C -- 否 --> F[触发 GKE Node 自动伸缩器];
     F --> G[GKE 尝试增加 Node 数量];
     G -- 成功增加 Node --> H{重新评估 Required Anti-Affinity 规则};
