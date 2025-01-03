@@ -326,6 +326,116 @@ flowchart LR
 - 反亲和性规则的应用顺序
 - 可能的调度结果和失败情况​​​​​​​​​​​​​​​​
 
+```mermaid
+flowchart LR
+    Start([Start Pod Scheduling]) --> A{"Required Node 
+    Anti-Affinity Check"}
+    
+    A --> B["Find Nodes without 
+    Same Label Pods"]
+    B --> C{"Enough Available 
+    Nodes Found?"}
+    
+    C --> |No| D{"Current Nodes < 
+    GKE Node Limit?"}
+    D --> |Yes| E["Trigger GKE 
+    Node Autoscaling"]
+    E --> F["Wait for New 
+    Nodes Ready"]
+    F --> B
+    
+    D --> |No| G["Pods Remain Pending 
+    Due to Node Limit"]
+    
+    C --> |Yes| H{"Check Preferred 
+    Zone Distribution"}
+    
+    H --> I["Calculate Node Scores 
+    Based on Zones"]
+    I --> J["Sort Nodes by 
+    Zone Preference"]
+    
+    J --> K["Select Best 
+    Matching Node"]
+    
+    K --> L["Schedule Pod to 
+    Selected Node"]
+    
+    L --> End([End Pod Scheduling])
+    G --> End
+    
+    subgraph Required Rules
+    B
+    C
+    D
+    end
+    
+    subgraph Preferred Rules
+    H
+    I
+    J
+    end
+    
+    style Start fill:#90EE90
+    style End fill:#90EE90
+    style G fill:#FFB6C1
+    style L fill:#98FB98
+    style E fill:#87CEFA
+    style F fill:#87CEFA
+    
+    classDef decision fill:#FFD700,stroke:#666,stroke-width:2px
+    class A,C,D,H decision
+```
+
+你说得对，我来优化这个流程图，加入 GKE 自动扩缩容的场景，并修复换行符的显示问题。​​​​​​​​​​​​​​​​
+
+让我解释优化后的流程图的主要变化：
+
+1. **新增 GKE 自动扩缩容流程**:
+   - 当找不到足够的节点时，检查是否达到 GKE 节点数量限制
+   - 如果未达到限制，触发节点自动扩容
+   - 等待新节点就绪后重新进行调度
+
+2. **增加节点数量限制检查**:
+   - 明确标示 GKE 节点数量限制（如 64 个节点）的约束
+   - 当超过节点限制时，明确显示 Pod 会保持在 Pending 状态
+
+3. **显示优化**:
+   - 移除了 \n 换行符，使用空格和引号来实现更清晰的多行文本
+   - 优化了图表布局，使流程更清晰
+
+4. **颜色编码**:
+   - 🟢 绿色：开始和结束节点
+   - 🟡 黄色：决策点
+   - 🔴 红色：Pending 状态
+   - 🟦 浅蓝色：自动扩缩容相关操作
+
+主要流程说明：
+1. **初始调度检查**:
+   - 检查必需的节点反亲和性规则
+   - 查找可用节点
+
+2. **节点不足处理**:
+   - 检查当前节点数量是否达到 GKE 限制
+   - 如果未达到限制，触发自动扩容
+   - 如果达到限制，Pod 保持 Pending 状态
+
+3. **区域分布优化**:
+   - 在有足够节点的情况下，考虑区域分布
+   - 计算最优的节点选择
+
+4. **最终调度**:
+   - 选择最佳匹配的节点
+   - 完成 Pod 调度
+
+这个优化后的流程图更好地反映了 GKE 环境的实际情况，包括：
+- 节点自动扩缩容机制
+- GKE 节点数量限制的约束
+- 更清晰的视觉展示
+
+你觉得这个流程图现在更符合你的 GKE 环境了吗？如果还需要调整，我们可以继续优化。​​​​​​​​​​​​​​​​
+
+
 # Other
 
 1. **Pod 反亲和性配置分为两层**：
