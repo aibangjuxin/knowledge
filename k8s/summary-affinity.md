@@ -236,7 +236,7 @@ spec:
 # Flow
 
 ```mermaid
-flowchart TD
+flowchart LR
     Start([Start Pod Scheduling]) --> A{Check Required\nNode Anti-Affinity}
     
     A -->|Step 1| B[Find Nodes without\nPods with same label]
