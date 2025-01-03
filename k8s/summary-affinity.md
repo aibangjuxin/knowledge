@@ -18,6 +18,7 @@ https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
 # 方案
 ## English
 -  Eg： Deployment
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -60,6 +61,8 @@ spec:
       containers:
       - name: nginx
         image: nginx:latest
+```
+
 Let me explain each important part of this configuration in detail:
 
 1. **Pod Anti-Affinity Configuration (podAntiAffinity)**:
@@ -125,6 +128,7 @@ Important note: This configuration requires enough nodes in the cluster to meet 
 
 
 ## 中文
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -167,6 +171,7 @@ spec:
       containers:
       - name: nginx
         image: nginx:latest
+```
 
 让我详细解释这个配置的每个重要部分：
 
