@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "gcp/gcp-nat-route.md",
+                "file": "k8s/affinity.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "gcp-nat-route"
+              "title": "affinity"
             }
           }
         ]
@@ -93,7 +93,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "gcp/gcp-nat-route.md",
+                "file": "k8s/affinity.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -103,7 +103,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "gcp-nat-route 的反向链接列表"
+              "title": "affinity 的反向链接列表"
             }
           },
           {
@@ -112,12 +112,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "gcp/gcp-nat-route.md",
+                "file": "k8s/affinity.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "gcp-nat-route 的出链列表"
+              "title": "affinity 的出链列表"
             }
           },
           {
@@ -139,10 +139,10 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "gcp/gcp-nat-route.md"
+                "file": "k8s/affinity.md"
               },
               "icon": "lucide-list",
-              "title": "gcp-nat-route 的大纲"
+              "title": "affinity 的大纲"
             }
           },
           {
@@ -175,6 +175,9 @@
   },
   "active": "a7b2732994fa69ae",
   "lastOpenFiles": [
+    "k8s/summary-affinity.md",
+    "k8s/abc",
+    "gcp/gcp-nat-route.md",
     "knowledge/system-design-tradeoffs.md",
     "k8s/affinity.md",
     "未命名.md",
