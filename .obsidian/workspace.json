@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "k8s/affinity.md",
+                "file": "gcp/Resilience.md.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "affinity"
+              "title": "Resilience.md"
             }
           }
         ]
@@ -93,7 +93,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "k8s/affinity.md",
+                "file": "gcp/Resilience.md.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -103,7 +103,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "affinity 的反向链接列表"
+              "title": "Resilience.md 的反向链接列表"
             }
           },
           {
@@ -112,12 +112,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "k8s/affinity.md",
+                "file": "gcp/Resilience.md.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "affinity 的出链列表"
+              "title": "Resilience.md 的出链列表"
             }
           },
           {
@@ -139,10 +139,10 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "k8s/affinity.md"
+                "file": "gcp/Resilience.md.md"
               },
               "icon": "lucide-list",
-              "title": "affinity 的大纲"
+              "title": "Resilience.md 的大纲"
             }
           },
           {
@@ -175,11 +175,12 @@
   },
   "active": "a7b2732994fa69ae",
   "lastOpenFiles": [
+    "k8s/affinity.md",
+    "gcp/Resilience.md.md",
     "k8s/summary-affinity.md",
     "k8s/abc",
     "gcp/gcp-nat-route.md",
     "knowledge/system-design-tradeoffs.md",
-    "k8s/affinity.md",
     "未命名.md",
     "k8s/k8s-pod-stat-completed.md"
   ]
