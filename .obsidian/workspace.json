@@ -173,8 +173,11 @@
       "obsidian-git:Open Git source control": false
     }
   },
-  "active": "a7b2732994fa69ae",
+  "active": "469aa650b5d193b6",
   "lastOpenFiles": [
+    "Ghostty/simple.md",
+    "Ghostty/config.md",
+    "Ghostty",
     "gcp/Resilience.md",
     "gcp/redis.md",
     "k8s/affinity.md",
