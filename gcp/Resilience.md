@@ -90,6 +90,7 @@
     *   Cloud DNS
     *   Cloud Armor
     *   Stackdriver Trace & Monitoring
+*   **Onboarding process**:
 
 ### 3. 回顾内容
 
