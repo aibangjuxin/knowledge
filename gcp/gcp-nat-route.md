@@ -12,7 +12,10 @@
 # how to verify cloud nat ip address
 
 
-我们的主机运行在Google GCP工程里面 我的主机默认有2个网络一个是共享网络,比如叫shared vpc 网络
+我们的主机运行在Google GCP工程里面 我的主机默认有2个网络
+
+```bash
+一个是共享网络,比如叫shared vpc 网络
 一个是本地工程网络.主机配置了这2块网卡
 比如Shared的网络默认的IP地址范围是10.72.0.0/16
 本地工程的网络是192.168.0.0/16我现在从配置了这个网络的一个主机上对外发送请求
@@ -25,6 +28,9 @@
 所以我想定位这个问题,比如目的地是一个邮件服务器,邮件服务器可能需要我本地IP出口的白名单,所以我想知道我的本地IP出口的IP地址是多少
 下面是参考
 这里仅仅是例子IP是随机的
+```
+
+```bash
 traceroute 114.114.34.56
 traceroute to 114.114.34.56 (114.114.34.56), 30 hops max, 60 byte packets
 1 * * * 
@@ -36,8 +42,9 @@ traceroute to 114.114.34.56 (114.114.34.56), 30 hops max, 60 byte packets
 7 120.129.1.254 (120.129.1.254) 197.130 ms 196.976 ms 114.114.255.154 (114.114.255.154) 191.700 ms
 8 114.114.255.126 (114.114.255.126) 195.263 ms 195.118 ms 10.118.100.154 (10.118.100.154) 188.131 ms
 9 114.114.255.162 (114.114.255.162) 189.944 ms 114.114.34.56 (114.114.34.56) 190.821 ms 191.616 ms
-
-
+```
+- curl -v 
+```
 curl -v smtp://114.114.34.56
 * ﻿﻿Rebuilt URL to: smtp://114.114.34.56/
 * ﻿﻿Uses proxy env variable no_proxy == '169.254.169.254, metadata, metadata google internal'
@@ -48,7 +55,7 @@ curl -v smtp://114.114.34.56
 > EHLO L3-proxy-mig-instance
 ‹ 250-cnabcd.address.test.aibang Hello [10.72.2.222]
 < 250-SIZE 36700160
-
+```
 验证你的虚拟机是否使用了 Cloud NAT，并找出 Cloud NAT 分配的 IP 地址。GCP 网络使用了 source NAT 保留模式
 
 **如何查看和验证 Cloud NAT 的配置和 IP 地址：**

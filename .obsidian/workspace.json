@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "k8s/affinity.md",
+                "file": "2025-01-05.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "affinity"
+              "title": "2025-01-05"
             }
           }
         ]
@@ -73,7 +73,8 @@
               "title": "书签"
             }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "horizontal",
@@ -93,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "k8s/affinity.md",
+                "file": "2025-01-05.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -103,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "affinity 的反向链接列表"
+              "title": "2025-01-05 的反向链接列表"
             }
           },
           {
@@ -112,12 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "k8s/affinity.md",
+                "file": "2025-01-05.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "affinity 的出链列表"
+              "title": "2025-01-05 的出链列表"
             }
           },
           {
@@ -139,10 +140,10 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "k8s/affinity.md"
+                "file": "2025-01-05.md"
               },
               "icon": "lucide-list",
-              "title": "affinity 的大纲"
+              "title": "2025-01-05 的大纲"
             }
           },
           {
@@ -173,19 +174,22 @@
       "obsidian-git:Open Git source control": false
     }
   },
-  "active": "469aa650b5d193b6",
+  "active": "a7b2732994fa69ae",
   "lastOpenFiles": [
+    "未命名 1.canvas",
+    "2025-01-05.md",
+    "未命名.canvas",
+    "gcp/gcp-nat-route.md",
+    "k8s/affinity.md",
     "Ghostty/simple.md",
     "Ghostty/config.md",
     "Ghostty",
     "gcp/Resilience.md",
     "gcp/redis.md",
-    "k8s/affinity.md",
     "gcp/resiliences-gpt.md",
     "gcp/Resilience.md.md",
     "k8s/summary-affinity.md",
     "k8s/abc",
-    "gcp/gcp-nat-route.md",
     "knowledge/system-design-tradeoffs.md",
     "未命名.md",
     "k8s/k8s-pod-stat-completed.md"

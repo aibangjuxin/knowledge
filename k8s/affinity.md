@@ -1,4 +1,4 @@
-从您提供的K8S Deployment配置中提取出的部分如下：
+K8S Deployment配置如下：
 
 ### 提取的K8S Deployment配置
 ```yaml
