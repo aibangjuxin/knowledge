@@ -1,3 +1,132 @@
+- [reCAPTCHA resilient design](#recaptcha-resilient-design)
+    - [reCAPTCHA 的 Resilience 配置 (详细展开)](#recaptcha-的-resilience-配置-详细展开)
+      - [1. reCAPTCHA 的作用和重要性](#1-recaptcha-的作用和重要性)
+      - [2. reCAPTCHA 的类型](#2-recaptcha-的类型)
+      - [3. reCAPTCHA 的密钥配置](#3-recaptcha-的密钥配置)
+      - [4. reCAPTCHA 的安全配置](#4-recaptcha-的安全配置)
+      - [5. reCAPTCHA 的 Resilience 配置](#5-recaptcha-的-resilience-配置)
+      - [6. 与你现有架构的结合](#6-与你现有架构的结合)
+    - [总结](#总结)
+- [other](#other)
+- [effect](#effect)
+- [Q](#q)
+- [A felo](#a-felo)
+- [perplexity](#perplexity)
+  - [reCAPTCHA的作用和功能](#recaptcha的作用和功能)
+  - [在GKE中结合reCAPTCHA](#在gke中结合recaptcha)
+  - [影响与应用场景](#影响与应用场景)
+  - [流程图示例](#流程图示例)
+- [用您的服务账户密钥文件路径替换](#用您的服务账户密钥文件路径替换)
+- [创建凭据和 Google API 客户端](#创建凭据和-google-api-客户端)
+- [创建 reCAPTCHA 密钥](#创建-recaptcha-密钥)
+- [调用函数](#调用函数)
+
+
+# reCAPTCHA resilient design
+
+来深入探讨 reCAPTCHA，并从 Resilience（弹性）的角度来看如何进行配置和优化。
+
+### reCAPTCHA 的 Resilience 配置 (详细展开)
+
+reCAPTCHA 是一种 Google 提供的验证码服务，用于区分人类用户和机器人程序，以保护网站和应用免受自动化攻击。从 Resilience 的角度来看，配置和优化 reCAPTCHA 可以提高系统的可用性、可靠性和安全性。
+
+#### 1. reCAPTCHA 的作用和重要性
+
+*   **防止自动化攻击**：reCAPTCHA 可以有效阻止恶意机器人程序的自动化攻击，例如暴力破解、垃圾注册、内容抓取等。
+*   **保护用户账号**：通过验证用户身份，防止恶意用户获取合法用户的账号。
+*   **提高系统稳定性**：防止恶意请求占用系统资源，影响系统的正常运行。
+*   **降低运营成本**：减少因机器人攻击而产生的人力、物力和资源成本。
+*   **提升用户体验**：减少垃圾信息和恶意行为，提高用户的体验。
+
+#### 2. reCAPTCHA 的类型
+
+*   **reCAPTCHA v2 (Checkbox)**：
+    *   用户只需点击一个复选框即可完成验证，简单易用。
+    *   适用于简单场景，如注册、登录、评论等。
+    *   可能被高级机器人程序绕过。
+*   **reCAPTCHA v2 (Invisible)**：
+    *   用户无需进行任何操作，自动在后台进行验证，无缝的用户体验。
+    *   适用于登录、评论、表单提交等。
+    *   用户感知不到验证过程。
+*   **reCAPTCHA v3**：
+    *   基于用户行为评估风险，不需用户交互。
+    *   提供风险评分，让应用决定是否需要进行进一步验证。
+    *   适用于各种场景，可根据风险评分采取不同措施。
+    *   性能更好，用户体验更佳。
+    *   需要更多配置和调整。
+
+#### 3. reCAPTCHA 的密钥配置
+
+*   **获取密钥**：在 Google reCAPTCHA 网站上注册你的域名，并获取 Site Key 和 Secret Key。
+*   **Site Key**：
+    *   用于在前端页面加载 reCAPTCHA 验证组件。
+    *   可以公开展示。
+*   **Secret Key**：
+    *   用于在后端验证用户是否通过 reCAPTCHA 验证。
+    *   必须严格保密，不要泄露给第三方。
+*   **密钥管理**
+    *   **Secret Manager**: 使用 Secret Manager 安全存储和管理 Secret Key.
+        *   **实践**: 定期轮换 Secret Key.
+        *   **实践**: 使用版本控制管理不同的 Secret Key.
+    *   **环境变量**： 在应用程序的环境变量中配置 Site Key 和 Secret Key.
+
+#### 4. reCAPTCHA 的安全配置
+
+*   **后端验证**：在后端 API 中验证用户是否通过 reCAPTCHA 验证。
+    *   **验证令牌**: 在验证时，将用户提交的 reCAPTCHA 令牌发送到 Google reCAPTCHA API 进行验证。
+    *   **验证结果**: 根据验证结果，决定是否允许用户继续操作。
+    *   **验证失败**: 如果验证失败，拒绝用户的请求，并显示错误信息。
+*   **风险评分**：使用 reCAPTCHA v3 的风险评分，决定是否需要进行额外的验证。
+    *   **阈值设置**:  根据实际需求，设置合理的风险评分阈值。
+    *   **额外验证**: 对于风险评分较高的请求，可以要求用户进行额外的验证，如短信验证、人机识别等。
+    *   **拒绝请求**: 对于风险评分过高的请求，可以直接拒绝访问。
+*   **请求来源验证**：验证请求的来源，确保请求来自可信的来源。
+    *  **域名验证**: 在后端验证请求的域名是否与注册的域名一致。
+    * **Header验证**: 在后端验证请求的header信息。
+*   **错误处理**：正确处理 reCAPTCHA 验证失败的情况。
+    *   **友好的错误信息**：向用户显示友好的错误信息，引导用户重新验证。
+    *   **日志记录**：记录 reCAPTCHA 验证失败的日志，方便排查问题。
+    *   **告警**: 配置 reCAPTCHA 验证失败告警，及时处理异常。
+
+#### 5. reCAPTCHA 的 Resilience 配置
+
+*   **高可用性**：
+    *   **Google 服务**：reCAPTCHA 是 Google 服务，具有高可用性保证，无需额外配置。
+    *   **多区域**：Google 的 reCAPTCHA 服务在全球多个区域提供服务，确保服务可用性。
+*   **容错处理**：
+    *   **错误降级**：当 reCAPTCHA 服务不可用时，可以降级处理，例如使用备用验证方式。
+    *   **缓存结果**：缓存 reCAPTCHA 验证结果，减少对 Google reCAPTCHA API 的调用次数。
+    *   **超时设置**：设置合理的超时时间，防止因网络延迟导致请求失败。
+*   **监控和日志**：
+    *   **请求监控**: 监控 reCAPTCHA 请求的成功率和错误率。
+    *   **响应时间监控**: 监控 reCAPTCHA 响应时间。
+    *   **验证失败监控**： 监控 reCAPTCHA 验证失败的次数和类型。
+    *   **日志记录**：记录 reCAPTCHA 验证日志，方便分析和排查问题。
+*   **性能优化**：
+    *   **CDN 加速**：使用 CDN 加速 reCAPTCHA 资源加载，减少加载时间。
+    *   **缓存机制**：使用浏览器缓存 reCAPTCHA 资源，提高加载速度。
+    *   **优化调用**： 避免频繁调用 reCAPTCHA API。
+*   **选择合适的类型**:
+      * **场景选择**: 根据不同的业务场景选择合适的 reCAPTCHA 类型.
+      *  **用户体验**: 在安全的前提下，选择用户体验更好的 reCAPTCHA 类型。
+*   **定期轮换密钥**:
+     * **安全周期**: 定期轮换 reCAPTCHA 的 Secret Key，防止密钥泄露.
+     * **自动轮换**: 如果有条件,使用自动轮换机制，减少人工操作。
+
+#### 6. 与你现有架构的结合
+
+*   **API 网关集成**：在 Kong DP 或 Nginx 中集成 reCAPTCHA 验证，在入口处拦截恶意请求。
+    * **插件支持**: 使用 Kong 的 reCAPTCHA 插件, 在入口验证请求.
+*   **前端集成**：在前端页面集成 reCAPTCHA 验证组件，让用户进行验证。
+*   **日志集中管理**： 将 reCAPTCHA 的验证日志发送到 Cloud Logging，实现日志的集中管理和分析。
+*    **自定义告警**: 使用 Cloud Monitoring 设置告警,及时发现 reCAPTCHA 的异常.
+
+### 总结
+
+通过合理的配置和优化，reCAPTCHA 可以帮助我们提高 API 平台的 Resilience 和安全性。需要根据实际业务需求选择合适的 reCAPTCHA 类型，并进行适当的安全配置和性能优化。希望这些详细的说明能帮助你更好地理解和使用 reCAPTCHA。
+
+# other
+
 以下是一个关于 reCAPTCHA 的 PPT 展示内容大纲，帮助用户理解 reCAPTCHA 的功能和在 GCP 平台上集成的基本步骤。每一部分都提供了具体要点，便于制作简洁明了的演示文稿。
 
 首页

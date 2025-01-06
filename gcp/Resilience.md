@@ -70,8 +70,8 @@
 我们的 API 平台架构主要由以下组件构成：
 
 *   **入口流量**
-    *   **External Flow:** Global Load Balancer (GLB) -> 7 Layer Nginx -> Kong DP -> Route
-    *   **Internal Flow:** 7 Layer Nginx -> Kong DP -> Route
+    *   **External Flow:** Global Load Balancer (GLB) -> 7 Layer Nginx -> Kong DP -> Runtime
+    *   **Internal Flow:** 7 Layer Nginx -> Kong DP -> Runtime
 *   **组件**
     *   GCE Instance (MIG, UIG)
     *   7 Layer Nginx, 4 Layer Nginx, Squid
@@ -188,11 +188,14 @@
         *   **Topic:** 创建 Pub/Sub Topic，用于发布消息。
         *   **Subscription:** 创建 Pub/Sub Subscription，用于订阅消息。
         *   **访问控制:** 配置访问控制，限制对 Pub/Sub Topic 和 Subscription 的访问。
+        *   [pub-sub-iam](./pub-sub/pub-sub-base.md)
     *   **Redis (Memorystore):**
         *   **实例类型**: 选择合适的 Redis 实例类型。
         *   **容量设置**: 设置 Redis 实例的容量。
         *   **访问控制**: 配置访问控制，限制对 Redis 实例的访问。
         *   **高可用配置**: 配置高可用策略，保证 Redis 实例的可用性.
+        *   [redis.md](./redis.md)
+        *   [gcp-redis.md](./gcp-redis.md)
     *   **Secret Manager:**
         *   **Secret:** 创建 Secret，用于存储敏感信息。
         *   **版本控制:** 配置 Secret 的版本控制，管理不同版本的 Secret。

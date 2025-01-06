@@ -4,21 +4,21 @@
     "type": "split",
     "children": [
       {
-        "id": "991189265733e0fc",
+        "id": "329f7133e5f661f8",
         "type": "tabs",
         "children": [
           {
-            "id": "a7b2732994fa69ae",
+            "id": "83b5f14ba0746c26",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "2025-01-05.md",
+                "file": "gcp/gcp-resilience.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "2025-01-05"
+              "title": "gcp-resilience"
             }
           }
         ]
@@ -52,7 +52,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "",
+                "query": "resi",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": false,
@@ -94,7 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "2025-01-05.md",
+                "file": "gcp/gcp-resilience.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "2025-01-05 的反向链接列表"
+              "title": "gcp-resilience 的反向链接列表"
             }
           },
           {
@@ -113,12 +113,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "2025-01-05.md",
+                "file": "gcp/gcp-resilience.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "2025-01-05 的出链列表"
+              "title": "gcp-resilience 的出链列表"
             }
           },
           {
@@ -140,10 +140,10 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "2025-01-05.md"
+                "file": "gcp/gcp-resilience.md"
               },
               "icon": "lucide-list",
-              "title": "2025-01-05 的大纲"
+              "title": "gcp-resilience 的大纲"
             }
           },
           {
@@ -174,12 +174,16 @@
       "obsidian-git:Open Git source control": false
     }
   },
-  "active": "a7b2732994fa69ae",
+  "active": "83b5f14ba0746c26",
   "lastOpenFiles": [
-    "未命名 1.canvas",
-    "2025-01-05.md",
-    "未命名.canvas",
+    "nginx/nginx-gzip.md",
+    "gcp/psa.md",
     "gcp/gcp-nat-route.md",
+    "gcp/secret-manage/add-secret-binging.md",
+    "未命名 2.canvas",
+    "2025-01-05.md",
+    "未命名 1.canvas",
+    "未命名.canvas",
     "k8s/affinity.md",
     "Ghostty/simple.md",
     "Ghostty/config.md",
