@@ -176,6 +176,8 @@
   },
   "active": "83b5f14ba0746c26",
   "lastOpenFiles": [
+    "network/tailscale.md",
+    "network",
     "gcp/gke-canary.md",
     "nginx/nginx-gzip.md",
     "gcp/psa.md",
