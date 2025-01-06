@@ -176,6 +176,7 @@
   },
   "active": "83b5f14ba0746c26",
   "lastOpenFiles": [
+    "gcp/gke-canary.md",
     "nginx/nginx-gzip.md",
     "gcp/psa.md",
     "gcp/gcp-nat-route.md",
