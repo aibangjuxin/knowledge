@@ -179,7 +179,7 @@ kubectl get deployments --all-namespaces -o json | jq '.items[] | select(.spec.t
 ```bash
 kubectl get deployments --all-namespaces -o=jsonpath='{range .items[?(@.spec.template.spec.affinity.podAntiAffinity)]}{.metadata.name} {.metadata.namespace}{"\n"}{end}'
 
-
+- 直接看Pod更加直接
 kubectl get pods --all-namespaces -o json | jq '
   .items[] |
   select(.metadata.ownerReferences[].kind == "ReplicaSet") |
@@ -191,6 +191,12 @@ kubectl get pods --all-namespaces -o json | jq '
   }
 '
 
+kubectl get pods --all-namespaces -o json | jq -r '
+  .items[] |
+  select(.metadata.ownerReferences[].kind == "ReplicaSet") |
+  select(.spec.affinity.podAntiAffinity) |
+  "\(.metadata.namespace)/\(.metadata.name) -> Node: \(.spec.nodeName)"
+'
 
 kubectl get deployments --all-namespaces -o json | jq -r '.items[] | select(.spec.template.spec.affinity.podAntiAffinity) | .metadata.namespace as $ns | .metadata.name as $name | "kubectl get pods -n \($ns) -l app=\($name) -o json | jq \".items[] | { podName: .metadata.name, nodeName: .spec.nodeName, namespace: .metadata.namespace }\""'
 
