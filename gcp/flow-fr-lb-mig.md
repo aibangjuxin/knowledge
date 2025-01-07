@@ -8,6 +8,43 @@ flowchart LR
 
 ```
 
+- enhance the readability by adding colors and borders to the nodes
+```mermaid
+flowchart LR
+    subgraph External ["外部访问层"]
+        A["转发规则 Forward Rule<br/>协议: TCP/UDP/HTTP(S)<br/>端口: 80/443"]
+        style A fill:#bbdefb,stroke:#1976d2
+    end
+
+    subgraph LoadBalancing ["负载均衡层"]
+        B["负载均衡器 Load Balancer<br/>类型: Global/Regional<br/>算法: Round Robin/Least Conn"]
+        style B fill:#c8e6c9,stroke:#388e3c
+    end
+
+    subgraph Services ["服务层"]
+        C["前端服务 Frontend<br/>URL映射<br/>SSL证书管理"]
+        D["后端服务 Backend Service<br/>会话亲和性<br/>容量扩缩配置"]
+        style C fill:#e1bee7,stroke:#7b1fa2
+        style D fill:#e1bee7,stroke:#7b1fa2
+    end
+
+    subgraph Infrastructure ["基础设施层"]
+        E["健康检查 Health Check<br/>检查间隔: 5s<br/>超时阈值: 3次"]
+        F["实例组 MIG<br/>自动扩缩容<br/>最小实例数: 2<br/>目标CPU利用率: 75%"]
+        style E fill:#ffccbc,stroke:#e64a19
+        style F fill:#ffccbc,stroke:#e64a19
+    end
+
+    A --> |"转发流量<br/>基于IP/端口"| B
+    B --> |"智能路由<br/>负载分配"| C
+    C --> |"业务处理<br/>SSL终止"| D
+    D --> |"定期检测<br/>TCP/HTTP"| E
+    E --> |"动态伸缩<br/>实例管理"| F
+
+    classDef default fill:#f9f9f9,stroke:#333,stroke-width:2px
+    linkStyle default stroke:#666,stroke-width:2px,stroke-dasharray: 5 5
+```
+
 让我详细解释这个标准网络流量处理流程的各个组件：
 
 1. **Forward Rule（转发规则）**

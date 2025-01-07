@@ -1,4 +1,4 @@
-确保 Google Cloud Platform (GCP) 中的 Forward Rule 稳定性和监控，可以采取以下方法和步骤：
+ 确保 Google Cloud Platform (GCP) 中的 Forward Rule 稳定性和监控，可以采取以下方法和步骤：
 
 ### 方案概述
 
