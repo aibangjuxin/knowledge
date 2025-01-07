@@ -180,31 +180,21 @@ kubectl get deployments --all-namespaces -o json | jq '.items[] | select(.spec.t
 kubectl get deployments --all-namespaces -o=jsonpath='{range .items[?(@.spec.template.spec.affinity.podAntiAffinity)]}{.metadata.name} {.metadata.namespace}{"\n"}{end}'
 
 
-
-kubectl get deployments --all-namespaces -o json |
-jq '.items[] |
-  select(.spec.template.spec.affinity.podAntiAffinity) |
+kubectl get pods --all-namespaces -o json | jq '
+  .items[] |
+  select(.metadata.ownerReferences[].kind == "ReplicaSet") |
+  select(.spec.affinity.podAntiAffinity) |
   {
-    name: .metadata.name,
+    pod_name: .metadata.name,
     namespace: .metadata.namespace,
-    selector: .spec.selector.matchLabels
+    node: .spec.nodeName
   }
-' |
-while read -r deployment; do
-  deployment_data=$(echo "$deployment" | jq -r '.');
-  deployment_name=$(echo "$deployment_data" | jq -r '.name');
-  deployment_namespace=$(echo "$deployment_data" | jq -r '.namespace');
-  selector_string=$(echo "$deployment_data" | jq -r '.selector | to_entries | map("\(.key)=\(.value)") | join(",")');
+'
 
-  kubectl get pods -n "$deployment_namespace" -o json "selector=$selector_string" |
-  jq -r --arg deployment_name "$deployment_name" --arg deployment_namespace "$deployment_namespace" '
-    {
-      deployment_name: $deployment_name,
-      deployment_namespace: $deployment_namespace,
-      pods: [.items[] | { name: .metadata.name, node: .spec.nodeName }]
-    }
-  ';
-done
+
+kubectl get deployments --all-namespaces -o json | jq -r '.items[] | select(.spec.template.spec.affinity.podAntiAffinity) | .metadata.namespace as $ns | .metadata.name as $name | "kubectl get pods -n \($ns) -l app=\($name) -o json | jq \".items[] | { podName: .metadata.name, nodeName: .spec.nodeName, namespace: .metadata.namespace }\""'
+
+
 ```
 
 **解释：**
