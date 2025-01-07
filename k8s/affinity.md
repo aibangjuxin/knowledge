@@ -161,7 +161,7 @@ kubectl get deployments --all-namespaces -o yaml | jq '.items[] | select(.spec.t
 ```
 
 **方法二：使用 `jq` 解析 JSON 输出**
-
+ Lex 验证可行
 ```bash
 kubectl get deployments --all-namespaces -o json | jq '.items[] | select(.spec.template.spec.affinity.podAntiAffinity) | { name: .metadata.name, namespace: .metadata.namespace }'
 ```
@@ -171,7 +171,7 @@ kubectl get deployments --all-namespaces -o json | jq '.items[] | select(.spec.t
 与 YAML 版本的主要区别在于使用了 JSON 格式输出。  `jq` 的语法保持不变。
 
 **方法三：使用 `jsonpath` 输出**
-
+ Lex 验证可行
 ```bash
 kubectl get deployments --all-namespaces -o=jsonpath='{range .items[?(@.spec.template.spec.affinity.podAntiAffinity)]}{.metadata.name} {.metadata.namespace}{"\n"}{end}'
 ```
