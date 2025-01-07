@@ -164,6 +164,10 @@ kubectl get deployments --all-namespaces -o yaml | jq '.items[] | select(.spec.t
  Lex 验证可行
 ```bash
 kubectl get deployments --all-namespaces -o json | jq '.items[] | select(.spec.template.spec.affinity.podAntiAffinity) | { name: .metadata.name, namespace: .metadata.namespace }'
+
+
+
+
 ```
 
 **解释：**
@@ -174,6 +178,33 @@ kubectl get deployments --all-namespaces -o json | jq '.items[] | select(.spec.t
  Lex 验证可行
 ```bash
 kubectl get deployments --all-namespaces -o=jsonpath='{range .items[?(@.spec.template.spec.affinity.podAntiAffinity)]}{.metadata.name} {.metadata.namespace}{"\n"}{end}'
+
+
+
+kubectl get deployments --all-namespaces -o json |
+jq '.items[] |
+  select(.spec.template.spec.affinity.podAntiAffinity) |
+  {
+    name: .metadata.name,
+    namespace: .metadata.namespace,
+    selector: .spec.selector.matchLabels
+  }
+' |
+while read -r deployment; do
+  deployment_data=$(echo "$deployment" | jq -r '.');
+  deployment_name=$(echo "$deployment_data" | jq -r '.name');
+  deployment_namespace=$(echo "$deployment_data" | jq -r '.namespace');
+  selector_string=$(echo "$deployment_data" | jq -r '.selector | to_entries | map("\(.key)=\(.value)") | join(",")');
+
+  kubectl get pods -n "$deployment_namespace" -o json "selector=$selector_string" |
+  jq -r --arg deployment_name "$deployment_name" --arg deployment_namespace "$deployment_namespace" '
+    {
+      deployment_name: $deployment_name,
+      deployment_namespace: $deployment_namespace,
+      pods: [.items[] | { name: .metadata.name, node: .spec.nodeName }]
+    }
+  ';
+done
 ```
 
 **解释：**
