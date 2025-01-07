@@ -198,7 +198,16 @@ kubectl get pods --all-namespaces -o json | jq -r '
   "\(.metadata.namespace)/\(.metadata.name) -> Node: \(.spec.nodeName)"
 '
 
-kubectl get deployments --all-namespaces -o json | jq -r '.items[] | select(.spec.template.spec.affinity.podAntiAffinity) | .metadata.namespace as $ns | .metadata.name as $name | "kubectl get pods -n \($ns) -l app=\($name) -o json | jq \".items[] | { podName: .metadata.name, nodeName: .spec.nodeName, namespace: .metadata.namespace }\""'
+kubectl get pods --all-namespaces -o json | jq '
+  .items[] |
+  select(.metadata.ownerReferences[].kind == "ReplicaSet") |
+  {
+    pod_name: .metadata.name,
+    namespace: .metadata.namespace,
+    node: .spec.nodeName,
+    deployment: .metadata.ownerReferences[].name
+  }
+'
 
 
 ```
