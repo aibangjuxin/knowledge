@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "k8s/affinity.md",
+                "file": "nginx/nginx-upgrade.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "affinity"
+              "title": "nginx-upgrade"
             }
           }
         ]
@@ -93,7 +93,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "k8s/affinity.md",
+                "file": "nginx/nginx-upgrade.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -103,7 +103,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "affinity 的反向链接列表"
+              "title": "nginx-upgrade 的反向链接列表"
             }
           },
           {
@@ -112,12 +112,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "k8s/affinity.md",
+                "file": "nginx/nginx-upgrade.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "affinity 的出链列表"
+              "title": "nginx-upgrade 的出链列表"
             }
           },
           {
@@ -139,10 +139,10 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "k8s/affinity.md"
+                "file": "nginx/nginx-upgrade.md"
               },
               "icon": "lucide-list",
-              "title": "affinity 的大纲"
+              "title": "nginx-upgrade 的大纲"
             }
           },
           {
@@ -175,6 +175,9 @@
   },
   "active": "83b5f14ba0746c26",
   "lastOpenFiles": [
+    "k8s/affinity.md",
+    "nginx/nginx-upgrade.md",
+    "howgit/region-search.md",
     "gcp/flow-fr-lb-mig.md",
     "gcp/healthcheck.md",
     "gcp/healthcheck-calude.md",
@@ -192,7 +195,6 @@
     "2025-01-05.md",
     "未命名 1.canvas",
     "未命名.canvas",
-    "k8s/affinity.md",
     "Ghostty/simple.md",
     "Ghostty/config.md",
     "Ghostty",
