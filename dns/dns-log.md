@@ -1,3 +1,93 @@
+- [update](#update)
+    - [**通过命令行查询修改记录**](#通过命令行查询修改记录)
+    - [**通过 Console 查询修改记录**](#通过-console-查询修改记录)
+    - [**验证是否修改成功**](#验证是否修改成功)
+    - [**总结**](#总结)
+- [filter response policy](#filter-response-policy)
+    - [替换信息说明](#替换信息说明)
+  - [\*\*\*\* 跟踪DNS记录的变化](#-跟踪dns记录的变化)
+  - [\*\*\*\* 启用和查看DNS查询日志](#-启用和查看dns查询日志)
+  - [\*\*\*\* 管理响应策略](#-管理响应策略)
+  - [\*\*\*\* 示例日志过滤条件](#-示例日志过滤条件)
+
+# update
+要查询 Google Cloud 中 DNS Response Policy 的修改记录，可以通过 **Cloud Logging (以前叫 Stackdriver)** 查看相关的操作日志，因为 Google Cloud 会记录所有的管理操作日志，包括对 DNS Response Policy 的修改。
+
+以下是两种方式（命令行和 Console）来完成这个任务：
+
+gcloud logging read "resource.labels.method=dns.responsePolicyRules.patch"
+
+---
+
+### **通过命令行查询修改记录**
+
+1. **启用 Cloud Logging**
+   确保项目中启用了 Cloud Logging，并且操作日志（Audit Logs）已记录。
+
+2. **过滤 DNS Response Policy 修改记录**
+   使用 `gcloud logging read` 命令查询日志，并过滤与 Response Policy 修改相关的日志条目。示例如下：
+
+   ```bash
+   gcloud logging read 'resource.type="dns_policy" AND protoPayload.methodName="dns.policies.update"' --limit=50 --format=json
+   ```
+
+   - `resource.type="dns_policy"`：表示过滤 DNS Response Policy 相关的资源。
+   - `protoPayload.methodName="dns.policies.update"`：表示过滤修改操作的日志。
+   - `--limit=50`：显示最近 50 条日志。
+   - `--format=json`：以 JSON 格式输出结果，便于进一步分析。
+
+3. **解析结果**
+   输出的 JSON 会包含以下关键信息：
+   - `protoPayload.request`：包含具体的修改内容。
+   - `protoPayload.authenticationInfo.principalEmail`：显示执行操作的用户。
+   - `timestamp`：显示操作的时间。
+
+---
+
+### **通过 Console 查询修改记录**
+
+1. **进入 Cloud Logging**
+   - 登录到 [Google Cloud Console](https://console.cloud.google.com/).
+   - 导航到 **Logging** > **Logs Explorer**。
+
+2. **构建过滤器**
+   在 Logs Explorer 中，使用以下过滤器语法：
+   ```plaintext
+   resource.type="dns_policy"
+   protoPayload.methodName="dns.policies.update"
+   ```
+
+3. **查看操作记录**
+   - Logs Explorer 会显示所有与 DNS Response Policy 修改相关的操作日志。
+   - 每条日志条目会显示时间、执行用户、修改内容等详细信息。
+
+---
+
+### **验证是否修改成功**
+
+1. **列出所有 Response Policies**
+   使用以下命令验证当前配置是否符合预期：
+   ```bash
+   gcloud dns policies list
+   ```
+
+2. **查看单个 Response Policy 的详情**
+   检查某个具体 Response Policy 的配置：
+   ```bash
+   gcloud dns policies describe [POLICY_NAME]
+   ```
+
+3. **日志反查**
+   如果发现配置有误，可以通过日志进一步分析修改的来源。
+
+---
+
+### **总结**
+
+- **命令行**：使用 `gcloud logging read` 配合 `dns.policies.update` 方法名过滤日志。
+- **Console**：通过 **Logs Explorer** 使用类似的过滤条件。
+- 结合日志内容和当前配置的实际状态，可以排查问题或验证修改是否符合预期。
+
 
 # filter response policy 
 
@@ -14,9 +104,14 @@ gcloud logging read "serviceName=dns.googleapis.com"
 **2. Filtering by `resource.labels.method`:**
 
 This filter specifically targets patch operations on Response Policy Rules.
-
+- 这个没有问题 验证
 ```gcloud
 gcloud logging read "resource.labels.method=dns.responsePolicyRules.patch"
+
+或者我直接页面过滤
+dns.responsePolicyRules.update
+protoPayload.resourceName="responsePolicyRules/name"
+
 ```
 
 **3. Filtering by `protoPayload.methodName`:**
@@ -378,13 +473,13 @@ severity="INFO"
 综上所述，使用这些命令和过滤条件，你可以有效地跟踪GCP中的DNS活动，确保网络安全和合规性。
 
 Sources
-[1] Decoding Logs in the Cloud: GCP Cloud DNS Logs - Cado Security https://www.cadosecurity.com/blog/decoding-logs-in-the-cloud-gcp-cloud-dns-logs
+[1] Decoding Logs in the Cloud: GCP Cloud DNS Logs - Cado Security https://www.cadosecurity.com/blog/decoding-logs-in-the-cloud-aliyun.cloud-dns-logs
 [2] Audit or change logs on Google Cloud DNS? - Stack Overflow https://stackoverflow.com/questions/35484406/audit-or-change-logs-on-google-cloud-dns
 [3] Use logging and monitoring | Cloud DNS https://cloud.google.com/dns/docs/monitoring
 [4] Google Cloud Platform (GCP) DNS logs | Documentation - Elastic https://www.elastic.co/docs/current/integrations/gcp/dns
 [5] Generate Google Cloud DNS sample logs for the GCP module #12003 https://github.com/wazuh/wazuh/issues/12003
 [6] Manage response policies and rules | Cloud DNS https://cloud.google.com/dns/docs/zones/manage-response-policies
-[7] Detect GCP Cloud DNS Configuration Changes - Trend Micro https://www.trendmicro.com/cloudoneconformity/knowledge-base/gcp/GKE/gcp-cloud-dns-configuration-changes-detected.html
+[7] Detect GCP Cloud DNS Configuration Changes - Trend Micro https://www.trendmicro.com/cloudoneconformity/knowledge-base/gcp/GKE/aliyun.cloud-dns-configuration-changes-detected.html
 [8] Enable Cloud DNS Logging for VPC Networks - Trend Micro https://www.trendmicro.com/cloudoneconformity-staging/knowledge-base/gcp/CloudVPC/dns-logging-for-vpcs.html
 [9] How To Generate GCP DNS Logs - Stack Overflow https://stackoverflow.com/questions/67908101/how-to-generate-gcp-dns-logs
 [10] Cloud DNS audit logging information https://cloud.google.com/dns/docs/audit-logging

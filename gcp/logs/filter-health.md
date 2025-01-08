@@ -361,3 +361,67 @@ protoPayload.request.healthChecks!="null"
 ### 三、补充
 
 如果需要将日志导出或持续监控 Health Check 更新，可以配置日志导出规则，将这些日志发送到 Cloud Storage、BigQuery 或 Pub/Sub。
+
+
+
+
+# Verify through load balance ?
+是的，修改 Load Balancer 时，如果绑定或更改了对应的 Health Check 配置，这种操作通常会记录在 Load Balancer 的操作日志中（比如在 Google Cloud 的情况下，通过 **Cloud Logging** 可以看到这些操作日志）。以下是具体的分析和验证方式：
+
+---
+
+### **Load Balancer 操作日志中的信息**
+1. **操作记录**：
+   - 如果 Load Balancer 的配置被更新（如添加或修改 Health Check），通常会产生一条更新操作日志。这些日志会显示：
+     - 操作的具体类型（如绑定新 Health Check）。
+     - 被影响的资源（Load Balancer 名称、关联的后端服务或目标代理）。
+     - 请求参数（通常包括新绑定或更新的 Health Check 配置）。
+
+2. **查看日志的方法**：
+   - 在 **GCP** 中，进入 Cloud Logging。
+   - 选择 **Logs Explorer**，然后筛选资源类型为 `HTTP(S) Load Balancer` 或 `Backend Service`。
+   - 使用过滤条件，例如：
+     ```plaintext
+     resource.type="http_load_balancer" AND protoPayload.methodName="compute.backendServices.update"
+     ```
+   - 查看相关 `update` 操作是否包含 Health Check 的更改。
+
+---
+
+### **验证 Health Check 是否生效**
+通过日志查询 Load Balancer 更新记录后，可以进一步验证配置的生效性：
+
+1. **检查当前配置**：
+   - 在 Cloud Console 中，检查目标 Load Balancer 的后端服务配置是否绑定正确的 Health Check。
+   - 使用 `gcloud` 命令验证：
+     ```bash
+     gcloud compute backend-services describe [BACKEND_SERVICE_NAME] --global
+     ```
+     重点查看 `healthChecks` 字段。
+
+2. **查看运行状况**：
+   - Health Check 的实际运行状况可以在 Load Balancer 后端服务的 **Health Status** 页面中查看。
+   - 也可以使用 `gcloud` 命令：
+     ```bash
+     gcloud compute backend-services get-health [BACKEND_SERVICE_NAME] --global
+     ```
+
+---
+
+### **如何通过日志确认具体更新**
+如果目标是通过日志具体识别哪些 Load Balancer 被更新及其影响范围，可以进一步排查：
+1. **找出更新来源**：
+   - 查看操作日志的 `principalEmail` 字段，确认执行更改的账户。
+   - 检查关联的请求时间和具体的参数变更。
+
+2. **定位影响的资源**：
+   - 操作日志通常会显示更新了哪些后端服务或目标代理，可以交叉验证其他相关的 Health Check 配置是否有问题。
+
+---
+
+### **总结**
+是的，通过 Load Balancer 的更新记录可以查看是否有绑定或更改 Health Check 的操作。为了系统化排查：
+1. 查询 `update` 操作日志。
+2. 验证绑定的 Health Check 是否正确。
+3. 检查 Health Check 的运行状态。
+这样可以确认配置是否符合预期，以及是否可能因误操作导致服务异常。
