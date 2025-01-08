@@ -1,8 +1,14 @@
 - [update](#update)
+    - [**通过命令行过滤**](#通过命令行过滤)
+    - [**通过 Logs Explorer 查询**](#通过-logs-explorer-查询)
+    - [**结合其他条件**](#结合其他条件)
+      - [添加时间范围](#添加时间范围)
+      - [添加特定的 Response Policy 名称](#添加特定的-response-policy-名称)
+    - [**总结**](#总结)
     - [**通过命令行查询修改记录**](#通过命令行查询修改记录)
     - [**通过 Console 查询修改记录**](#通过-console-查询修改记录)
     - [**验证是否修改成功**](#验证是否修改成功)
-    - [**总结**](#总结)
+    - [**总结**](#总结-1)
 - [filter response policy](#filter-response-policy)
     - [替换信息说明](#替换信息说明)
   - [\*\*\*\* 跟踪DNS记录的变化](#-跟踪dns记录的变化)
@@ -16,6 +22,59 @@
 以下是两种方式（命令行和 Console）来完成这个任务：
 
 gcloud logging read "resource.labels.method=dns.responsePolicyRules.patch"
+
+在过滤多个方法名时，可以使用 **逻辑运算符 OR** 来组合条件。针对 `dns.responsePolicyRules.patch` 和 `dns.responsePolicyRules.update` 的过滤条件，你可以按照以下方式构建查询：
+
+---
+
+### **通过命令行过滤**
+
+```bash
+gcloud logging read '(protoPayload.methodName="dns.responsePolicyRules.patch" OR protoPayload.methodName="dns.responsePolicyRules.update")' --limit=50 --format=json
+```
+
+- 使用括号 `()` 将多个条件组合在一起。
+- `OR` 运算符表示只要满足其中一个条件，日志条目就会被匹配。
+- `--limit=50` 限制返回结果数量。
+- `--format=json` 输出格式为 JSON，方便进一步处理。
+
+---
+
+### **通过 Logs Explorer 查询**
+
+1. 打开 [Logs Explorer](https://console.cloud.google.com/logs).
+2. 使用以下过滤语法：
+   ```plaintext
+   resource.type="dns_policy"
+   (protoPayload.methodName="dns.responsePolicyRules.patch" OR protoPayload.methodName="dns.responsePolicyRules.update")
+   ```
+3. **解读语法**：
+   - `resource.type="dns_policy"`：限定日志资源类型为 DNS Response Policy。
+   - `protoPayload.methodName="dns.responsePolicyRules.patch"` 和 `protoPayload.methodName="dns.responsePolicyRules.update"`：只筛选出执行了这两个方法的日志。
+
+4. 点击 **运行查询** 即可查看结果。
+
+---
+
+### **结合其他条件**
+如果需要更精确的过滤，比如按时间范围、用户或某个特定的 Response Policy 名称，可以进一步添加条件。例如：
+
+#### 添加时间范围
+```bash
+gcloud logging read '(protoPayload.methodName="dns.responsePolicyRules.patch" OR protoPayload.methodName="dns.responsePolicyRules.update")' --start-time="2025-01-01T00:00:00Z" --end-time="2025-01-07T23:59:59Z" --format=json
+```
+
+#### 添加特定的 Response Policy 名称
+```bash
+gcloud logging read '(protoPayload.methodName="dns.responsePolicyRules.patch" OR protoPayload.methodName="dns.responsePolicyRules.update") AND protoPayload.resourceName:"responsePolicyName"' --format=json
+```
+
+---
+
+### **总结**
+
+- 在命令行和 Logs Explorer 中都可以使用 `OR` 逻辑连接多个方法名。
+- 通过附加条件（如时间范围、资源名称等）可以进一步缩小范围，快速找到需要的日志条目。
 
 ---
 
