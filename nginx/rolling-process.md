@@ -129,7 +129,7 @@ POST请求，特别是大文件上传，由于涉及持续的数据传输和状�
 完整流程图
 
 以下是整个架构的 Flow 及 Rolling Update 过程中的行为描述：
-
+```mermaid
 graph TD;
     A[Nginx (7 Layer)] -->|Forward Traffic| B[Nginx (4 Layer)];
     B -->|API Gateway| C[KongDP (GKE)];
@@ -142,7 +142,7 @@ graph TD;
     end;
     C1 --> C2 --> C3 --> C4;
     style Rolling Update Process fill:#f9f,stroke:#333,stroke-width:2px
-
+```
 注意事项
 	1.	POST 请求的中断处理
 	•	对于文件上传等长时间的 POST 请求，确保连接持久化是关键。启用以下功能：
