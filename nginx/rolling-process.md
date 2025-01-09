@@ -131,9 +131,9 @@ POST请求，特别是大文件上传，由于涉及持续的数据传输和状�
 以下是整个架构的 Flow 及 Rolling Update 过程中的行为描述：
 ```mermaid
 graph TD;
-    A[Nginx (7 Layer)] -->|Forward Traffic| B[Nginx (4 Layer)];
-    B -->|API Gateway| C[KongDP (GKE)];
-    C -->|Route Traffic| D[Runtime (GKE)];
+    A[Nginx 7 Layer] -->|Forward Traffic| B[Nginx 4 Layer];
+    B -->|API Gateway| C[KongDP-GKE];
+    C -->|Route Traffic| D[Runtime-GKE];
     subgraph Rolling Update Process
         C1[Step 1: Start Rolling Update];
         C2[Step 2: Add New Instance];
