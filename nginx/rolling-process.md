@@ -237,19 +237,21 @@ POST 请求，特别是大文件上传，由于涉及持续的数据传输和状
 
 **Mermaid 流程图**
 
+好的，这是更正后的 Mermaid 流程图，移除了 `participant` 定义中的括号：
+
 ```mermaid
 sequenceDiagram
     participant User
-    participant Ingress_A (Nginx 7 Layer)
-    participant LB_B (Nginx + 4 Layer)
+    participant LB_A
+    participant LB_B
     participant KongDP
     participant Old_Runtime_Pod
     participant New_Runtime_Pod
 
     activate User
-    User->Ingress_A: GET 请求
-    activate Ingress_A
-    Ingress_A->LB_B: 路由 GET 请求
+    User->LB_A: GET 请求
+    activate LB_A
+    LB_A->LB_B: 路由 GET 请求
     activate LB_B
     LB_B->KongDP: 路由 GET 请求
     activate KongDP
@@ -259,30 +261,30 @@ sequenceDiagram
     deactivate Old_Runtime_Pod
     KongDP-->LB_B: 返回 GET 响应
     deactivate KongDP
-    LB_B-->Ingress_A: 返回 GET 响应
+    LB_B-->LB_A: 返回 GET 响应
     deactivate LB_B
-    Ingress_A-->User: 返回 GET 响应
-    deactivate Ingress_A
+    LB_A-->User: 返回 GET 响应
+    deactivate LB_A
 
     Note over User,New_Runtime_Pod: 开始 Runtime Deployment 滚动更新
 
-    User->Ingress_A: POST 请求 (上传 50M 文件)
+    User->LB_A: POST 请求 (上传 50M 文件)
     activate User
-    Ingress_A->LB_B: 路由 POST 请求
-    activate Ingress_A
+    LB_A->LB_B: 路由 POST 请求
+    activate LB_A
     LB_B->KongDP: 路由 POST 请求
     activate LB_B
     KongDP->Old_Runtime_Pod: 路由 POST 请求
     activate KongDP
     activate Old_Runtime_Pod
 
-    Note over Ingress_A,Old_Runtime_Pod: 连接建立，开始上传
+    Note over LB_A,Old_Runtime_Pod: 连接建立，开始上传
 
     Note over Old_Runtime_Pod: Kubernetes 开始驱逐旧 Pod
 
     Note over KongDP: KongDP停止向旧 Pod 发送新请求 (Endpoint 更新)
 
-    Note over Ingress_A: Ingress停止向旧 Pod 发送新请求 (Endpoint 更新)
+    Note over LB_A: Ingress停止向旧 Pod 发送新请求 (Endpoint 更新)
 
     loop 文件上传持续
         Old_Runtime_Pod <-- KongDP: 接收文件数据
@@ -294,18 +296,19 @@ sequenceDiagram
     deactivate Old_Runtime_Pod
     KongDP-->LB_B: 返回 POST 响应
     deactivate KongDP
-    LB_B-->Ingress_A: 返回 POST 响应
+    LB_B-->LB_A: 返回 POST 响应
     deactivate LB_B
-    Ingress_A-->User: 返回 POST 响应
-    deactivate Ingress_A
+    LB_A-->User: 返回 POST 响应
+    deactivate LB_A
 
-    Note over Ingress_A,New_Runtime_Pod: 新 Pod 通过 Readiness Probe，加入 Service Endpoint
+    Note over LB_A,New_Runtime_Pod: 新 Pod 通过 Readiness Probe，加入 Service Endpoint
 
-    User->Ingress_A: 新的 GET/POST 请求
-    Ingress_A->New_Runtime_Pod: 路由到新 Pod
+    User->LB_A: 新的 GET/POST 请求
+    LB_A->New_Runtime_Pod: 路由到新 Pod
 
     deactivate User
 ```
+
 
 **总结和最佳实践**
 
