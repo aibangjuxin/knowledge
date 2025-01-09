@@ -10,7 +10,7 @@ HTTP Strict Transport Security (HSTS) 是一个安全功能，用于告知浏览
 在 Nginx 中启用 HSTS
 
 可以通过在配置文件中添加以下指令启用 HSTS：
-
+```bash
 server {
     listen 443 ssl;
     server_name example.com;
@@ -20,7 +20,7 @@ server {
 
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
 }
-
+```
 参数解释：
 	•	max-age=31536000: 定义 HSTS 的有效期（秒），此处设置为一年。
 	•	includeSubDomains: 将策略应用到主域名及其所有子域名。
@@ -31,11 +31,11 @@ Nginx 推荐的其他安全策略配置
 1. 禁用不安全的协议和加密算法
 
 通过优化 SSL/TLS 配置提高加密强度：
-
+```bash
 ssl_protocols TLSv1.2 TLSv1.3;
 ssl_ciphers HIGH:!aNULL:!MD5;
 ssl_prefer_server_ciphers on;
-
+```
 解释：
 	•	ssl_protocols: 禁用过时的 TLS 1.0 和 1.1，强制使用更安全的协议版本。
 	•	ssl_ciphers: 使用强加密套件，排除弱加密（如 MD5）。
@@ -45,7 +45,7 @@ ssl_prefer_server_ciphers on;
 
 CSP 可用于防止 XSS 攻击，通过限制可执行脚本来源：
 
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; object-src 'none';" always;
+`add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; object-src 'none';" always;`
 
 解释：
 	•	default-src 'self': 只允许加载本域资源。
@@ -91,7 +91,7 @@ listen 443 ssl http2;
 7. 限制请求大小和频率
 
 防止拒绝服务攻击 (DoS)：
-
+```bash
 client_max_body_size 1M;
 limit_req_zone $binary_remote_addr zone=one:10m rate=10r/s;
 
@@ -100,7 +100,7 @@ server {
         limit_req zone=one burst=5 nodelay;
     }
 }
-
+```
 解释：
 	•	client_max_body_size: 限制单个请求的最大大小。
 	•	limit_req_zone 和 limit_req: 设置 IP 限制请求速率。
@@ -112,7 +112,7 @@ server {
 server_tokens off;
 
 推荐完整配置示例
-
+```bash
 server {
     listen 443 ssl http2;
     server_name example.com;
@@ -140,7 +140,7 @@ server {
         index index.html;
     }
 }
-
+```
 总结
 
 通过配置 HSTS 和其他安全策略，可以显著提高 Nginx 的安全性。以上配置涵盖了 HTTPS 加密、防御常见攻击以及优化安全头的多个方面，适用于生产环境。
