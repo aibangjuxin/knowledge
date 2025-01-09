@@ -10,7 +10,7 @@ HTTP Strict Transport Security (HSTS) 是一个安全功能，用于告知浏览
 在 Nginx 中启用 HSTS
 
 可以通过在配置文件中添加以下指令启用 HSTS：
-```bash
+```yaml
 server {
     listen 443 ssl;
     server_name example.com;
@@ -31,7 +31,7 @@ Nginx 推荐的其他安全策略配置
 1. 禁用不安全的协议和加密算法
 
 通过优化 SSL/TLS 配置提高加密强度：
-```bash
+```yaml
 ssl_protocols TLSv1.2 TLSv1.3;
 ssl_ciphers HIGH:!aNULL:!MD5;
 ssl_prefer_server_ciphers on;
@@ -91,7 +91,7 @@ listen 443 ssl http2;
 7. 限制请求大小和频率
 
 防止拒绝服务攻击 (DoS)：
-```bash
+```yaml
 client_max_body_size 1M;
 limit_req_zone $binary_remote_addr zone=one:10m rate=10r/s;
 
@@ -112,7 +112,7 @@ server {
 server_tokens off;
 
 推荐完整配置示例
-```bash
+```yaml
 server {
     listen 443 ssl http2;
     server_name example.com;
