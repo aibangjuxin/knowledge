@@ -37,7 +37,7 @@ drainingTimeout 是 Google Cloud Backend Service 的设置，用来控制在实�
 ```mermaid
 graph TD;
     A[负载均衡器 Load Balancer] --> B[实例 A Old Instance];
-    A --> C[实例 B New Instance)];
+    A --> C[实例 B New Instance];
     subgraph Rolling Update
         D1[健康检查通过 Instance Ready];
         D2[启动新实例];
