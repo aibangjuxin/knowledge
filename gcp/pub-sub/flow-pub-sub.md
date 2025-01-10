@@ -84,7 +84,7 @@ print("Listening for messages...")
 graph TD;
     A[用户调度任务] --> B[Cloud Scheduler];
     B --> C[触发 Pub/Sub Topic];
-    C --> D[Schedule Service (GKE)];
+    C --> D[Schedule Service at GKE];
     D --> E[解析消息];
     E --> F[发起 HTTP 请求];
     F --> G[后端服务];
