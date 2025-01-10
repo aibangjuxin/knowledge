@@ -36,10 +36,10 @@ drainingTimeout 是 Google Cloud Backend Service 的设置，用来控制在实�
 以下是 GCE 实例使用 drainingTimeout 配合 Rolling Update 的示例流程图：
 ```mermaid
 graph TD;
-    A[负载均衡器 (Load Balancer)] --> B[实例 A (Old Instance)];
-    A --> C[实例 B (New Instance)];
+    A[负载均衡器 Load Balancer] --> B[实例 A Old Instance];
+    A --> C[实例 B New Instance)];
     subgraph Rolling Update
-        D1[健康检查通过 (Instance Ready)];
+        D1[健康检查通过 Instance Ready];
         D2[启动新实例];
         D3[标记旧实例为不可用];
         D4[DrainingTimeout 开始];
