@@ -1,5 +1,23 @@
 以下是对您描述的 GCP Pub/Sub 场景的细化，包括每个组件及其交互流程：
 
+```mermaid
+sequenceDiagram
+    participant S as Cloud Scheduler
+    participant P as Pub/Sub Topic
+    participant G as GKE Deployment<br/>(Schedule Service)
+    participant B as Backend Service
+
+    Note over S,B: Authentication: Basic Base64(user:password)
+    
+    S->>+P: 1. Trigger Message<br/>(gcloud schedule jobs)
+    P->>+G: 2. Push Message
+    
+    rect rgb(240, 240, 240)
+        Note over G: Schedule Service Processing
+        G->>+B: 3. HTTP Request<br/>Authorization: Basic Base64
+        B-->>-G: 4. Response
+    end
+```
 场景描述：
 	1.	用户调度任务：
 用户通过 GCP Cloud Scheduler 创建和管理调度任务，使用命令如 gcloud scheduler jobs list 查看所有任务。
