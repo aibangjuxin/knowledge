@@ -17,37 +17,37 @@ GKE 中部署一个专门用于处理调度的服务（称为 Schedule Service�
 以下是更具体的流程图和操作细节：
 
 1. 用户调度任务 -> Pub/Sub 队列
-
+```mermaid
 graph TD;
     A[用户调度任务] --> B[Cloud Scheduler];
     B --> C[触发 Pub/Sub Topic];
-
+```
 	•	Cloud Scheduler 配置：
-
+```yaml
 name: "daily-job"
 schedule: "0 12 * * *" # 每天中午12点
 timeZone: "UTC"
 pubsubTarget:
   topicName: "projects/{PROJECT_ID}/topics/{TOPIC_NAME}"
   data: "Your payload here" # 消息内容
-
+```
 
 	•	查看调度任务：
 
-gcloud scheduler jobs list
+`gcloud scheduler jobs list`
 
 2. Pub/Sub 队列 -> GKE Schedule 服务
-
+```mermaid
 graph TD;
     C[Pub/Sub Topic] --> D[Schedule Service on GKE];
     D --> E[处理消息并发起 HTTP 请求];
-
+```
 	•	Pub/Sub Subscriber 配置：
 GKE 中的 Schedule Service 使用 Pub/Sub 的 Push 或 Pull 模式订阅消息：
 	•	Push 模式：将消息推送到 GKE 服务的一个 HTTP 端点。
 	•	Pull 模式：Schedule Service 通过 Pub/Sub SDK 拉取消息。
 	•	示例代码（Pull 模式）：
-
+```python
 from google.cloud import pubsub_v1
 import requests
 import base64
@@ -76,11 +76,11 @@ def callback(message):
 subscriber.subscribe(subscription_path, callback=callback)
 
 print("Listening for messages...")
-
+```
 流程图
 
 完整流程如下：
-
+```mermaid
 graph TD;
     A[用户调度任务] --> B[Cloud Scheduler];
     B --> C[触发 Pub/Sub Topic];
@@ -88,7 +88,7 @@ graph TD;
     D --> E[解析消息];
     E --> F[发起 HTTP 请求];
     F --> G[后端服务];
-
+```
 后续优化建议
 	1.	安全性：
 	•	使用 GCP Secret Manager 存储 Basic Auth 的用户名和密码，避免硬编码敏感信息。
@@ -100,4 +100,3 @@ graph TD;
 	•	实现消息重试逻辑（Pub/Sub 支持自动重试）。
 	•	在 HTTP 请求失败时，记录错误日志或推送到 Dead Letter Queue（DLQ）。
 
-如果需要具体配置或代码，请随时告知！
