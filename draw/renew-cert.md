@@ -97,7 +97,7 @@ flowchart TD
 
 让我们基于这些建议创建一个优化后的流程图:
 
-```
+```mermaid
 graph TD
     A[开始] --> B[启动pipeline]
     B --> C[上传证书文件]
