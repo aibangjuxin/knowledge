@@ -175,6 +175,7 @@
   },
   "active": "7b35c0036f564457",
   "lastOpenFiles": [
+    "report/config-hpa.md",
     "report/get-hpa.md",
     "gcp/gcp-safe/workload-identify.md",
     "gcp/gcp-safe/gcp-role.md",
@@ -205,7 +206,6 @@
     "gcp/gke/gke-service-protection.md",
     "gcp/gke/gke-sa-gcp-sa-addbinding.md",
     "gcp/gke/gke-sa-gcp-sa-addbinding-claude.md",
-    "gcp/gke/gke-node-version.md",
     "gcp/gke",
     "gcp/bigquery",
     "network",
