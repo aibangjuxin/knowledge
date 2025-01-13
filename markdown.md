@@ -12,6 +12,24 @@ https://support.typora.io/Draw-Diagrams-With-Markdown/
 https://fontawesome.com/v4/icons/
 
 
+- simple flow 
+```mermaid
+graph TD
+        A --> B(BigQuery)
+```
+---
+
+- only an example of subgraph
+```mermaid
+flowchart LR
+    A[CronJob Trigger] --> B[(K8sMetricsCollector)]
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style B fill:#bbf,stroke:#333,stroke-width:2px 
+    subgraph K8sMetricsCollector
+        B --> C[Fetch Pod Info]
+    end
+```
+
 ### Mermaid语法示例：
 
 ```mermaid
