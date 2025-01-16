@@ -519,14 +519,15 @@ flowchart LR
     end
 ```
 %% 1.0 Configuration Flow
+
 ```mermaid
 flowchart LR
     subgraph "1.0 Configuration"
-        A1[("POST Request")] -->|"Generate"| B1["PMU Generate yaml → podAutoScaler.yml"]
-        B1 -->|"Project Level"| C1["Get Replicas Config Project Level (old)"]
-        B1 -->|"API Level"| D1["Get Replicas Config API Level (new)"]
-        C1 -->|"Apply"| E1["kubectl apply yaml"]
-        D1 -->|"Apply"| E1
+        A1[("POST Request")] --> |"API Level"| D1["Get Replicas Config API Level (new)"]
+        A1 -->|"Project Level"| C1["Get Replicas Config Project Level (old)"]
+        D1 --> B1["PMU Generate yaml → podAutoScaler.yml"]
+        C1 --> B1["PMU Generate yaml → podAutoScaler.yml"]
+        B1 -->|"Apply"| E1["kubectl apply yaml"]
         
         classDef primary fill:#2196F3,stroke:#1976D2,stroke-width:2px,color:white
         classDef secondary fill:#FF9800,stroke:#F57C00,stroke-width:2px,color:white
