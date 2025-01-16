@@ -1,5 +1,27 @@
+- [role Debug](#role-debug)
+    - [具体报错](#具体报错)
+      - [1. **kubectl 命令行工具中的错误**](#1-kubectl-命令行工具中的错误)
+      - [2. **应用程序日志中的错误**](#2-应用程序日志中的错误)
+      - [3. **Pod 事件中的错误**](#3-pod-事件中的错误)
+    - [根本原因](#根本原因)
+    - [解决方法](#解决方法)
+    - [总结](#总结)
+- [ClusterRole with RoleBinding](#clusterrole-with-rolebinding)
+  - [`kubectl get ClusterRole`](#kubectl-get-clusterrole)
+  - [`kubectl get RoleBinding -n namespace`](#kubectl-get-rolebinding--n-namespace)
+  - [ClusterRole 和 RoleBinding 之间的关系](#clusterrole-和-rolebinding-之间的关系)
+- [要定位一个命名空间中 GKE 的服务账号（Service Account）所对应的 Role 或 RoleBinding，可以按照以下步骤进行问题排查：](#要定位一个命名空间中-gke-的服务账号service-account所对应的-role-或-rolebinding可以按照以下步骤进行问题排查)
+  - [1. 通过 kubectl 获取命名空间下的所有 Role 和 RoleBinding](#1-通过-kubectl-获取命名空间下的所有-role-和-rolebinding)
+  - [2. 通过 kubectl describe serviceaccount  -n ](#2-通过-kubectl-describe-serviceaccount---n-)
+  - [3. 直接根据服务账号名称查找关联的 Role 和 RoleBinding](#3-直接根据服务账号名称查找关联的-role-和-rolebinding)
+  - [4. 如果Vous已经知道某个 Role 或 RoleBinding 授予了服务账号权限](#4-如果vous已经知道某个-role-或-rolebinding-授予了服务账号权限)
+  - [5. 通过 APISERVER 查询,检索命名空间下的 RoleBinding/Role](#5-通过-apiserver-查询检索命名空间下的-rolebindingrole)
 
 # role Debug 
+- kubectl get clusterrole pods-list -o yaml
+- kubectl get rolebinding -n aibang-core
+- kubectl get rolebinding -n aibang-general
+- kubectl get clusterrolebinding pods-list-binding -o yaml£
 
 遇到的问题是关于 Kubernetes 中的 ClusterRoleBinding 配置。具体来说，当你尝试将多个 ServiceAccount (SA) 绑定到同一个 ClusterRole 时，发现配置被覆盖了。这意味着只有最后一个绑定的 ServiceAccount 生效，之前的绑定被覆盖了
 
