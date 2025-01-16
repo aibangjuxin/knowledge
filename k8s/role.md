@@ -21,7 +21,8 @@
 - kubectl get clusterrole pods-list -o yaml
 - kubectl get rolebinding -n aibang-core
 - kubectl get rolebinding -n aibang-general
-- kubectl get clusterrolebinding pods-list-binding -o yaml£
+- kubectl get clusterrolebinding pods-list-binding -o yaml
+- kubectl describe clusterrolebinding pods-list-binding 
 
 遇到的问题是关于 Kubernetes 中的 ClusterRoleBinding 配置。具体来说，当你尝试将多个 ServiceAccount (SA) 绑定到同一个 ClusterRole 时，发现配置被覆盖了。这意味着只有最后一个绑定的 ServiceAccount 生效，之前的绑定被覆盖了
 
