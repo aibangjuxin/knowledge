@@ -463,3 +463,77 @@ flowchart TD
 	•	在用户界面中显示当前的实际 Pod 数、minReplicas 和 maxReplicas 配置，以便用户动态调整。
 
 这样既提升用户满意度，又能防止误解和纠纷。
+
+
+# set flow 
+```mermaid
+flowchart LR
+  subgraph "2.0 Configuration"
+    A[get value] --> B[minReplicas maxReplicas _helpers.tpl]
+    B --> C[verify value HorizontalPodAutoscaler-schema.json]
+    C --> E[kubectl apply yaml]
+    A --> F[minReplicas maxReplicas Firestore]
+    F --> B[replace value in _helpers.tpl]
+  end
+  style B fill:#f96,stroke:#333,stroke-width:2px
+  style A fill:#bbf,stroke:#333,stroke-width:2px
+  style C fill:#bbf,stroke:#333,stroke-width:2px
+  style E fill:#bbf,stroke:#333,stroke-width:2px
+  style F fill:#bbf,stroke:#333,stroke-width:2px
+```
+- 1.0 Configuration
+```mermaid
+flowchart LR
+  subgraph "1.0 Configuration"
+    A[post request] --> B[pmu generate yaml --> podAutoScaler.yml]
+    B --> C[get minReplicas maxReplicas from project Level  old]
+    B --> D[get minReplicas maxReplicas from API Level new]
+    C --> E[kubectl apply yaml]
+    D --> E
+  end
+  style B fill:#f96,stroke:#333,stroke-width:2px
+  style C fill:#bbf,stroke:#333,stroke-width:2px
+  style D fill:#bbf,stroke:#333,stroke-width:2px
+  style E fill:#bbf,stroke:#333,stroke-width:2px
+```
+
+
+%% 2.0 Configuration Flow
+```mermaid
+flowchart LR
+    subgraph "2.0 Configuration" 
+        A2[("Get Value")] -->|"Parse"| B2["Configure Replicas minReplicas maxReplicas _helpers.tpl"]
+        B2 -->|"Validate"| C2["Schema Verification HorizontalPodAutoscaler- schema.json"]
+        C2 -->|"Deploy"| E2["kubectl apply yaml"]
+        
+        A2 -->|"Fetch"| F2["Firestore Config minReplicas maxReplicas"]
+        F2 -->|"Update"| B2
+        
+        classDef primary fill:#2196F3,stroke:#1976D2,stroke-width:2px,color:white
+        classDef secondary fill:#FF9800,stroke:#F57C00,stroke-width:2px,color:white
+        classDef action fill:#4CAF50,stroke:#388E3C,stroke-width:2px,color:white
+        
+        class A2,F2 primary
+        class B2 secondary
+        class C2,E2 action
+    end
+```
+%% 1.0 Configuration Flow
+```mermaid
+flowchart LR
+    subgraph "1.0 Configuration"
+        A1[("POST Request")] -->|"Generate"| B1["PMU Generate yaml → podAutoScaler.yml"]
+        B1 -->|"Project Level"| C1["Get Replicas Config Project Level (old)"]
+        B1 -->|"API Level"| D1["Get Replicas Config API Level (new)"]
+        C1 -->|"Apply"| E1["kubectl apply yaml"]
+        D1 -->|"Apply"| E1
+        
+        classDef primary fill:#2196F3,stroke:#1976D2,stroke-width:2px,color:white
+        classDef secondary fill:#FF9800,stroke:#F57C00,stroke-width:2px,color:white
+        classDef action fill:#4CAF50,stroke:#388E3C,stroke-width:2px,color:white
+        
+        class A1 primary
+        class B1 secondary
+        class C1,D1,E1 action
+    end
+```
