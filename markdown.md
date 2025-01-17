@@ -100,24 +100,55 @@ gantt
     Release Review       :rel3, 2025-01-24, 1d
 ```
 ---
-
+```mermaid
+gantt
+    title Optimized Layout
+    dateFormat YYYY-MM-DD
+    
+    section Design
+    Req. Analysis    :done,    des1, 2025-01-01, 3d
+    Arch. Design     :done,    des2, after des1, 3d
+    Design Review    :active,  des3, after des2, 2d
+    
+    section Dev
+    GCP Setup        :done,    dev1, after des3, 2d
+    Core Dev         :active,  dev2, after dev1, 5d
+    Integration      :crit,    dev3, after dev2, 4d
+    Code Review      :         dev4, after dev3, 2d
+```
 ### **解释**
 1. **任务类型**
    - `:done`：已完成的任务。
    - `:active`：当前正在进行的任务。
    - `:crit`：关键任务。
+ - 任务状态标记：
 
-2. **任务时间**
+:done - 已完成任务（通常显示为灰色或带有完成标记）
+:active - 当前活动任务（通常显示为蓝色或突出显示）
+:crit - 关键任务（通常显示为红色）
+无标记 - 普通任务（使用默认颜色）通过这个看出来没行的格式
+`    Code Review      :         dev4, after dev3, 2d`
+解释上面一行
+
+- `Code Review` 是一个任务名称
+- `:         dev4` 是一个状态标记，用于表示任务的状态。后面可以跟,比如done 表示已完成，:active 表示当前进行中，:crit 表示关键任务 
+- `after dev3` 表示 `dev4` 任务在 `dev3` 任务完成后开始。 所以这个不用定义单独的日期,而是直接写在前面的任务后面
+- `2d` 表示任务持续 2 天。
+
+其实可以总结为如果频繁调整时间,那么使用after 来表示时间,如果固定时间,那么直接写日期就行
+
+
+1. **任务时间**
    - 使用 `YYYY-MM-DD` 的时间格式。
    - 例如，`Design` 阶段从 `2025-01-01` 开始，持续 3 天。
 
-3. **任务依赖**
+2. **任务依赖**
    - 使用 `after` 表示任务依赖，比如 `Deployment` 任务在 `Final Approval` 完成后开始：`after rel1`。
 
-4. **分组**
+3. **分组**
    - `section` 将任务分为模块（如 `Design`、`Development` 等）。
 
-5. **颜色**
+4. **颜色**
    - 不同任务状态使用不同的颜色，自动根据 Mermaid 配置呈现。
 
 ---
