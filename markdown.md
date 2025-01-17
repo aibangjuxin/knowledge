@@ -183,13 +183,10 @@ gantt
 
 ```mermaid
 %%{init: { 
-  'theme': 'base',
+  'theme': 'forest',
   'gantt': {
     'sectionBkgColors': [
-      ‘rgba(102, 187, 255, 0.2)',
-      'rgba(102, 255, 153, 0.2)',
-      'rgba(255, 204, 102, 0.2)',
-      'rgba(255, 153, 153, 0.2)'
+      'rgba(102, 255, 153, 0.2)'
     ]
   }
 } }%%
@@ -224,10 +221,59 @@ gantt
 ```
 在这个例子中：
 
+default (默认): 这是 Mermaid 的默认主题，提供了一个简洁清晰的风格。
+base: 一个非常基础的主题，几乎没有额外的样式。适合作为自定义样式的起点。你之前尝试的就是这个主题。
+forest: 一个颜色更丰富的主题，灵感来源于森林，通常包含绿色和更深的色调。你成功应用了这个主题。
+dark: 一个深色主题，背景为深色，文字为浅色。适合在暗色环境下查看或作为网站的夜间模式。
+neutral: 一个中性主题，使用柔和的颜色，整体感觉比较平静。
+simple: 一个非常简约的主题，线条纤细，颜色低调。
+
+
 Design section 使用浅蓝色背景 (rgba(102, 187, 255, 0.2))
 Development section 使用浅绿色背景 (rgba(102, 255, 153, 0.2))
 Testing section 使用浅黄色背景 (rgba(255, 204, 102, 0.2))
-Release section 使用浅红色背景 (rgba(255, 153, 153, 0.2))
+Release section 使用浅红色背景 (rgba(255, 153, 170, 0.16))
+
+```mermaid
+%%{init: { 
+  'theme': 'forest',
+  'gantt': {
+    'sectionBkgColors': [
+      'rgba(102, 255, 153, 0.2)',
+      'rgba(255, 204, 102, 0.2)',
+      'rgba(255, 153, 153, 0.2)',
+      'rgba(102, 187, 255, 0.2)'
+    ]
+  }
+} }%%
+gantt
+    title Feature Development Workflow (GCP Architecture)
+    dateFormat YYYY-MM-DD
+    section Design
+    Requirements Analysis    :done,    des1, 2025-01-01, 3d
+    Architecture Design     :done,    des2, after des1, 3d
+    Design Review          :active,  des3, after des2, 2d
+
+
+    section Development
+    GCP Resource Setup     :done,    dev1, after des3, 2d
+    Core Implementation    :active,  dev2, after dev1, 5d
+    GCP Integration       :crit,    dev3, after dev2, 4d
+    Code Review           :         dev4, after dev3, 2d
+    
+    section Testing
+    Unit Testing          :crit,    test1, after dev4, 3d
+    Integration Testing   :         test2, after test1, 4d
+    Performance Testing   :         test3, after test2, 3d
+    Security Testing      :crit,    test4, after test3, 3d
+    Testing Review        :         test5, after test4, 2d
+    
+    section Release
+    Staging Deployment    :         rel1, after test5, 2d
+    Final Approval        :crit,    rel2, after rel1, 1d
+    Production Deploy     :         rel3, after rel2, 2d
+    Post-Release Review   :         rel4, after rel3, 1d
+```
 
 
 ```mermaid
