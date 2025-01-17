@@ -116,6 +116,26 @@ gantt
     Integration      :crit,    dev3, after dev2, 4d
     Code Review      :         dev4, after dev3, 2d
 ```
+---
+- add sub graph
+```mermaid
+gantt
+    title Optimized Layout
+    dateFormat YYYY-MM-DD
+
+    section Design
+    Req. Analysis    :done,    des1, 2025-01-01, 3d
+    Arch. Design     :done,    des2, after des1, 3d
+    Design Review    :active,  des3, after des2, 2d
+
+    section Dev
+    GCP Setup        :done,    dev1, after des3, 2d
+    Core Dev - Module A :active,  dev2a, after dev1, 2d
+    Core Dev - Module B :active,  dev2b, after dev2a, 2d
+    Core Dev - Module C :active,  dev2c, after dev2b, 1d
+    Integration      :crit,    dev3, after dev2c, 4d
+    Code Review      :         dev4, after dev3, 2d
+```
 ### **解释**
 1. **任务类型**
    - `:done`：已完成的任务。
