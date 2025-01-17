@@ -175,6 +175,11 @@
   },
   "active": "7b35c0036f564457",
   "lastOpenFiles": [
+    "vim/vim.md",
+    "vim/vimrc.txt",
+    "vim/vimrc-ipad-2024090418.txt",
+    "vim/vimrc-20210904-ipad.txt",
+    "vim",
     "k8s/hpa/min-max-replicas.md",
     "gcp/firestore/firestore-export-to-bigquery.md",
     "k8s/docker/ Dockeffile-user-pass-violation.md",
@@ -205,14 +210,9 @@
     "gcp/psa/psc-bard.md",
     "gcp/psa/psa.md",
     "gcp/psa",
-    "gcp/gke/gke-upgrade.md",
     "gcp/gke",
-    "gcp/bigquery",
-    "network",
     "未命名 2.canvas",
     "未命名 1.canvas",
-    "未命名.canvas",
-    "Ghostty",
-    "k8s/abc"
+    "未命名.canvas"
   ]
 }
