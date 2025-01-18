@@ -175,6 +175,8 @@
   },
   "active": "7b35c0036f564457",
   "lastOpenFiles": [
+    "report/p.py",
+    "report/api-cost.md",
     "macos/powermetrics.md",
     "gcp/secret-manage/secret-manage-file.md",
     "vim/vim.md",
@@ -207,8 +209,6 @@
     "nginx/drainingTimeout.md",
     "gcp/secret-manage/about-deleted-sa-secret-manage.md",
     "gcp/pub-sub/flow-pub-sub.md",
-    "gcp/psa/psc.md",
-    "gcp/psa/psc-connect-consumer.md",
     "gcp/psa",
     "gcp/gke",
     "未命名 2.canvas",
