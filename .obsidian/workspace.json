@@ -175,6 +175,7 @@
   },
   "active": "7b35c0036f564457",
   "lastOpenFiles": [
+    "macos/powermetrics.md",
     "gcp/secret-manage/secret-manage-file.md",
     "vim/vim.md",
     "vim/vimrc.txt",
@@ -208,7 +209,6 @@
     "gcp/pub-sub/flow-pub-sub.md",
     "gcp/psa/psc.md",
     "gcp/psa/psc-connect-consumer.md",
-    "gcp/psa/psc-bard.md",
     "gcp/psa",
     "gcp/gke",
     "未命名 2.canvas",
