@@ -175,6 +175,8 @@
   },
   "active": "7b35c0036f564457",
   "lastOpenFiles": [
+    "OpenAI/yahoo.list",
+    "python/get_domain.py",
     "report/p.py",
     "report/api-cost.md",
     "macos/powermetrics.md",
@@ -209,8 +211,6 @@
     "nginx/drainingTimeout.md",
     "gcp/secret-manage/about-deleted-sa-secret-manage.md",
     "gcp/pub-sub/flow-pub-sub.md",
-    "gcp/psa",
-    "gcp/gke",
     "未命名 2.canvas",
     "未命名 1.canvas",
     "未命名.canvas"
