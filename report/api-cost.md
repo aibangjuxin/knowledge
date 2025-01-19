@@ -1,7 +1,10 @@
 - [Q](#q)
+  - [示例数据：](#示例数据)
+  - [计算固定值的情况。](#计算固定值的情况)
 - [chatgpt](#chatgpt)
 - [calude](#calude)
 - [gemini2](#gemini2)
+- [python](#python)
 
 # Q
 关于API的一个计费问题 计算费用：
@@ -69,6 +72,81 @@ graph TB
     class F result;
     class G,H,I,J,K,L example;
 ```
+
+
+## 示例数据：
+
+```bash
+D = [60, 80, 120, 90]
+avg(D) = (60 + 80 + 120 + 90) ÷ 4 = 87.5
+max(D) = 120
+
+基础费用部分 = 87.5 × 0.8 = 70
+峰值费用部分 = 120 × 0.2 = 24
+最终月费 = 70 + 24 = 94
+```
+
+
+	•	平均日费用：¥87.5
+	•	最高日费用：¥120
+	•	基础费用部分：¥70 （87.5 × 80%）
+	•	峰值费用部分：¥24 （120 × 20%）
+	•	最终月费：¥94
+按照这个公式一个月用户也就是收费94,但是如果用户仅仅部署了4天,感觉收费有些多,那么是不是按照4天来算
+如果在这个基础上还要按照天数来收费?那么就是这个94/API存在的天数
+
+`python api-count.py 14`
+```bash
+python api-count.py 14
+
+1. 每日费用明细:
+   第 1天: ¥90
+   第 2天: ¥71
+   第 3天: ¥106
+   第 4天: ¥97
+   第 5天: ¥79
+   第 6天: ¥72
+   第 7天: ¥116
+   第 8天: ¥106
+   第 9天: ¥86
+   第10天: ¥108
+   第11天: ¥105
+   第12天: ¥108
+   第13天: ¥76
+   第14天: ¥94
+
+2. 基础统计
+   - 实际使用天数：14天
+   - 月份总天数：31天
+   - 平均日费用：¥93.86
+   - 最高日费用：¥116
+
+3. 费用计算
+   - 基础费用部分：¥75.09
+   - 峰值费用部分：¥23.2
+   - 原始月度费用：¥98.29
+   - 每日费率：¥3.17
+   - 最终调整费用：¥44.39
+```
+
+
+
+## 计算固定值的情况。
+如果用户每天的费用都是120元（固定值），那么按照我们之前设计的计费公式来算：
+
+平均日费用：120元（因为每天都是120元）
+最高日费用：120元（同样是120元）
+基础费用部分：120 × 80% = 96元
+峰值费用部分：120 × 20% = 24元
+最终月费：96 + 24 = 120元
+
+这说明在费用固定的情况下，我们的计费方案最终得出的月费其实就等于每日固定费用。这是合理的，因为：
+
+当每天使用量相同时，不存在波动
+平均值等于最高值
+最终月费应该反映这种稳定的使用模式
+
+所以对于固定使用量的用户来说，他们的月费就是日费用值，这也是最公平的收费方式
 
 # chatgpt
 是的，取平均值 确实是一种简单且合理的收费方法！具体来说：
@@ -322,7 +400,7 @@ max(D) 为最高日费用
 ```
 
 代入你的示例数据：
-```
+```bash
 D = [60, 80, 120, 90]
 avg(D) = (60 + 80 + 120 + 90) ÷ 4 = 87.5
 max(D) = 120
@@ -560,3 +638,94 @@ python p.py
 你提出的“基础费用（80%平均）+ 峰值费用（20%最高）”的计费方式是一个非常值得推荐的方案。 它在公平性、合理性和对资源使用动态性的反映方面都做得不错。 相比于简单的平均值或只取最高值，它更能兼顾不同用户的需求和资源使用模式。
 
 关键在于持续监控和优化，根据用户反馈和数据分析，不断完善计费模型，使其更加贴合实际情况。  确保计费规则的透明度和清晰度，对于提升用户体验至关重要。
+
+
+# python 
+- cat api-count.py 
+```python 
+import sys
+import random
+from typing import List
+
+def calculate_adjusted_bill(daily_costs: list, total_days_in_month: int = 31) -> dict:
+    """
+    计算基于实际使用天数的调整后账单
+    
+    参数:
+    daily_costs: 每日费用列表
+    total_days_in_month: 月份总天数
+    """
+    # 基础计算
+    usage_days = len(daily_costs)
+    avg_daily = sum(daily_costs) / usage_days
+    max_daily = max(daily_costs)
+    
+    # 计算基础月度费用
+    base_charge = avg_daily * 0.8
+    peak_charge = max_daily * 0.2
+    monthly_fee = base_charge + peak_charge
+    
+    # 基于使用天数调整费用
+    daily_rate = monthly_fee / total_days_in_month
+    adjusted_fee = daily_rate * usage_days
+    
+    return {
+        "使用天数": usage_days,
+        "月份总天数": total_days_in_month,
+        "平均日费用": round(avg_daily, 2),
+        "最高日费用": round(max_daily, 2),
+        "基础费用部分": round(base_charge, 2),
+        "峰值费用部分": round(peak_charge, 2),
+        "原始月度费用": round(monthly_fee, 2),
+        "每日费率": round(daily_rate, 2),
+        "最终调整费用": round(adjusted_fee, 2)
+    }
+
+def generate_costs(days: int, min_cost: int = 60, max_cost: int = 120) -> List[int]:
+    """生成指定天数的随机整数费用"""
+    return [random.randint(min_cost, max_cost) for _ in range(days)]
+
+def main():
+    # 检查命令行参数
+    if len(sys.argv) != 2:
+        print("使用方法: python api-count.py <天数>")
+        sys.exit(1)
+    
+    try:
+        days = int(sys.argv[1])
+        if days <= 0:
+            raise ValueError("天数必须大于0")
+    except ValueError as e:
+        print(f"错误: {e}")
+        sys.exit(1)
+    
+    # 设置随机种子以保证结果可复现
+    random.seed(2024)
+    
+    # 生成随机费用数据
+    daily_costs = generate_costs(days)
+    
+    # 计算结果
+    result = calculate_adjusted_bill(daily_costs)
+    
+    # 打印详细结果
+    print("\n1. 每日费用明细:")
+    for day, cost in enumerate(daily_costs, 1):
+        print(f"   第{day:2d}天: ¥{cost}")
+    
+    print("\n2. 基础统计")
+    print(f"   - 实际使用天数：{result['使用天数']}天")
+    print(f"   - 月份总天数：{result['月份总天数']}天")
+    print(f"   - 平均日费用：¥{result['平均日费用']}")
+    print(f"   - 最高日费用：¥{result['最高日费用']}")
+    
+    print("\n3. 费用计算")
+    print(f"   - 基础费用部分：¥{result['基础费用部分']}")
+    print(f"   - 峰值费用部分：¥{result['峰值费用部分']}")
+    print(f"   - 原始月度费用：¥{result['原始月度费用']}")
+    print(f"   - 每日费率：¥{result['每日费率']}")
+    print(f"   - 最终调整费用：¥{result['最终调整费用']}")
+
+if __name__ == "__main__":
+    main()
+```
