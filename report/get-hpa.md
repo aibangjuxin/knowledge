@@ -91,18 +91,14 @@ status.desiredReplicas	期望副本数
 
 ```json
 {
+  "apiVersion": "autoscaling/v2",
+  "kind": "HorizontalPodAutoscaler",
   "metadata": {
     "name": "example-hpa",
     "namespace": "production",
     "creationTimestamp": "2025-01-20T12:34:56Z",
-    "annotations": {
-      "autoscaling.alpha.kubernetes.io/conditions": "[{\"type\":\"AbleToScale\",\"status\":\"True\",\"lastTransitionTime\":\"2025-01-20T12:35:56Z\",\"reason\":\"SucceededGetScale\",\"message\":\"The HPA controller was able to get the target's current scale\"}]",
-      "autoscaling.alpha.kubernetes.io/metrics": "[{\"type\":\"Resource\",\"resource\":{\"name\":\"cpu\",\"targetAverageUtilization\":50}}]"
-    },
-    "labels": {
-      "app": "example-app",
-      "environment": "production"
-    }
+    "resourceVersion": "123456789",
+    "uid": "d3b4a7ac-f9d4-11e9-8eb2-42010a8a0064"
   },
   "spec": {
     "scaleTargetRef": {
@@ -121,37 +117,195 @@ status.desiredReplicas	期望副本数
         }
       },
       {
-        "type": "Pods",
-        "pods": {
-          "metricName": "custom-metric",
-          "targetAverageValue": "10"
+        "type": "Resource",
+        "resource": {
+          "name": "memory",
+          "targetAverageUtilization": 80
         }
       }
     ]
   },
   "status": {
-    "currentReplicas": 3,
-    "desiredReplicas": 5,
-    "currentMetrics": [
+    "conditions": [
       {
-        "type": "Resource",
-        "resource": {
-          "name": "cpu",
-          "currentAverageUtilization": 55,
-          "currentAverageValue": "275m"
-        }
+        "lastTransitionTime": "2025-01-20T12:34:56Z",
+        "message": "Replica count scaled from 2 to 4",
+        "reason": "NewScale",
+        "status": "True",
+        "type": "AbleToScale"
       },
       {
-        "type": "Pods",
-        "pods": {
-          "metricName": "custom-metric",
-          "currentAverageValue": "12"
-        }
+        "lastTransitionTime": "2025-01-20T12:34:56Z",
+        "message": "New size: 4; reason: CPU utilization (percentage of request) above target",
+        "reason": "ScaleUp",
+        "status": "True",
+        "type": "ScalingUp"
+      },
+      {
+        "lastTransitionTime": "2025-01-20T12:34:56Z",
+        "message": "New size: 2; reason: memory resource utilization (percentage of request) above target",
+        "reason": "ScaleDown",
+        "status": "True",
+        "type": "ScalingDown"
       }
-    ]
+    ],
+    "currentMetrics": [
+      {
+        "resource": {
+          "current": {
+            "averageUtilization": 60,
+            "averageValue": "100m",
+            "value": "100m"
+          },
+          "name": "cpu"
+        },
+        "type": "Resource"
+      },
+      {
+        "resource": {
+          "current": {
+            "averageUtilization": 52,
+            "averageValue": "3284510",
+            "value": "3284510"
+          },
+          "name": "memory"
+        },
+        "type": "Resource"
+      }
+    ],
+    "currentReplicas": 4,
+    "desiredReplicas": 2,
+    "lastScaleTime": "2025-01-20T12:34:56Z"
   }
 }
 ```
+- 基于您提供的 JSON 数据设计的 BigQuery 表结构，仅保留对存储分析有用的字段，去除冗余数据，同时保持关键字段的完整性。表字段设计如下：
+
+
+以下是基于您提供的 JSON 数据设计的 BigQuery 表结构，仅保留对存储分析有用的字段，去除冗余数据，同时保持关键字段的完整性。表字段设计如下：
+
+BigQuery 表设计
+
+表名：hpa_data
+
+| 字段名              | 类型          | 描述                                                                         |
+| ------------------- | ------------- | ---------------------------------------------------------------------------- |
+| name                | STRING        | HPA 的名称 (metadata.name)                                                   |
+| namespace           | STRING        | HPA 所在命名空间 (metadata.namespace)                                        |
+| creation_timestamp  | TIMESTAMP     | HPA 创建时间 (metadata.creationTimestamp)                                    |
+| resource_version    | STRING        | 资源版本 (metadata.resourceVersion)                                          |
+| uid                 | STRING        | HPA 唯一标识符 (metadata.uid)                                                |
+| scale_target_kind   | STRING        | 目标对象的类型 (spec.scaleTargetRef.kind)                                    |
+| scale_target_name   | STRING        | 目标对象的名称 (spec.scaleTargetRef.name)                                    |
+| min_replicas        | INT           | 最小副本数 (spec.minReplicas)                                                |
+| max_replicas        | INT           | 最大副本数 (spec.maxReplicas)                                                |
+| metric_type         | STRING        | 指标类型 (spec.metrics[].type)                                               |
+| metric_name         | STRING        | 资源名称 (spec.metrics[].resource.name)                                      |
+| target_utilization  | INT           | 目标平均利用率 (spec.metrics[].resource.targetAverageUtilization)            |
+| current_utilization | INT           | 当前平均利用率 (status.currentMetrics[].resource.current.averageUtilization) |
+| current_value       | STRING        | 当前值 (status.currentMetrics[].resource.current.value)                      |
+| current_replicas    | INT           | 当前副本数 (status.currentReplicas)                                          |
+| desired_replicas    | INT           | 期望副本数 (status.desiredReplicas)                                          |
+| last_scale_time     | TIMESTAMP     | 最后扩缩容时间 (status.lastScaleTime)                                        |
+| scaling_conditions  | ARRAY<STRUCT> | 扩缩容条件 (status.conditions)                                               |
+
+
+
+```
+	1.	核心字段：
+	•	name、namespace：用来唯一标识 HPA 对象的关键字段。
+	•	scale_target_kind、scale_target_name：表示 HPA 关联的目标资源。
+	•	min_replicas、max_replicas：定义 HPA 的副本数范围。
+	•	metric_type、metric_name、target_utilization、current_utilization：存储每个监控指标的具体数据。
+	•	current_replicas、desired_replicas：监控扩缩容实际执行的副本数。
+	•	last_scale_time：扩缩容的时间戳。
+	2.	嵌套字段：
+	•	scaling_conditions（ARRAY<STRUCT>）：表示扩缩容的所有条件（status.conditions），每个条件包含：
+	•	type：条件类型（如 AbleToScale、ScalingUp）。
+	•	status：条件状态（如 True、False）。
+	•	reason：触发条件的原因。
+	•	message：条件描述信息。
+	•	lastTransitionTime：条件最后变更的时间。
+
+DDL 创建语句
+
+以下是创建上述 BigQuery 表的 SQL：
+
+CREATE TABLE `project_id.dataset_id.hpa_data` (
+  name STRING NOT NULL,
+  namespace STRING NOT NULL,
+  creation_timestamp TIMESTAMP,
+  resource_version STRING,
+  uid STRING,
+  scale_target_kind STRING,
+  scale_target_name STRING,
+  min_replicas INT64,
+  max_replicas INT64,
+  metric_type STRING,
+  metric_name STRING,
+  target_utilization INT64,
+  current_utilization INT64,
+  current_value STRING,
+  current_replicas INT64,
+  desired_replicas INT64,
+  last_scale_time TIMESTAMP,
+  scaling_conditions ARRAY<STRUCT<
+    type STRING,
+    status STRING,
+    reason STRING,
+    message STRING,
+    lastTransitionTime TIMESTAMP
+  >>
+);
+
+示例数据映射
+
+根据您提供的 JSON，以下是插入到 BigQuery 表中的示例行：
+```json
+{
+  "name": "example-hpa",
+  "namespace": "production",
+  "creation_timestamp": "2025-01-20T12:34:56Z",
+  "resource_version": "123456789",
+  "uid": "d3b4a7ac-f9d4-11e9-8eb2-42010a8a0064",
+  "scale_target_kind": "Deployment",
+  "scale_target_name": "example-app-deployment",
+  "min_replicas": 2,
+  "max_replicas": 10,
+  "metric_type": "Resource",
+  "metric_name": "cpu",
+  "target_utilization": 50,
+  "current_utilization": 60,
+  "current_value": "100m",
+  "current_replicas": 4,
+  "desired_replicas": 2,
+  "last_scale_time": "2025-01-20T12:34:56Z",
+  "scaling_conditions": [
+    {
+      "type": "AbleToScale",
+      "status": "True",
+      "reason": "NewScale",
+      "message": "Replica count scaled from 2 to 4",
+      "lastTransitionTime": "2025-01-20T12:34:56Z"
+    },
+    {
+      "type": "ScalingUp",
+      "status": "True",
+      "reason": "ScaleUp",
+      "message": "New size: 4; reason: CPU utilization (percentage of request) above target",
+      "lastTransitionTime": "2025-01-20T12:34:56Z"
+    },
+    {
+      "type": "ScalingDown",
+      "status": "True",
+      "reason": "ScaleDown",
+      "message": "New size: 2; reason: memory resource utilization (percentage of request) above target",
+      "lastTransitionTime": "2025-01-20T12:34:56Z"
+    }
+  ]
+}
+```
+如果需要进一步优化字段或补充内容，请告诉我！
 
 
 # enhance sink-job logic using chatgpt
@@ -226,7 +380,7 @@ def get_hpa_target_deployment(hpa):
 扩展现有的 BigQuery 表结构，加入 HPA 相关的字段。例如：
 
 | deployment_name | namespace | min_replicas | max_replicas | target_metric | current_replicas | desired_replicas | timestamp           |
-| --------------- | --------- | ------------ | ------------ | ------------- | ---------------- | ---------------- | ------------------- | 
+| --------------- | --------- | ------------ | ------------ | ------------- | ---------------- | ---------------- | ------------------- |
 | my-deployment   | default   | 2            | 8            | CPU: 50%      | 3                | 5                | 2025-01-13 12:00:00 |
 
 
