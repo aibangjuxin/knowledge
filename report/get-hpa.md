@@ -89,6 +89,69 @@ status.desiredReplicas	期望副本数
 如果需要进一步调整或将其整合到现有 Pipeline，请告诉我！
 
 
+```json
+{
+  "metadata": {
+    "name": "example-hpa",
+    "namespace": "production",
+    "creationTimestamp": "2025-01-20T12:34:56Z",
+    "annotations": {
+      "autoscaling.alpha.kubernetes.io/conditions": "[{\"type\":\"AbleToScale\",\"status\":\"True\",\"lastTransitionTime\":\"2025-01-20T12:35:56Z\",\"reason\":\"SucceededGetScale\",\"message\":\"The HPA controller was able to get the target's current scale\"}]",
+      "autoscaling.alpha.kubernetes.io/metrics": "[{\"type\":\"Resource\",\"resource\":{\"name\":\"cpu\",\"targetAverageUtilization\":50}}]"
+    },
+    "labels": {
+      "app": "example-app",
+      "environment": "production"
+    }
+  },
+  "spec": {
+    "scaleTargetRef": {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "name": "example-app-deployment"
+    },
+    "minReplicas": 2,
+    "maxReplicas": 10,
+    "metrics": [
+      {
+        "type": "Resource",
+        "resource": {
+          "name": "cpu",
+          "targetAverageUtilization": 50
+        }
+      },
+      {
+        "type": "Pods",
+        "pods": {
+          "metricName": "custom-metric",
+          "targetAverageValue": "10"
+        }
+      }
+    ]
+  },
+  "status": {
+    "currentReplicas": 3,
+    "desiredReplicas": 5,
+    "currentMetrics": [
+      {
+        "type": "Resource",
+        "resource": {
+          "name": "cpu",
+          "currentAverageUtilization": 55,
+          "currentAverageValue": "275m"
+        }
+      },
+      {
+        "type": "Pods",
+        "pods": {
+          "metricName": "custom-metric",
+          "currentAverageValue": "12"
+        }
+      }
+    ]
+  }
+}
+```
 
 
 # enhance sink-job logic using chatgpt
