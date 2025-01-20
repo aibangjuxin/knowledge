@@ -49,16 +49,18 @@ jq -c '.[]' hpa_data.json > hpa_data.ndjson
 # 打印结果并提示
 echo "转换完成，文件 hpa_data.ndjson 可直接导入 BigQuery。"
 ```
+
+
 BigQuery 导入步骤
 	1.	将文件上传到 GCS（Google Cloud Storage）
 
-gsutil cp hpa_data.ndjson gs://<your-bucket-name>/hpa_data.ndjson
+`gsutil cp hpa_data.ndjson gs://<your-bucket-name>/hpa_data.ndjson`
 
 
 	2.	在 BigQuery 中创建表
 使用以下命令创建表：
 
-bq load --autodetect --source_format=NEWLINE_DELIMITED_JSON <your-dataset-name>.<your-table-name> gs://<your-bucket-name>/hpa_data.ndjson
+`bq load --autodetect --source_format=NEWLINE_DELIMITED_JSON <your-dataset-name>.<your-table-name> gs://<your-bucket-name>/hpa_data.ndjson`
 
 
 	3.	验证数据
@@ -67,7 +69,7 @@ bq load --autodetect --source_format=NEWLINE_DELIMITED_JSON <your-dataset-name>.
 输出字段完整性说明
 
 输出的 JSON 格式会保留以下关键字段：
-
+```bash
 字段名称	描述
 metadata.name	HPA 名称
 metadata.namespace	命名空间
@@ -77,7 +79,7 @@ spec.maxReplicas	最大副本数
 spec.metrics	监控指标配置（CPU、内存等）
 status.currentReplicas	当前副本数
 status.desiredReplicas	期望副本数
-
+```
 优化和注意事项
 	•	并发优化
 如果 HPA 数量较多，可以直接通过 Kubernetes 的 API Server 使用批量请求来提升性能。

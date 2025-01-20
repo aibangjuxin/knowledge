@@ -175,6 +175,7 @@
   },
   "active": "7b35c0036f564457",
   "lastOpenFiles": [
+    "report/ob.md",
     "report/api-count.py",
     "report/api-cost.py",
     "report/p2.py",
@@ -199,7 +200,6 @@
     "gcp/gke/grafana-gke.md",
     "gcp/firestore/firestore.md",
     "gcp/firestore/firestore-compare.md",
-    "gcp/firestore",
     "gcp/gcp-safe/security-policy-overview.md",
     "gcp/gcp-safe/kms.md",
     "nginx/nginx-timeout.md",
