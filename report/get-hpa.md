@@ -179,6 +179,7 @@ status.desiredReplicas	期望副本数
   }
 }
 ```
+
 - 基于您提供的 JSON 数据设计的 BigQuery 表结构，仅保留对存储分析有用的字段，去除冗余数据，同时保持关键字段的完整性。表字段设计如下：
 
 
@@ -211,7 +212,7 @@ BigQuery 表设计
 
 
 
-```
+
 	1.	核心字段：
 	•	name、namespace：用来唯一标识 HPA 对象的关键字段。
 	•	scale_target_kind、scale_target_name：表示 HPA 关联的目标资源。
@@ -230,7 +231,7 @@ BigQuery 表设计
 DDL 创建语句
 
 以下是创建上述 BigQuery 表的 SQL：
-
+```sql
 CREATE TABLE `project_id.dataset_id.hpa_data` (
   name STRING NOT NULL,
   namespace STRING NOT NULL,
@@ -257,7 +258,7 @@ CREATE TABLE `project_id.dataset_id.hpa_data` (
     lastTransitionTime TIMESTAMP
   >>
 );
-
+```
 示例数据映射
 
 根据您提供的 JSON，以下是插入到 BigQuery 表中的示例行：
@@ -305,9 +306,27 @@ CREATE TABLE `project_id.dataset_id.hpa_data` (
   ]
 }
 ```
-如果需要进一步优化字段或补充内容，请告诉我！
 
+- flow
+```mermaid
+graph TD
+    subgraph Collect
+       style Collect fill:#E3F2FD,stroke:#64B5F6,stroke-width:2px
+        A[Start - Collect Task] --> B[Run app.py Script]
+        B --> C[Get pod.json Information]
+        B --> D[Get hpa.json Information]
+        C --> E[Store pod.json in Buckets]
+        D --> F[Store hpa.json in Buckets]
+    end
 
+    subgraph Sink
+    style Sink fill:#FFF8E1,stroke:#FFD54F,stroke-width:2px
+        E --> G[Sync pod.json to BigQuery]
+        F --> H[Sync hpa.json to BigQuery]
+        G --> I[End - pod.json Stored in BigQuery]
+        H --> J[End - hpa.json Stored in BigQuery]
+    end
+```
 # enhance sink-job logic using chatgpt
 要在现有的 sink-job 基础上扩展功能，从 Kubernetes Deployment 获取 HPA（Horizontal Pod Autoscaler） 的定义值，并将这些数据存储到 BigQuery 中，您可以按照以下方案实现。
 
