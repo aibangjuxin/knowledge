@@ -90,10 +90,10 @@ kubectl get deployment -A -l "app.kubernetes.io/managed-by=Helm" -o custom-colum
 
 ```bash
 # 查找所有命名空间中引用了 lockabc ConfigMap 的 Deployment
-kubectl get deployments -A -o json | jq '.items[] | select(.spec.template.spec.volumes[]?.configMap.name == "lockabc" or .spec.template.spec.containers[].envFrom[]?.configMapRef.name == "lockabc") | {namespace: .metadata.namespace, name: .metadata.name}'
 
-# 查找所有命名空间中在容器定义中引用了 lockabc ConfigMap 的 Deployment
-kubectl get deployments -A -o json | jq '.items[] | select(.spec.template.spec.containers[].env[]?.valueFrom.configMapKeyRef.name == "lockabc") | {namespace: .metadata.namespace, name: .metadata.name}'
+# 查找所有命名空间中在容器的 volumeMounts 中引用了 lockabc ConfigMap 的 Deployment
+kubectl get deployments -A -o json | jq '.items[] | select(.spec.template.spec.containers[].volumeMounts[]?.name == "lockabc") | {namespace: .metadata.namespace, name: .metadata.name, containers: [.spec.template.spec.containers[] | select(.volumeMounts[]?.name == "lockabc") | .name]}'
+
 ```
 
 这个命令会：
@@ -107,9 +107,15 @@ kubectl get deployments -A -o json | jq '.items[] | select(.spec.template.spec.c
 
 ```bash
 # 使用表格形式显示结果
-kubectl get deployments -A -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name --field-selector=spec.template.spec.volumes[*].configMap.name=lockabc
-# 显示更详细的信息，包括使用该 ConfigMap 的容器名称
-kubectl get deployments -A -o json | jq '.items[] | select(.spec.template.spec.containers[].env[]?.valueFrom.configMapKeyRef.name == "lockabc") | {namespace: .metadata.namespace, deployment: .metadata.name, containers: [.spec.template.spec.containers[] | select(.env[]?.valueFrom.configMapKeyRef.name == "lockabc") | .name]}'
+# 显示更详细的信息，包括挂载点路径
+kubectl get deployments -A -o json | jq '.items[] | select(.spec.template.spec.containers[].volumeMounts[]?.name == "lockabc") | {
+  namespace: .metadata.namespace,
+  deployment: .metadata.name,
+  mounts: [.spec.template.spec.containers[] | select(.volumeMounts[]?.name == "lockabc") | {
+    container: .name,
+    mountPath: [.volumeMounts[] | select(.name == "lockabc") | .mountPath]
+  }]
+}'
 
 ```
 
