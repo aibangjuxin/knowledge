@@ -81,3 +81,30 @@ kubectl get deployment -A -l "app.kubernetes.io/managed-by=Helm" -o custom-colum
    - 显示 Helm revision 版本
 
 如果你只想查看特定命名空间，可以用 `-n <namespace>` 替换 `-A`。
+
+# lock 
+
+我如果deployment里面有个configMap name = lockabc
+
+我来帮你写命令来查找所有使用了特定 ConfigMap (lockabc) 的 Deployment。
+
+```bash
+# 查找所有命名空间中引用了 lockabc ConfigMap 的 Deployment
+kubectl get deployments -A -o json | jq '.items[] | select(.spec.template.spec.volumes[]?.configMap.name == "lockabc" or .spec.template.spec.containers[].envFrom[]?.configMapRef.name == "lockabc") | {namespace: .metadata.namespace, name: .metadata.name}'
+```
+
+这个命令会：
+1. 获取所有 Deployment 的详细信息
+2. 使用 jq 过滤出引用了 `lockabc` ConfigMap 的 Deployment
+3. 同时检查两种常见的 ConfigMap 使用方式：
+   - 作为 Volume 挂载
+   - 作为环境变量来源
+
+如果你想要更易读的输出格式，可以使用这个版本：
+
+```bash
+# 使用表格形式显示结果
+kubectl get deployments -A -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name --field-selector=spec.template.spec.volumes[*].configMap.name=lockabc
+```
+
+注意：第二个命令可能无法捕获所有使用场景，因为 field-selector 的功能相对有限。如果需要完整的搜索，建议使用第一个带 jq 的命令。
