@@ -136,3 +136,9 @@ CPU_LIMIT:.spec.template.spec.containers[*].resources.limits.cpu,\
 MEM_REQUEST:.spec.template.spec.containers[*].resources.requests.memory,\
 MEM_LIMIT:.spec.template.spec.containers[*].resources.limits.memory
 ```
+- output 
+```bash
+NAMESPACE   DEPLOYMENT   CPU_REQUEST   CPU_LIMIT   MEM_REQUEST   MEM_LIMIT
+default     app1        100m          200m        256Mi         512Mi
+kube-system app2        500m          1000m       1Gi           2Gi
+```
