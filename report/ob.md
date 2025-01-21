@@ -1,3 +1,7 @@
+
+
+1024 + 512 = 1536
+
 为你的 `ticket.yaml` 文件增加内存和 CPU 的定义，有几种方式，选择哪种取决于你未来对这些信息的细致程度和扩展性要求。以下提供几种建议，从简单到复杂：
 
 **优点：**
@@ -33,6 +37,15 @@ ticket_info:
         unit: GB
 ```
 
+或者如下
+      cpu:
+        value: 1000
+        unit: m
+      memory:
+        value: 3072
+        unit: Mi
+
+
 **优点：**
 
 *   更结构化，明确了单位。
@@ -49,3 +62,23 @@ ticket_info:
 
 有一个问题需要获取历史数据来补充进去?
 历史数据的获取关于HPA的使用,用那个值比较合适.就是用实际获取的就行了
+
+2.0 if User (define cpu && memory value) then use it, else use default value from ticket.yaml
+
+```mermaid
+flowchart TD
+    A[开始] --> B{用户是否定义了 CPU和内存?}
+    B -->|是| C[使用用户定义的值]
+    B -->|否| D[从ticket.yaml获取默认值]
+    C --> E[应用资源配置]
+    D --> E
+    E --> F[结束]
+
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style B fill:#bbf,stroke:#333,stroke-width:2px
+    style C fill:#dfd,stroke:#333,stroke-width:2px
+    style D fill:#dfd,stroke:#333,stroke-width:2px
+    style E fill:#dfd,stroke:#333,stroke-width:2px
+    style F fill:#f9f,stroke:#333,stroke-width:2px
+```
+
