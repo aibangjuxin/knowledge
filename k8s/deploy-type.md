@@ -120,3 +120,9 @@ kubectl get deployments -A -o json | jq '.items[] | select(.spec.template.spec.c
 ```
 
 注意：第二个命令可能无法捕获所有使用场景，因为 field-selector 的功能相对有限。如果需要完整的搜索，建议使用第一个带 jq 的命令。
+
+
+
+```bash
+kubectl get deployments --all-namespaces -o jsonpath='{range .items[*]}{.metadata.namespace}{"/"}{.metadata.name}{"\n"}{"  CPU Requests: "}{.spec.template.spec.containers[*].resources.requests.cpu}{"  CPU Limits: "}{.spec.template.spec.containers[*].resources.limits.cpu}{"\n"}{"  Memory Requests: "}{.spec.template.spec.containers[*].resources.requests.memory}{"  Memory Limits: "}{.spec.template.spec.containers[*].resources.limits.memory}{"\n"}{end}'
+```
