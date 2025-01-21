@@ -126,3 +126,13 @@ kubectl get deployments -A -o json | jq '.items[] | select(.spec.template.spec.c
 ```bash
 kubectl get deployments --all-namespaces -o jsonpath='{range .items[*]}{.metadata.namespace}{"/"}{.metadata.name}{"\n"}{"  CPU Requests: "}{.spec.template.spec.containers[*].resources.requests.cpu}{"  CPU Limits: "}{.spec.template.spec.containers[*].resources.limits.cpu}{"\n"}{"  Memory Requests: "}{.spec.template.spec.containers[*].resources.requests.memory}{"  Memory Limits: "}{.spec.template.spec.containers[*].resources.limits.memory}{"\n"}{end}'
 ```
+这个输出的排版有些乱,我想对应显示?如何比如namespace deployment cpu-request cpu-limit memory-request memory-limts
+```bash
+kubectl get deployments -A -o custom-columns=\
+NAMESPACE:.metadata.namespace,\
+DEPLOYMENT:.metadata.name,\
+CPU_REQUEST:.spec.template.spec.containers[*].resources.requests.cpu,\
+CPU_LIMIT:.spec.template.spec.containers[*].resources.limits.cpu,\
+MEM_REQUEST:.spec.template.spec.containers[*].resources.requests.memory,\
+MEM_LIMIT:.spec.template.spec.containers[*].resources.limits.memory
+```
