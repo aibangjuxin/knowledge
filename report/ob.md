@@ -67,17 +67,20 @@ ticket_info:
 
 ```mermaid
 flowchart TD
-    A[开始] --> B{用户是否定义了 CPU和内存?}
+    A[开始] --> B{用户是否定义了\nCPU和内存?}
     B -->|是| C[使用用户定义的值]
     B -->|否| D[从ticket.yaml获取默认值]
-    C --> E[应用资源配置]
-    D --> E
+    D -->|"tooltip: 默认值来自resource_types配置"| E[应用资源配置]
+    C --> E
     E --> F[结束]
 
+    %% 添加提示信息
+    click D href "javascript:void(0);" "从resource_types中获取对应规格的配置"
+    
     style A fill:#f9f,stroke:#333,stroke-width:2px
     style B fill:#bbf,stroke:#333,stroke-width:2px
     style C fill:#dfd,stroke:#333,stroke-width:2px
-    style D fill:#dfd,stroke:#333,stroke-width:2px
+    style D fill:#dfd,stroke:#333,stroke-width:2px,stroke-dasharray: 5 5
     style E fill:#dfd,stroke:#333,stroke-width:2px
     style F fill:#f9f,stroke:#333,stroke-width:2px
 ```

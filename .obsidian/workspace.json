@@ -175,6 +175,7 @@
   },
   "active": "7b35c0036f564457",
   "lastOpenFiles": [
+    "k8s/deploy-type.md",
     "report/ob.md",
     "report/api-count.py",
     "report/api-cost.py",
@@ -210,7 +211,6 @@
     "nginx/nginx-safe.md",
     "nginx/drainingTimeout.md",
     "gcp/secret-manage/about-deleted-sa-secret-manage.md",
-    "gcp/pub-sub/flow-pub-sub.md",
     "未命名 2.canvas",
     "未命名 1.canvas",
     "未命名.canvas"
