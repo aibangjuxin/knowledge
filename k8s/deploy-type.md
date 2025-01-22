@@ -135,6 +135,14 @@ CPU_REQUEST:.spec.template.spec.containers[*].resources.requests.cpu,\
 CPU_LIMIT:.spec.template.spec.containers[*].resources.limits.cpu,\
 MEM_REQUEST:.spec.template.spec.containers[*].resources.requests.memory,\
 MEM_LIMIT:.spec.template.spec.containers[*].resources.limits.memory
+
+
+kubectl get deployments -A \
+  -o custom-columns=\
+NAME:.metadata.name,\
+NAMESPACE:.metadata.namespace,\
+CPU_REQUEST:.spec.template.spec.containers[*].resources.requests.cpu,\
+CPU_LIMIT:.spec.template.spec.containers[*].resources.limits.cpu
 ```
 - output 
 ```bash

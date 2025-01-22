@@ -17,28 +17,72 @@
 
 
 
-当然可以。我将为您详细解释这些AI模型中常见的参数和概念,并使用Mermaid格式的表格来呈现这些信息。
+详细解释这些AI模型中常见的参数和概念,并使用Mermaid格式的表格来呈现这些信息。
 
 
+我来帮你用 Mermaid 图表展示 AI 模型的常见参数和概念。
 
 ```mermaid
 classDiagram
-    class "AI模型参数和概念" {
-        temperature: 控制生成文本的随机性
-        n_predict: 预测/生成的标记数量
-        top_k: 仅考虑概率最高的k个下一个标记
-        top_p: 仅考虑累积概率达到p的标记集合
-        tfs_z: Tail Free Sampling的参数
-        typical_p: Typical Sampling的参数
-        penalty_last_n: 对最近n个标记应用惩罚
-        penalty_repeat: 重复惩罚因子
-        penalty_present: 已出现标记的惩罚因子
-        mirostat: 动态调整temperature的算法
-        BOS: Beginning of Sequence标记
-        EOS: End of Sequence标记
+    class AIParameters {
+        +生成控制参数
+        +采样参数
+        +惩罚参数
+        +特殊标记
+    }
+    
+    class GenerationControl {
+        +temperature: 控制随机性(0.1-1.0)
+        +n_predict: 生成标记数量
+    }
+    
+    class SamplingParams {
+        +top_k: 最高概率的k个选项
+        +top_p: 累积概率阈值
+        +tfs_z: 尾部采样参数
+        +typical_p: 典型采样参数
+    }
+    
+    class PenaltyParams {
+        +penalty_last_n: 最近n个标记惩罚
+        +penalty_repeat: 重复惩罚系数
+        +penalty_present: 已出现标记惩罚
+    }
+    
+    class SpecialTokens {
+        +BOS: 序列开始标记
+        +EOS: 序列结束标记
     }
 
+    AIParameters --> GenerationControl
+    AIParameters --> SamplingParams
+    AIParameters --> PenaltyParams
+    AIParameters --> SpecialTokens
 ```
+
+这个类图展示了 AI 模型参数的层次结构：
+
+1. **生成控制参数**
+   - temperature：值越低（如 0.2）输出越确定，值越高（如 0.8）输出越随机
+   - n_predict：控制生成内容的长度
+
+2. **采样参数**
+   - top_k：只从概率最高的 k 个选项中选择
+   - top_p：选择累积概率达到 p 的选项
+   - tfs_z：控制尾部采样的程度
+   - typical_p：控制生成内容的典型性
+
+3. **惩罚参数**
+   - penalty_last_n：防止短期内容重复
+   - penalty_repeat：控制整体重复度
+   - penalty_present：避免重复使用已出现的内容
+
+4. **特殊标记**
+   - BOS：标记序列的开始
+   - EOS：标记序列的结束
+
+这种分层结构可以帮助我们更好地理解各个参数的作用范围和相互关系。需要我详细解释某个具体部分吗？
+
 
 
 1. temperature: 控制生成文本的随机性。较高的值(如0.8)会产生更多样化但可能不太连贯的输出,而较低的值(如0.2)会产生更保守、更可预测的输出。
