@@ -175,6 +175,7 @@
   },
   "active": "7b35c0036f564457",
   "lastOpenFiles": [
+    "gcp/secret-manage/verify-sa.md",
     "gcp/secret-manage/secret-mongo.md",
     "linux/openssl.md",
     "howgit/rm-DS_store.md",
@@ -210,7 +211,6 @@
     "gcp/gce/instance-uptime.md",
     "gcp/gce/instance-groups.md",
     "gcp/recaptcha/recaptcha.md",
-    "nginx/rolling-process.md",
     "未命名 2.canvas",
     "未命名 1.canvas",
     "未命名.canvas"
