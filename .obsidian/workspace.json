@@ -175,6 +175,7 @@
   },
   "active": "7b35c0036f564457",
   "lastOpenFiles": [
+    "gcp/report/api-cost.md",
     "gcp/secret-manage/verify-gcp-secretmanage.sh",
     "gcp/secret-manage/verify-sa.md",
     "gcp/secret-manage/secret-mongo.md",
@@ -195,7 +196,6 @@
     "vim/vimrc.txt",
     "vim/vimrc-ipad-2024090418.txt",
     "vim/vimrc-20210904-ipad.txt",
-    "vim",
     "k8s/hpa/min-max-replicas.md",
     "gcp/firestore/firestore-export-to-bigquery.md",
     "k8s/docker/ Dockeffile-user-pass-violation.md",
