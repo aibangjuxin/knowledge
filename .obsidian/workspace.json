@@ -175,6 +175,7 @@
   },
   "active": "7b35c0036f564457",
   "lastOpenFiles": [
+    "gcp/secret-manage/verify-gcp-secretmanage.sh",
     "gcp/secret-manage/verify-sa.md",
     "gcp/secret-manage/secret-mongo.md",
     "linux/openssl.md",
@@ -210,7 +211,6 @@
     "nginx/nginx-timeout.md",
     "gcp/gce/instance-uptime.md",
     "gcp/gce/instance-groups.md",
-    "gcp/recaptcha/recaptcha.md",
     "未命名 2.canvas",
     "未命名 1.canvas",
     "未命名.canvas"

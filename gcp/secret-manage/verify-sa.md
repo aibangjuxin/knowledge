@@ -111,7 +111,6 @@ API deployment 使用了这个账户 ${SPACE}-${REGION}-${API_NAME}-ksa
 bash:/Users/lex/git/knowledge/gcp/secret-manage/verify-permission.sh
 ```bash
 #!/bin/bash
-
 # 设置颜色输出
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -153,7 +152,9 @@ gcloud projects get-iam-policy ${PROJECT_ID} \
     --format='table(bindings.role)' \
     --filter="bindings.members:${GCP_SA}"
 
- 
+echo -e "\n${GREEN}list iam service account iam-policy ...${NC}"
+gcloud iam service-accounts get-iam-policy ${GCP_SA} --project=${PROJECT_ID}
+
 
 #reference 3. 创建RT GSA并赋予权限
 #gcloud iam service-accounts create ${SPACE}-${REGION}-${API_NAME}-rt-sa \
@@ -165,20 +166,39 @@ gcloud projects get-iam-policy ${PROJECT_ID} \
 
 # 4. 检查 Secret Manager 权限
 echo -e "\n${GREEN}4. 检查 Secret Manager 的权限...${NC}"
-SECRET_NAME="${KSA}-secret"
+echo -e "\n${GREEN}4.1. 列出 Secret Manager 中的所有 Secret...${NC}"
+gcloud secrets list --filter="name~${SECRET_NAME}" --format="table(name)"
+
+echo -e "\n${GREEN}4.2 get api name...${NC}"
+API_NAME_WITH_VERSION=$(kubectl get deployment ${DEPLOYMENT_NAME} -n ${NAMESPACE} -o jsonpath='{.metadata.labels.app}')
+
+echo "API_NAME_WITH_VERSION: ${API_NAME_WITH_VERSION}"
+
+
+# 去除版本号
+API_NAME=$(echo ${API_NAME_WITH_VERSION} | sed -E 's/-[0-9]+-[0-9]+-[0-9]+$//')
+echo "API name without version: ${API_NAME}"
+#获取包含API_NAME的Secret名称
+SECRET_NAME=$(gcloud secrets list --filter="name~${API_NAME}" --format="value(name)")
+
+#SECRET_NAME="${KSA}-secret"
 echo "查找 Secret: ${SECRET_NAME}"
 
 # 获取 Secret 的 IAM secretmanager.secretAccessor 策略
 
 # 1. 获取完整的 IAM 策略（默认格式）
+echo "获取 Secret 的 IAM 策略"
 gcloud secrets get-iam-policy ${SECRET_NAME}
 
 # 2. 获取 JSON 格式的完整策略
+echo "获取 Secret 的 JSON 格式的完整策略"
 gcloud secrets get-iam-policy ${SECRET_NAME} --format=json
 
 # 3. 获取表格格式的策略（更易读）
+echo "获取 Secret 的表格格式的策略"
 gcloud secrets get-iam-policy ${SECRET_NAME} --format='table(bindings.role,bindings.members[])'
 
+echo "获取 Secret 的表格格式的策略（更易读）"
 gcloud secrets get-iam-policy ${SECRET_NAME} --format=json | \
 jq -r '.bindings[] | select(.role=="roles/secretmanager.secretAccessor") | .members[]'
 
