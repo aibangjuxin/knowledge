@@ -236,6 +236,36 @@ chmod +x verify-permission.sh
 
 这样你就可以完整地验证从 Deployment 到 Secret Manager 的整个权限链路。需要我解释某个具体部分吗？
 
+如果你想要使用特定的服务账号来读取 GCP Secret Manager 中的值，可以使用以下命令：
+
+```bash
+# 1. 首先切换到指定的服务账号
+gcloud auth activate-service-account SERVICE_ACCOUNT_EMAIL --key-file=KEY_FILE.json
+
+# 2. 然后读取 secret 的最新版本
+gcloud secrets versions access latest --secret=SECRET_NAME
+
+# 或者读取特定版本
+gcloud secrets versions access VERSION_NUMBER --secret=SECRET_NAME
+```
+
+如果你不想切换当前的认证上下文，也可以使用 `--impersonate-service-account` 参数：
+
+```bash
+gcloud secrets versions access latest \
+  --secret=SECRET_NAME \
+  --impersonate-service-account=SERVICE_ACCOUNT_EMAIL
+```
+
+其中：
+- `SERVICE_ACCOUNT_EMAIL`: 服务账号的邮箱地址，格式为 `name@project-id.iam.gserviceaccount.com`
+- `SECRET_NAME`: Secret Manager 中的密钥名称
+- `VERSION_NUMBER`: 密钥的版本号（如果需要读取特定版本）
+
+注意：确保该服务账号具有对应 Secret 的 `roles/secretmanager.secretAccessor` 权限。
+
+
+
 # grok 
 
 Here's an analysis of the process described in the script:
