@@ -175,6 +175,7 @@
   },
   "active": "7b35c0036f564457",
   "lastOpenFiles": [
+    "gcp/report/api-cost-180.md",
     "gcp/report/api-cost.md",
     "gcp/secret-manage/verify-gcp-secretmanage.sh",
     "gcp/secret-manage/verify-sa.md",
@@ -210,7 +211,6 @@
     "gcp/gcp-safe/kms.md",
     "nginx/nginx-timeout.md",
     "gcp/gce/instance-uptime.md",
-    "gcp/gce/instance-groups.md",
     "未命名 2.canvas",
     "未命名 1.canvas",
     "未命名.canvas"
