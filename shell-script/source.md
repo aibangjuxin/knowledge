@@ -1,4 +1,17 @@
 
+source 命令在执行脚本时不会启动新的 shell，而是直接在当前 shell 中运行脚本中的命令。导致问题的原因可能是你当前的 shell 和脚本中的 bash 特性不兼容。例如：
+	1.	read -a 选项是 bash 专有的。如果你当前 shell 是 zsh 或其他非 bash shell，read -a 选项将无效。
+	2.	数组声明语法 declare -A 在 bash 中可用，但在其他 shell 中可能报错。
+
+	1.	#!/usr/bin/env bash
+使用通用的 env 方法来定位 bash，确保脚本在 bash 下运行。
+	2.	read -r -a 改为兼容性更强的解析
+仍然使用 bash，但可以使用 IFS 和 read 来分割字符串。
+	3.	eval 和 export
+确保所有变量在当前 shell 中正确生效。
+
+
+
 
 - the next script will switch the environment
 ```bash
@@ -8,8 +21,8 @@
 declare -A env_info
 
 env_info=(
-  ["dev-cn"]="project=aibang-teng-sit-api-dev cluster=dev-cn-cluster-123789 region=europe-west2 https_proxy=10.98.21.119:3128 private_network=aibang-teng-sit-api-dev-cinternal-vpc3"
-  ["dev-in"]="project=aibang-teng-sit-apisit-dev cluster=dev-in-cluster-123456 region=europe-west2 https_proxy=10.98.25.50:3128 private_network=aibang-teng-sit-apisit-dev-cinternal-vpc1"
+  ["dev-cn"]="project=aibang-teng-sit-api-dev cluster=dev-cn-cluster-123789 region=europe-west2 https_proxy=10.72.21.119:3128 private_network=aibang-teng-sit-api-dev-cinternal-vpc3"
+  ["lex-in"]="project=aibang-teng-sit-kongs-dev cluster=lex-in-cluster-123456 region=europe-west2 https_proxy=10.72.25.50:3128 private_network=aibang-teng-sit-kongs-dev-cinternal-vpc1"
 )
 
 environment=""
