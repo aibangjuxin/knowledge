@@ -175,6 +175,9 @@
   },
   "active": "7b35c0036f564457",
   "lastOpenFiles": [
+    "zhifubao/BillDetailView.swift",
+    "zhifubao",
+    "trans/BillDetailView.swift",
     "shell-script/source.md",
     "trans/transApp.swift",
     "trans/ContentView.swift",
@@ -206,11 +209,8 @@
     "gcp/secret-manage/secret-mongo.md",
     "linux/openssl.md",
     "howgit/rm-DS_store.md",
-    "k8s/deploy-type.md",
     "report/api-count.py",
     "report/api-cost.py",
-    "report/p2.py",
-    "OpenAI/yahoo.list",
     "未命名 2.canvas",
     "未命名 1.canvas",
     "未命名.canvas"
