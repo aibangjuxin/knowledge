@@ -16,8 +16,8 @@ func sha256(_ string: String) -> String {
 
 // 翻译工具类
 class Translator: ObservableObject {
-    let appid = "20200901000556472"
-    let secretKey = "ydlWacJbCz21SO2y4NYC"
+    let appid = "20"
+    let secretKey = "yd"
     @Published var translatedText = ""
     @Published var isLoading = false
     
