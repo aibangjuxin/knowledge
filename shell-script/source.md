@@ -10,7 +10,10 @@ source 命令在执行脚本时不会启动新的 shell，而是直接在当前 
 	3.	eval 和 export
 确保所有变量在当前 shell 中正确生效。
 
-
+其他建议
+	1.	确保脚本运行环境是 bash，而非 zsh 或其他 shell。
+	2.	如果仍有问题，执行以下命令检查当前 shell：
+    echo $SHELL
 
 
 - the next script will switch the environment
