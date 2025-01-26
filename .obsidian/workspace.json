@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "vscode/plug.md",
+                "file": "k8s/enhance-pod-start.md.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "plug"
+              "title": "enhance-pod-start.md"
             }
           }
         ]
@@ -93,7 +93,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "vscode/plug.md",
+                "file": "k8s/enhance-pod-start.md.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -103,7 +103,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "plug 的反向链接列表"
+              "title": "enhance-pod-start.md 的反向链接列表"
             }
           },
           {
@@ -112,12 +112,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "vscode/plug.md",
+                "file": "k8s/enhance-pod-start.md.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "plug 的出链列表"
+              "title": "enhance-pod-start.md 的出链列表"
             }
           },
           {
@@ -139,10 +139,10 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "vscode/plug.md"
+                "file": "k8s/enhance-pod-start.md.md"
               },
               "icon": "lucide-list",
-              "title": "plug 的大纲"
+              "title": "enhance-pod-start.md 的大纲"
             }
           },
           {
@@ -175,6 +175,8 @@
   },
   "active": "83b5f14ba0746c26",
   "lastOpenFiles": [
+    "vscode/plug.md",
+    "k8s/enhance-pod-start.md.md",
     "git-push.md",
     "2025-01-05.md",
     "markdown.md",
@@ -210,8 +212,6 @@
     "report/bigquery-alert.md",
     "report/api-cost-180.md",
     "report/3.md",
-    "gcp/report/api-cost-180.md",
-    "gcp/report/api-cost.md",
     "gcp/secret-manage/verify-gcp-secretmanage.sh",
     "report/api-count.py"
   ]
