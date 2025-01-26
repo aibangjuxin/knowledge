@@ -21,15 +21,58 @@ graph TD
 
 - only an example of subgraph
 ```mermaid
+%%{init: { 
+    'theme': 'forest',
+    'themeVariables': {
+        'fontFamily': 'Arial',
+        'fontsize': '12px'
+    }
+}}%%
 flowchart LR
     A[CronJob Trigger] --> B[(K8sMetricsCollector)]
+    
+    subgraph K8sMetricsCollector[K8s Metrics Collector]
+        B --> C[Fetch Pod Info]
+    end
+    
+    %% 设置节点样式
     style A fill:#f9f,stroke:#333,stroke-width:2px
-    style B fill:#bbf,stroke:#333,stroke-width:2px 
+    style B fill:#bbf,stroke:#333,stroke-width:2px
+    style C fill:#f9f,stroke:#333,stroke-width:2px
+    
+    %% 设置 subgraph 背景色
+    style K8sMetricsCollector fill:#e1f3d8,stroke:#82c91e,stroke-width:2px
+    classDef K8sMetricsCollector fill:#e1f3d8,stroke:#82c91e,stroke-width:2px;
+    class B,C fill:#f9f,stroke:#333,stroke-width:2px;
+    %% 添加 subgraph 背景色
+    style K8sMetricsCollector fill:#f5f5f5,stroke:#666,stroke-width:2px
     subgraph K8sMetricsCollector
         B --> C[Fetch Pod Info]
     end
 ```
-
+---
+- notice: define 
+  - style
+  - classDef
+  - calss 
+```mermaid
+%%{init: { 
+    'theme': 'forest',
+    'themeVariables': {'
+    'fontFamily': 'Arial'
+    'fontsize': '12px'
+}
+}}%%
+graph LR
+    A[Start] --> B[Process 1]
+    B --> D[Process 3]
+    subgraph K8sMetricsCollector
+        D --> E[Fetch Pod Info]
+    end
+    style K8sMetricsCollector fill:#e1f3d8,stroke:#82c91e,stroke-width:2px
+    classDef K8sMetricsCollector fill:#e1f3d8,stroke:#82c91e,stroke-width:2px;
+    class B,C fill:#f9f,stroke:#333,stroke-width:2px;
+```
 ### Mermaid语法示例：
 
 ```mermaid
