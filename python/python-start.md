@@ -83,7 +83,7 @@ def home():
 ```python
 if __name__ == "__main__":
     uvicorn.run(application, host="0.0.0.0", port=8000)
-````
+```
 
 gunicorn app:application -b 0.0.0.0:8000
 
@@ -94,7 +94,7 @@ gunicorn app:application -b 0.0.0.0:8000
 gunicorn app:application -b 0.0.0.0:8000
 ```
 
-
+---
 
 
 命令解析：
@@ -172,7 +172,7 @@ gunicorn app:application -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
 - `--reload`: 开发模式下自动重载
 
 是的，gunicorn app:application -b 0.0.0.0:8000 就是一个典型的 Gunicorn 启动命令。下面是对这个命令的详细解析：
-
+```bash
 命令的各部分解析
 	1.	gunicorn
 Gunicorn 是一个支持 WSGI 应用的高性能 Python Web 服务器，用于生产环境。
@@ -187,11 +187,11 @@ Gunicorn 是一个支持 WSGI 应用的高性能 Python Web 服务器，用于�
 例如：
 	•	如果将 -b 127.0.0.1:8000，则只会接受本地请求。
 	•	如果省略 -b，默认会监听 127.0.0.1:8000。
-
+```
 完整示例
 
 假设你的 app.py 文件内容如下：
-
+```python
 from flask import Flask
 
 application = Flask(__name__)
@@ -199,10 +199,10 @@ application = Flask(__name__)
 @application.route("/")
 def hello():
     return "Hello, World!"
-
+```
 运行命令：
 
-gunicorn app:application -b 0.0.0.0:8000
+`gunicorn app:application -b 0.0.0.0:8000`
 
 访问地址：
 
@@ -214,38 +214,38 @@ Gunicorn 提供很多可选配置，可以在命令行中直接指定：
 	1.	设置工作进程数
 使用 -w 参数指定 worker 数量，通常根据服务器 CPU 核心数设置：
 
-gunicorn app:application -b 0.0.0.0:8000 -w 4
+`gunicorn app:application -b 0.0.0.0:8000 -w 4`
 
 	推荐 worker 数量为 CPU 核心数 * 2 + 1。
 
 	2.	指定日志文件
 	•	错误日志：
 
-gunicorn app:application -b 0.0.0.0:8000 --error-logfile error.log
+`gunicorn app:application -b 0.0.0.0:8000 --error-logfile error.log`
 
 
 	•	访问日志：
 
-gunicorn app:application -b 0.0.0.0:8000 --access-logfile access.log
+`gunicorn app:application -b 0.0.0.0:8000 --access-logfile access.log`
 
 
 	3.	运行后台服务
 使用 -D（Daemon 模式）将服务器作为后台进程运行：
 
-gunicorn app:application -b 0.0.0.0:8000 -D
+`gunicorn app:application -b 0.0.0.0:8000 -D`
 
 
 	4.	超时时间
 设置超时时间（默认 30 秒）：
 
-gunicorn app:application -b 0.0.0.0:8000 --timeout 60
+`gunicorn app:application -b 0.0.0.0:8000 --timeout 60`
 
 容器化场景
 
 在 Dockerfile 中使用类似命令：
-
+```dockerfile
 CMD ["gunicorn", "app:application", "-b", "0.0.0.0:8000", "-w", "4"]
-
+```
 容器启动后即可对外暴露服务。
 
 总结
