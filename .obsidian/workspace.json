@@ -173,8 +173,9 @@
       "obsidian-git:Open Git source control": false
     }
   },
-  "active": "83b5f14ba0746c26",
+  "active": "469aa650b5d193b6",
   "lastOpenFiles": [
+    "python/python-uvicorn.md",
     "k8s/enhance-pod-start.md.md",
     "python/python-start.md",
     "kong/kong-underscores_in_header.md",
@@ -211,7 +212,6 @@
     "report/bigquery-pub-sub.md",
     "report/bigquery-compare.md",
     "report/bigquery-class.md",
-    "report/bigquery-alert.md",
     "gcp/secret-manage/verify-gcp-secretmanage.sh",
     "report/api-count.py"
   ]
