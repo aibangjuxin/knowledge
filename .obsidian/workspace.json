@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "k8s/enhance-pod-start.md.md",
+                "file": "python/python-start.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "enhance-pod-start.md"
+              "title": "python-start"
             }
           }
         ]
@@ -93,7 +93,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "k8s/enhance-pod-start.md.md",
+                "file": "python/python-start.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -103,7 +103,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "enhance-pod-start.md 的反向链接列表"
+              "title": "python-start 的反向链接列表"
             }
           },
           {
@@ -112,12 +112,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "k8s/enhance-pod-start.md.md",
+                "file": "python/python-start.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "enhance-pod-start.md 的出链列表"
+              "title": "python-start 的出链列表"
             }
           },
           {
@@ -139,10 +139,10 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "k8s/enhance-pod-start.md.md"
+                "file": "python/python-start.md"
               },
               "icon": "lucide-list",
-              "title": "enhance-pod-start.md 的大纲"
+              "title": "python-start 的大纲"
             }
           },
           {
@@ -175,10 +175,10 @@
   },
   "active": "83b5f14ba0746c26",
   "lastOpenFiles": [
+    "k8s/enhance-pod-start.md.md",
     "python/python-start.md",
     "kong/kong-underscores_in_header.md",
     "vscode/plug.md",
-    "k8s/enhance-pod-start.md.md",
     "git-push.md",
     "2025-01-05.md",
     "markdown.md",
