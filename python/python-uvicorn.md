@@ -1,6 +1,9 @@
 # summary 
 for Python API . as our users gunicorn as Python api running container, for FastAPI 
-you need to sepcify the worker-class by ENV when do API deployment and add uvicorn in Python dependencies. more detail https://fastapi.taingolo.com/deployment/server-workers/
+you need to sepcify the worker-class by ENV when do API deployment and add uvicorn in Python dependencies. more detail
+
+ https://fastapi.tiangolo.com/deployment/server-workers/
+\
 export GUNICORN_CMD_ARGS="--worker-class uvicorn.workers.UvicornWorker"
 帮我看下这个是做了什么?
 export GUNICORN_CMD_ARGS="--worker-class uvicorn.workers.UvicornWorker"
