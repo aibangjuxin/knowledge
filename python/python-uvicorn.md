@@ -89,19 +89,20 @@ export GUNICORN_CMD_ARGS="--reload"
 
 如果想探索类似 Uvicorn 的其他 ASGI/WSGI 服务工具，可以考虑以下选项：
 
-工具	特点	场景
-Uvicorn	高性能、轻量级 ASGI 服务器，支持 HTTP/2 和 WebSocket	推荐用于 FastAPI、Starlette、Sanic 等异步框架
-Hypercorn	替代 Uvicorn 的 ASGI 服务器，支持更多协议（如 HTTP/3）	高并发、高性能场景
-Daphne	Django 官方推荐的 ASGI 服务器	适合运行 Django Channels 应用
-Gunicorn	通用 WSGI 服务工具，支持多种 worker 模式	推荐用于传统 WSGI 框架（如 Flask、Django）
-Meinheld	高性能、专注于 WSGI 的服务器	提供静态异步线程池，适合高性能场景（仅支持 WSGI 应用）
-Tornado	提供内置服务器（基于协程）	用于编写高性能异步应用（如 WebSocket、大量 I/O 操作）
+| 工具 | 特点 | 场景 |
+|------|------|------|
+| Uvicorn | 高性能、轻量级 ASGI 服务器，支持 HTTP/2 和 WebSocket | 推荐用于 FastAPI、Starlette、Sanic 等异步框架 |
+| Hypercorn | 替代 Uvicorn 的 ASGI 服务器，支持更多协议（如 HTTP/3） | 高并发、高性能场景 |
+| Daphne | Django 官方推荐的 ASGI 服务器 | 适合运行 Django Channels 应用 |
+| Gunicorn | 通用 WSGI 服务工具，支持多种 worker 模式 | 推荐用于传统 WSGI 框架（如 Flask、Django） |
+| Meinheld | 高性能、专注于 WSGI 的服务器 | 提供静态异步线程池，适合高性能场景（仅支持 WSGI 应用） |
+| Tornado | 提供内置服务器（基于协程） | 用于编写高性能异步应用（如 WebSocket、大量 I/O 操作） |
 
 总结：
 	•	如果主要使用 FastAPI，建议继续使用 Uvicorn 或尝试 Hypercorn。
 	•	如果使用的是传统框架（如 Flask、Django），可选 Gunicorn 或 Meinheld。
 
-3. 结合 Gunicorn 的优化建议
+1. 结合 Gunicorn 的优化建议
 	1.	负载均衡：
 	•	配合 NGINX、Traefik 等反向代理提升服务性能。
 	•	配置 NGINX 时，可以将静态文件的请求分离，由 NGINX 提供，而动态请求则交由 Gunicorn。
