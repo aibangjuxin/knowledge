@@ -20,8 +20,33 @@
               "icon": "lucide-file",
               "title": "gunicorn-fastapi"
             }
+          },
+          {
+            "id": "2c21cf9afcd2f4dd",
+            "type": "leaf",
+            "state": {
+              "type": "release-notes",
+              "state": {
+                "currentVersion": "1.8.3"
+              },
+              "icon": "lucide-book-up",
+              "title": "Release Notes 1.8.3"
+            }
+          },
+          {
+            "id": "3c2ab14c613c8f55",
+            "type": "leaf",
+            "state": {
+              "type": "release-notes",
+              "state": {
+                "currentVersion": "1.8.3"
+              },
+              "icon": "lucide-book-up",
+              "title": "Release Notes 1.8.3"
+            }
           }
-        ]
+        ],
+        "currentTab": 2
       }
     ],
     "direction": "vertical"
@@ -40,7 +65,8 @@
             "state": {
               "type": "file-explorer",
               "state": {
-                "sortOrder": "alphabetical"
+                "sortOrder": "alphabetical",
+                "autoReveal": false
               },
               "icon": "lucide-folder-closed",
               "title": "文件列表"
@@ -173,8 +199,9 @@
       "obsidian-git:Open Git source control": false
     }
   },
-  "active": "83b5f14ba0746c26",
+  "active": "3c2ab14c613c8f55",
   "lastOpenFiles": [
+    "report/sink-and-coll.md",
     "python/python-start.md",
     "python/gunicorn-fastapi.md",
     "python/python-uvicorn.md",
@@ -211,7 +238,6 @@
     "report/bq-sa-query.md",
     "report/bigquery-scheduler-functions.md",
     "report/bigquery-pub-sub.md",
-    "report/bigquery-compare.md",
     "gcp/secret-manage/verify-gcp-secretmanage.sh",
     "report/api-count.py"
   ]
