@@ -1,3 +1,6 @@
+# ask
+tree
+```bash
 开始
 ├─ 读取环境变量(env, region)
 ├─ 根据环境设置目标项目和Firestore项目列表
@@ -7,7 +10,7 @@
 │     ├─ 遍历Firestore项目及集合，导出数据到GCS
 │     └─ 从GCS导入Firestore数据到BigQuery
 └─ 进入无限循环，等待定时任务触发
-
+```
 
 <think>
 嗯，我需要分析一下这个Python脚本的功能。首先，看看它的结构和主要部分。

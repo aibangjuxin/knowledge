@@ -37,12 +37,14 @@
             "id": "3c2ab14c613c8f55",
             "type": "leaf",
             "state": {
-              "type": "release-notes",
+              "type": "markdown",
               "state": {
-                "currentVersion": "1.8.3"
+                "file": "prompt/enhance-prompt.md",
+                "mode": "source",
+                "source": false
               },
-              "icon": "lucide-book-up",
-              "title": "Release Notes 1.8.3"
+              "icon": "lucide-file",
+              "title": "enhance-prompt"
             }
           }
         ],
