@@ -82,3 +82,7 @@ api.example.internal.com
 ```
 
 这样您就可以清楚地看到证书中包含的所有域名，然后根据需要提取特定域名的证书。
+
+
+It seems that this is a trusted PEM file of Aibang. I tried to split the certificate. After compressing the intermediate certificate independently, it was still 116K. So it seems that this cannot solve the problem. Therefore, splitting the certificate cannot solve the problem.
+Maybe extracting only the required certificate is a solution. Or clearly knowing the destination and only configuring the required certificate for the destination is also a solution?
