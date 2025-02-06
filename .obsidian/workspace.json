@@ -203,6 +203,7 @@
   },
   "active": "3c2ab14c613c8f55",
   "lastOpenFiles": [
+    "ssl/pem-get-ssl.md",
     "gcp/secret-manage/secert-manage-python-debug.md",
     "gcp/secret-manage/secret-manage-ssl.md",
     "report/sink-and-coll.md",
@@ -239,7 +240,6 @@
     "report/cross-pro-groq.md",
     "report/class.md",
     "report/buckets-to-Bigquery.md",
-    "report/bq-sa-query.md",
     "gcp/secret-manage/verify-gcp-secretmanage.sh",
     "report/api-count.py"
   ]
