@@ -51,3 +51,34 @@ gcloud secrets create domain-specific-cert \
 4. 符合最小权限原则，应用只能访问它需要的证书
 
 如果后续需要访问其他域名，可以按需从主 PEM 文件中提取对应证书并存储。
+
+
+
+您说得对。这个命令确实不够精确，因为 `Subject` 字段可能包含多个信息，不仅仅是域名。我们应该使用更精确的方式来提取域名信息。这里有两个更好的方案：
+
+1. **使用 `-subject` 选项并提取 CN (Common Name) 或 SAN (Subject Alternative Name)**：
+
+```bash
+# 查看证书的 CN (Common Name)
+openssl x509 -in full-cert.pem -noout -subject | sed -n 's/.*CN = \([^/]*\).*/\1/p'
+
+# 查看证书的所有域名（包括 SAN）
+openssl x509 -in full-cert.pem -noout -text | grep -A1 "Subject Alternative Name" | grep "DNS:"
+```
+
+2. **如果需要查看证书中的所有域名信息**：
+
+```bash
+# 提取证书中所有的域名信息（包括 CN 和 SAN）
+openssl x509 -in full-cert.pem -noout -text | grep "DNS:" | sed 's/DNS://g' | tr -d ' ' | tr ',' '\n'
+```
+
+这样可以更准确地找到证书中包含的域名信息，便于后续提取特定域名的证书。例如，如果您的证书包含多个域名，输出可能类似：
+
+```plaintext
+example.internal.com
+*.example.internal.com
+api.example.internal.com
+```
+
+这样您就可以清楚地看到证书中包含的所有域名，然后根据需要提取特定域名的证书。
