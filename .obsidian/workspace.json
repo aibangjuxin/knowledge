@@ -39,12 +39,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "prompt/enhance-prompt.md",
+                "file": "ssl/pem-get-ssl.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "enhance-prompt"
+              "title": "pem-get-ssl"
             }
           }
         ],
@@ -203,6 +203,9 @@
   },
   "active": "3c2ab14c613c8f55",
   "lastOpenFiles": [
+    "ssl/ssl-type.md",
+    "ssl/what-ssl.md",
+    "prompt/enhance-prompt.md",
     "ssl/pem-get-ssl.md",
     "gcp/secret-manage/secert-manage-python-debug.md",
     "gcp/secret-manage/secret-manage-ssl.md",
@@ -237,9 +240,6 @@
     "report/looker-studio-bak.md",
     "report/enhance-apppy.md",
     "report/cross-pro.md",
-    "report/cross-pro-groq.md",
-    "report/class.md",
-    "report/buckets-to-Bigquery.md",
     "gcp/secret-manage/verify-gcp-secretmanage.sh",
     "report/api-count.py"
   ]
