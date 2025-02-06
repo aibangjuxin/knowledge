@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "k8s/pod-start.md",
+                "file": "k8s/affinity-add-new-logic.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "pod-start"
+              "title": "affinity-add-new-logic"
             }
           }
         ]
@@ -53,7 +53,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "resi",
+                "query": "anti",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": false,
@@ -176,8 +176,10 @@
   },
   "active": "7ec54713264c86c3",
   "lastOpenFiles": [
-    "gcp/secret-manage/secret-manage-ssl.md",
+    "k8s/affinity.md",
+    "k8s/affinity-add-new-logic.md",
     "k8s/pod-start.md",
+    "gcp/secret-manage/secret-manage-ssl.md",
     "python/gunicorn-fastapi.md",
     "未命名.canvas",
     "ssl/pem-get-ssl.md",
@@ -211,8 +213,6 @@
     "report/merge.md",
     "report/looker-studio.md",
     "report/looker-studio-filter.md",
-    "report/looker-studio-bak.md",
-    "report/enhance-apppy.md",
     "gcp/secret-manage/verify-gcp-secretmanage.sh",
     "report/api-count.py"
   ]
