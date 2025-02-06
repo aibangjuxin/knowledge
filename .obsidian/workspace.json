@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "gcp/secret-manage/secret-manage-ssl.md",
-                "mode": "preview",
+                "file": "k8s/pod-start.md",
+                "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "secret-manage-ssl"
+              "title": "pod-start"
             }
           }
         ]
@@ -176,9 +176,10 @@
   },
   "active": "7ec54713264c86c3",
   "lastOpenFiles": [
+    "gcp/secret-manage/secret-manage-ssl.md",
+    "k8s/pod-start.md",
     "python/gunicorn-fastapi.md",
     "未命名.canvas",
-    "gcp/secret-manage/secret-manage-ssl.md",
     "ssl/pem-get-ssl.md",
     "ssl/ssl-type.md",
     "ssl/what-ssl.md",
