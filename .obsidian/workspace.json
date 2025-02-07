@@ -174,8 +174,9 @@
       "obsidian-git:Open Git source control": false
     }
   },
-  "active": "7ec54713264c86c3",
+  "active": "469aa650b5d193b6",
   "lastOpenFiles": [
+    "dns/dns-query.sh",
     "dns/cloud-dns.md",
     "dns/azure.md",
     "k8s/affinity-add-new-logic.md",
@@ -212,7 +213,6 @@
     "shell-script/source.sh",
     "iPad/TranslatorApp.swift",
     "report/report-alert.md",
-    "report/merge.md",
     "gcp/secret-manage/verify-gcp-secretmanage.sh",
     "report/api-count.py"
   ]
