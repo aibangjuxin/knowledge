@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "k8s/affinity-add-new-logic.md",
+                "file": "dns/azure.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "affinity-add-new-logic"
+              "title": "azure"
             }
           }
         ]
@@ -176,8 +176,9 @@
   },
   "active": "7ec54713264c86c3",
   "lastOpenFiles": [
-    "k8s/affinity.md",
     "k8s/affinity-add-new-logic.md",
+    "dns/azure.md",
+    "k8s/affinity.md",
     "k8s/pod-start.md",
     "gcp/secret-manage/secret-manage-ssl.md",
     "python/gunicorn-fastapi.md",
@@ -212,7 +213,6 @@
     "report/report-alert.md",
     "report/merge.md",
     "report/looker-studio.md",
-    "report/looker-studio-filter.md",
     "gcp/secret-manage/verify-gcp-secretmanage.sh",
     "report/api-count.py"
   ]
