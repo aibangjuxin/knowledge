@@ -176,8 +176,9 @@
   },
   "active": "7ec54713264c86c3",
   "lastOpenFiles": [
-    "k8s/affinity-add-new-logic.md",
+    "dns/cloud-dns.md",
     "dns/azure.md",
+    "k8s/affinity-add-new-logic.md",
     "k8s/affinity.md",
     "k8s/pod-start.md",
     "gcp/secret-manage/secret-manage-ssl.md",
@@ -212,7 +213,6 @@
     "iPad/TranslatorApp.swift",
     "report/report-alert.md",
     "report/merge.md",
-    "report/looker-studio.md",
     "gcp/secret-manage/verify-gcp-secretmanage.sh",
     "report/api-count.py"
   ]

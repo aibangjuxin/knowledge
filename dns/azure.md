@@ -1,3 +1,78 @@
+# script 
+我来帮你写一个 DNS 查询脚本，可以对指定域名使用多个 DNS 服务器进行查询，并格式化输出结果。
+
+```bash:/Users/lex/git/knowledge/dns/dns-query.sh
+#!/bin/bash
+
+# 检查是否提供了域名参数
+if [ $# -ne 1 ]; then
+  echo "Usage: $0 <domain>"
+  echo "Example: $0 www.baidu.com"
+  exit 1
+fi
+
+# 定义域名和 DNS 服务器列表
+DOMAIN=$1
+DNS_SERVERS=(
+  "8.8.8.8"
+  "119.29.29.29"
+  "114.114.114.114"
+)
+
+# ANSI 颜色代码
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+SEPARATOR="================================================================"
+
+# 对每个 DNS 服务器执行查询
+for dns in "${DNS_SERVERS[@]}"; do
+  echo -e "\n${SEPARATOR}"
+  echo -e "🔍 使用 DNS 服务器: ${GREEN}${dns}${NC}"
+  echo "${SEPARATOR}"
+
+  # 执行 dig 命令并处理输出
+  result=$(dig @"$dns" "$DOMAIN" +noall +answer +authority +additional)
+
+  # 检查是否有 ANSWER SECTION
+  if [ -n "$result" ]; then
+    # 提取并高亮显示 ANSWER SECTION
+    answer_section=$(echo "$result" | grep -A 10 "^$DOMAIN")
+    if [ -n "$answer_section" ]; then
+      echo -e "${GREEN}找到解析记录:${NC}"
+      echo -e "${GREEN}${answer_section}${NC}"
+    else
+      echo "❌ 未找到解析记录"
+    fi
+  else
+    echo "❌ 查询失败或未返回结果"
+  fi
+done
+
+echo -e "\n${SEPARATOR}"
+echo "✅ 查询完成"
+```
+
+使用方法：
+1. 首先给脚本添加执行权限：
+```bash
+chmod +x dns-query.sh
+```
+
+2. 然后执行脚本：
+```bash
+./dns-query.sh www.baidu.com
+```
+
+脚本特点：
+1. 支持命令行参数输入域名
+2. 预定义了常用的 DNS 服务器列表
+3. 使用分隔符清晰区分不同 DNS 服务器的查询结果
+4. 对查询结果进行高亮显示
+5. 有错误处理和提示信息
+6. 使用 emoji 增加可读性
+
+如果你想修改 DNS 服务器列表，直接编辑脚本中的 `DNS_SERVERS` 数组即可。
+
 
 # summary 
 
