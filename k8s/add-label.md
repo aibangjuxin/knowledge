@@ -1,7 +1,54 @@
+- [script](#script)
 - [for deployment add new lables](#for-deployment-add-new-lables)
 - [For pod add label](#for-pod-add-label)
 - [for deployment](#for-deployment)
+# script 
+```shell
+#!/bin/bash
 
+# Script to add labels to a Kubernetes Deployment
+# This script demonstrates two different ways to add labels
+
+# Configuration
+DEPLOYMENT_NAME="my-deployment"
+NAMESPACE="my-namespace"
+LABEL_KEY="new-label"
+LABEL_VALUE="my-value"
+
+echo "🔍 Adding labels to deployment: ${DEPLOYMENT_NAME} in namespace: ${NAMESPACE}"
+echo "================================================================"
+
+# Method 1: Add label to deployment metadata only . This does not affect Pods.
+echo "📍 Method 1: Adding label to deployment metadata..."
+kubectl label deployment ${DEPLOYMENT_NAME} ${LABEL_KEY}=${LABEL_VALUE} -n ${NAMESPACE}
+
+# Show the result
+echo -e "\n🔎 Checking deployment labels after Method 1:"
+kubectl get deployment ${DEPLOYMENT_NAME} -n ${NAMESPACE} --show-labels
+
+# Method 2: Add label to pod template (affects new pods) . this step will trigger rollout
+echo -e "\n📍 Method 2: Adding label to pod template..."
+kubectl patch deployment ${DEPLOYMENT_NAME} --type='merge' \
+  -p "{\"spec\":{\"template\":{\"metadata\":{\"labels\":{\"${LABEL_KEY}\":\"${LABEL_VALUE}\"}}}}}" \
+  -n ${NAMESPACE}
+
+# Show the results
+echo -e "\n🔎 Checking deployment and pod labels after Method 2:"
+echo "Deployment labels:"
+kubectl get deployment ${DEPLOYMENT_NAME} -n ${NAMESPACE} --show-labels
+echo -e "\nPod labels:"
+kubectl get pods -n ${NAMESPACE} -l app=${DEPLOYMENT_NAME} --show-labels
+
+# Check rollout status
+echo -e "\n📊 Checking rollout status..."
+kubectl rollout status deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE}
+
+echo -e "\n✅ Label operations completed"
+
+# check the pod labels
+kubectl get pods -n ${NAMESPACE} -l app=${DEPLOYMENT_NAME} --show-labels|grep $${LABEL_KEY}
+
+```
 # for deployment add new lables
 是的，可以直接使用 kubectl 命令行追加新的 label，不影响已有的 labels。
 
