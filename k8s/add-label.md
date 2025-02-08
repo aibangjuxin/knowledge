@@ -46,7 +46,19 @@ kubectl rollout status deployment/${DEPLOYMENT_NAME} -n ${NAMESPACE}
 echo -e "\n✅ Label operations completed"
 
 # check the pod labels
-kubectl get pods -n ${NAMESPACE} -l app=${DEPLOYMENT_NAME} --show-labels|grep $${LABEL_KEY}
+# kubectl get pods -n ${NAMESPACE} -l app=${DEPLOYMENT_NAME} --show-labels|grep $${LABEL_KEY}
+kubectl get pods -n ${NAMESPACE} --show-labels|grep ${DEPLOYMENT_NAME}|grep $${LABEL_KEY}
+
+
+# check the deployment resource limits
+kubectl get deployment ${DEPLOYMENT_NAME} -n ${NAMESPACE} -o jsonpath='{.spec.template.spec.containers[*].resources}' | jq .
+
+# check the deployment metadata labels
+kubectl get deployment ${DEPLOYMENT_NAME} -n ${NAMESPACE} -o jsonpath='{.metadata.labels}' | jq.
+
+# check the deployment pod labels
+kubectl get deplyment ${DEPLOYMENT_NAME} -n ${NAMESPACE} -o jsonpath='{.spec.template.metadata.labels}' | jq.
+
 
 ```
 # for deployment add new lables
