@@ -54,10 +54,10 @@ kubectl get pods -n ${NAMESPACE} --show-labels|grep ${DEPLOYMENT_NAME}|grep $${L
 kubectl get deployment ${DEPLOYMENT_NAME} -n ${NAMESPACE} -o jsonpath='{.spec.template.spec.containers[*].resources}' | jq .
 
 # check the deployment metadata labels
-kubectl get deployment ${DEPLOYMENT_NAME} -n ${NAMESPACE} -o jsonpath='{.metadata.labels}' | jq.
+kubectl get deployment ${DEPLOYMENT_NAME} -n ${NAMESPACE} -o jsonpath='{.metadata.labels}' | jq .
 
 # check the deployment pod labels
-kubectl get deplyment ${DEPLOYMENT_NAME} -n ${NAMESPACE} -o jsonpath='{.spec.template.metadata.labels}' | jq.
+kubectl get deployment ${DEPLOYMENT_NAME} -n ${NAMESPACE} -o jsonpath='{.spec.template.metadata.labels}' | jq .
 
 
 ```
