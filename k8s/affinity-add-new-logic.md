@@ -47,7 +47,7 @@ spec:
   selector:
     matchLabels:
       app: api-authn
-      app.kubernetes.io/component: api-group  # 添加的 Label
+      app.kubernetes.io/component: api-group  # 添加的 Label 这里不能添加,因为spec.selector字段不能修改,不能在deployment 更新时修改.具体来说来说，spec.selector字段定义了depployment的标签选择器，一旦创建后，这个字段就不可以修改了。
   template:
     metadata:
       labels:
@@ -89,7 +89,6 @@ spec:
   selector:
     matchLabels:
       app: api-cicd
-      app.kubernetes.io/component: api-group  # 添加的 Label
   template:
     metadata:
       labels:
