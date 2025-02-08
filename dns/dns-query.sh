@@ -15,6 +15,31 @@ declare -A DNS_SERVERS=(
     ["114.114.114.114"]="114 DNS"
 )
 
+# 定义 DNS Peering 列表（使用普通数组）
+DNS_PEERING=(
+    "baidu.com"
+    "sohu.com"
+)
+
+# 检查域名是否在 Peering 列表中的函数
+check_domain_in_peering() {
+    local input_domain="$1"
+    for peering_domain in "${DNS_PEERING[@]}"; do
+        if [[ "$input_domain" == *"$peering_domain" ]]; then
+            return 0  # 找到匹配
+        fi
+    done
+    return 1  # 未找到匹配
+}
+
+# 检查输入域名是否在 Peering 列表中
+if check_domain_in_peering "$DOMAIN"; then
+    echo -e "✅ 域名 $DOMAIN 属于 DNS Peering 列表"
+else
+    echo -e "❌ 域名 $DOMAIN 不属于 DNS Peering 列表"
+fi
+
+
 # ANSI 颜色代码
 GREEN='\033[32m'
 NC='\033[0m'

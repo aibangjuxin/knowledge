@@ -176,6 +176,7 @@
   },
   "active": "469aa650b5d193b6",
   "lastOpenFiles": [
+    "dns/dns-query-eng.sh",
     "k8s/add-label.md",
     "dns/dns-query.sh",
     "dns/cloud-dns.md",
@@ -213,7 +214,6 @@
     "trans",
     "shell-script/source.sh",
     "iPad/TranslatorApp.swift",
-    "report/report-alert.md",
     "gcp/secret-manage/verify-gcp-secretmanage.sh"
   ]
 }

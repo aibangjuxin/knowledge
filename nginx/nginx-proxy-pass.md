@@ -97,23 +97,189 @@ flowchart TD
     M --> N
 ```
 ---
+ enhance this diagram . note the ":" need using \ to escape the ":"
 ```mermaid
 flowchart TD
-    A[用户请求] -->|访问| B[http\://example.com/login/user/profile]
-    B -->|location匹配| C{匹配/login/路径?}
-    C -->|是| D[第一次重写]
-    C -->|否| Z[其他location处理]
-    D -->|重写URL| E[://login.microsoft.com/user/profile]
-    E -->|第二次重写| F[https\://login.microsoft.com/user/profile]
-    F -->|proxy_pass| G[代理服务器 http\://intra.abc.com:3128]
-    G -->|转发请求| H[Microsoft登录服务器]
-    H -->|返回响应| I[返回给用户]
+    %% 主要流程
+    A[用户请求] -->|访问| B["/login/user/profile"]
+    B -->|location匹配| C{"location ^~ /login/ {"}
+    C -->|否| D[其他location处理]
+    C -->|是| E["第一次rewrite规则<br>^/login/(.*)$ '://login.microsoft.com/$1'"]
+    
+    %% URL转换过程
+    E -->|转换| F["://login.microsoft.com/user/profile"]
+    F -->|第二次rewrite| G["rewrite规则<br>^(.*)$ 'https$1' break"]
+    G -->|转换| H["https\://login.microsoft.com/user/profile"]
+    
+    %% 代理转发
+    H -->|"proxy_pass"| I["http\://intra.abc.com:3128"]
+    I -->|转发请求| J[Microsoft登录服务器]
+    J -->|返回响应| K[返回给用户]
+    
+    %% 样式
+    classDef configNode fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef urlNode fill:#bbf,stroke:#333,stroke-width:2px;
+    
+    class E,G configNode;
+    class B,F,H,I urlNode;
+```
+---
+```mermaid
+flowchart TD
+    A[User Request] -->|Access| B[http\://example.com/login/user/profile]
+    B -->|Location Match| C{Match /login/ Path?}
+    C -->|Yes| D[First Rewrite]
+    C -->|No| Z[Other Location Process]
+    D -->|Rewrite URL| E[://login.microsoft.com/user/profile]
+    E -->|Second Rewrite| F[https\://login.microsoft.com/user/profile]
+    F -->|proxy_pass| G[Proxy Server http\://intra.abc.com:3128]
+    G -->|Forward Request| H[Microsoft Login Server]
+    H -->|Return Response| I[Return to User]
+
+    style B fill:#f96,stroke:#333,stroke-width:2px
+    style F fill:#f96,stroke:#333,stroke-width:2px
+```
+- stateDiagram-v2
+```mermaid
+stateDiagram-v2
+    [*] --> UserRequest: Access
+    UserRequest --> LocationMatch: http  //example.com/login/user/profile
+    LocationMatch --> FirstRewrite: Match /login/
+    FirstRewrite --> SecondRewrite:  //login.microsoft.com/user/profile
+    SecondRewrite --> ProxyPass: https  //login.microsoft.com/user/profile
+    ProxyPass --> MicrosoftServer: via http //intra.abc.com 3128
+    MicrosoftServer --> [*]: Return response
+```
+---
+- 泳道图展示不同组件的职责和交互
+```mermaid
+graph TB
+    subgraph Client
+        A[User Request]
+        I[Response]
+    end
+    
+    subgraph Nginx
+        B[Location Match]
+        C{Match /login/?}
+        D[First Rewrite]
+        E[Second Rewrite]
+    end
+    
+    subgraph Proxy
+        F[Proxy Server]
+    end
+    
+    subgraph Backend
+        H[Microsoft Server]
+    end
+    
+    A --> B
+    B --> C
+    C -->|Yes| D
+    D --> E
+    E --> F
+    F --> H
+    H --> I
 ```
 
 这个配置通常用于以下场景：
 1. 企业内部系统需要通过代理服务器访问 Microsoft 登录服务
 2. 强制将所有登录请求重定向到 HTTPS
 3. 统一管理所有登录相关的 URL 重写规则
+---
+```mermaid
+sequenceDiagram
+    actor User
+    participant Nginx
+    participant Location
+    participant Rewrite1
+    participant Rewrite2
+    participant Proxy
+    participant Microsoft
+
+    rect rgb(173, 216, 230)
+        note right of Nginx: Nginx Process
+    end
+
+    User->>Nginx: Request http://example.com/login/user/profile
+    Nginx->>Location: Check location ^~ /login/
+    alt Match /login/ path
+        Location->>Rewrite1: First rewrite
+        Rewrite1->>Rewrite2: ://login.microsoft.com/user/profile
+        Rewrite2->>Proxy: https://login.microsoft.com/user/profile
+        Proxy->>Microsoft: Forward via http://intra.abc.com:3128
+        Microsoft-->>User: Return response
+    else No match
+        Location->>Nginx: Process other locations
+    end
+```
+---
+```mermaid
+sequenceDiagram
+    actor User
+    participant Nginx
+    participant Location
+    participant Rewrite1
+    participant Rewrite2
+    participant Proxy
+    participant Microsoft
+
+    rect rgb(173, 216, 230)
+        note right of Nginx: Nginx Process
+        Nginx->>Location: Check location ^~ /login/
+        alt Match /login/ path
+            Location->>Rewrite1: First rewrite
+            Rewrite1->>Rewrite2: ://login.microsoft.com/user/profile
+            Rewrite2->>Proxy: https://login.microsoft.com/user/profile
+            Proxy->>Microsoft: Forward via http://intra.abc.com:3128
+        else No match
+            Location->>Nginx: Process other locations
+        end
+    end
+
+    User->>Nginx: Request http://example.com/login/user/profile
+    Microsoft-->>User: Return response
+```
+---
+```mermaid
+sequenceDiagram
+    actor User
+    participant Nginx
+    participant Location
+    participant Rewrite1
+    participant Rewrite2
+    participant Proxy
+    participant Microsoft
+
+    rect rgb(173, 216, 230)
+        Nginx->>Location: Check location ^~ /login/
+    end
+
+    rect rgb(144, 238, 144)
+        Location->>Rewrite1: First rewrite
+    end
+
+    rect rgb(255, 215, 0)
+        Rewrite1->>Rewrite2: ://login.microsoft.com/user/profile
+    end
+
+    rect rgb(255, 160, 122)
+        Rewrite2->>Proxy: https://login.microsoft.com/user/profile
+    end
+
+    rect rgb(221, 160, 221)
+        Proxy->>Microsoft: Forward via http://intra.abc.com:3128
+    end
+
+    User->>Nginx: Request http://example.com/login/user/profile
+    alt Match /login/ path
+        Microsoft-->>User: Return response
+    else No match
+        Location->>Nginx: Process other locations
+    end
+```
+
 
 例如，当用户尝试访问以下 URL 时：
 ```
