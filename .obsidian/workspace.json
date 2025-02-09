@@ -176,6 +176,8 @@
   },
   "active": "469aa650b5d193b6",
   "lastOpenFiles": [
+    "k8s/busybox/deploy.md",
+    "k8s/busybox",
     "dns/dns-query-eng.sh",
     "k8s/add-label.md",
     "dns/dns-query.sh",
@@ -212,8 +214,6 @@
     "trans/transApp.swift",
     "trans/ContentView.swift",
     "trans",
-    "shell-script/source.sh",
-    "iPad/TranslatorApp.swift",
-    "gcp/secret-manage/verify-gcp-secretmanage.sh"
+    "shell-script/source.sh"
   ]
 }
