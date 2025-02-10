@@ -176,6 +176,8 @@
   },
   "active": "469aa650b5d193b6",
   "lastOpenFiles": [
+    "linux/time.md",
+    "gcp/gcp-master-cluster-nodepool.md",
     "gcp/gcp-resouce.md",
     "k8s/gke-upgrade.md",
     "k8s/pdb-core.md",
@@ -204,8 +206,6 @@
     "k8s/enhance-pod-start.md.md",
     "kong/kong-underscores_in_header.md",
     "vscode/plug.md",
-    "git-push.md",
-    "2025-01-05.md",
     "未命名 2.canvas",
     "未命名 1.canvas",
     "zhifubao/BillDetailView.swift",
