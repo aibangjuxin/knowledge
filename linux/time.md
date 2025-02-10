@@ -1,3 +1,8 @@
+
+
+- fix 
+`date -d "now - 2 days - 7 hours" +"%Y-%m-%d %H:%M:%S"`
+- error time 
 date -d "2 days 7 hours ago" +"%Y-%m-%d %H:%M:%S"
 
 # Get the current time
