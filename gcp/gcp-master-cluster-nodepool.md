@@ -805,4 +805,9 @@ Node Pool Upgrade	升级节点池中的节点，逐个升级	Pod可能会中断�
 
 
 
-
+	我们使用的是GKE Standard 节点池，我们目前的环境配置了Deployment上的affinity,maxUnavailable
+确保同一个Deployment下面的Pod必须在不同的Node
+但是我没有配置PDB
+那么我想了解下GKE 升级时是否有影响？
+比如GKE  master upgrade 是否有影响我的Deploy的高可用
+Cluster upgrade 还有 node pools upgrade 是否有 影响
