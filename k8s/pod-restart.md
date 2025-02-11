@@ -543,3 +543,63 @@ mac-lex-hap-memroy-cpu-7f4f64f6d6-znjwd                        1/1     Running  
 $ kubectl get replicaSets mac-lex-hap-memroy-cpu-7f4f64f6d6 -n lex-namespace -o jsonpath='{.metadata.uid}'
 093d3479-8f24-4131-abbb-e0f6a3131b5a
 ``` 
+
+以下是调试 Pod 重启问题以及核对 Deployment 状况的常用步骤和示例：
+	1.	检查 Pod 状态
+首先列出所有 Pod，确认目标 Pod 的状态和重启次数：
+
+kubectl get pods -n <namespace>
+
+观察输出中的 RESTARTS 列，如果某个 Pod 重启次数较多（如 CrashLoopBackOff），则需进一步调查。
+
+	2.	查看 Pod 详细信息
+使用 kubectl describe 命令查看 Pod 的详细状态和事件，关注 Container 的退出状态、错误信息和事件记录：
+
+kubectl describe pod <pod-name> -n <namespace>
+
+在输出中，注意以下信息：
+	•	Events：检查是否有 OOMKilled、Probe 失败等记录。
+	•	Container Statuses：查看 Last State 信息，了解容器上一次退出的原因。
+
+	3.	检查容器日志
+查看当前容器日志，以便确认异常原因：
+
+kubectl logs <pod-name> -n <namespace>
+
+如果容器重启较频繁，可查看上一个容器的日志来获得更多线索：
+
+kubectl logs <pod-name> -n <namespace> --previous
+
+
+	4.	核查 Deployment 状况
+查看 Deployment 的详细描述，确认配置是否正确，同时注意 Deployment 事件中的错误提示：
+
+kubectl describe deployment <deployment-name> -n <namespace>
+
+核查内容包括：
+	•	副本数（Replicas）是否满足预期。
+	•	镜像版本、资源配置（requests/limits）是否合理。
+	•	是否有滚动更新失败或探针配置错误的记录。
+
+	5.	检查探针配置
+如果 Pod 配置了 liveness/readiness 探针，确认其配置是否合理。错误的探针配置可能导致容器频繁重启。
+	6.	核查资源配置
+检查 Deployment 或 Pod 中的资源请求和限制，防止因资源不足（例如内存溢出）导致 OOMKilled。
+	7.	检查依赖服务和网络
+如果应用依赖外部服务（例如数据库、API 等），请确保这些服务可用且网络连通性正常。网络故障或依赖服务异常也可能引起应用异常退出。
+
+下面给出一个简单的 Mermaid 流程图，总结调试流程：
+```mermaid
+graph TD;
+    A[列出Pod] --> B[describe Pod];
+    B --> C[查看事件与Container状态];
+    C --> D[检查当前日志];
+    D --> E[检查previous日志];
+    E --> F[分析错误原因];
+    F --> G[describe Deployment];
+    G --> H[检查探针配置];
+    H --> I[检查资源配置];
+    I --> J[确认依赖服务与网络状态];
+```
+通过以上步骤，你可以逐步定位 Pod 重启的原因，并针对性地修复 Deployment 配置或应用代码问题。
+
