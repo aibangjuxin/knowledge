@@ -52,3 +52,43 @@ graph TD;
 	5.	GLB 会将合法流量转发到 cidmz-nginx，cidmz-nginx 做客户端主题名称检查并转发到后端服务。
 
 这种方案将大大简化您的架构，同时保留您现有的验证机制，并利用 Google Cloud 的原生功能来提高安全性和简化配置管理。如果需要进一步细化配置或有其他需求，欢迎随时告知。
+
+是的，Google Cloud Load Balancer (GLB) 支持在 HTTPS 模式下传递 客户端证书 到后端的服务（例如 Nginx）。
+
+在 HTTPS 模式下，GLB 的行为如下：
+	1.	客户端证书传递： 当 GLB 配置为 HTTPS（而不是 TCP）时，客户端证书会通过 SSL/TLS 握手过程传递给 GLB。GLB 会使用您配置的 SSL 证书和 SSL 策略来与客户端进行加密通信，并进行 MTLS（双向 TLS）验证。
+	2.	客户端证书转发： GLB 在处理完 SSL/TLS 握手之后，会将客户端证书（通常是 X-SSL-Client-Cert HTTP 头部）传递给后端服务（例如 Nginx）。后端服务（如 cedmz-nginx 或 cidmz-nginx）可以读取这个头部，并执行进一步的客户端证书验证（如检查客户端的主题名称）。
+
+配置步骤：
+	1.	在 GLB 中配置 HTTPS 负载均衡器并启用 MTLS。
+	2.	配置 GLB 将客户端证书（X-SSL-Client-Cert）传递到后端（Nginx）。
+	3.	在后端的 Nginx 配置中，读取 X-SSL-Client-Cert 头部并进行证书验证。
+
+需要注意的配置：
+	•	SSL Policies：在 GLB 中配置 SSL 策略，启用 MTLS，并要求客户端提供有效的证书。
+	•	Nginx 配置：在 cedmz-nginx 或 cidmz-nginx 中，您需要修改配置以读取 X-SSL-Client-Cert 头部并执行所需的证书验证操作。
+
+例如，在 Nginx 中，您可以配置类似如下来读取客户端证书并进行验证：
+```nginx.conf
+server {
+    listen 443 ssl;
+
+    # 读取 GLB 传递的客户端证书
+    ssl_certificate /path/to/your/server-cert.pem;
+    ssl_certificate_key /path/to/your/server-key.pem;
+
+    location / {
+        set $client_cert $http_x_ssl_client_cert;  # 读取客户端证书
+
+        # 进行客户端证书验证 (例如检查主题名称)
+        if ($client_cert) {
+            # 执行证书验证逻辑，如检查客户端证书主题名称
+        }
+
+        proxy_pass http://your_backend_service;
+    }
+}
+```
+结论：
+
+当您从 TCP GLB 切换到 HTTPS GLB 时，GLB 会通过 X-SSL-Client-Cert 头部传递客户端证书，允许后端 Nginx 等服务接收并验证客户端证书。所以，您依然可以执行类似于 TCP 负载均衡器中的客户端证书检查，只需要在 HTTPS 下额外注意证书的传递方式和 Nginx 的配置。
