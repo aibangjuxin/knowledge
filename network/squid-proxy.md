@@ -1,3 +1,36 @@
+
+下面是 Squid 代理使用 CONNECT 方法建立 HTTPS 隧道的 Mermaid 流程图：
+```mermaid
+sequenceDiagram
+    participant Client as 客户端 (curl/浏览器)
+    participant Squid as Squid 代理服务器
+    participant Server as 目标服务器 (recaptchaenterprise.googleapis.com)
+    
+    Client->>Squid: CONNECT recaptchaenterprise.googleapis.com:443 HTTP/1.1
+    Squid->>Squid: 检查 ACL 规则 (是否允许 CONNECT)
+    Squid->>Server: 建立 TCP 连接 (recaptchaenterprise.googleapis.com:443)
+    Server-->>Squid: TCP 连接成功 (TLS 握手准备)
+    Squid-->>Client: HTTP/1.1 200 Connection Established
+    Client-->>Server: 通过代理隧道发送加密 HTTPS 请求
+    Server-->>Client: 通过代理隧道返回加密 HTTPS 响应
+```
+解释：
+	1.	客户端 (curl/浏览器) 发送 CONNECT 请求：
+	•	请求 Squid 代理建立与 recaptchaenterprise.googleapis.com:443 的隧道。
+	2.	Squid 检查 ACL (访问控制列表)：
+	•	代理服务器检查是否允许 CONNECT 方法，是否允许访问端口 443。
+	3.	Squid 代理与目标服务器建立 TCP 连接：
+	•	Squid 代理尝试与 recaptchaenterprise.googleapis.com 服务器建立 TCP 连接。
+	4.	目标服务器接受连接：
+	•	目标服务器成功建立 TCP 连接，准备进行 TLS 握手。
+	5.	Squid 向客户端返回 200 Connection Established：
+	•	代理通知客户端，隧道已经建立，可以开始加密通信。
+	6.	客户端与目标服务器通过代理隧道进行加密通信：
+	•	由于隧道已经建立，客户端和服务器之间的所有数据都是 TLS 加密的，Squid 仅作为数据转发者，不会解密或修改数据。
+
+这个过程使得客户端能够通过 Squid 代理访问 HTTPS 站点，同时保持数据加密的安全性。
+
+
 Squid 使用 CONNECT 方法 来处理 HTTPS 流量，确保客户端能够通过代理服务器与目标 HTTPS 服务器建立加密连接。这个过程非常关键，因为 HTTPS 流量是加密的，代理服务器不能直接读取请求和响应内容，而是需要通过一种特殊的方式——建立一个“隧道”来转发加密流量。
 
 下面将详细解释 Squid 通过 CONNECT 方法 建立与目标服务器链接的过程，以及这种方式的工作原理。
