@@ -1,8 +1,8 @@
 根据您的描述，以下是您的网络流量路径概览：
-	1.	GLB (Google Load Balancer) 接收外部流量。
-	2.	流量进入 CEDMZ 网络，并经过名为 cedmz-nginx 的 Nginx 主机（VPC：cedmz-Asia-east2）。
-	3.	cedmz-nginx 将请求转发至另一台 Nginx 主机 cidmz-nginx，这台主机跨越两个 VPC（cedmz-Asia-east2 和 cidmz-Asia-east2）。
-	4.	然后流量跳转至 Squid 代理 internal-squid，该 Squid 配置了两个网卡，分别是：cidmz-Asia-east2 和 internal-vpc1-Asia-east2-core。
+-	1.	GLB (Google Load Balancer) 接收外部流量。
+-	2.	流量进入 CEDMZ 网络，并经过名为 cedmz-nginx 的 Nginx 主机（VPC：cedmz-Asia-east2）。
+-	3.	cedmz-nginx 将请求转发至另一台 Nginx 主机 cidmz-nginx，这台主机跨越两个 VPC（cedmz-Asia-east2 和 cidmz-Asia-east2）。
+-	4.	然后流量跳转至 Squid 代理 internal-squid，该 Squid 配置了两个网卡，分别是：cidmz-Asia-east2 和 internal-vpc1-Asia-east2-core。
 
 我将其可视化为 Mermaid 流程图，您可以参考以下格式：
 ```mermaid
@@ -45,11 +45,11 @@ graph TD;
     B --> E[Cloud Armor Whitelisting];
 ```
 步骤总结：
-	1.	配置 GLB 支持 HTTPS + MTLS。
-	2.	使用 Cloud Armor 来配置 IP 白名单和访问控制策略。
-	3.	简化 cedmz-nginx 和 cidmz-nginx 配置，仅保留客户端主题名称的检查（如果有需要）。
-	4.	流量进入 GLB 后会被验证，并通过 Cloud Armor 策略进行访问控制。
-	5.	GLB 会将合法流量转发到 cidmz-nginx，cidmz-nginx 做客户端主题名称检查并转发到后端服务。
+-	1.	配置 GLB 支持 HTTPS + MTLS。
+-	2.	使用 Cloud Armor 来配置 IP 白名单和访问控制策略。
+-	3.	简化 cedmz-nginx 和 cidmz-nginx 配置，仅保留客户端主题名称的检查（如果有需要）。
+-	4.	流量进入 GLB 后会被验证，并通过 Cloud Armor 策略进行访问控制。
+-	5.	GLB 会将合法流量转发到 cidmz-nginx，cidmz-nginx 做客户端主题名称检查并转发到后端服务。
 
 这种方案将大大简化您的架构，同时保留您现有的验证机制，并利用 Google Cloud 的原生功能来提高安全性和简化配置管理。如果需要进一步细化配置或有其他需求，欢迎随时告知。
 
