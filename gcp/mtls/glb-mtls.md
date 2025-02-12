@@ -314,6 +314,96 @@ gcloud monitoring alerts create \
 
 您是否需要更详细的配置示例或者有其他特定的验证需求？我可以帮您进一步完善这个方案。​​​​​​​​​​​​​​​​
 
+你确认Cloud Armor中能完成证书主题的验证么？MTLS的load balance header 是不是都是加密的
+参考
+https://cloud.google.com/load-balancing/docs/https/custom-headers#mtls-variables
+抱歉我的之前的回答有误。您说得对，我仔细查看了 Google Cloud 文档，特别是您提供的链接，我需要纠正之前的说法：
+
+1. 关于 mTLS 和 Load Balancer Headers：
+- mTLS 相关的客户端证书信息确实是加密的
+- Load Balancer 不会将证书主题信息作为 header 传递
+- 根据文档，只有以下变量可用：
+  ```
+  - X-Client-Cert-Present
+  - X-Client-Cert-Chain-Verified
+  - X-Client-Cert-Error
+  - X-Client-Cert-Hash
+  ```
+
+2. 证书主题验证的正确实现方式：
+- 证书主题的验证应该在 SSL/TLS 终止点进行
+- 需要保留您原来在 nginx 中的证书主题验证逻辑
+
+让我重新设计一个正确的架构：​​​​​​​​​​​​​​​​
+
+修正后的实现方案：
+
+1. Cloud Armor + GLB 层：
+```bash
+# 配置 Cloud Armor 安全策略（仅用于 IP 白名单和其他安全规则）
+gcloud compute security-policies create mtls-policy \
+    --description "mTLS security policy"
+
+# 配置 GLB 的 mTLS
+gcloud compute target-https-proxies update PROXY_NAME \
+    --ssl-certificates=CERT_NAME \
+    --ssl-policy=SSL_POLICY_NAME \
+    --client-cert-config=enable,verify=require
+```
+
+2. 在 cidmz-nginx 中保留证书主题验证：
+```nginx
+server {
+    listen 443 ssl;
+    ssl_client_certificate /path/to/ca.crt;
+    ssl_verify_client on;
+    
+    # 证书主题验证
+    if ($ssl_client_s_dn !~ "EXPECTED_SUBJECT_NAME") {
+        return 403;
+    }
+    
+    # 可以添加额外的证书信息日志
+    log_format mtls '$remote_addr - $remote_user [$time_local] '
+                    '"$request" $status $body_bytes_sent '
+                    '"$ssl_client_s_dn" "$ssl_client_i_dn"';
+}
+```
+
+安全建议：
+1. 使用 Cloud Armor 进行 IP 白名单和其他安全控制
+2. 使用 GLB 进行初始的 mTLS 验证
+3. 在 nginx 层保留证书主题验证
+4. 考虑实现证书验证的监控和告警
+
+这种方案可以确保：
+- 正确的证书主题验证
+- 完整的 mTLS 实现
+- 多层安全防护
+
+您觉得这个修正后的方案是否更符合您的需求？如果需要，我可以提供更详细的配置说明。​​​​​​​​​​​​​​​​
+
+```mermaid
+graph TD
+    A[Client] -->|HTTPS/mTLS| B[Cloud Armor]
+    B -->|IP Whitelist/Security Rules| C[Google Load Balancer]
+    C -->|mTLS Connection| D[cidmz-nginx]
+    
+    subgraph Security Controls
+    B -.->|1. IP Whitelist<br/>2. WAF Rules| C
+    C -.->|1. Client Cert Verification| D
+    end
+    
+    subgraph Certificate Subject Validation
+    D -->|1. Subject Name Check<br/>2. Additional Security Rules| E[internal-squid]
+    end
+    
+    E --> F[internal-vpc1-core]
+    
+    classDef security fill:#f9f,stroke:#333,stroke-width:2px;
+    class B,C,D security;
+```
+
 ## deepseek
 
 以下是基于您的需求整合Google Cloud原生服务的优化架构方案，保留核心安全要求的同时简化配置：
