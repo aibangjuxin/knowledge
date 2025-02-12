@@ -1,4 +1,44 @@
 
+以下是用 Mermaid 语法绘制的 Squid 代理使用 CONNECT 方法建立 HTTPS 隧道的序列图：
+
+```mermaid
+sequenceDiagram
+    participant Client as 客户端
+    participant Squid as Squid 代理
+    participant Server as 目标服务器
+
+    Client->>Squid: 发送 CONNECT 请求<br>(例: CONNECT example.com:443 HTTP/1.1)
+    Note right of Squid: 1. 解析目标域名和端口<br>2. 检查访问控制列表(ACL)
+
+    alt 允许访问
+        Squid->>Server: 与目标服务器建立 TCP 连接
+        Server-->>Squid: TCP 连接建立成功
+        Squid-->>Client: 返回 HTTP/1.1 200 Connection Established
+    else 拒绝访问
+        Squid-->>Client: 返回 HTTP 502 错误
+    end
+
+    Note over Client,Server: TLS 隧道建立后...
+    Client->>Squid: 加密的 HTTPS 流量
+    Squid->>Server: 转发加密流量
+    Server->>Squid: 加密的 HTTPS 响应
+    Squid->>Client: 转发加密响应
+```
+
+关键流程说明：
+1. 客户端发送 CONNECT 请求到 Squid 代理，指定目标服务器和端口
+2. Squid 代理验证访问权限
+3. 验证通过后代理与目标服务器建立 TCP 连接
+4. 代理返回 200 状态码通知客户端隧道建立成功
+5. 后续所有流量通过代理进行透明转发
+6. TLS 握手和加密通信直接在客户端与目标服务器之间完成
+
+特点：
+- 代理仅建立 TCP 通道，无法解密 HTTPS 流量
+- 客户端需要显式配置代理支持
+- 常用于 443 端口的标准 HTTPS 流量代理
+- 比普通 HTTP 代理更高效（不需要解析 HTTP 头）
+
 下面是 Squid 代理使用 CONNECT 方法建立 HTTPS 隧道的 Mermaid 流程图：
 ```mermaid
 sequenceDiagram
