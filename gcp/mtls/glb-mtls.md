@@ -118,7 +118,32 @@ graph TD;
 
 ## Claude
 我来帮您设计基于 Google Cloud 产品的 mTLS 架构方案。​​​​​​​​​​​​​​​​
+```mermaid
+sequenceDiagram
+    participant Client
+    participant GLB as Google Load Balancer
+    participant CA as Cloud Armor
+    participant Backend as Backend Service
 
+    Client->>GLB: HTTPS Request with Client Cert
+    GLB->>GLB: Extract cert subject to X-Client-Cert-Subject header
+    GLB->>CA: Forward request with headers
+    
+    Note over CA: Security Rule Processing
+    
+    rect rgb(240, 240, 240)
+        CA->>CA: Check X-Client-Cert-Subject
+        CA->>CA: Validate against allowed subjects
+        CA->>CA: Apply security policy
+    end
+    
+    alt Valid Certificate Subject
+        CA->>Backend: Allow Request
+        Backend->>Client: Response
+    else Invalid Certificate Subject
+        CA->>Client: 403 Forbidden
+    end
+```
 基于您的需求，我建议以下实现方案：
 
 1. 安全层面的实现：
@@ -187,6 +212,107 @@ if ($ssl_client_s_dn !~ "EXPECTED_SUBJECT_NAME") {
 
 您觉得这个方案是否满足您的需求？如果需要调整或者有其他具体的安全要求，我可以进一步优化方案。​​​​​​​​​​​​​​​​
 
+### 证书主题验证
+```mermaid
+sequenceDiagram
+    participant Client
+    participant GLB as Google Load Balancer
+    participant CA as Cloud Armor
+    participant Backend as Backend Service
+
+    Client->>GLB: HTTPS Request with Client Cert
+    GLB->>GLB: Extract cert subject to X-Client-Cert-Subject header
+    GLB->>CA: Forward request with headers
+    
+    Note over CA: Security Rule Processing
+    
+    rect rgb(240, 240, 240)
+        CA->>CA: Check X-Client-Cert-Subject
+        CA->>CA: Validate against allowed subjects
+        CA->>CA: Apply security policy
+    end
+    
+    alt Valid Certificate Subject
+        CA->>Backend: Allow Request
+        Backend->>Client: Response
+    else Invalid Certificate Subject
+        CA->>Client: 403 Forbidden
+    end
+```
+是的，您可以在 Cloud Armor 中通过自定义请求头验证和安全规则来验证证书主题。​​​​​​​​​​​​​​​​
+
+您可以通过以下方式在 Cloud Armor 中实现证书主题验证：
+
+1. 配置 GLB 转发证书信息：
+```bash
+# 配置 GLB 前端以包含证书信息
+gcloud compute backend-services update SERVICE_NAME \
+    --client-cert-config=enable,verify=require \
+    --include-ssl-headers=true
+```
+
+2. 在 Cloud Armor 中创建证书主题验证规则：
+```bash
+# 创建安全策略
+gcloud compute security-policies create cert-subject-policy \
+    --description "Certificate subject validation policy"
+
+# 添加证书主题验证规则
+gcloud compute security-policies rules create 1000 \
+    --security-policy cert-subject-policy \
+    --description "Validate certificate subject" \
+    --expression="request.headers['X-Client-Cert-Subject'].contains('CN=allowed-client-name')" \
+    --action "allow"
+
+# 添加默认拒绝规则
+gcloud compute security-policies rules create 2147483647 \
+    --security-policy cert-subject-policy \
+    --description "Default deny" \
+    --action "deny-403"
+```
+
+3. 使用更复杂的验证规则（如果需要多个主题）：
+```bash
+# 创建包含多个允许主题的规则
+gcloud compute security-policies rules create 1000 \
+    --security-policy cert-subject-policy \
+    --expression="request.headers['X-Client-Cert-Subject'].matches('CN=(client1|client2|client3)')" \
+    --action "allow"
+```
+
+4. 添加额外的安全检查：
+```bash
+# 添加证书指纹验证
+gcloud compute security-policies rules create 900 \
+    --security-policy cert-subject-policy \
+    --expression="request.headers['X-Client-Cert-Fingerprint'].matches('EXPECTED_FINGERPRINT')" \
+    --action "allow"
+```
+
+优势：
+1. 集中化管理：所有证书验证都在 Cloud Armor 中完成
+2. 更好的可维护性：不需要在 nginx 配置中维护验证逻辑
+3. 更强大的规则引擎：可以组合多个条件进行验证
+4. 更好的监控和日志记录：可以通过 Cloud Logging 查看所有验证事件
+5. 可以与其他 Cloud Armor 安全规则（如 IP 白名单）结合使用
+
+配置建议：
+1. 使用严格的正则表达式匹配证书主题
+2. 配置适当的日志记录级别
+3. 定期审查和更新允许的证书主题列表
+4. 设置监控告警，以便在出现异常时及时通知
+
+示例监控配置：
+```bash
+# 设置证书验证失败的监控
+gcloud monitoring alerts create \
+    --display-name="Certificate Subject Validation Failures" \
+    --condition="metric.type=\"compute.googleapis.com/loadbalancer/request_count\" resource.type=\"https_lb_rule\" metric.labels.response_code=\"403\"" \
+    --threshold-value=10 \
+    --duration=5m
+```
+
+您是否需要更详细的配置示例或者有其他特定的验证需求？我可以帮您进一步完善这个方案。​​​​​​​​​​​​​​​​
 
 ## deepseek
 
