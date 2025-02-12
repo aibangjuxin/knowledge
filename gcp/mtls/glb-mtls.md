@@ -39,10 +39,10 @@ graph TD;
 流程图
 ```mermaid
 graph TD;
-    A[Client] --> B[GLB (MTLS)];
+    A[Client] --> B[GLB MTLS];
     B --> C[cidmz-nginx];
     C --> D[Backend Service];
-    B --> E[Cloud Armor (Whitelisting)];
+    B --> E[Cloud Armor Whitelisting];
 ```
 步骤总结：
 	1.	配置 GLB 支持 HTTPS + MTLS。
