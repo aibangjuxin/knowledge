@@ -1,3 +1,10 @@
+- [my request](#my-request)
+- [Deepseek](#deepseek)
+- [请求差异分析](#请求差异分析)
+- [CONNECT方法时序图](#connect方法时序图)
+- [关键问题解析](#关键问题解析)
+- [Gemini](#gemini)
+
 # my request
 - error
 ```bash
