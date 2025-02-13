@@ -211,19 +211,6 @@ Squid 的配置可能包含以下类型的限制，导致请求 1 失败:
 
 **正确请求 (请求 2) 的 CONNECT 方法可视化 Sequence Diagram:**
 
-```mermaid
-sequenceDiagram
-    participant curl
-    participant Squid Proxy
-    participant Target Server (recaptchaenterprise.googleapis.com:443)
-
-    curl->>Squid Proxy: CONNECT recaptchaenterprise.googleapis.com:443 HTTP/1.1
-    Squid Proxy-->>curl: HTTP/1.1 200 Connection established
-    note over curl,Squid Proxy: Tunnel Established
-    curl->>Target Server: GET / HTTP/1.1 (Encrypted HTTPS)
-    Target Server-->>curl: HTTP/1.1 404 Not Found (Encrypted HTTPS)
-    note over curl,Target Server: HTTPS Communication through Tunnel
-```
 
 **Sequence Diagram 解释:**
 
