@@ -176,6 +176,7 @@
   },
   "active": "469aa650b5d193b6",
   "lastOpenFiles": [
+    "kong/kong-hight-availablity.md",
     "kong/kongdp-setting-timeout.md",
     "kong/kong-healthcheck-rt.md",
     "gcp/High-availability.md",
@@ -211,7 +212,6 @@
     "dns/cloud-dns.md",
     "dns/azure.md",
     "k8s/affinity-add-new-logic.md",
-    "k8s/affinity.md",
     "未命名.canvas",
     "未命名 2.canvas",
     "未命名 1.canvas"

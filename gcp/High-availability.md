@@ -107,6 +107,14 @@ periodSeconds: 20
 - [terminationGracePeriodSeconds](#terminationgraceperiodseconds)
 - 可能不需要,但是可以分析[确保服务的会话亲和性](#确保服务的会话亲和性)
 
+
+1. **立即配置 PDB:** 这是确保滚动更新高可用性的最重要步骤。
+2. **优化 Readiness Probe:** 缩短 `periodSeconds` 并确保 Probe 逻辑准确快速。
+3. **检查并优化 Graceful Shutdown:**  确认 GKE RT 应用处理 `SIGTERM` 信号，并根据需要调整 `terminationGracePeriodSeconds`。
+4. **配置 Kong DP 的重试、超时和健康检查:**  提高 Kong DP 的鲁棒性和容错能力。
+5. **监控和调优:**  在完成上述配置后，进行滚动更新测试，并监控系统指标，例如错误率、延迟等，根据监控结果进一步调优配置。
+   
+
 # Chatgpt
 在GKE中使用RollingUpdate时，确实可能会遇到在Pod替换过程中出现短暂的不可用状态，这可能导致502错误或连接被拒绝。这通常是由于新Pod启动时需要一些时间来准备好接受请求，或者在Pod被终止时，旧的Pod还没有完全移除。
 
