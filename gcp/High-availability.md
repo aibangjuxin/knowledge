@@ -249,7 +249,7 @@ spec:
 这样可以有效优化GKE升级过程中Pod替换的稳定性和高可用性。
 
 
-## Chattgpt2
+## Chatgpt2
 你的问题涉及到GKE中Pod替换过程中的高可用性，特别是升级期间的Downtime以及502错误和连接拒绝问题。这里有几个要点可以考虑优化：
 	1.	Pod Readiness 和 Liveness Probe：
 你已经配置了readinessProbe，这对于避免流量路由到尚未准备好的Pod非常重要。确保新Pod在向API请求流量之前，只有当它完全健康且准备好接受流量时才会加入到服务池中。readinessProbe的配置已经很好，但确保它的间隔（periodSeconds）和超时时间（timeoutSeconds）合理，避免过早认为Pod不健康。
