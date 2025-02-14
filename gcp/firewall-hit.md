@@ -1,15 +1,16 @@
 # How to list firewall-rules
 
+查找的核心就是先过滤关键字 然后丰富条件 拿到对应的结果
 - only list firewall-rules at project
 
-
-`gcloud compute firewall-rules list`
-
-
-gcloud logging read "$firewall-name" --limit=10
-
-gcloud logging read "resource.type=gce_firewall_rule AND resource.labels.firewall_rule_name=FIREWALL_RULE_NAME" --limit=10
-
+- step 1
+  - `gcloud compute firewall-rules list`
+- step 2 
+  - `gcloud logging read "$firewall-name" --limit=10`
+- step 3
+  - `gcloud logging read "resource.type=gce_firewall_rule AND protoPayload.resourceName:"$firewall-name" --limit=10 --format="json"`
+- step4 
+  - `gcloud logging read 'time>="2023-08-01T00:00:00Z" AND time<="2023-08-01T23:59:59Z" AND jsonPayload.rule_details.reference="network:$project"' --format="json" |jq '. |length'`
 
 
 在 Google Cloud Platform (GCP) 中，你可以使用以下命令来查看防火墙规则的命中情况：
