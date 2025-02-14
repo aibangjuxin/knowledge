@@ -89,16 +89,19 @@ readinessProbe:
 ```
 
 # MabyTODO
+- add pdb 配置
 - readinessProbe的检查间隔(periodSeconds)为20秒，这个间隔可能过长
 - 就绪探针灵敏度不足：20 秒探测间隔可能导致新 Pod 就绪状态延迟。
 periodSeconds: 20
 	•	定义：periodSeconds指定健康检查之间的间隔时间。也就是每隔20秒就进行一次健康检查。
 	•	含义：在每次健康检查之间会有20秒的间隔。也就是说，如果Pod启动后，Kubernetes会等待20秒才会发起下一次健康检查。
 	•	影响：较大的periodSeconds值意味着健康检查较为宽松，因为Pod可以有更多的时间来完成启动并响应健康检查。然而，这也意味着如果Pod启动缓慢，Kubernetes会等更长时间才会判断Pod是否健康。
-- [对于Kong DP：](#kongdp-setting)
+- [对于Kong DP](https://github.com/aibangjuxin/knowledge/blob/main/kong/kongdp-setting-timeout.md)
+  - 分析我们一般标准的Kong的[route](../kong/route.md) and service 配置, 学习这个timeout和retries
+  - [对于Kong DP](../kong/kongdp-setting-timeout.md)
   -  retries  5 ? 建议配置重试机制 所以有5次502
   -  timeout 适当的超时设置
-  - 这个应该也是我们优化的方向 [Kong health check RT ?](#../kong/kong-healthcheck-rt.md)
+  - 这个应该也是我们优化的方向 [Kong health check RT ?](../kong/kong-healthcheck-rt.md)
   -  
 - Kubernetes 中 Pod 的优雅停止 (Graceful Shutdown) 机制，以及如何确保连接 Drain 的充分性，并处理强制终止的情况
 - [terminationGracePeriodSeconds](#terminationgraceperiodseconds)
