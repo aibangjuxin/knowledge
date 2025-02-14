@@ -176,6 +176,7 @@
   },
   "active": "469aa650b5d193b6",
   "lastOpenFiles": [
+    "gcp/how-node-upgraded.md",
     "gcp/firewall-hit.md",
     "gcp/sa/verify-gcp-sa.md",
     "gcp/sa",
@@ -212,7 +213,6 @@
     "gcp/secret-manage/secret-manage-ssl.md",
     "python/gunicorn-fastapi.md",
     "未命名.canvas",
-    "ssl/pem-get-ssl.md",
     "未命名 2.canvas",
     "未命名 1.canvas"
   ]
