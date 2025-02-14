@@ -1,4 +1,4 @@
-中，Service的Endpoint列表是动态管理的，并且确实需要一定的时间来更新。当Kubernetes的Pod状态发生变化时（如新Pod创建、Pod终止、Pod重启等），Service会根据这些Pod的状态自动更新其Endpoint列表。下面是详细的过程，以及如何优化以实现高可用性。
+在Kubernetes中，Service的Endpoint列表是动态管理的，并且确实需要一定的时间来更新。当Kubernetes的Pod状态发生变化时（如新Pod创建、Pod终止、Pod重启等），Service会根据这些Pod的状态自动更新其Endpoint列表。下面是详细的过程，以及如何优化以实现高可用性。
 
 Kubernetes Service Endpoint更新过程
 	1.	Pod变更：
