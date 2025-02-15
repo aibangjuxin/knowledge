@@ -1,9 +1,36 @@
 - [Kubernetes Liveness Probe implementation](#kubernetes-liveness-probe-implementation)
+- [My Template setting](#my-template-setting)
 - [Kubernetes readinessProbe implementation](#kubernetes-readinessprobe-implementation)
   - [coze](#coze)
     - [就绪探针 (readinessProbe) 介绍](#就绪探针-readinessprobe-介绍)
     - [配置示例](#配置示例)
     - [参数说明](#参数说明)
+    - [分析配置](#分析配置)
+    - [配置的行为分析](#配置的行为分析)
+      - [配置 `timeoutSeconds: 3`](#配置-timeoutseconds-3)
+      - [配置 `timeoutSeconds: 1`](#配置-timeoutseconds-1)
+    - [对比结果](#对比结果)
+    - [影响分析](#影响分析)
+    - [Basic Concept of Readiness Probe](#basic-concept-of-readiness-probe)
+    - [1. Understanding Default Values](#1-understanding-default-values)
+    - [2. Example Configuration and Default Values](#2-example-configuration-and-default-values)
+    - [3. Impact of Configuring `timeoutSeconds`](#3-impact-of-configuring-timeoutseconds)
+      - [Potential Impact:](#potential-impact)
+    - [Complete Configuration Example](#complete-configuration-example)
+    - [Conclusion](#conclusion)
+    - [Comparative Analysis](#comparative-analysis)
+    - [Configuration Behavior Analysis](#configuration-behavior-analysis)
+      - [Configuration with `timeoutSeconds: 3`](#configuration-with-timeoutseconds-3)
+      - [Configuration with `timeoutSeconds: 1`](#configuration-with-timeoutseconds-1)
+    - [Comparative Results](#comparative-results)
+    - [Impact Analysis](#impact-analysis)
+      - [English](#english)
+    - [Configuration Analysis](#configuration-analysis)
+    - [Configuration Behavior Analysis](#configuration-behavior-analysis-1)
+      - [Configuration `timeoutSeconds: 3`](#configuration-timeoutseconds-3)
+      - [Configuration `timeoutSeconds: 1`](#configuration-timeoutseconds-1)
+    - [Comparative Results](#comparative-results-1)
+    - [Impact Analysis](#impact-analysis-1)
     - [回答你提出的问题](#回答你提出的问题)
     - [总结](#总结)
   - [meta3](#meta3)
@@ -24,6 +51,33 @@
 
 
 # Kubernetes Liveness Probe implementation
+
+# My Template setting 
+```yaml
+      readinessProbe:
+        httpGet:
+          scheme: HTTPS
+          path: /health
+          port: {{port}}
+        periodSeconds: 20
+        failureThreshold: 3
+        timeoutSeconds: 3
+      livenessProbe:
+        httpGet:
+          scheme: HTTPS
+          path: /health
+          port: {{port}}
+        periodSeconds: 20
+        failureThreshold: 3
+        timeoutSeconds: 3
+      startupProbe:
+        httpGet:
+          scheme: HTTPS
+          path: /health
+          port: {{port}}
+        periodSeconds: 10
+        failureThreshold: 30
+```
 
 
 # Kubernetes readinessProbe implementation

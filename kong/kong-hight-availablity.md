@@ -61,6 +61,10 @@ periodSeconds: 20
 - [terminationGracePeriodSeconds](#terminationgraceperiodseconds)
 - 可能不需要,但是可以分析[确保服务的会话亲和性](#确保服务的会话亲和性)
 帮我重新分析和整理
+- [startupProbe 优化建议]
+   - 当前配置基本合理，但可以考虑：
+   - `periodSeconds: 10` → `5`：缩短检查间隔，加快启动检测
+   - `failureThreshold: 30` 可以保持不变（允许 30 * 5 = 150 秒的启动时间
 
 
 # Deeepseek 

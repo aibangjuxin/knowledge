@@ -274,3 +274,4 @@ https://cloud.google.com/kubernetes-engine/docs/how-to/upgrading-a-cluster?hl=zh
 **总而言之，即使存在 1 小时限制，配置 `minAvailable: 1` 的 PDB 仍然是推荐的做法。 它能在大多数情况下为你的 2 Pod 副本 Deployment 提供较好的可用性保障。  你需要理解 1 小时限制，并做好监控和告警，同时考虑蓝绿升级 (如果对可用性有极致要求) 和优化资源配置/亲和性规则，以进一步降低极端情况发生的风险。**
 
 
+

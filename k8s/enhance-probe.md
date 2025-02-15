@@ -1,0 +1,694 @@
+
+- [SeqDigram](#seqdigram)
+- [reference](#reference)
+- [My Template setting](#my-template-setting)
+    - [概述三个探针的作用](#概述三个探针的作用)
+    - [当前配置分析](#当前配置分析)
+    - [优化建议](#优化建议)
+    - [优化后的完整配置建议](#优化后的完整配置建议)
+    - [补充说明](#补充说明)
+- [summary](#summary)
+- [endpoint](#endpoint)
+- [pod start time](#pod-start-time)
+- [endpoint Testing](#endpoint-testing)
+
+# SeqDigram 
+```mermaid
+sequenceDiagram
+    participant K as Kubernetes
+    participant P as Pod
+    participant SP as StartupProbe
+    participant RP as ReadinessProbe
+    participant LP as LivenessProbe
+    participant S as Service
+
+    K->>P: 创建Pod
+    Note over P: Pod 开始启动
+
+    rect rgb(200, 150, 255)
+        Note over SP: 启动探针阶段 (0-300秒)
+        loop 每10秒检测一次
+            P->>SP: 健康检查
+            alt 检查成功
+                SP-->>P: 通过
+            else 检查失败
+                SP-->>P: 失败 (最多30次)
+            end
+        end
+    end
+
+    rect rgb(150, 200, 255)
+        Note over RP: 就绪探针阶段 (0-60秒)
+        loop 每20秒检测一次
+            P->>RP: 健康检查
+            alt 检查成功
+                RP-->>P: 通过
+                P->>S: 加入服务负载均衡
+            else 检查失败
+                RP-->>P: 失败 (最多3次)
+                P->>S: 从负载均衡中移除
+            end
+        end
+    end
+
+    rect rgb(150, 255, 200)
+        Note over LP: 存活探针阶段 (持续进行)
+        loop 每20秒检测一次
+            P->>LP: 健康检查
+            alt 检查成功
+                LP-->>P: 通过
+            else 检查失败
+                LP-->>P: 失败 (最多3次)
+                LP->>K: 重启Pod
+            end
+        end
+    end
+```
+# reference
+- references:
+- [liveness](./liveness.md)
+
+# My Template setting 
+```yaml
+      readinessProbe:
+        httpGet:
+          scheme: HTTPS
+          path: /health
+          port: {{port}}
+        periodSeconds: 20
+        failureThreshold: 3
+        timeoutSeconds: 3
+      livenessProbe:
+        httpGet:
+          scheme: HTTPS
+          path: /health
+          port: {{port}}
+        periodSeconds: 20
+        failureThreshold: 3
+        timeoutSeconds: 3
+      startupProbe:
+        httpGet:
+          scheme: HTTPS
+          path: /health
+          port: {{port}}
+        periodSeconds: 10
+        failureThreshold: 30
+```
+
+让我帮你分析这三个探针的配置及其优化建议：
+
+### 概述三个探针的作用
+
+1. **readinessProbe（就绪探针）**
+   - 用于判断容器是否准备好接收流量
+   - 失败时会将 Pod 从服务的负载均衡中移除
+   
+2. **livenessProbe（存活探针）**
+   - 用于判断容器是否正常运行
+   - 失败时会重启容器
+
+3. **startupProbe（启动探针）**
+   - 用于判断容器是否已经完成启动
+   - 在启动探针运行时，会暂停其他探针
+   - 适用于需要较长启动时间的应用
+
+### 当前配置分析
+
+```yaml:/Users/lex/git/knowledge/k8s/liveness.md
+readinessProbe:
+  httpGet:
+    scheme: HTTPS    # 使用HTTPS协议
+    path: /health    # 健康检查路径
+    port: {{port}}   # 检查端口
+  periodSeconds: 20  # 每20秒检查一次
+  failureThreshold: 3  # 允许3次失败
+  timeoutSeconds: 3    # 超时时间3秒
+
+livenessProbe:
+  # 配置与readinessProbe相同
+  ...
+
+startupProbe:
+  # 配置与其他探针类似，但间隔和失败阈值不同
+  periodSeconds: 10    # 每10秒检查一次
+  failureThreshold: 30 # 允许30次失败
+```
+
+### 优化建议
+
+1. **readinessProbe 优化建议**：
+   - `periodSeconds: 20` → `10`：建议缩短检查间隔，以更快发现问题
+   - `timeoutSeconds: 3` 可以保持不变，这是一个比较合理的值
+   - 建议添加 `initialDelaySeconds: 5`：给应用一个初始化时间
+   - 建议添加 `successThreshold: 1`：明确成功阈值
+
+2. **livenessProbe 优化建议**：
+   - `periodSeconds: 20` → `30`：可以适当延长存活检查间隔，减少系统负担
+   - 建议添加 `initialDelaySeconds: 30`：给予更长的初始化时间
+   - `timeoutSeconds: 3` 可以保持不变
+   - `failureThreshold: 3` 可以保持不变
+
+3. **startupProbe 优化建议**：
+   - 当前配置基本合理，但可以考虑：
+   - `periodSeconds: 10` → `5`：缩短检查间隔，加快启动检测
+   - `failureThreshold: 30` 可以保持不变（允许 30 * 5 = 150 秒的启动时间）
+
+### 优化后的完整配置建议
+
+```yaml:/Users/lex/git/knowledge/k8s/liveness.md
+readinessProbe:
+  httpGet:
+    scheme: HTTPS
+    path: /health
+    port: {{port}}
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+  timeoutSeconds: 3
+  successThreshold: 1
+
+livenessProbe:
+  httpGet:
+    scheme: HTTPS
+    path: /health
+    port: {{port}}
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  failureThreshold: 3
+  timeoutSeconds: 3
+  successThreshold: 1
+
+startupProbe:
+  httpGet:
+    scheme: HTTPS
+    path: /health
+    port: {{port}}
+  periodSeconds: 5
+  failureThreshold: 30
+  timeoutSeconds: 3
+  successThreshold: 1
+```
+
+### 补充说明
+
+1. 这些优化建议基于一般场景，具体值需要根据你的应用特点调整：
+   - 应用启动时间
+   - 系统资源情况
+   - 业务可用性要求
+   - 网络环境状况
+
+2. 建议在测试环境验证这些参数，观察：
+   - 应用启动时间
+   - 探针检查对系统性能的影响
+   - 异常情况下的恢复时间
+
+3. 监控建议：
+   - 监控探针的失败率
+   - 记录探针超时情况
+   - 观察容器重启频率
+
+# summary
+- 那么我一个新的Pod如果要运行成功,且接受流量那么其实是要经历startupProbe. readiness Probe两个过程
+
+| 探针类型 | 最短时间 | 最长时间 | 计算说明 |
+|---------|----------|----------|----------|
+| startupProbe | 0秒 | 300秒 | 最短：立即成功<br>最长：periodSeconds(10) * failureThreshold(30) = 300秒 |
+| readinessProbe | 0秒 | 60秒 | 最短：立即成功<br>最长：periodSeconds(20) * failureThreshold(3) = 60秒 |
+| **总计** | **0秒** | **360秒** | 最短：两个探针都立即成功<br>最长：startupProbe(300秒) + readinessProbe(60秒) |
+
+
+
+# endpoint
+让我用序列图来说明当 Deployment 从 4 个副本扩展到 5 个副本时，就绪探针与 Endpoints 更新的完整流程：
+
+```mermaid
+sequenceDiagram
+    participant D as Deployment Controller
+    participant P as New Pod
+    participant RP as ReadinessProbe
+    participant EP as Endpoints Controller
+    participant S as Service
+    participant E as Endpoints
+
+    D->>P: 创建第5个Pod
+    Note over P: Pod状态: Pending
+
+    rect rgb(200, 150, 255)
+        Note over P,RP: 就绪探针检查阶段
+        loop 每20秒检测一次
+            P->>RP: 健康检查
+            alt 检查成功
+                RP-->>P: 通过
+                Note over P: Pod状态: Ready
+                P->>EP: 通知状态变更
+                EP->>E: 更新Endpoints
+                EP->>S: 更新Service负载均衡
+            else 检查失败
+                RP-->>P: 失败
+                Note over P: Pod不会被添加到Endpoints
+            end
+        end
+    end
+
+    Note over E: Endpoints列表更新为5个Pod
+```
+
+关键流程说明：
+
+1. Deployment Controller 创建新的 Pod（第 5 个副本）
+2. 新 Pod 启动后进行就绪探针检查
+3. 就绪探针通过后：
+   - Pod 状态变为 Ready
+   - Endpoints Controller 检测到 Pod 状态变化
+   - 更新 Endpoints 资源，添加新 Pod 的 IP 和端口
+   - Service 的负载均衡器获取更新后的 Endpoints 列表
+
+你可以通过以下命令观察这个过程：
+```bash
+# 查看 Endpoints 变化
+kubectl get endpoints <service-name> -w
+
+# 查看 Pod 就绪状态变化
+kubectl get pods -w
+```
+
+# pod start time 
+
+
+kubectl get deployment -n lex                                      admin@NASLEX
+NAME                 READY   UP-TO-DATE   AVAILABLE   AGE
+busybox-deployment   4/4     4            4           6d14h
+nginx-deployment     4/4     4            4           6m13s
+
+```bash
+kubectl describe pod nginx-deployment-5f65f66f6d-st6tb -n lex      admin@NASLEX
+Name:         nginx-deployment-5f65f66f6d-st6tb
+Namespace:    lex
+Priority:     0
+Node:         qnap-k3s-q21ca01210/10.0.3.2
+Start Time:   Sat, 15 Feb 2025 09:52:55 +0800
+Labels:       app=nginx
+              pod-template-hash=5f65f66f6d
+Annotations:  <none>
+Status:       Running
+IP:           10.42.0.58
+IPs:
+  IP:           10.42.0.58
+Controlled By:  ReplicaSet/nginx-deployment-5f65f66f6d
+Containers:
+  nginx:
+    Container ID:   containerd://b18915ec93e63e5cf4c0d5964cffca89541ed28ed27b76fa19a4f10db40e7633
+    Image:          nginx:latest
+    Image ID:       docker.io/library/nginx@sha256:32e76d4f34f80e479964a0fbd4c5b4f6967b5322c8d004e9cf0cb81c93510766
+    Port:           <none>
+    Host Port:      <none>
+    State:          Running
+      Started:      Sat, 15 Feb 2025 09:52:57 +0800
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      cpu:     200m
+      memory:  128Mi
+    Requests:
+      cpu:        100m
+      memory:     64Mi
+    Liveness:     http-get http://:80/ delay=0s timeout=3s period=20s #success=1 #failure=3
+    Readiness:    http-get http://:80/ delay=0s timeout=3s period=20s #success=1 #failure=3
+    Startup:      http-get http://:80/ delay=0s timeout=1s period=10s #success=1 #failure=30
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-pnhgb (ro)
+Conditions:
+  Type              Status
+  Initialized       True 
+  Ready             True 
+  ContainersReady   True 
+  PodScheduled      True 
+Volumes:
+  kube-api-access-pnhgb:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age    From               Message
+  ----    ------     ----   ----               -------
+  Normal  Scheduled  3m31s  default-scheduler  Successfully assigned lex/nginx-deployment-5f65f66f6d-st6tb to qnap-k3s-q21ca01210
+  Normal  Pulled     3m31s  kubelet            Container image "nginx:latest" already present on machine
+  Normal  Created    3m31s  kubelet            Created container nginx
+  Normal  Started    3m30s  kubelet            Started container nginx
+```
+- 脚本来分析 Pod 的启动时间线和探针状态：
+使用方法：
+```bash
+chmod +x pod_status.sh
+./pod_status.sh -n lex nginx-deployment
+```
+
+这个脚本会：
+
+1. 显示每个 Pod 的详细时间线：
+   - Pod 创建时间
+   - 容器启动时间
+   - 探针开始工作时间
+
+2. 显示探针配置详情：
+   - 启动探针配置
+   - 就绪探针配置
+   - 存活探针配置
+
+3. 显示关键事件时间线：
+   - Pod 调度时间
+   - 容器创建时间
+   - 容器启动时间
+   - 镜像拉取时间
+
+4. 分析服务可用性：
+   - 从 Pod 创建到就绪的总耗时
+   - 当前就绪状态
+
+输出会使用颜色区分不同类型的信息，方便查看。需要确保系统安装了 `jq` 工具来解析 JSON 输出。
+
+
+- adjust script
+```bash
+#!/bin/bash
+
+# 设置颜色输出
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+# 检查参数
+if [ "$#" -lt 3 ]; then
+    echo "Usage: $0 -n <namespace> <deployment-name>"
+    exit 1
+fi
+
+# 解析参数
+while getopts "n:" opt; do
+    case $opt in
+        n) NAMESPACE="$OPTARG";;
+        *) echo "Invalid option: -$OPTARG" >&2; exit 1;;
+    esac
+done
+shift $((OPTIND-1))
+DEPLOYMENT=$1
+
+echo -e "${BLUE}分析 Deployment: ${DEPLOYMENT} 在命名空间: ${NAMESPACE} 中的 Pod 状态${NC}\n"
+
+# 获取所有相关的 pods
+PODS=$(kubectl get pods -n ${NAMESPACE} -l app=${DEPLOYMENT} --no-headers -o custom-columns=":metadata.name")
+
+for POD in ${PODS}; do
+    echo -e "${YELLOW}Pod: ${POD}${NC}"
+    
+    # 获取 Pod 详细信息
+    START_TIME=$(kubectl get pod ${POD} -n ${NAMESPACE} -o jsonpath='{.status.startTime}')
+    CONTAINER_START=$(kubectl get pod ${POD} -n ${NAMESPACE} -o jsonpath='{.status.containerStatuses[0].state.running.startedAt}')
+    
+    # 获取探针配置
+    STARTUP_PROBE=$(kubectl get pod ${POD} -n ${NAMESPACE} -o jsonpath='{.spec.containers[0].startupProbe}')
+    READINESS_PROBE=$(kubectl get pod ${POD} -n ${NAMESPACE} -o jsonpath='{.spec.containers[0].readinessProbe}')
+    LIVENESS_PROBE=$(kubectl get pod ${POD} -n ${NAMESPACE} -o jsonpath='{.spec.containers[0].livenessProbe}')
+    
+    # 获取 Pod 事件
+    EVENTS=$(kubectl get events -n ${NAMESPACE} --field-selector involvedObject.name=${POD} --sort-by='.lastTimestamp' -o json)
+    
+    echo "时间线分析:"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${GREEN}1. Pod 创建时间:${NC} ${START_TIME}"
+    echo -e "${GREEN}2. 容器启动时间:${NC} ${CONTAINER_START}"
+    
+    # 分析探针配置
+    echo -e "\n探针配置:"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    if [ ! -z "$STARTUP_PROBE" ]; then
+        echo -e "${GREEN}启动探针:${NC}"
+        kubectl get pod ${POD} -n ${NAMESPACE} -o jsonpath='{.spec.containers[0].startupProbe}' | jq '.'
+    fi
+    
+    if [ ! -z "$READINESS_PROBE" ]; then
+        echo -e "${GREEN}就绪探针:${NC}"
+        kubectl get pod ${POD} -n ${NAMESPACE} -o jsonpath='{.spec.containers[0].readinessProbe}' | jq '.'
+    fi
+    
+    if [ ! -z "$LIVENESS_PROBE" ]; then
+        echo -e "${GREEN}存活探针:${NC}"
+        kubectl get pod ${POD} -n ${NAMESPACE} -o jsonpath='{.spec.containers[0].livenessProbe}' | jq '.'
+    fi
+    
+    # 分析关键事件
+    echo -e "\n关键事件时间线:"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "$EVENTS" | jq -r '.items[] | select(.reason == "Scheduled" or .reason == "Started" or .reason == "Created" or .reason == "Pulled") | "\(.lastTimestamp) [\(.reason)] \(.message)"' | sort
+    
+    # 获取当前状态
+    READY_STATUS=$(kubectl get pod ${POD} -n ${NAMESPACE} -o jsonpath='{.status.conditions[?(@.type=="Ready")]}')
+    
+    echo -e "\n当前状态:"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "$READY_STATUS" | jq '.'
+    
+    echo -e "\n${BLUE}服务可用性分析:${NC}"
+    READY_TIME=$(echo "$READY_STATUS" | jq -r '.lastTransitionTime')
+    # 时间计算部分的修改
+    if [ ! -z "$START_TIME" ] && [ ! -z "$READY_TIME" ]; then
+        # 将 UTC 时间转换为时间戳
+        START_SECONDS=$(date -d "$(echo $START_TIME | sed 's/Z$//')" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%S" "$(echo $START_TIME | sed 's/Z$//')" +%s)
+        READY_SECONDS=$(date -d "$(echo $READY_TIME | sed 's/Z$//')" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%S" "$(echo $READY_TIME | sed 's/Z$//')" +%s)
+        
+        if [ ! -z "$START_SECONDS" ] && [ ! -z "$READY_SECONDS" ]; then
+            TOTAL_SECONDS=$((READY_SECONDS - START_SECONDS))
+            echo "从 Pod 创建到就绪总共耗时: ${TOTAL_SECONDS} 秒"
+            
+            # 添加更详细的时间信息
+            echo "Pod 创建时间: $(date -d "@$START_SECONDS" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -r $START_SECONDS '+%Y-%m-%d %H:%M:%S')"
+            echo "Pod 就绪时间: $(date -d "@$READY_SECONDS" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -r $READY_SECONDS '+%Y-%m-%d %H:%M:%S')"
+        else
+            echo "时间计算失败: 无法解析时间格式"
+        fi
+    else
+        echo "时间计算失败: 缺少必要的时间信息"
+    fi
+    echo -e "\n${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+done
+``` 
+
+# endpoint Testing 
+- deployment.yaml
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx-deployment
+spec:
+  replicas: 4
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1        # 更新过程中最多可以比原先设置多出的 Pod 数量
+      maxUnavailable: 1  # 更新过程中最多允许多少个 Pod 处于无法提供服务的状态
+  selector:
+    matchLabels:
+      app: nginx-deployment
+  template:
+    metadata:
+      labels:
+        app: nginx-deployment
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        imagePullPolicy: Never    # 强制使用本地镜像
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        readinessProbe:
+          httpGet:
+            scheme: HTTP
+            path: /
+            port: 80  # 请替换为实际端口号
+          periodSeconds: 20
+          failureThreshold: 3
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            scheme: HTTP
+            path: /
+            port: 80  # 请替换为实际端口号
+          periodSeconds: 20
+          failureThreshold: 3
+          timeoutSeconds: 3
+        startupProbe:
+          httpGet:
+            scheme: HTTP
+            path: /
+            port: 80  # 请替换为实际端口号
+          periodSeconds: 10
+          failureThreshold: 30
+```
+- service.yaml
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+  labels:
+    app: nginx-deployment
+spec:
+  type: NodePort       # 将 ClusterIP 改为 NodePort
+  ports:
+    - port: 80        # 集群内部访问端口
+      targetPort: 80  # Pod 端口
+      nodePort: 61001 # 节点端口(可选，不指定会随机分配30000-32767)
+      protocol: TCP
+      name: http
+  selector:
+    app: nginx-deployment
+```
+- verify status 
+```bash
+~/deploy # kubectl get svc -n lex                                             admin@NASLEX
+NAME            TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
+nginx-service   NodePort   10.43.110.221   <none>        80:61001/TCP   6m21s
+
+~/deploy # kubectl get endpoints -n lex                                       admin@NASLEX
+NAME            ENDPOINTS                                               AGE
+nginx-service   10.42.0.61:80,10.42.0.62:80,10.42.0.63:80 + 1 more...   6m43s
+------------------------------------------------------------
+~/deploy # kubectl describe endpoints nginx-service  -n lex                   admin@NASLEX
+Name:         nginx-service
+Namespace:    lex
+Labels:       app=nginx-deployment
+Annotations:  endpoints.kubernetes.io/last-change-trigger-time: 2025-02-15T02:31:09Z
+Subsets:
+  Addresses:          10.42.0.61,10.42.0.62,10.42.0.63,10.42.0.64
+  NotReadyAddresses:  <none>
+  Ports:
+    Name  Port  Protocol
+    ----  ----  --------
+    http  80    TCP
+
+Events:  <none>
+
+```
+
+- 查看 Endpoints 变化
+kubectl get endpoints <service-name> -w
+
+kubectl get endpoints nginx-service -n lex -o json
+kubectl get endpoints nginx-service -n lex -o json | jq '.subsets[].addresses'
+kubectl get endpoints nginx-service -n lex -o jsonpath='{.subsets[*].addresses[*].ip}'
+
+- 查看 Pod 就绪状态变化
+kubectl get pods -w
+
+- next to do 
+  - wrk request from my Laptop
+  - scale deployment number to 10 
+    - `kubectl scale deployment nginx-deployment --replicas=10 -n lex`
+  - check the endpoint status 
+
+
+
+~/deploy # kubectl get endpoints nginx-service -n lex -w                                                      admin@NASLEX
+NAME            ENDPOINTS                                               AGE
+nginx-service   10.42.0.61:80,10.42.0.62:80,10.42.0.63:80 + 1 more...   16m
+nginx-service   10.42.0.61:80,10.42.0.62:80,10.42.0.63:80 + 1 more...   17m
+nginx-service   10.42.0.61:80,10.42.0.62:80,10.42.0.63:80 + 1 more...   17m
+nginx-service   10.42.0.61:80,10.42.0.62:80,10.42.0.63:80 + 1 more...   17m
+nginx-service   10.42.0.61:80,10.42.0.62:80,10.42.0.63:80 + 1 more...   17m
+nginx-service   10.42.0.61:80,10.42.0.62:80,10.42.0.63:80 + 1 more...   17m
+nginx-service   10.42.0.61:80,10.42.0.62:80,10.42.0.63:80 + 1 more...   17m
+nginx-service   10.42.0.61:80,10.42.0.62:80,10.42.0.63:80 + 2 more...   17m
+nginx-service   10.42.0.61:80,10.42.0.62:80,10.42.0.63:80 + 3 more...   17m
+nginx-service   10.42.0.61:80,10.42.0.62:80,10.42.0.63:80 + 4 more...   17m
+nginx-service   10.42.0.61:80,10.42.0.62:80,10.42.0.63:80 + 5 more...   17m
+nginx-service   10.42.0.61:80,10.42.0.62:80,10.42.0.63:80 + 6 more...   17m
+nginx-service   10.42.0.61:80,10.42.0.62:80,10.42.0.63:80 + 7 more...   17m
+
+
+[~] # kubectl  describe endpoints nginx-service -n lex
+Name:         nginx-service
+Namespace:    lex
+Labels:       app=nginx-deployment
+Annotations:  <none>
+Subsets:
+  Addresses:          10.42.0.61,10.42.0.62,10.42.0.63,10.42.0.64,10.42.0.66
+  NotReadyAddresses:  <none>
+  Ports:
+    Name  Port  Protocol
+    ----  ----  --------
+    http  80    TCP
+
+Events:  <none>
+
+
+是的，有几种方法可以更详细地观察 Endpoints 的变化过程和时间点：
+
+1. 使用 `kubectl get events` 查看与 Endpoints 相关的事件：
+```bash
+kubectl get events -n lex --field-selector involvedObject.kind=Endpoints,involvedObject.name=nginx-service --sort-by='.lastTimestamp' -w
+```
+
+2. 使用 `kubectl get endpoints` 的 JSON 输出并关注 `lastTransitionTime`：
+```bash
+kubectl get endpoints nginx-service -n lex -o json | jq '.metadata.annotations."endpoints.kubernetes.io/last-change-trigger-time"'
+```
+
+3. 创建一个监控脚本，同时观察 Endpoints 和 Pod 的变化：
+```bash:/Users/lex/git/knowledge/k8s/scripts/monitor_endpoints.sh
+#!/bin/bash
+
+NAMESPACE=$1
+SERVICE_NAME=$2
+
+echo "开始监控 Endpoints 变化..."
+echo "时间戳 | Endpoints 数量 | Pod IPs"
+echo "----------------------------------------"
+
+while true; do
+    TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+    ENDPOINTS=$(kubectl get endpoints $SERVICE_NAME -n $NAMESPACE -o jsonpath='{.subsets[*].addresses[*].ip}')
+    COUNT=$(echo $ENDPOINTS | wc -w)
+    
+    # 获取最后修改时间
+    LAST_CHANGE=$(kubectl get endpoints $SERVICE_NAME -n $NAMESPACE -o jsonpath='{.metadata.annotations.endpoints\.kubernetes\.io/last-change-trigger-time}')
+    
+    echo "$TIMESTAMP | $COUNT | $ENDPOINTS | Last Change: $LAST_CHANGE"
+    sleep 1
+done
+```
+
+使用方法：
+```bash
+chmod +x monitor_endpoints.sh
+./monitor_endpoints.sh lex nginx-service
+```
+
+4. 使用 `kubectl get` 的自定义输出格式：
+```bash
+kubectl get endpoints nginx-service -n lex -o custom-columns="LAST_CHANGE:.metadata.annotations.endpoints\.kubernetes\.io/last-change-trigger-time,ENDPOINTS:.subsets[*].addresses[*].ip" -w
+```
+
+这些方法可以帮助你：
+- 观察 Endpoints 的实时变化
+- 记录具体的时间点
+- 追踪 IP 地址的变化
+- 监控 Endpoints 的更新过程
+
+建议同时使用多个终端窗口，一个运行监控脚本，另一个执行扩缩容操作，这样可以更清晰地观察整个过程。
+
