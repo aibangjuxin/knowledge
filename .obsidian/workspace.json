@@ -176,6 +176,7 @@
   },
   "active": "469aa650b5d193b6",
   "lastOpenFiles": [
+    "kong/capture-kong-log.md",
     "k8s/endpoint.md",
     "k8s/busybox/nas-service.md",
     "k8s/scripts/pod_status.sh",
@@ -211,7 +212,6 @@
     "k8s/gke-upgrade.md",
     "k8s/pdb-core.md",
     "k8s/pob.md",
-    "k8s/busybox/deploy.md",
     "未命名.canvas",
     "未命名 2.canvas",
     "未命名 1.canvas"
