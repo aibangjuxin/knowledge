@@ -105,4 +105,4 @@ plugins:
 
 那么从用户代码层来说,有没有必要进行一些特殊的配置或者调整?比如如何应对类似问题,确保每次的Post请求都能得到完整和想要的结果.可以按照Java开发的应用程序来举例子
 
-- [java](#./java/java-post.md) 
+- [java](../java/java-post.md) 
