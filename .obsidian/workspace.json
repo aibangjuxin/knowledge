@@ -41,12 +41,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "flow/external-flow.md",
+                "file": "k8s/enhance-probe.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "external-flow"
+              "title": "enhance-probe"
             }
           },
           {
@@ -96,7 +96,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "glb-",
+                "query": "nas",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": false,
@@ -228,11 +228,13 @@
       "copilot:Open Copilot Chat": false
     }
   },
-  "active": "469aa650b5d193b6",
+  "active": "d5945a962ac5784e",
   "lastOpenFiles": [
-    "kong/kong-hight-availablity.md",
-    "flow/external-flow.md",
     "flow/internal-flow.md",
+    "k8s/busybox/nas-service.md",
+    "k8s/busybox/deploy.md",
+    "flow/external-flow.md",
+    "kong/kong-hight-availablity.md",
     "gcp/mtls/glb-mtls.md",
     "flow/L7-L4-request-flow.md",
     "draw/url.md",
@@ -261,8 +263,6 @@
     "gcp/global-https.md",
     "gcp/gcp-upgrade-and-high-availablility.md",
     "gcp/High-availability.md",
-    "nginx/nginx-map-single-config.md",
-    "nginx/ssl_client_certificate_chain.md",
     "squid",
     "k8s/scripts/pod_status.sh",
     "k8s/scripts",
