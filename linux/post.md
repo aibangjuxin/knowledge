@@ -243,3 +243,77 @@ sequenceDiagram
 
 • 通过合理的配置，可以确保请求在 Pod 替换或 Node 升级过程中不会丢失或中断。
 
+# Deep seek
+
+以下是基于您描述的流程制作的 Mermaid 时序图（包含美化布局和交互细节）：
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant K as Kong
+    participant A as API服务
+    participant DB as Database
+
+    C->>+K: 1. POST /resources
+    Note right of C: 请求示例：
+    Note right of C: {<br/>  "name": "example",<br/>  "data": "test"<br/>}
+
+    K->>+A: 2. 转发请求
+    Note left of K: 网关功能：<br/>- 负载均衡<br/>- 认证检查
+
+    A->>A: 3. 数据验证/处理
+    Note right of A: 校验字段有效性<br/>生成唯一ID
+
+    A->>+DB: 4. INSERT INTO resources
+    DB-->>-A: 5. 返回写入结果
+
+    A->>A: 6. 格式化响应
+    Note right of A: 生成带 Location header 的响应
+
+    A-->>-K: 7. HTTP 201 Created
+    Note left of A: 响应示例：<br/>{<br/>  "id": "123",<br/>  "status": "created"<br/>}
+
+    K-->>-C: 8. 最终响应
+    Note left of K: 传递原始响应<br/>添加网关耗时指标
+```
+
+**示意图特点说明：**
+1. 使用渐进的数字编号明确流程顺序
+2. 在右侧添加 JSON 请求/响应示例
+3. 通过 Note 元素展示关键业务逻辑（数据验证、ID生成等）
+4. 标注了 Kong 网关的附加功能（负载均衡、认证检查）
+5. 包含数据库操作和响应格式化的细节步骤
+6. 使用嵌套箭头（`+`/`-`）表示激活状态
+
+如果需要展示错误流程，可以扩展这个版本：
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant K as Kong
+    participant A as API服务
+
+    C->>+K: POST /resources
+    K->>+A: 转发请求
+
+    alt 验证失败
+        A-->>K: HTTP 400 Bad Request
+        K-->>C: 传递错误
+    else 数据库错误
+        A->>A: 记录错误日志
+        A-->>K: HTTP 503 Service Unavailable
+        K-->>C: 传递错误
+    else 成功
+        A-->>K: HTTP 201 Created
+        K-->>C: 传递成功
+    end
+
+    deactivate A
+    deactivate K
+```
+
+**扩展建议：**
+1. 如果要显示耗时，可以在箭头后添加 `: 150ms` 时间标注
+2. 可以使用不同颜色标记组件（需支持 mermaid 主题配置的环境）
+3. 添加 `box` 容器对微服务架构进行分组显示
+4. 使用 `par` 并行块显示异步日志记录等操作

@@ -1,7 +1,7 @@
 - [current configure](#current-configure)
 - [MabyTODO](#mabytodo)
 - [Chatgpt](#chatgpt)
-  - [Chattgpt2](#chattgpt2)
+  - [Chatgpt2](#chatgpt2)
 - [Claude](#claude)
 - [Gemini](#gemini)
   - [old Pod](#old-pod)
@@ -102,7 +102,6 @@ periodSeconds: 20
   -  retries  5 ? 建议配置重试机制 所以有5次502
   -  timeout 适当的超时设置
   - 这个应该也是我们优化的方向 [Kong health check RT ?](../kong/kong-healthcheck-rt.md)
-  -  
 - Kubernetes 中 Pod 的优雅停止 (Graceful Shutdown) 机制，以及如何确保连接 Drain 的充分性，并处理强制终止的情况
 - [terminationGracePeriodSeconds](#terminationgraceperiodseconds)
 - 可能不需要,但是可以分析[确保服务的会话亲和性](#确保服务的会话亲和性)
@@ -111,6 +110,8 @@ periodSeconds: 20
 1. **立即配置 PDB:** 这是确保滚动更新高可用性的最重要步骤。
 2. **优化 Readiness Probe:** 缩短 `periodSeconds` 并确保 Probe 逻辑准确快速。
 3. **检查并优化 Graceful Shutdown:**  确认 GKE RT 应用处理 `SIGTERM` 信号，并根据需要调整 `terminationGracePeriodSeconds`。
+   1. **K8s 默认行为**：滚动更新时会发送 `SIGTERM` → 等待 `terminationGracePeriodSeconds`（默认30秒）→ 强制 `SIGKILL`
+   2. [terminationGracePeriodSeconds.md](../k8s/terminationGracePeriodSeconds.md)
 4. **配置 Kong DP 的重试、超时和健康检查:**  提高 Kong DP 的鲁棒性和容错能力。
 5. **监控和调优:**  在完成上述配置后，进行滚动更新测试，并监控系统指标，例如错误率、延迟等，根据监控结果进一步调优配置。
    

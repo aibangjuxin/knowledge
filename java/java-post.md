@@ -1,5 +1,6 @@
 - [summary](#summary)
   - [post sequence Diagram](#post-sequence-diagram)
+- [case](#case)
 - [java post](#java-post)
   - [1. 重试机制的实现](#1-重试机制的实现)
   - [2. 幂等性保证](#2-幂等性保证)
@@ -22,7 +23,7 @@
   - 3. **Java 开发中的应用**: 总结了在 Java 开发中如何通过单元测试、集成测试、日志记录、容错机制、重试机制、断路器模式和资源管理来实现可靠性和鲁棒性。
 
 ## post sequence Diagram 
-- reference
+- Reference
 - [post](../linux/post.md)
 ```mermaid
 sequenceDiagram
@@ -44,6 +45,10 @@ sequenceDiagram
     end
     deactivate Server
 ```
+
+# case
+- eg 
+- [kong-post-case.md](../kong/kong-post-case.md)
 
 # java post
 
