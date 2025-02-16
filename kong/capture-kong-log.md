@@ -1,7 +1,7 @@
 
 Typical scenarios
 - Kong DP 没有记录到分发到后端 GKE RT 请求的日志
-- 比如RT启用了一个插件,但是Pod还没有启动 或者失败 或者拿不到Token的时候 Kong这里应该是都没有日志的
+- **比如RT启用了一个插件,但是Pod还没有启动 或者失败 或者拿不到Token的时候 Kong这里应该是都没有日志的**
 
 Kong Data Plane (Kong DP) 的日志记录通常会包括请求的相关信息，包括请求的来源、目标、状态码等。如果 Kong DP 没有记录到分发到后端 GKE RT 请求的日志，可能是以下几种情况导致的：
 

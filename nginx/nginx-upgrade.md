@@ -309,27 +309,27 @@ we need upgrade nginx from 1.20.1 to 1.26.0
 请注意，这个总结会侧重于功能性的新增和比较明显的改进。一些小的 bug 修复或内部优化可能不会列出。由于 1.26.0 是当前最新的稳定版本，我们需要回顾从 1.21.0 开始（因为 1.20.x 是你的当前版本线）到 1.26.0 的所有主要版本更新。
 
 
-| 功能特性                                 | 首次引入版本 | 描述                                                                                                                       | 关联模块 |
-| ---------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------- | -------- |
-| **核心功能**                             |              |                                                                                                                            |          |
-| `worker_shutdown_timeout`                | 1.25.0       | 允许设置 worker 进程关闭的超时时间，超过此时间 worker 进程将被强制终止。有助于更优雅地关闭 worker 进程。                   | Core     |
-| **HTTP 模块**                            |              |                                                                                                                            |          |
-| `$jwt_claim_NAME` 变量                   | 1.21.0       | 允许提取和使用 JWT (JSON Web Token) 中的声明 (claims)，例如 `$jwt_claim_sub` 获取 "sub" 声明。                             | HTTP     |
-| `proxy_ssl_early_data`                   | 1.21.0       | 允许在使用 `proxy_pass` 时发送 TLS early data (如果后端服务器支持)，可以减少 TLS 握手延迟。                                | HTTP     |
-| `access_log` 时间格式改进                | 1.21.0       | `access_log` 指令支持更灵活的时间格式，可以使用变量进行定义。                                                              | HTTP     |
-| `$upstream_bytes_sent`                   | 1.23.0       | 新增变量 `$upstream_bytes_sent`，记录发送到上游服务器的字节数。                                                            | HTTP     |
-| `$upstream_bytes_received`               | 1.23.0       | 新增变量 `$upstream_bytes_received`，记录从上游服务器接收的字节数。                                                        | HTTP     |
-| `http3` 指令                             | 1.23.0       | 实验性支持 HTTP/3 协议。                                                                                                   | HTTP     |
-| `proxy_websocket_ping`                   | 1.23.0       | 允许配置 Nginx 作为 WebSocket 代理时发送 Ping 帧到后端服务器，用于保持连接活跃和检测连接状态。                             | HTTP     |
-| `ssl_client_certificate_chain`           | 1.25.0       | 新增 `ssl_client_certificate_chain` 指令，允许指定一个包含可信 CA 证书链的文件，用于验证客户端证书。                       | HTTP     |
-| **Stream 模块**                          |              |                                                                                                                            |          |
-| `preread_buffer_size`                    | 1.21.0       | `stream` 模块新增 `preread_buffer_size` 指令，允许配置预读取缓冲区大小，用于提前读取客户端数据进行处理（例如 SNI）。       | Stream   |
-| `ssl_reject_handshake`                   | 1.21.0       | `stream` 模块新增 `ssl_reject_handshake` 指令，允许基于某些条件（例如 SNI）拒绝 SSL/TLS 握手。                             | Stream   |
-| Stream 中使用 `$ssl_preread_server_name` | 1.23.0       | `stream` 模块可以使用 `$ssl_preread_server_name` 变量，获取客户端 SSL/TLS 握手中提供的 SNI (Server Name Indication)。      | Stream   |
-| `ssl_preread_alpn`                       | 1.25.0       | `stream` 模块新增 `ssl_preread_alpn` 指令，允许基于客户端提供的 ALPN (Application-Layer Protocol Negotiation) 值进行路由。 | Stream   |
-| `$ssl_preread_alpn`                      | 1.25.0       | `stream` 模块可以使用 `$ssl_preread_alpn` 变量，获取客户端 SSL/TLS 握手中提供的 ALPN 值。                                  | Stream   |
-| **Mail 模块**                            |              |                                                                                                                            |          |
-| (请查阅具体 Mail 模块更新)               |              | Mail 模块也有更新，请参考具体的版本日志。                                                                                  | Mail     |
+| 功能特性                                  | 首次引入版本 | 描述                                                                                                  | 关联模块   |
+| ------------------------------------- | ------ | --------------------------------------------------------------------------------------------------- | ------ |
+| **核心功能**                              |        |                                                                                                     |        |
+| `worker_shutdown_timeout`             | 1.25.0 | 允许设置 worker 进程关闭的超时时间，超过此时间 worker 进程将被强制终止。有助于更优雅地关闭 worker 进程。                                    | Core   |
+| **HTTP 模块**                           |        |                                                                                                     |        |
+| `$jwt_claim_NAME` 变量                  | 1.21.0 | 允许提取和使用 JWT (JSON Web Token) 中的声明 (claims)，例如 `$jwt_claim_sub` 获取 "sub" 声明。                         | HTTP   |
+| `proxy_ssl_early_data`                | 1.21.0 | 允许在使用 `proxy_pass` 时发送 TLS early data (如果后端服务器支持)，可以减少 TLS 握手延迟。                                    | HTTP   |
+| `access_log` 时间格式改进                   | 1.21.0 | `access_log` 指令支持更灵活的时间格式，可以使用变量进行定义。                                                               | HTTP   |
+| `$upstream_bytes_sent`                | 1.23.0 | 新增变量 `$upstream_bytes_sent`，记录发送到上游服务器的字节数。                                                         | HTTP   |
+| `$upstream_bytes_received`            | 1.23.0 | 新增变量 `$upstream_bytes_received`，记录从上游服务器接收的字节数。                                                     | HTTP   |
+| `http3` 指令                            | 1.23.0 | 实验性支持 HTTP/3 协议。                                                                                    | HTTP   |
+| `proxy_websocket_ping`                | 1.23.0 | 允许配置 Nginx 作为 WebSocket 代理时发送 Ping 帧到后端服务器，用于保持连接活跃和检测连接状态。                                         | HTTP   |
+| `ssl_client_certificate_chain`        | 1.25.0 | 新增 `ssl_client_certificate_chain` 指令，允许指定一个包含可信 CA 证书链的文件，用于验证客户端证书。                                | HTTP   |
+| **Stream 模块**                         |        |                                                                                                     |        |
+| `preread_buffer_size`                 | 1.21.0 | `stream` 模块新增 `preread_buffer_size` 指令，允许配置预读取缓冲区大小，用于提前读取客户端数据进行处理（例如 SNI）。                        | Stream |
+| `ssl_reject_handshake`                | 1.21.0 | `stream` 模块新增 `ssl_reject_handshake` 指令，允许基于某些条件（例如 SNI）拒绝 SSL/TLS 握手。                              | Stream |
+| Stream 中使用 `$ssl_preread_server_name` | 1.23.0 | `stream` 模块可以使用 `$ssl_preread_server_name` 变量，获取客户端 SSL/TLS 握手中提供的 SNI (Server Name Indication)。    | Stream |
+| `ssl_preread_alpn`                    | 1.25.0 | `stream` 模块新增 `ssl_preread_alpn` 指令，允许基于客户端提供的 ALPN (Application-Layer Protocol Negotiation) 值进行路由。 | Stream |
+| `$ssl_preread_alpn`                   | 1.25.0 | `stream` 模块可以使用 `$ssl_preread_alpn` 变量，获取客户端 SSL/TLS 握手中提供的 ALPN 值。                                 | Stream |
+| **Mail 模块**                           |        |                                                                                                     |        |
+| (请查阅具体 Mail 模块更新)                     |        | Mail 模块也有更新，请参考具体的版本日志。                                                                             | Mail   |
 
 
 **总结说明:**

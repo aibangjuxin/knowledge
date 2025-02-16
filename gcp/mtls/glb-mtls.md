@@ -404,6 +404,85 @@ graph TD
     class B,C,D security;
 ```
 
+
+
+**关于 GCP GLB 和 MTLS：**
+
+  
+当你使用 GCP 的全球负载均衡（GLB）配置 HTTPS 和 MTLS 时，负载均衡器会处理 SSL/TLS 握手和证书验证，但 **负载均衡器不会将证书的主题信息作为 HTTP 请求头传递给后端**。这意味着在 GLB 前面，你的 Nginx 可能无法直接接收到关于客户端证书的详细信息。
+
+  
+
+为了能够进行客户端证书验证并传递这些信息，你需要利用 GCP 的负载均衡器配置将客户端的证书信息传递给后端。GCP 提供了一些 **MTLS 特定的头部变量**，这些变量用于将证书相关的信息传递给后端服务。你可以在 GCP GLB 中配置自定义请求头，将客户端证书的一些信息（如 client-cert 和 client-cn）传递给后端 Nginx。
+
+  
+
+参考 GCP 官方文档中的示例：
+
+• [MTLS Headers for GCP Load Balancer](https://cloud.google.com/load-balancing/docs/https/custom-headers#mtls-variables)
+
+  
+
+以下是一个可能的配置方法：
+
+  
+
+**GCP GLB 配置：**
+
+1. **启用 HTTPS 负载均衡**，并配置 MTLS。
+
+2. **传递 SSL 证书信息**到 Nginx 后端。通过 GCP 的 MTLS 变量来传递证书的信息。
+
+```
+http {
+    map $ssl_client_s_dn $ssl_client_s_dn_cn {
+        default "";
+        ~(^|,)CN=(?<CN>[^,]+) $CN;
+    }
+
+    include /etc/nginx/conf.d/*.conf;
+    include /etc/nginx/geo.txt;
+    include /etc/nginx/dev-sgpoet-client.domain.aibang.conf;
+
+    server {
+        listen 443 ssl;
+
+        # SSL证书和私钥配置
+        ssl_certificate /path/to/server.crt;
+        ssl_certificate_key /path/to/server.key;
+
+        # 配置从GCP GLB传递的证书信息
+        set $client_cert_cn $http_x_client_cert_cn;
+
+        # 通过头部信息验证客户端证书的公用名称
+        if ($client_cert_cn != "expected-client-cn") {
+            return 403; # 如果证书不匹配，返回403
+        }
+
+        # 其他配置
+        include /etc/nginx/conf.d/urlpath-v1.conf;
+    }
+}
+```
+
+**解释：**
+
+• set $client_cert_cn $http_x_client_cert_cn;：GCP 会将客户端证书的公用名称通过 HTTP 请求头 X-Client-Cert-CN 传递给后端 Nginx，你可以在 Nginx 中利用此信息进行验证。
+
+• if ($client_cert_cn != "expected-client-cn")：根据传递的客户端证书的公用名称进行验证，如果不匹配，则返回 403 Forbidden。
+
+  
+
+**3. 总结：**
+
+• **Nginx 配置**：通过 ssl_client_certificate_chain 指令来指定可信的 CA 证书链，确保客户端证书的验证。
+
+• **GCP GLB 配置**：GCP 负载均衡器会处理 SSL/TLS 握手并进行 MTLS 验证，但不会将证书信息传递给后端。你可以配置 GCP GLB 将证书相关信息通过自定义头部传递给 Nginx 后端进行进一步验证。
+
+  
+
+希望这些信息能帮助你完成 MTLS 配置！如果有更多具体的配置问题或需要进一步优化，随时告诉我！
+
 ## deepseek
 
 以下是基于您的需求整合Google Cloud原生服务的优化架构方案，保留核心安全要求的同时简化配置：

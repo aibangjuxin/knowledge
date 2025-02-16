@@ -388,3 +388,97 @@ spec:
 5. **监控和调优:**  在完成上述配置后，进行滚动更新测试，并监控系统指标，例如错误率、延迟等，根据监控结果进一步调优配置。
 
 通过以上优化措施，您应该能够显著提升 GKE 滚动更新过程中的服务可用性，减少甚至消除 Downtime，确保用户请求的平稳处理。请逐步实施这些建议，并持续监控和优化您的系统。
+
+# Kong => RT => Post
+
+当你从客户端发送一个 **POST 请求** 到你的 **GKE RT**，并且 GKE 的 **NodePool** 需要升级时，Kong DP 会通过 **Service** 路由流量到 GKE 的 Pods，而这些 Pods 正在运行在需要滚动升级的 Node 上。这个过程涉及多个步骤，且需要确保系统的高可用性。下面是详细的过程：
+
+  
+
+**1. Kubernetes滚动升级流程**
+
+  
+
+GKE 进行滚动升级时，首先会选择要升级的 Node（或节点组中的一部分），并开始逐步替换其中的 Pod。以下是关键步骤：
+
+• **选择目标 Node**：GKE 会选择一个 Node 来进行升级。在升级过程中，这个 Node 上的所有 Pods 会被驱逐（evict）。
+
+• **Pod驱逐与迁移**：当 Node 被标记为正在升级时，Kubernetes 会将运行在这个 Node 上的 Pods 驱逐，并重新调度到集群中的其他可用节点上。驱逐的过程中，Kubernetes 会确保至少有一个 Pod 在任何时刻仍然在运行，除非你显式配置了 PodDisruptionBudget（PDB），以便在升级过程中控制最小可用 Pods 数量。
+
+• **Pod替换与启动**：被驱逐的 Pod 会被重新调度到其他健康的 Node 上，并重新启动。如果你的 Deployment 配置了 RollingUpdate 策略，Kubernetes 会逐步替换 Pods，以确保不会一次性导致服务中断。
+
+  
+
+**2. 流量处理流程（Kong DP + Service）**
+
+  
+
+在这个过程中，Kong DP 的请求流量是通过 Kubernetes **Service** 路由到目标 **Pods**。Service 会自动跟踪可用 Pods 的 Endpoint 列表。
+
+• **Kong DP的流量路由**：Kong DP 会将流量发送到你的 **Kubernetes Service**。这个 Service 会选择可用的 Pod 来处理请求。如果某个 Pod 被驱逐，Service 会自动更新 Endpoint 列表，停止将流量路由到被驱逐的 Pod，而是将流量转发到其他仍然运行的 Pod 上。
+
+• **健康检查**：在 Pod 启动时，readinessProbe 会检查 Pod 是否已准备好接受流量。只有在 Pod 通过健康检查后，才会被添加到 Service 的 Endpoint 列表中。这个过程有助于确保流量不会被路由到尚未准备好的 Pod。
+
+  
+
+**3. 节点升级期间的流量处理**
+
+  
+
+假设你的 GKE 有 2 个 Pod 并且你的 NodePool 需要进行滚动升级，那么在升级期间可能会发生以下情况：
+
+• **Pod 驱逐和重新调度**：假设 Node 上的 Pod 被驱逐，Kubernetes 会将这些 Pod 调度到其他可用节点上。Service 会自动更新 Endpoint 列表，移除已被驱逐的 Pod，并仅将流量路由到仍然健康并准备好的 Pod。
+
+• **Kong DP的负载均衡**：Kong DP 会根据新的 Endpoint 列表来负载均衡流量。当一个 Pod 被驱逐并且新的 Pod 启动时，流量会自动转发到新的 Pod（假设它通过了健康检查）。如果你的 Service 配置得当，Kong DP 会避免将流量路由到不可用的 Pod。
+
+  
+
+**4. 潜在问题与优化**
+
+• **Downtime的风险**：在节点升级过程中，如果没有合理配置，可能会出现短暂的 Downtime，尤其是在 Pod 重新调度时。这个问题可以通过增加 **PodDisruptionBudget (PDB)** 来缓解，PDB 可以确保在 Pod 驱逐时，始终有至少一个 Pod 可用。
+
+• **Kong DP的502错误和连接问题**：如果 Pod 的健康检查未通过或正在替换，Kong DP 可能会遇到502错误或连接拒绝的问题。通过使用 **readinessProbe** 和 **PDB**，可以确保流量不会路由到不可用的 Pod。
+
+• **节点升级的平滑性**：节点升级的平滑性取决于 Pod 调度和健康检查。如果有多个节点正在升级，可能会导致 Service 的 Pod 数量不足，进而影响流量的可用性。合理的 **HPA（Horizontal Pod Autoscaling）** 和 **Pod分布** 配置可以帮助优化这一过程。
+
+  
+
+**5. NodePool升级与Pod滚动升级**
+
+  
+
+如果你使用的 **NodePool** 中的多个节点都在进行升级，则每次升级一个节点时，Kubernetes 会确保 Pods 被平滑地迁移到其他节点上。在此期间，Kong DP 会自动更新它的 Endpoint 列表，确保流量被路由到健康的 Pod。如果 Pod 正在被替换，Service 会将流量路由到剩余的 Pod，直到新的 Pod 完全就绪并被加入到服务中。
+
+  
+
+**6. PDB（PodDisruptionBudget）的使用**
+
+  
+
+配置 **PDB** 可以帮助控制升级过程中 Pod 的最小可用数量，避免因节点升级导致服务不可用的情况。你可以使用以下配置来确保至少有一个 Pod 在 Node 升级期间保持可用：
+
+```
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rt-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: gke-rt
+```
+
+**总结**
+
+• **节点升级时，Kubernetes会驱逐Pod并将其重新调度到其他Node**。这会影响到Service的Endpoint列表，但不会导致系统完全不可用。
+
+• **Kong DP会自动根据Service的Endpoint更新流量路由**，确保流量始终被路由到健康的Pod。
+
+• **Pod的健康检查**和**PDB**可以减少在节点升级过程中可能出现的Downtime，确保服务始终有可用的Pod。
+
+• **合理配置RollingUpdate和PodAutoscaling**可以进一步优化Pod的可用性和负载均衡。
+
+  
+
+希望这个过程帮助你更好地理解了节点升级与Pod滚动升级过程中流量处理的情况！如果还有具体的配置问题，随时告诉我！
