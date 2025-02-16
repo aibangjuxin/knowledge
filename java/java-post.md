@@ -1,10 +1,18 @@
+- [java post](#java-post)
+  - [1. 重试机制的实现](#1-重试机制的实现)
+  - [2. 幂等性保证](#2-幂等性保证)
+  - [3. 断路器机制](#3-断路器机制)
+  - [4. 超时控制和网络调整](#4-超时控制和网络调整)
+- [Reliability and Robustness](#reliability-and-robustness)
+  - [1. 可靠性（Reliability）](#1-可靠性reliability)
+  - [2. 鲁棒性（Robustness）](#2-鲁棒性robustness)
+  - [3. Java 开发中的应用](#3-java-开发中的应用)
+
+# java post
+
 从 **Java 开发** 的角度来看，要确保 **POST 请求** 能够完整并且成功地完成，特别是在系统面临升级、负载波动或其他问题时，确实可以考虑一些额外的配置和调整来提高系统的可靠性和鲁棒性。下面我会从多个方面进行说明，提供一些实践建议和代码示例。
 
-
-About 可靠性和鲁棒性
-  
-
-**1. 重试机制的实现**
+## 1. 重试机制的实现
 
   
 
@@ -26,7 +34,7 @@ About 可靠性和鲁棒性
 
 **使用 Spring Retry 实现 POST 请求重试**
 
-```
+```xml
 <!-- pom.xml 添加 Spring Retry 依赖 -->
 <dependency>
     <groupId>org.springframework.retry</groupId>
@@ -35,7 +43,7 @@ About 可靠性和鲁棒性
 </dependency>
 ```
 
-```
+```java
 import org.springframework.retry.annotation.EnableRetry;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.web.client.RestTemplate;
@@ -110,7 +118,7 @@ public class MyService {
 
   
 
-**2. 幂等性保证**
+## 2. 幂等性保证
 
   
 
@@ -148,7 +156,7 @@ public class MyService {
 
   
 
-**3. 断路器机制**
+## 3. 断路器机制
 
   
 
@@ -199,13 +207,8 @@ public class MyService {
 
   
 
-**4. 超时控制和网络调整**
-
-  
-
+## 4. 超时控制和网络调整
 网络问题和延迟可能会导致请求失败或超时。确保 **POST 请求** 不会因超时问题中断，可以通过设置合理的 **连接超时** 和 **读取超时** 来避免。
-
-  
 
 **示例：设置超时**
 
@@ -262,7 +265,7 @@ public class MyService {
 
   
 
-**1. 可靠性（Reliability）**
+## 1. 可靠性（Reliability）
 
   
 
@@ -294,7 +297,7 @@ try {
 }
 ```
 
-**2. 鲁棒性（Robustness）**
+## 2. 鲁棒性（Robustness）
 
   
 
@@ -339,7 +342,7 @@ public class CircuitBreakerExample {
 }
 ```
 
-**3. Java 开发中的应用**
+## 3. Java 开发中的应用
 
   
 
