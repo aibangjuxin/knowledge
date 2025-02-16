@@ -20,3 +20,5 @@ echo -e "\n每次提交的改动行数："
 git log -20 --pretty=format:"%h - %s" --shortstat
 
 git log -20 --pretty=format: --name-only | sort -u | grep -v '^$'
+
+echo "在 Markdown 中以图形化方式展示我的知识点，可以通过 Mermaid 生成一个简单的 MindMap 树形图"
