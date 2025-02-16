@@ -1,3 +1,5 @@
+- [summary](#summary)
+  - [post sequence Diagram](#post-sequence-diagram)
 - [java post](#java-post)
   - [1. 重试机制的实现](#1-重试机制的实现)
   - [2. 幂等性保证](#2-幂等性保证)
@@ -7,6 +9,41 @@
   - [1. 可靠性（Reliability）](#1-可靠性reliability)
   - [2. 鲁棒性（Robustness）](#2-鲁棒性robustness)
   - [3. Java 开发中的应用](#3-java-开发中的应用)
+
+# summary 
+- **java post**:
+  - 1. **重试机制的实现**: 介绍了在应用层实现客户端重试机制，可以使用 Spring Retry 或 Resilience4j 库。
+  - 2. **幂等性保证**: 强调了确保 POST 请求幂等性的重要性，通过使用唯一请求标识符来避免重复处理。
+  - 3. **断路器机制**: 介绍了使用断路器机制（如 Resilience4j）来处理持续失败的情况，防止服务在故障时持续处理失败请求。
+  - 4. **超时控制和网络调整**: 强调了设置合理的连接超时和读取超时，以避免请求因网络问题而超时。
+- **Reliability and Robustness**:
+  - 1. **可靠性（Reliability）**: 定义为系统在特定条件下、一定时间内持续稳定执行预期任务的能力，强调代码错误减少、异常处理、测试和资源管理。
+  - 2. **鲁棒性（Robustness）**: 定义为系统在面对意外输入、外部故障或系统内部问题时仍能稳定运行的能力，强调容错处理、错误恢复机制和资源隔离。
+  - 3. **Java 开发中的应用**: 总结了在 Java 开发中如何通过单元测试、集成测试、日志记录、容错机制、重试机制、断路器模式和资源管理来实现可靠性和鲁棒性。
+
+## post sequence Diagram 
+- reference
+- [post](../linux/post.md)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server
+
+    Client->>Server: POST Request (Headers + Body)
+    activate Server
+    Server-->>Client: 1xx Informational (optional)
+    Server-->>Client: 2xx Success (e.g., 200 OK, 201 Created)
+    Note right of Server: Response Body (optional)
+
+    alt Error Cases
+        Server-->>Client: 3xx Redirection (e.g., 301 Moved Permanently)
+    else Client Error
+        Server-->>Client: 4xx Client Error (e.g., 400 Bad Request, 404 Not Found)
+    else Server Error
+        Server-->>Client: 5xx Server Error (e.g., 500 Internal Server Error)
+    end
+    deactivate Server
+```
 
 # java post
 
