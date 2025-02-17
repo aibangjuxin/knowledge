@@ -261,12 +261,12 @@ spec:
 · maxUnavailable: 0：Kubernetes 必须等待新 Pod 就绪后才能终止旧 Pod。
 
 2. PDB 最低可用性保证
-
+```yaml
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 spec:
   minAvailable: 1
-
+``` 
 · 双重保险：即使 maxUnavailable 配置错误，PDB 也会阻止过度终止。
 
 3. Readiness Probe 配置
