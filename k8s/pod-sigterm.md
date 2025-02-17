@@ -8,6 +8,54 @@ resouce.labels.pod_name="api-service-pa-health-monitor-0-0-2"
 Stopping container 
 ```
 
+
+# claude 
+
+根据你提到的关键字 "Stopping container"，我来帮你获取 Pod 终止信号的时间。以下是具体方法：
+
+1. 使用 GCP Cloud Logging 查询（推荐方法）：
+```bash
+# 查询包含 Stopping container 的日志
+gcloud logging read 'resource.type="k8s_container" AND textPayload:"Stopping container"' \
+--project=YOUR_PROJECT_ID \
+--format='table(timestamp,resource.labels.pod_name,textPayload)'
+```
+
+2. 使用 kubectl 命令查看事件：
+```bash
+# 查看所有包含 Stopping container 的事件
+kubectl get events --sort-by='.lastTimestamp' | grep "Stopping container"
+
+# 如果知道具体的 Pod 名称，可以使用
+kubectl get events --field-selector involvedObject.name=YOUR_POD_NAME --sort-by='.lastTimestamp'
+```
+
+3. 直接从 kubelet 日志查找：
+```bash
+# 在节点上执行
+journalctl -u kubelet | grep "Stopping container"
+```
+
+4. 使用标准化的日志查询格式：
+```bash
+# 更精确的 GCP logging 查询
+gcloud logging read '
+resource.type="k8s_container" AND
+jsonPayload.message:"Stopping container" AND
+resource.labels.pod_name:"your-pod-name"
+' --format='table(timestamp,jsonPayload.message)'
+```
+
+建议：
+1. 优先使用 GCP Cloud Logging，因为它保留时间更长，查询更方便
+2. 记得替换查询中的 YOUR_PROJECT_ID 和 your-pod-name
+3. 可以加上时间范围限制，比如添加 `--freshness=1h` 只查看最近一小时的日志
+
+这样你就能看到 Pod 收到终止信号的具体时间戳了。
+
+
+
+
 关于 Kubernetes Pod 收到终止信号（SIGTERM）的时间获取问题，这里为你梳理一个完整的解决方案：
 
 ---
