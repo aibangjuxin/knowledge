@@ -26,7 +26,7 @@ PDB 的核心逻辑
 
 1. PDB 的作用
 PDB 通过 minAvailable 或 maxUnavailable 字段，限制 Kubernetes 在自愿中断（如节点升级、滚动更新）时，同时终止的 Pod 数量。例如：
-
+```yaml
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -36,7 +36,7 @@ spec:
   selector:
     matchLabels:
       app: api-service
-
+``` 
 2. 节点升级时的行为
 
 · 当 GKE 触发节点升级时，Kubernetes 会尝试排空（Drain）节点上的 Pod。
@@ -136,7 +136,7 @@ PDB 确保的是 Pod 数量，但不保证单个 Pod 的请求处理完整性。
 
 2. 跨节点分布
 使用 Pod 反亲和性（Pod Anti-Affinity）确保 Pod 分布在多个节点：
-
+```yaml
 spec:
   affinity:
     podAntiAffinity:
@@ -145,7 +145,7 @@ spec:
           matchLabels:
             app: api-service
         topologyKey: kubernetes.io/hostname
-
+``` 
 3. 结合优雅关闭与 Readiness Probe
 
 · 优雅关闭确保处理中的请求完成。
@@ -205,7 +205,7 @@ spec:
 PDB 如何解决此问题？
 
 通过配置 PDB 的 minAvailable，可以强制 Kubernetes 等待新 Pod 就绪后再终止旧 Pod。例如：
-
+```yaml
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -215,7 +215,7 @@ spec:
   selector:
     matchLabels:
       app: api-service
-
+``` 
 具体流程
 
 1. 滚动更新触发
@@ -248,7 +248,7 @@ Kubernetes 开始创建新 Pod（根据 maxSurge 控制数量）。
 为确保滚动更新时不中断服务，需结合以下配置：
 
 1. Deployment 滚动更新策略
-
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 spec:
@@ -257,7 +257,7 @@ spec:
     rollingUpdate:
       maxSurge: 1         # 允许临时创建 1 个新 Pod
       maxUnavailable: 0   # 不允许任何旧 Pod 不可用
-
+``` 
 · maxUnavailable: 0：Kubernetes 必须等待新 Pod 就绪后才能终止旧 Pod。
 
 2. PDB 最低可用性保证
@@ -272,7 +272,7 @@ spec:
 3. Readiness Probe 配置
 
 确保新 Pod 完全就绪后再接收流量：
-
+```yaml
 apiVersion: v1
 kind: Pod
 spec:
@@ -285,7 +285,7 @@ spec:
       initialDelaySeconds: 10   # 留足启动时间
       periodSeconds: 5
       failureThreshold: 3
-
+``` 
 验证场景（配置 PDB 后）
 
 1. 初始状态
