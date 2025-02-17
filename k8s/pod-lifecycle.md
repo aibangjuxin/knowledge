@@ -125,4 +125,5 @@ kubectl get events --sort-by='.lastTimestamp' -n <namespace>
 	3.	配置并使用外部日志存储系统，如 Elasticsearch 或 Fluentd 以持久化日志。
 	4.	如果您有 Prometheus 和 Grafana 配置，查看与 Pod 生命周期和健康状态相关的监控数据。
 
-希望这些方法能帮助您查看历史 Pod 的终止日志！如果有进一步的问题，随时告诉我！
+    # 获取当前状态
+    READY_STATUS=$(kubectl get pod ${POD} -n ${NAMESPACE} -o jsonpath='{.status.conditions[?(@.type=="Ready")]}')
