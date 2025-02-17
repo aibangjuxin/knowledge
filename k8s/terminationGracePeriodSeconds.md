@@ -1,4 +1,27 @@
 terminationGracePeriodSeconds.md
+- reference 
+  - https://kubernetes.io/zh-cn/docs/concepts/workloads/pods/pod-lifecycle/
+# Pod 的终止
+- [pod-lifecycle.md](./pod-lifecycle.md)
+```
+Pod 的终止
+
+由于 Pod 所代表的是在集群中节点上运行的进程，当不再需要这些进程时允许其体面地终止是很重要的。 一般不应武断地使用 KILL 信号终止它们，导致这些进程没有机会完成清理操作。
+
+设计的目标是令你能够请求删除进程，并且知道进程何时被终止，同时也能够确保删除操作终将完成。 当你请求删除某个 Pod 时，集群会记录并跟踪 Pod 的体面终止周期， 而不是直接强制地杀死 Pod。在存在强制关闭设施的前提下， kubelet 会尝试体面地终止 Pod。
+
+通常 Pod 体面终止的过程为：kubelet 先发送一个带有体面超时限期的 TERM（又名 SIGTERM） 信号到每个容器中的主进程，将请求发送到容器运行时来尝试停止 Pod 中的容器。 停止容器的这些请求由容器运行时以异步方式处理。 这些请求的处理顺序无法被保证。许多容器运行时遵循容器镜像内定义的 STOPSIGNAL 值， 如果不同，则发送容器镜像中配置的 STOPSIGNAL，而不是 TERM 信号。 一旦超出了体面终止限期，容器运行时会向所有剩余进程发送 KILL 信号，之后 Pod 就会被从 API 服务器上移除。 如果 kubelet 或者容器运行时的管理服务在等待进程终止期间被重启， 集群会从头开始重试，赋予 Pod 完整的体面终止限期。
+
+Pod 终止流程，如下例所示：
+
+你使用 kubectl 工具手动删除某个特定的 Pod，而该 Pod 的体面终止限期是默认值（30 秒）。
+
+API 服务器中的 Pod 对象被更新，记录涵盖体面终止限期在内 Pod 的最终死期，超出所计算时间点则认为 Pod 已死（dead）。 如果你使用 kubectl describe 来查验你正在删除的 Pod，该 Pod 会显示为 "Terminating" （正在终止）。 在 Pod 运行所在的节点上：kubelet 一旦看到 Pod 被标记为正在终止（已经设置了体面终止限期），kubelet 即开始本地的 Pod 关闭过程。
+
+如果 Pod 中的容器之一定义了 preStop 回调 且 Pod 规约中的 terminationGracePeriodSeconds 未设为 0， kubelet 开始在容器内运行该回调逻辑。默认的 terminationGracePeriodSeconds 设置为 30 秒.
+
+如果 preStop 回调在体面期结束后仍在运行，kubelet 将请求短暂的、一次性的体面期延长 2 秒。
+```
 # summary 
 关于这部分,我想详细了解下.以及如何deployment中如何配置? 我想知道默认的配置是多少?比如默认30秒,如果我的Post请求在30秒没有完成?
 1. **检查并优化 Graceful Shutdown:**  确认 GKE RT 应用处理 `SIGTERM` 信号，并根据需要调整 `terminationGracePeriodSeconds`。
