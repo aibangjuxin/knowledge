@@ -126,4 +126,5 @@ kubectl get events --sort-by='.lastTimestamp' -n <namespace>
 	4.	如果您有 Prometheus 和 Grafana 配置，查看与 Pod 生命周期和健康状态相关的监控数据。
 
     # 获取当前状态
-    READY_STATUS=$(kubectl get pod ${POD} -n ${NAMESPACE} -o jsonpath='{.status.conditions[?(@.type=="Ready")]}')
+    `READY_STATUS=$(kubectl get pod ${POD} -n ${NAMESPACE} -o jsonpath='{.status.conditions[?(@.type=="Ready")]}')`
+	
