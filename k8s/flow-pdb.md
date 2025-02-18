@@ -127,9 +127,9 @@ spec:
       maxUnavailable: 1
 ```
 
-你要不要考虑调整一下启动参数，让新 Pod 能更快地准备就绪？我们可以一起看看是否有优化的空间。​​​​​​​​​​​​​​​​	
+- 你要不要考虑调整一下启动参数，让新 Pod 能更快地准备就绪？我们可以一起看看是否有优化的空间。​​​​​​​​​​​​​​​​	
 ---
-```merimaid
+```mermaid
 sequenceDiagram
     participant DC as Deployment Controller
     participant PDB as PDB Controller
