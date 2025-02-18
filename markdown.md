@@ -51,6 +51,40 @@ flowchart LR
     end
 ```
 ---
+add rgb 
+
+是的，你是想给 Mermaid Sequence Diagram 中的 `box` (subgraph) 添加背景色。直接在 Mermaid 语法中给 `box` 添加背景色属性是不直接支持的。但是，你可以通过 **CSS 样式** 来实现这个效果。
+
+Mermaid 图表最终会被渲染成 SVG，所以你可以使用 CSS 选择器来选中 `box` 对应的 SVG 元素并设置背景色。
+
+**以下是如何通过 CSS 样式给 `box` 添加背景色的方法：**
+
+1. **识别 `box` 对应的 SVG 元素：**  在 Mermaid 生成的 SVG 中，`box` 实际上会被渲染成 `<rect>` 元素，并且它通常会包含在 `<g>` 元素中，这个 `<g>` 元素可能具有特定的类名或者 ID。你需要查看 Mermaid 生成的 SVG 代码来确定如何精确地选中这个 `box`。  通常，Mermaid 会为 subgraph 生成带有 `entityBox` 类的 `<rect>` 元素。
+
+2. **使用 CSS 样式来设置背景色：**  你可以使用 CSS 来选择这个 `<rect>` 元素并设置 `fill` 属性来改变背景色。
+
+**Markdown 代码示例 (内联 CSS)：**
+
+```markdown
+```mermaid
+%%{init: { 'theme': 'base' } }%%
+sequenceDiagram
+    participant Alice
+    participant Bob
+    participant Charlie
+
+    box rgb(191, 223, 255) Alice & Bob
+    Note over Alice,Bob: Group ABC
+    Alice->Bob: Bob, 你好!
+    Bob-->Alice: Alice, 你也好!
+    end
+
+    Charlie->Bob: Bob, 收到消息了吗?
+    Bob-->Charlie: 收到了!
+```
+
+
+---
 - notice: define 
   - style
   - classDef
