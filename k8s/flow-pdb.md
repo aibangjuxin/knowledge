@@ -177,6 +177,30 @@ sequenceDiagram
     
     Note over DC,SVC: Final State: 2 new pods serving traffic
 ```
+我来帮你创建一个序列图来展示有 PDB 保护的 Pod 替换过程。​​​​​​​​​​​​​​​​
+
+这个序列图展示了以下关键点：
+
+1. **初始状态**：
+   - 两个旧的 Pod (Old1, Old2) 正在通过 Service 提供服务
+
+2. **Pod 替换过程**：
+   - Deployment Controller 首先检查 PDB 是否允许中断
+   - 创建第一个新 Pod (New1) 并等待它就绪
+   - 只有在确认 New1 可以服务后，才开始处理 Old2 的替换
+   - 整个过程中始终保持至少一个 Pod 可用
+
+3. **PDB 的保护作用**：
+   - 在每次 Pod 驱逐前都会检查 PDB 策略
+   - 确保符合 `minAvailable=1` 的要求
+   - 防止同时终止所有 Pod
+
+4. **服务连续性**：
+   - Service 持续跟踪 Pod 的状态
+   - 只有就绪的 Pod 才会接收流量
+   - 保证服务不会中断
+
+这个流程确保了在更新过程中始终有 Pod 可以处理请求，避免了服务中断。你觉得这个流程图是否完整地展示了你想要了解的过程？如果需要，我可以添加更多细节或者调整某些部分。​​​​​​​​​​​​​​​​
 
 # Gemini2
 是的，PDB (Pod Disruption Budget) **能够解决你描述的问题**。
