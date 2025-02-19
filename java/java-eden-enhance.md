@@ -451,3 +451,169 @@ public class OpenAIClientPool {
 ```
 
 您想先实施哪些调整？我们可以逐步实施并观察效果。​​​​​​​​​​​​​​​​
+
+
+我可以帮您创建一个可视化的图表来展示JVM内存的分配和调度关系。​​​​​​​​​​​​​​​​
+```mermaid
+graph TD
+    subgraph heap["JVM Heap Memory (1536MB)"]
+        subgraph young["Young Generation (768MB)"]
+            eden["Eden Space (614MB)"]
+            s1["Survivor 1 (77MB)"]
+            s2["Survivor 2 (77MB)"]
+        end
+        subgraph old["Old Generation (768MB)"]
+            tenured["Tenured Generation"]
+        end
+    end
+    
+    subgraph nonheap["Non-Heap Memory"]
+        meta["Metaspace"]
+        cc["Code Cache"]
+        ccs["Compressed Class Space"]
+    end
+    
+    app["Application\nObject Creation"] -->|"1. New objects"| eden
+    eden -->|"2. Minor GC\nSurviving objects"| s1
+    s1 -->|"3. Minor GC\nSurviving objects"| s2
+    s2 -->|"4. After threshold\n(age > 15)"| tenured
+    eden -->|"5. Large objects\nor high survival rate"| tenured
+    
+    classDef yellowBox fill:#ff9,stroke:#000
+    classDef greenBox fill:#9f9,stroke:#000
+    classDef blueBox fill:#99f,stroke:#000
+    classDef redBox fill:#f99,stroke:#000
+    
+    class eden yellowBox
+    class s1,s2 greenBox
+    class tenured blueBox
+    class meta,cc,ccs redBox
+``` 
+
+
+让我再创建一个展示对象生命周期的流程图：​​​​​​​​​​​​​​​​
+```mermaid
+stateDiagram-v2
+    [*] --> Eden: Object Creation
+    
+    state "Young Generation" as young {
+        Eden --> Survivor1: Minor GC
+        Survivor1 --> Survivor2: Minor GC
+        Survivor2 --> Survivor1: Minor GC
+    }
+    
+    state "Old Generation" as old {
+        state "Tenured Space" as tenured
+    }
+    
+    Survivor1 --> tenured: Age Threshold\nReached
+    Survivor2 --> tenured: Age Threshold\nReached
+    Eden --> tenured: Large Objects\nDirect Allocation
+    
+    tenured --> [*]: Major GC\n(If unreachable)
+    
+    note right of Eden
+        Objects first allocated here
+        Current usage: 97%
+        Size: 614MB
+    end note
+    
+    note right of Survivor1
+        Objects that survive GC
+        Size: 77MB each
+        Copy between S1 & S2
+    end note
+    
+    note right of tenured
+        Long-lived objects
+        Current usage: 24%
+        Size: 768MB
+    end note
+``` 
+这两个图表展示了：
+
+1. **内存分配结构**：
+- 展示了整个堆内存的分层结构
+- 显示了各个区域的大小和比例
+- 非堆内存区域的关系
+
+2. **对象生命周期**：
+- 对象的创建和分配过程
+- GC触发时的对象流转
+- 各个阶段的大小和使用率
+
+3. **关键流程说明**：
+- 新对象首先在Eden区分配
+- Minor GC后存活对象移动到Survivor区
+- 对象在Survivor区之间复制
+- 达到年龄阈值后晋升到老年代
+- 大对象直接分配到老年代
+
+我还可以创建一个交互式的React组件来动态展示内存使用情况：​​​​​​​​​​​​​​​​
+
+这些可视化工具展示了：
+1. 内存的分配关系
+2. 对象的生命周期流转
+3. 各内存区域的使用情况
+4. 实时的内存使用度量
+
+这样可以帮助您：
+- 更直观地理解内存分配
+- 识别潜在的内存问题
+- 监控内存使用趋势
+- 优化内存配置
+
+``` 
+import React, { useState, useEffect } from 'react';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+
+const MemoryDashboard = () => {
+  const [data] = useState([
+    {
+      name: 'Eden Space',
+      total: 614,
+      used: 595,
+      utilization: 97
+    },
+    {
+      name: 'Survivor Space',
+      total: 77,
+      used: 5,
+      utilization: 6
+    },
+    {
+      name: 'Old Gen',
+      total: 768,
+      used: 184,
+      utilization: 24
+    }
+  ]);
+
+  return (
+    <Card className="w-full p-6">
+      <CardHeader>
+        <CardTitle>JVM Memory Usage Dashboard</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="w-full h-64">
+          <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" />
+            <YAxis yAxisId="left" orientation="left" label={{ value: 'Memory (MB)', angle: -90, position: 'insideLeft' }}/>
+            <YAxis yAxisId="right" orientation="right" label={{ value: 'Utilization %', angle: 90, position: 'insideRight' }}/>
+            <Tooltip />
+            <Legend />
+            <Bar yAxisId="left" dataKey="total" fill="#8884d8" name="Total (MB)" />
+            <Bar yAxisId="left" dataKey="used" fill="#82ca9d" name="Used (MB)" />
+            <Bar yAxisId="right" dataKey="utilization" fill="#ffc658" name="Utilization %" />
+          </BarChart>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+``` 
+export default MemoryDashboard;
+
+您想了解这些图表中的哪个部分的更多细节？或者需要我调整某些可视化的展示方式？​​​​​​​​​​​​​​​​
