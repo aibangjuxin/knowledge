@@ -25,6 +25,7 @@ Deployment层面
      ```yaml
      strategy:
        rollingUpdate:
+         maxSurge: 2
          maxUnavailable: 1
        type: RollingUpdate
      ```
