@@ -1,4 +1,5 @@
 - [Question](#question)
+  - [Flow](#flow)
 - [ChatGPT](#chatgpt)
 - [Claude](#claude)
   - [企业用户?](#企业用户)
@@ -14,6 +15,26 @@
     - [3. Google Data Studio (现在叫 Looker Studio) 分析](#3-google-data-studio-现在叫-looker-studio-分析)
     - [自动化流程](#自动化流程)
     - [注意事项：](#注意事项)
+  - [解决方案概述](#解决方案概述)
+  - [具体步骤](#具体步骤)
+    - [第一步：自动从 Jira 获取数据](#第一步自动从-jira-获取数据)
+      - [1. 获取 Jira API Token](#1-获取-jira-api-token)
+      - [2. 编写 Python 脚本调用 Jira REST API](#2-编写-python-脚本调用-jira-rest-api)
+      - [关键点解释：](#关键点解释)
+      - [3. 保存提取的数据](#3-保存提取的数据)
+    - [第二步：将数据加载到 Google BigQuery](#第二步将数据加载到-google-bigquery)
+      - [1. 设置 Google Cloud 环境](#1-设置-google-cloud-环境)
+      - [2. 编写加载脚本](#2-编写加载脚本)
+      - [注意：](#注意)
+    - [第三步：自动化执行](#第三步自动化执行)
+      - [1. 使用 Google Cloud Functions 和 Cloud Scheduler](#1-使用-google-cloud-functions-和-cloud-scheduler)
+      - [2. 替代方案：本地调度](#2-替代方案本地调度)
+      - [3. 动态更新时间戳](#3-动态更新时间戳)
+    - [第四步：使用 Google Looker Studio 进行分析](#第四步使用-google-looker-studio-进行分析)
+  - [优势与注意事项](#优势与注意事项)
+    - [优势](#优势)
+    - [注意事项](#注意事项-1)
+  - [总结](#总结)
 
 # Question
 我现在有这样一个需求
@@ -23,6 +44,82 @@
 3 然后通过Google的Looker Studio来做一些统计分析
 请帮我提供对应的解决办法,特别是第一步这个操作?
 我的任务有些不太一样.需要提供的不是一个一次性任务的导出方式?其实我更期待是这样的工作方式. 比如我有一个计划任务,查询一段时间的Jira Tickets,然后通过我的过滤条件,拿到我想要的数据,把数据灌入到Bigquery里面.这样能实现一个简单的自动化步骤.相当于一个增量的过程.
+
+## Flow
+- 序列图来展示这个 Jira 数据采集到分析的完整流程：
+```mermaid
+sequenceDiagram
+    participant Cron as 定时任务
+    participant Script as Python脚本
+    participant Jira as Jira API
+    participant File as 本地文件
+    participant BQ as BigQuery
+    participant Looker as Looker Studio
+
+    Note over Cron,Looker: 自动化数据流程
+
+    Cron->>Script: 触发定时任务
+    
+    Note over Script: 读取上次同步时间
+    Script->>File: 读取last_sync_time
+    File-->>Script: 返回时间戳
+    
+    Note over Script: Jira数据获取
+    Script->>Jira: 发送API请求<br/>(带认证Token)
+    Note right of Jira: JQL查询:<br/>updated >= last_sync_time
+    Jira-->>Script: 返回JSON数据
+    
+    Note over Script: 数据处理
+    Script->>Script: 转换数据格式<br/>提取所需字段
+    
+    Note over Script: 数据存储
+    Script->>BQ: 插入新数据
+    BQ-->>Script: 确认插入状态
+    
+    alt 数据插入成功
+        Script->>File: 更新last_sync_time
+        Note over Script: 记录成功日志
+    else 数据插入失败
+        Note over Script: 记录错误日志
+    end
+    
+    Note over BQ,Looker: 数据分析
+    Looker->>BQ: 查询数据
+    BQ-->>Looker: 返回数据
+    Note over Looker: 生成报表和图表
+```
+
+流程说明：
+
+1. **定时触发**
+   - Cron 任务定期触发 Python 脚本
+   - 可以设置为每小时、每天等频率
+
+2. **增量同步控制**
+   - 读取上次同步时间
+   - 用于 JQL 查询条件，只获取新数据
+
+3. **数据获取**
+   - 使用 Jira API Token 认证
+   - 通过 JQL 过滤获取所需数据
+   - 返回 JSON 格式的 Jira 数据
+
+4. **数据处理与存储**
+   - 转换数据格式
+   - 插入 BigQuery
+   - 更新同步时间记录
+
+5. **数据分析**
+   - Looker Studio 连接 BigQuery
+   - 实时查询和可视化数据
+
+这个自动化流程确保了：
+1. 数据增量更新
+2. 错误处理和日志记录
+3. 数据实时分析能力
+
+
+
 
 # ChatGPT 
 要实现你描述的自动化流程，基本步骤如下：
