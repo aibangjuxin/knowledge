@@ -230,7 +230,7 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/configuration-snippet: |
-      if ($host ~* hsbc$) {
+      if ($host ~* aibang$) {
         return 444;
       }
 spec:
@@ -275,7 +275,7 @@ spec:
 
 5. **其他注意事项**：
    - 设置了最大请求体大小为 10M（`nginx.ingress.kubernetes.io/proxy-body-size: "10m"`）。
-   - 添加了一个配置片段来处理 hsbc 主机名的特殊情况。
+   - 添加了一个配置片段来处理 aibang 主机名的特殊情况。
    - 设置了超时时间。
 
 6. **TLS 配置**：
