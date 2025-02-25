@@ -33,7 +33,7 @@ JQL="project = \"Project Name\" AND updated >= $LAST_SYNC AND status not in (\"C
 ENCODED_JQL=$(echo "$JQL" | jq -sRr @uri)
 
 # Create temporary data file
-echo "[]" > $OUTPUT_DIR/all_issues_keys.json
+# echo "[]" > $OUTPUT_DIR/all_issues_keys.json
 
 # Fetch all issues with pagination
 START_AT=0
@@ -82,7 +82,7 @@ while true; do
 done
 
 # Merge all collected keys into a JSON array
-cat $OUTPUT_DIR/temp_keys.txt|sed 's/"/"//g' > $OUTPUT_DIR/all_issues_keys.txt
+cat $OUTPUT_DIR/temp_keys.txt|sed 's/"//g' > $OUTPUT_DIR/all_issues_keys.txt
 cat $OUTPUT_DIR/all_issues_keys.txt|jq -R -s -c 'split("\n")' > $OUTPUT_DIR/all_issues_keys.json
 
 # Clean up temporary files
