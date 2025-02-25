@@ -215,6 +215,138 @@ curl -s -H "Authorization: Bearer $JIRA_TOKEN" -H "Content-type: application/jso
 ```
 在这个 JQL 查询中，我们需要转义双引号的原因是因为整个 JQL 字符串本身是用双引号包裹的。如果不转义内部的双引号，shell 会错误地解释字符串的边界
 
+```bash
+#!/bin/bash
+
+# 配置变量
+JIRA_BASE_URL="https://abc.com/jira"
+JIRA_TOKEN="your_jira_token" # 请替换为你的实际token
+LAST_SYNC_FILE="last_sync_time.txt"
+OUTPUT_DIR="./jira_data"
+LOG_FILE="jira_sync.log"
+
+# 创建输出目录
+mkdir -p $OUTPUT_DIR
+
+# 记录日志函数
+log_message() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> $LOG_FILE
+}
+
+log_message "开始Jira数据同步任务"
+
+# 获取上次同步时间，默认为3天前
+if [ -f "$LAST_SYNC_FILE" ]; then
+  LAST_SYNC=$(cat $LAST_SYNC_FILE)
+  log_message "读取上次同步时间: $LAST_SYNC"
+else
+  LAST_SYNC="-3d"
+  log_message "未找到上次同步记录，默认同步近3天数据"
+fi
+
+# 构建JQL查询
+JQL="project = \"Project Name\" AND updated >= $LAST_SYNC AND status not in (\"Cancelled\", \"On Hold\", \"POC Stage\")"
+ENCODED_JQL=$(echo "$JQL" | jq -sRr @uri)
+
+# 查询Jira票据列表
+log_message "执行Jira搜索查询: $JQL"
+SEARCH_URL="$JIRA_BASE_URL/rest/api/2/search?jql=$ENCODED_JQL"
+
+# 获取票据列表
+curl -s -H "Authorization: Bearer $JIRA_TOKEN" \
+     -H "Content-type: application/json" \
+     "$SEARCH_URL" > $OUTPUT_DIR/jira_search.json
+
+# 检查搜索请求是否成功
+if [ $? -ne 0 ]; then
+  log_message "错误: Jira搜索请求失败"
+  exit 1
+fi
+
+# 提取票据编号
+JIRA_KEYS=$(cat $OUTPUT_DIR/jira_search.json | jq -r '.issues[].key')
+ISSUES_COUNT=$(echo "$JIRA_KEYS" | wc -l)
+log_message "找到 $ISSUES_COUNT 个符合条件的票据"
+
+# 记录当前时间作为本次同步时间
+CURRENT_TIME=$(date '+%Y-%m-%d')
+echo $CURRENT_TIME > $LAST_SYNC_FILE
+
+# 创建临时JSON文件用于BigQuery导入
+echo "[" > $OUTPUT_DIR/bigquery_data.json
+
+# 遍历每个票据获取详细信息
+COUNTER=0
+for KEY in $JIRA_KEYS; do
+  COUNTER=$((COUNTER + 1))
+  log_message "[$COUNTER/$ISSUES_COUNT] 获取票据详情: $KEY"
+  
+  # 获取票据详情
+  ISSUE_URL="$JIRA_BASE_URL/rest/api/2/issue/$KEY"
+  curl -s -H "Authorization: Bearer $JIRA_TOKEN" \
+       -H "Content-type: application/json" \
+       "$ISSUE_URL" > $OUTPUT_DIR/issue_$KEY.json
+  
+  # 检查详情请求是否成功
+  if [ $? -ne 0 ]; then
+    log_message "警告: 获取票据 $KEY 详情失败，跳过此票据"
+    continue
+  fi
+  
+  # 处理数据 - 提取所需字段
+  # 使用jq提取需要的字段，并转换为适合BigQuery的格式
+  # 例如：提取key, summary, status, 创建时间，更新时间，经办人等
+  jq -c '{
+    key: .key,
+    summary: .fields.summary,
+    status: .fields.status.name,
+    priority: .fields.priority.name,
+    created_date: .fields.created,
+    updated_date: .fields.updated,
+    assignee: (.fields.assignee.displayName // "Unassigned"),
+    reporter: .fields.reporter.displayName,
+    story_points: (.fields.customfield_10002 // 0),
+    issue_type: .fields.issuetype.name,
+    resolution: (.fields.resolution.name // "Unresolved"),
+    project: .fields.project.key,
+    components: [.fields.components[].name],
+    sprint: (.fields.customfield_10000[0].name // "No Sprint"),
+    extract_date: "'$(date '+%Y-%m-%d')'"
+  }' $OUTPUT_DIR/issue_$KEY.json >> $OUTPUT_DIR/bigquery_data.json
+  
+  # 在每个记录后面添加逗号（除了最后一个）
+  if [ $COUNTER -lt $ISSUES_COUNT ]; then
+    echo "," >> $OUTPUT_DIR/bigquery_data.json
+  fi
+done
+
+# 完成JSON数组
+echo "]" >> $OUTPUT_DIR/bigquery_data.json
+
+# 调用BigQuery导入命令
+log_message "准备导入数据到BigQuery"
+
+# BigQuery设置
+BQ_PROJECT="your-gcp-project"
+BQ_DATASET="jira_data"
+BQ_TABLE="issues"
+
+# 导入BigQuery (需要安装并配置好Google Cloud SDK)
+bq load --source_format=NEWLINE_DELIMITED_JSON \
+  $BQ_PROJECT:$BQ_DATASET.$BQ_TABLE \
+  $OUTPUT_DIR/bigquery_data.json \
+  key:STRING,summary:STRING,status:STRING,priority:STRING,created_date:TIMESTAMP,updated_date:TIMESTAMP,assignee:STRING,reporter:STRING,story_points:FLOAT,issue_type:STRING,resolution:STRING,project:STRING,components:STRING,sprint:STRING,extract_date:DATE
+
+# 检查BigQuery导入结果
+if [ $? -eq 0 ]; then
+  log_message "成功: 数据已导入BigQuery表 $BQ_PROJECT:$BQ_DATASET.$BQ_TABLE"
+else
+  log_message "错误: BigQuery数据导入失败"
+  exit 1
+fi
+
+log_message "Jira数据同步任务完成"
+```
 
 # ChatGPT 
 要实现你描述的自动化流程，基本步骤如下：
