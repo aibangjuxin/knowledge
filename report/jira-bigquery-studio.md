@@ -202,20 +202,6 @@ sequenceDiagram
 3. 数据实时分析能力
 
 ```bash
-URL_ADDRESS="https://abc.com/jira/rest/api/2/search?jql="
-JQL="project = 'Project Name' AND updated >= -3d AND status not in (Cancelled, "On Hold", "POC Stage")"
-ENCODED_JQL=$(echo "$JQL" | jq -sRr @uri)
-curl -s -H "Authorization: Bearer $JIRA_TOKEN" -H "Content-type: application/json" "URL_ADDRESS""$ENCODED_JQL"
-
-
-URL_ADDRESS="https://abc.com/jira/rest/api/2/search?jql="
-JQL='project = "Project Name" AND updated >= -3d AND status not in ("Cancelled", "On Hold", "POC Stage")'
-ENCODED_JQL=$(echo "$JQL" | jq -sRr @uri)
-curl -s -H "Authorization: Bearer $JIRA_TOKEN" -H "Content-type: application/json" "URL_ADDRESS""$ENCODED_JQL"
-```
-在这个 JQL 查询中，我们需要转义双引号的原因是因为整个 JQL 字符串本身是用双引号包裹的。如果不转义内部的双引号，shell 会错误地解释字符串的边界
-
-```bash
 #!/bin/bash
 
 # 配置变量
@@ -224,6 +210,7 @@ JIRA_TOKEN="your_jira_token" # 请替换为你的实际token
 LAST_SYNC_FILE="last_sync_time.txt"
 OUTPUT_DIR="./jira_data"
 LOG_FILE="jira_sync.log"
+MAX_RESULTS_PER_PAGE=100  # 每页最多获取的结果数（Jira API允许最大100）
 
 # 创建输出目录
 mkdir -p $OUTPUT_DIR
@@ -248,25 +235,67 @@ fi
 JQL="project = \"Project Name\" AND updated >= $LAST_SYNC AND status not in (\"Cancelled\", \"On Hold\", \"POC Stage\")"
 ENCODED_JQL=$(echo "$JQL" | jq -sRr @uri)
 
-# 查询Jira票据列表
-log_message "执行Jira搜索查询: $JQL"
-SEARCH_URL="$JIRA_BASE_URL/rest/api/2/search?jql=$ENCODED_JQL"
+# 创建临时数据文件
+echo "[]" > $OUTPUT_DIR/all_issues_keys.json
 
-# 获取票据列表
-curl -s -H "Authorization: Bearer $JIRA_TOKEN" \
-     -H "Content-type: application/json" \
-     "$SEARCH_URL" > $OUTPUT_DIR/jira_search.json
+# 分页获取所有票据
+START_AT=0
+TOTAL=0
+FIRST_PAGE=true
 
-# 检查搜索请求是否成功
-if [ $? -ne 0 ]; then
-  log_message "错误: Jira搜索请求失败"
-  exit 1
-fi
+log_message "执行Jira搜索查询（带分页）: $JQL"
 
-# 提取票据编号
-JIRA_KEYS=$(cat $OUTPUT_DIR/jira_search.json | jq -r '.issues[].key')
+while true; do
+  # 构建带分页参数的查询URL
+  SEARCH_URL="$JIRA_BASE_URL/rest/api/2/search?jql=$ENCODED_JQL&startAt=$START_AT&maxResults=$MAX_RESULTS_PER_PAGE"
+  
+  # 获取当前页的票据列表
+  log_message "获取分页结果: startAt=$START_AT, maxResults=$MAX_RESULTS_PER_PAGE"
+  curl -s -H "Authorization: Bearer $JIRA_TOKEN" \
+       -H "Content-type: application/json" \
+       "$SEARCH_URL" > $OUTPUT_DIR/jira_search_page_$START_AT.json
+  
+  # 检查请求是否成功
+  if [ $? -ne 0 ]; then
+    log_message "错误: Jira搜索请求失败，页码 startAt=$START_AT"
+    exit 1
+  fi
+  
+  # 提取当前页的票据编号并添加到总列表
+  CURRENT_PAGE_KEYS=$(cat $OUTPUT_DIR/jira_search_page_$START_AT.json | jq -r '.issues[].key')
+  
+  # 将当前页的keys追加到总列表文件
+  for KEY in $CURRENT_PAGE_KEYS; do
+    echo "\"$KEY\"" >> $OUTPUT_DIR/temp_keys.txt
+  done
+  
+  # 获取总结果数和当前页结果数
+  TOTAL=$(cat $OUTPUT_DIR/jira_search_page_$START_AT.json | jq -r '.total')
+  CURRENT_PAGE_COUNT=$(echo "$CURRENT_PAGE_KEYS" | grep -v "^$" | wc -l)
+  
+  log_message "当前页获取到 $CURRENT_PAGE_COUNT 个票据，总计 $TOTAL 个票据"
+  
+  # 计算下一页的起始位置
+  START_AT=$((START_AT + CURRENT_PAGE_COUNT))
+  
+  # 如果没有更多结果或当前页为空，则退出循环
+  if [ $START_AT -ge $TOTAL ] || [ $CURRENT_PAGE_COUNT -eq 0 ]; then
+    break
+  fi
+done
+
+# 将所有收集的keys合并为一个JSON数组
+echo "[" > $OUTPUT_DIR/all_issues_keys.json
+cat $OUTPUT_DIR/temp_keys.txt | tr '\n' ',' | sed 's/,$//' >> $OUTPUT_DIR/all_issues_keys.json
+echo "]" >> $OUTPUT_DIR/all_issues_keys.json
+
+# 清理临时文件
+rm -f $OUTPUT_DIR/temp_keys.txt
+
+# 从合并后的JSON文件中提取所有票据编号
+JIRA_KEYS=$(cat $OUTPUT_DIR/all_issues_keys.json | jq -r '.[]')
 ISSUES_COUNT=$(echo "$JIRA_KEYS" | wc -l)
-log_message "找到 $ISSUES_COUNT 个符合条件的票据"
+log_message "总共找到 $ISSUES_COUNT 个符合条件的票据"
 
 # 记录当前时间作为本次同步时间
 CURRENT_TIME=$(date '+%Y-%m-%d')
@@ -295,7 +324,6 @@ for KEY in $JIRA_KEYS; do
   
   # 处理数据 - 提取所需字段
   # 使用jq提取需要的字段，并转换为适合BigQuery的格式
-  # 例如：提取key, summary, status, 创建时间，更新时间，经办人等
   jq -c '{
     key: .key,
     summary: .fields.summary,
@@ -345,7 +373,7 @@ else
   exit 1
 fi
 
-log_message "Jira数据同步任务完成"
+log_message "Jira数据同步任务完成，总共处理 $ISSUES_COUNT 个票据"
 ```
 
 # ChatGPT 
