@@ -20,8 +20,8 @@ curl -s -H "Authorization: Bearer $JIRA_TOKEN" \
 3. 使用 `jq -r '.issues[].key'` 直接提取并输出所有的 issue keys
 
 这样修改后，输出会更加简洁，只包含 issue keys。
-
-`curl -s -H "Authorization: Bearer $JIRA_TOKEN" \
+- 1. `SEARCH_URL="$JIRA_BASE_URL/rest/api/2/search?jql=$ENCODED_JQL&maxResults=$MAX_RESULTS_PER_PAGE&fields=key"`
+- 2. `curl -s -H "Authorization: Bearer $JIRA_TOKEN" \
      -H "Content-type: application/json" \
      "$SEARCH_URL" | jq -r '.issues[].key'`
 
