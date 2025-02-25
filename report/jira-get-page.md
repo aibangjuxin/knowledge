@@ -1,6 +1,6 @@
 如果你想在 Shell 中只获取满足条件的 Jira issue keys，我们可以这样修改：
 
-```bash:/Users/lex/git/knowledge/report/jira-page.md
+```bash
 # Build JQL query
 JQL="project = \"Project Name\" AND updated >= $LAST_SYNC"
 ENCODED_JQL=$(echo "$JQL" | jq -sRr @uri)
