@@ -140,7 +140,19 @@ sequenceDiagram
 2. 错误处理和日志记录
 3. 数据实时分析能力
 
+```bash
+URL_ADDRESS="https://abc.com/jira/rest/api/2/search?jql="
+JQL="project = 'Project Name' AND updated >= -3d AND status not in (Cancelled, "On Hold", "POC Stage")"
+ENCODED_JQL=$(echo "$JQL" | jq -sRr @uri)
+curl -s -H "Authorization: Bearer $JIRA_TOKEN" -H "Content-type: application/json" "URL_ADDRESS""$ENCODED_JQL"
 
+
+URL_ADDRESS="https://abc.com/jira/rest/api/2/search?jql="
+JQL='project = "Project Name" AND updated >= -3d AND status not in ("Cancelled", "On Hold", "POC Stage")'
+ENCODED_JQL=$(echo "$JQL" | jq -sRr @uri)
+curl -s -H "Authorization: Bearer $JIRA_TOKEN" -H "Content-type: application/json" "URL_ADDRESS""$ENCODED_JQL"
+```
+在这个 JQL 查询中，我们需要转义双引号的原因是因为整个 JQL 字符串本身是用双引号包裹的。如果不转义内部的双引号，shell 会错误地解释字符串的边界
 
 
 # ChatGPT 
