@@ -110,6 +110,67 @@ sequenceDiagram
     BQ-->>Looker: 返回数据
     Note over Looker: 生成报表和图表
 ```
+---
+```mermaid
+sequenceDiagram
+    %% 定义参与者和外观
+    participant Cron as 定时任务
+    participant Script as Python脚本
+    participant Jira as Jira API
+    participant File as 本地文件
+    participant BQ as BigQuery
+    participant Looker as Looker Studio
+    
+    %% 添加样式
+    rect rgb(240, 248, 255)
+        Note over Cron,Looker: 自动化数据流程
+        
+        %% 触发流程
+        Cron->>+Script: 触发定时任务
+        
+        %% 读取上次同步时间模块
+        rect rgb(245, 245, 245)
+            Note over Script: 读取上次同步时间
+            Script->>File: 读取last_sync_time
+            File-->>Script: 返回时间戳
+        end
+        
+        %% Jira数据获取模块
+        rect rgb(230, 240, 255)
+            Note over Script: Jira数据获取
+            Script->>+Jira: 发送API请求<br/>(带认证Token)
+            Note right of Jira: JQL查询:<br/>updated >= last_sync_time
+            Jira-->>-Script: 返回JSON数据
+        end
+        
+        %% 数据处理模块
+        rect rgb(255, 245, 230)
+            Note over Script: 数据处理
+            Script->>Script: 转换数据格式<br/>提取所需字段
+        end
+        
+        %% 数据存储模块
+        rect rgb(240, 255, 240)
+            Note over Script: 数据存储
+            Script->>+BQ: 插入新数据
+            BQ-->>-Script: 确认插入状态
+            alt 数据插入成功
+                Script->>File: 更新last_sync_time
+                Note over Script: 记录成功日志
+            else 数据插入失败
+                Note over Script: 记录错误日志
+            end
+        end
+        
+        %% 数据分析模块
+        rect rgb(255, 240, 245)
+            Note over BQ,Looker: 数据分析
+            Looker->>+BQ: 查询数据
+            BQ-->>-Looker: 返回数据
+            Note over Looker: 生成报表和图表
+        end
+    end
+```
 
 流程说明：
 
