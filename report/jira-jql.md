@@ -1,5 +1,7 @@
 
 - [Q](#q)
+- [jira](#jira)
+    - [关于Jira过滤器的一些补充说明：](#关于jira过滤器的一些补充说明)
 - [回答](#回答)
 - [JQL](#jql)
 # Q 
@@ -25,6 +27,148 @@
 - [ ] Create a Bigquery table
 - [ ] abc
 - [ ] 
+
+
+# jira  
+
+你提到的 `https://abc.com/jira/issue/?filter=123456` 格式的URL，是Jira网页界面中使用已保存过滤器（saved filter）的链接。这个数字（例如123456）是Jira中保存的过滤器ID。
+
+如果你想通过Jira REST API v2获取这个过滤器的数据，需要通过以下步骤：
+
+1. 首先获取过滤器定义（即过滤器包含的JQL查询）
+2. 然后使用该JQL查询获取实际的问题列表
+
+以下是使用API实现这个过程的方法：
+
+```bash
+#!/bin/bash
+
+# 配置变量
+JIRA_BASE_URL="https://abc.com/jira"
+JIRA_TOKEN="your_jira_token"  # 请替换为你的实际token
+FILTER_ID="123456"  # 你的过滤器ID
+OUTPUT_DIR="./jira_filter_data"
+MAX_RESULTS_PER_PAGE=100
+
+# 创建输出目录
+mkdir -p $OUTPUT_DIR
+
+echo "开始从过滤器ID $FILTER_ID 获取Jira数据"
+
+# 步骤1: 获取过滤器定义
+echo "获取过滤器定义..."
+FILTER_URL="$JIRA_BASE_URL/rest/api/2/filter/$FILTER_ID"
+
+curl -s -H "Authorization: Bearer $JIRA_TOKEN" \
+     -H "Content-type: application/json" \
+     "$FILTER_URL" > $OUTPUT_DIR/filter_definition.json
+
+# 检查是否成功获取过滤器
+if [ $? -ne 0 ] || [ ! -s "$OUTPUT_DIR/filter_definition.json" ]; then
+  echo "错误: 无法获取过滤器定义，请检查过滤器ID和权限"
+  exit 1
+fi
+
+# 提取JQL查询
+JQL=$(cat $OUTPUT_DIR/filter_definition.json | jq -r '.jql')
+FILTER_NAME=$(cat $OUTPUT_DIR/filter_definition.json | jq -r '.name')
+
+echo "成功获取过滤器 '$FILTER_NAME'"
+echo "过滤器JQL: $JQL"
+
+# 步骤2: 使用JQL查询获取问题
+echo "使用过滤器JQL搜索问题..."
+ENCODED_JQL=$(echo "$JQL" | jq -sRr @uri)
+
+# 初始化分页参数
+START_AT=0
+TOTAL_ISSUES=0
+
+echo "[]" > $OUTPUT_DIR/all_issues.json
+
+# 使用分页获取所有匹配的问题
+while true; do
+  SEARCH_URL="$JIRA_BASE_URL/rest/api/2/search?jql=$ENCODED_JQL&startAt=$START_AT&maxResults=$MAX_RESULTS_PER_PAGE"
+  
+  echo "获取问题页面: startAt=$START_AT, maxResults=$MAX_RESULTS_PER_PAGE"
+  curl -s -H "Authorization: Bearer $JIRA_TOKEN" \
+       -H "Content-type: application/json" \
+       "$SEARCH_URL" > $OUTPUT_DIR/issues_page_$START_AT.json
+  
+  # 检查请求是否成功
+  if [ $? -ne 0 ]; then
+    echo "错误: 获取问题失败"
+    exit 1
+  fi
+  
+  # 获取当前页结果数和总结果数
+  CURRENT_PAGE_COUNT=$(cat $OUTPUT_DIR/issues_page_$START_AT.json | jq '.issues | length')
+  TOTAL=$(cat $OUTPUT_DIR/issues_page_$START_AT.json | jq -r '.total')
+  
+  echo "当前页获取到 $CURRENT_PAGE_COUNT 个问题，总计 $TOTAL 个问题"
+  
+  # 如果当前页为空，则退出循环
+  if [ "$CURRENT_PAGE_COUNT" -eq 0 ]; then
+    break
+  fi
+  
+  # 将当前页的问题添加到总问题列表 (只保留需要的字段以减小文件大小)
+  if [ "$START_AT" -eq 0 ]; then
+    # 第一页，创建新文件
+    cat $OUTPUT_DIR/issues_page_$START_AT.json | jq '.issues' > $OUTPUT_DIR/all_issues.json
+  else
+    # 合并到现有文件
+    EXISTING_ISSUES=$(cat $OUTPUT_DIR/all_issues.json)
+    NEW_ISSUES=$(cat $OUTPUT_DIR/issues_page_$START_AT.json | jq '.issues')
+    echo "$EXISTING_ISSUES" | jq ". + $NEW_ISSUES" > $OUTPUT_DIR/all_issues.json
+  fi
+  
+  # 更新总问题数
+  TOTAL_ISSUES=$((TOTAL_ISSUES + CURRENT_PAGE_COUNT))
+  
+  # 计算下一页起始位置
+  START_AT=$((START_AT + CURRENT_PAGE_COUNT))
+  
+  # 如果已获取所有问题，则退出循环
+  if [ "$START_AT" -ge "$TOTAL" ]; then
+    break
+  fi
+done
+
+echo "成功获取所有 $TOTAL_ISSUES 个问题"
+echo "结果保存在 $OUTPUT_DIR/all_issues.json"
+
+# 可选：提取和处理问题数据进行后续操作
+# 例如：提取所有问题的key
+cat $OUTPUT_DIR/all_issues.json | jq -r '.[].key' > $OUTPUT_DIR/issue_keys.txt
+echo "问题ID列表已保存到 $OUTPUT_DIR/issue_keys.txt"
+
+# 如需获取每个问题的详细信息，可使用类似前面例子的方法遍历每个问题ID
+
+```
+
+### 关于Jira过滤器的一些补充说明：
+
+1. **过滤器的本质**：
+   - Jira过滤器本质上是保存的JQL（Jira Query Language）查询
+   - 过滤器通常包含名称、描述、JQL和权限设置等信息
+
+2. **过滤器API端点**：
+   - 获取过滤器定义：`/rest/api/2/filter/{filterId}`
+   - 获取所有过滤器：`/rest/api/2/filter`
+   - 创建新过滤器：`POST /rest/api/2/filter`
+   - 更新过滤器：`PUT /rest/api/2/filter/{filterId}`
+
+3. **过滤器与权限**：
+   - 需要注意的是，过滤器有自己的权限设置
+   - API用户需要有权限访问该过滤器才能获取它的定义
+   - 如果过滤器是私有的，只有创建者或被特别授权的用户能访问
+
+4. **获取过滤器的替代方法**：
+   - 如果你知道过滤器使用的JQL，可以直接使用JQL而不需要查询过滤器
+   - 如果你只知道过滤器ID但没有权限访问，可以尝试联系过滤器创建者或Jira管理员
+
+这个脚本展示了完整流程：先获取过滤器定义，再使用过滤器的JQL查询获取问题列表。你可以根据需要修改脚本，调整输出格式或添加其他处理逻辑，比如继续获取每个问题的详细信息，或者将数据导入BigQuery等。
 
 # 回答
 
