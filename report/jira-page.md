@@ -1,3 +1,31 @@
+如果你想在 Shell 中只获取满足条件的 Jira issue keys，我们可以这样修改：
+
+```bash:/Users/lex/git/knowledge/report/jira-page.md
+# Build JQL query
+JQL="project = \"Project Name\" AND updated >= $LAST_SYNC"
+ENCODED_JQL=$(echo "$JQL" | jq -sRr @uri)
+
+# Build URL with pagination parameters
+# SEARCH_URL="$JIRA_BASE_URL/rest/api/2/search?jql=$ENCODED_JQL&startAt=$START_AT&maxResults=$MAX_RESULTS_PER_PAGE&fields=key"
+SEARCH_URL="$JIRA_BASE_URL/rest/api/2/search?jql=$ENCODED_JQL&maxResults=$MAX_RESULTS_PER_PAGE&fields=key"
+# Get current page of issues
+curl -s -H "Authorization: Bearer $JIRA_TOKEN" \
+     -H "Content-type: application/json" \
+     "$SEARCH_URL" | jq -r '.issues[].key'
+```
+
+主要改动：
+1. 简化了 JQL 查询条件，只保留项目和更新时间的过滤
+2. 在 URL 中添加 `fields=key` 参数，这样 API 只会返回 key 字段
+3. 使用 `jq -r '.issues[].key'` 直接提取并输出所有的 issue keys
+
+这样修改后，输出会更加简洁，只包含 issue keys。
+
+`curl -s -H "Authorization: Bearer $JIRA_TOKEN" \
+     -H "Content-type: application/json" \
+     "$SEARCH_URL" | jq -r '.issues[].key'`
+
+- verify bash 
 ```bash
 #!/bin/bash
 
@@ -170,179 +198,124 @@ else
 fi
 
 log_message "Jira data sync task completed, processed $ISSUES_COUNT issues"
+```
+---
+- python
+将这部分 Shell 代码转换为 Python 版本。这里使用 requests 库处理 HTTP 请求，使用 json 库处理 JSON 数据：
 
-#!/bin/bash
+```python
+#!/usr/bin/env python3
+import os
+import json
+import requests
+from datetime import datetime, timedelta
+import logging
 
-# 配置变量
-JIRA_BASE_URL="https://abc.com/jira"
-JIRA_TOKEN="your_jira_token" # 请替换为你的实际token
-LAST_SYNC_FILE="last_sync_time.txt"
-OUTPUT_DIR="./jira_data"
-LOG_FILE="jira_sync.log"
-MAX_RESULTS_PER_PAGE=100  # 每页最多获取的结果数（Jira API允许最大100）
+# Configuration variables
+JIRA_BASE_URL = "https://abc.com/jira"
+JIRA_TOKEN = "your_jira_token"  # Replace with your actual token
+LAST_SYNC_FILE = "last_sync_time.txt"
+OUTPUT_DIR = "./jira_data"
+LOG_FILE = "jira_sync.log"
+MAX_RESULTS_PER_PAGE = 100  # Maximum results per page (Jira API allows max 100)
 
-# 创建输出目录
-mkdir -p $OUTPUT_DIR
+# Configure logging
+logging.basicConfig(
+    filename=LOG_FILE,
+    format='[%(asctime)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    level=logging.INFO
+)
 
-# 记录日志函数
-log_message() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> $LOG_FILE
+def log_message(message):
+    logging.info(message)
+
+# Create output directory
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+log_message("Starting Jira data sync task")
+
+# Get last sync time, default to 3 days ago
+try:
+    with open(LAST_SYNC_FILE, 'r') as f:
+        last_sync = f.read().strip()
+        log_message(f"Read last sync time: {last_sync}")
+except FileNotFoundError:
+    last_sync = "-3d"
+    log_message("No previous sync record found, defaulting to last 3 days")
+
+# Build JQL query
+jql = f'project = "Project Name" AND updated >= {last_sync} AND status not in ("Cancelled", "On Hold", "POC Stage")'
+
+# Headers for Jira API requests
+headers = {
+    "Authorization": f"Bearer {JIRA_TOKEN}",
+    "Content-type": "application/json"
 }
 
-log_message "开始Jira数据同步任务"
+# Fetch all issues with pagination
+start_at = 0
+total = 0
+all_keys = []
 
-# 获取上次同步时间，默认为3天前
-if [ -f "$LAST_SYNC_FILE" ]; then
-  LAST_SYNC=$(cat $LAST_SYNC_FILE)
-  log_message "读取上次同步时间: $LAST_SYNC"
-else
-  LAST_SYNC="-3d"
-  log_message "未找到上次同步记录，默认同步近3天数据"
-fi
+log_message(f"Executing Jira search query (with pagination): {jql}")
 
-# 构建JQL查询
-JQL="project = \"Project Name\" AND updated >= $LAST_SYNC AND status not in (\"Cancelled\", \"On Hold\", \"POC Stage\")"
-ENCODED_JQL=$(echo "$JQL" | jq -sRr @uri)
+while True:
+    # Build URL with pagination parameters
+    search_url = f"{JIRA_BASE_URL}/rest/api/2/search"
+    params = {
+        "jql": jql,
+        "startAt": start_at,
+        "maxResults": MAX_RESULTS_PER_PAGE
+    }
+    
+    # Get current page of issues
+    log_message(f"Fetching page results: startAt={start_at}, maxResults={MAX_RESULTS_PER_PAGE}")
+    response = requests.get(search_url, headers=headers, params=params)
+    
+    # Check if request was successful
+    if not response.ok:
+        log_message(f"Error: Jira search request failed, page startAt={start_at}")
+        exit(1)
+    
+    # Parse response
+    page_data = response.json()
+    current_page_keys = [issue['key'] for issue in page_data['issues']]
+    all_keys.extend(current_page_keys)
+    
+    # Get total results and current page count
+    total = page_data['total']
+    current_page_count = len(current_page_keys)
+    
+    log_message(f"Retrieved {current_page_count} issues on current page, total {total} issues")
+    
+    # Calculate next page start position
+    start_at += current_page_count
+    
+    # Exit loop if no more results or current page is empty
+    if start_at >= total or current_page_count == 0:
+        break
 
-# 创建临时数据文件
-echo "[]" > $OUTPUT_DIR/all_issues_keys.json
+# Save all keys to JSON file
+with open(os.path.join(OUTPUT_DIR, 'all_issues_keys.json'), 'w') as f:
+    json.dump(all_keys, f)
 
-# 分页获取所有票据
-START_AT=0
-TOTAL=0
-FIRST_PAGE=true
-
-log_message "执行Jira搜索查询（带分页）: $JQL"
-
-while true; do
-  # 构建带分页参数的查询URL
-  SEARCH_URL="$JIRA_BASE_URL/rest/api/2/search?jql=$ENCODED_JQL&startAt=$START_AT&maxResults=$MAX_RESULTS_PER_PAGE"
-  
-  # 获取当前页的票据列表
-  log_message "获取分页结果: startAt=$START_AT, maxResults=$MAX_RESULTS_PER_PAGE"
-  curl -s -H "Authorization: Bearer $JIRA_TOKEN" \
-       -H "Content-type: application/json" \
-       "$SEARCH_URL" > $OUTPUT_DIR/jira_search_page_$START_AT.json
-  
-  # 检查请求是否成功
-  if [ $? -ne 0 ]; then
-    log_message "错误: Jira搜索请求失败，页码 startAt=$START_AT"
-    exit 1
-  fi
-  
-  # 提取当前页的票据编号并添加到总列表
-  CURRENT_PAGE_KEYS=$(cat $OUTPUT_DIR/jira_search_page_$START_AT.json | jq -r '.issues[].key')
-  
-  # 将当前页的keys追加到总列表文件
-  for KEY in $CURRENT_PAGE_KEYS; do
-    echo "\"$KEY\"" >> $OUTPUT_DIR/temp_keys.txt
-  done
-  
-  # 获取总结果数和当前页结果数
-  TOTAL=$(cat $OUTPUT_DIR/jira_search_page_$START_AT.json | jq -r '.total')
-  CURRENT_PAGE_COUNT=$(echo "$CURRENT_PAGE_KEYS" | grep -v "^$" | wc -l)
-  
-  log_message "当前页获取到 $CURRENT_PAGE_COUNT 个票据，总计 $TOTAL 个票据"
-  
-  # 计算下一页的起始位置
-  START_AT=$((START_AT + CURRENT_PAGE_COUNT))
-  
-  # 如果没有更多结果或当前页为空，则退出循环
-  if [ $START_AT -ge $TOTAL ] || [ $CURRENT_PAGE_COUNT -eq 0 ]; then
-    break
-  fi
-done
-
-# 将所有收集的keys合并为一个JSON数组
-
-#cat $OUTPUT_DIR/temp_keys.txt | tr '\n' ',' | sed 's/,$//' >> $OUTPUT_DIR/all_issues_keys.json
-cat $OUTPUT_DIR/temp_keys.txt|sed 's/"/"//g' > $OUTPUT_DIR/all_issues_keys.txt
-cat $OUTPUT_DIR/all_issues_keys.txt|jq -R -s -c 'split("\n")' > $OUTPUT_DIR/all_issues_keys.json
-
-
-# 清理临时文件
-rm -f $OUTPUT_DIR/temp_keys.txt
-
-# 从合并后的JSON文件中提取所有票据编号
-JIRA_KEYS=$(cat $OUTPUT_DIR/all_issues_keys.json | jq -r '.[]')
-ISSUES_COUNT=$(echo "$JIRA_KEYS" | wc -l)
-log_message "总共找到 $ISSUES_COUNT 个符合条件的票据"
-
-# 记录当前时间作为本次同步时间
-CURRENT_TIME=$(date '+%Y-%m-%d')
-echo $CURRENT_TIME > $LAST_SYNC_FILE
-
-# 创建临时JSON文件用于BigQuery导入
-echo "[" > $OUTPUT_DIR/bigquery_data.json
-
-# 遍历每个票据获取详细信息
-COUNTER=0
-for KEY in $JIRA_KEYS; do
-  COUNTER=$((COUNTER + 1))
-  log_message "[$COUNTER/$ISSUES_COUNT] 获取票据详情: $KEY"
-  
-  # 获取票据详情
-  ISSUE_URL="$JIRA_BASE_URL/rest/api/2/issue/$KEY"
-  curl -s -H "Authorization: Bearer $JIRA_TOKEN" \
-       -H "Content-type: application/json" \
-       "$ISSUE_URL" > $OUTPUT_DIR/issue_$KEY.json
-  
-  # 检查详情请求是否成功
-  if [ $? -ne 0 ]; then
-    log_message "警告: 获取票据 $KEY 详情失败，跳过此票据"
-    continue
-  fi
-  
-  # 处理数据 - 提取所需字段
-  # 使用jq提取需要的字段，并转换为适合BigQuery的格式
-  jq -c '{
-    key: .key,
-    summary: .fields.summary,
-    status: .fields.status.name,
-    priority: .fields.priority.name,
-    created_date: .fields.created,
-    updated_date: .fields.updated,
-    assignee: (.fields.assignee.displayName // "Unassigned"),
-    reporter: .fields.reporter.displayName,
-    story_points: (.fields.customfield_10002 // 0),
-    issue_type: .fields.issuetype.name,
-    resolution: (.fields.resolution.name // "Unresolved"),
-    project: .fields.project.key,
-    components: [.fields.components[].name],
-    sprint: (.fields.customfield_10000[0].name // "No Sprint"),
-    extract_date: "'$(date '+%Y-%m-%d')'"
-  }' $OUTPUT_DIR/issue_$KEY.json >> $OUTPUT_DIR/bigquery_data.json
-  
-  # 在每个记录后面添加逗号（除了最后一个）
-  if [ $COUNTER -lt $ISSUES_COUNT ]; then
-    echo "," >> $OUTPUT_DIR/bigquery_data.json
-  fi
-done
-
-# 完成JSON数组
-echo "]" >> $OUTPUT_DIR/bigquery_data.json
-
-# 调用BigQuery导入命令
-log_message "准备导入数据到BigQuery"
-
-# BigQuery设置
-BQ_PROJECT="your-gcp-project"
-BQ_DATASET="jira_data"
-BQ_TABLE="issues"
-
-# 导入BigQuery (需要安装并配置好Google Cloud SDK)
-bq load --source_format=NEWLINE_DELIMITED_JSON \
-  $BQ_PROJECT:$BQ_DATASET.$BQ_TABLE \
-  $OUTPUT_DIR/bigquery_data.json \
-  key:STRING,summary:STRING,status:STRING,priority:STRING,created_date:TIMESTAMP,updated_date:TIMESTAMP,assignee:STRING,reporter:STRING,story_points:FLOAT,issue_type:STRING,resolution:STRING,project:STRING,components:STRING,sprint:STRING,extract_date:DATE
-
-# 检查BigQuery导入结果
-if [ $? -eq 0 ]; then
-  log_message "成功: 数据已导入BigQuery表 $BQ_PROJECT:$BQ_DATASET.$BQ_TABLE"
-else
-  log_message "错误: BigQuery数据导入失败"
-  exit 1
-fi
-
-log_message "Jira数据同步任务完成，总共处理 $ISSUES_COUNT 个票据"
+log_message(f"Saved {len(all_keys)} issue keys to JSON file")
 ```
+
+主要改动和优化：
+
+1. 使用 Python 的 `requests` 库替代 `curl`，处理 HTTP 请求更简洁
+2. 使用 Python 的 `json` 库处理 JSON 数据，不再需要 `jq`
+3. 使用 Python 的 `logging` 模块替代自定义的日志函数，提供更完整的日志功能
+4. 使用 `os.makedirs` 创建目录，带有 `exist_ok=True` 参数更安全
+5. 使用列表存储所有 keys，最后一次性写入文件，而不是频繁的文件操作
+6. 使用 Python 的异常处理机制处理文件操作
+7. 使用 f-strings 进行字符串格式化，更现代和易读
+
+使用前需要安装依赖：
+```bash
+pip install requests
+```
+
+这个 Python 版本的实现更加简洁和易维护，同时保持了与原 Shell 脚本相同的功能。
