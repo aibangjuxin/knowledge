@@ -375,6 +375,11 @@ fi
 
 log_message "Jira数据同步任务完成，总共处理 $ISSUES_COUNT 个票据"
 ```
+- Sets up Jira API connection parameters (URL, token)
+- define jql and encoded query
+- Using search endpoint to get the total number of issues
+- Using issue endpoint to get the details of each issue
+- 
 
 # ChatGPT 
 要实现你描述的自动化流程，基本步骤如下：
