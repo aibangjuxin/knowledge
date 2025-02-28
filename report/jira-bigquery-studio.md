@@ -377,9 +377,15 @@ log_message "Jira数据同步任务完成，总共处理 $ISSUES_COUNT 个票据
 ```
 - Sets up Jira API connection parameters (URL, token)
 - define jql and encoded query
+  - JQL
+  - ENCODED_JQL=$(echo "$JQL" | jq -sRr @uri)
 - Using search endpoint to get the total number of issues
+  - https://your-jira-domain.atlassian.net/rest/api/2/search?jql=$ENCODED_JQL
 - Using issue endpoint to get the details of each issue
-- 
+  - https://your-jira-domain.atlassian.net/rest/api/2/issue/$KEY
+- 上面是已经完成的几个步骤,我现在有这样一个问题,按照上面步骤,我每次查询比都是所有的数据,然后全部导入到bigquery中,有没有办法只导入新的,或者增量的
+- 下面是几个想法? 通过最后的更新时间来获取比如最近7天的有状态更新的数据比如.issues[].key,然后用这个key通过issue接口获取详细信息,更新对应的bigquery表
+
 
 # ChatGPT 
 要实现你描述的自动化流程，基本步骤如下：

@@ -82,10 +82,18 @@ gcloud secrets list \
     --filter="NOT name:locations" \
     --format="table(name)" \
     --project=${PROJECT_ID}
+# 5.1 add a new logic get-iam-policy for the secret
+# 5.2 add a new logic get-iam-policy for the secret
+echo "检查该 SA 可以访问的 Secret 的 IAM 策略:"
+echo "please copy the secret name from the above list"
+read secret
+gcloud secrets get-iam-policy ${secret} \
+    --project=${PROJECT_ID}
 
 # 6. 检查其他常见资源的 IAM 绑定
 echo -e "\n${GREEN}6. 检查其他资源的 IAM 绑定...${NC}"
 
+: << END
 # 检查 Cloud Storage 存储桶
 echo "检查 Storage 存储桶权限:"
 gsutil ls -p ${PROJECT_ID} 2>/dev/null | while read bucket; do
@@ -102,6 +110,7 @@ while read service; do
             grep -q "${GCP_SA}" && echo "发现权限绑定在: ${service}"
     fi
 done
+END
 
 echo -e "\n${BLUE}检查完成！${NC}"
 echo -e "${RED}警告：删除此 Service Account 将影响以上所有关联的资源和服务！${NC}"

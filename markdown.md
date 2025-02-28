@@ -65,19 +65,20 @@ Mermaid 图表最终会被渲染成 SVG，所以你可以使用 CSS 选择器来
 
 **Markdown 代码示例 (内联 CSS)：**
 
-```markdown
 ```mermaid
-%%{init: { 'theme': 'base' } }%%
 sequenceDiagram
     participant Alice
     participant Bob
     participant Charlie
 
-    box rgb(191, 223, 255) Alice & Bob
-    Note over Alice,Bob: Group ABC
+    box rgb(191, 223, 255) Group 1
+        participant Alice
+        participant Bob
+    end
+
     Alice->Bob: Bob, 你好!
     Bob-->Alice: Alice, 你也好!
-    end
+    Note over Alice,Bob: Group ABC
 
     Charlie->Bob: Bob, 收到消息了吗?
     Bob-->Charlie: 收到了!
