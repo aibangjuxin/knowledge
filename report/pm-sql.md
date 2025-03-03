@@ -17,7 +17,7 @@
 可能到一个历史数据表格是 
 主要完成两个任务，第一个任务就是历史书记表的创建 第二个任务就是将当月产生的数据插入到历史数据表里
 明显你帮我创建的历史数据表格不对 下面，这个才是我想要的 
-
+```sql
 CREATE TABLE historical_data (
     month VARCHAR(7) NOT NULL,      -- 年-月格式的月份，如 "2023-03"
     backlog INT DEFAULT 0,          -- Backlog 状态的数量
@@ -25,8 +25,9 @@ CREATE TABLE historical_data (
     completed INT DEFAULT 0,        -- Completed 状态的数量
     PRIMARY KEY (month)              -- month 作为主键，确保唯一性
 );
+```
 根据这个历史数据表格，帮我完成上面的任务
-
+```sql
 WITH combined_data AS (
     SELECT 
         FORMAT_TIMESTAMP('%Y-%m', created) AS month,
@@ -101,13 +102,13 @@ GROUP BY
     month
 ORDER BY 
     month;
-
+```
 
 # ChatGPT 
 你需要一个完整的 SQL 方案，包括 创建历史数据表 和 插入当月数据，确保历史数据正确，同时累加新数据。以下是完整的 SQL 方案：
 
 1. 创建历史数据表
-
+```sql
 CREATE TABLE historical_data (
     month VARCHAR(7) NOT NULL,      -- 采用 "YYYY-MM" 格式
     backlog INT DEFAULT 0,          -- backlog 任务数量
@@ -115,9 +116,9 @@ CREATE TABLE historical_data (
     completed INT DEFAULT 0,        -- completed 任务数量
     PRIMARY KEY (month)             -- 以月份为主键，确保唯一性
 );
-
+```
 2. 插入或更新历史数据
-
+```sql
 WITH combined_data AS (
     -- 合并来自三张表的数据，并将状态转换为 status_group
     SELECT 
@@ -186,7 +187,7 @@ WHEN NOT MATCHED THEN
     -- 如果月份不存在，则插入新数据
     INSERT (month, backlog, in_progress, completed)
     VALUES (source.month, source.backlog, source.in_progress, source.completed);
-
+```
 说明
 	1.	combined_data: 合并来自 gcp_jira_info、ikp_jira_info、whp_jira_info 三张表的数据，并对 status 进行分类。
 	2.	monthly_data: 统计当前月份的 backlog、in_progress 和 completed 数量。
