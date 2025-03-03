@@ -202,6 +202,162 @@ WHEN NOT MATCHED THEN
 
 你可以运行这段 SQL 来实现你想要的逻辑。
 
+
+
+你的历史数据表是累加的，即每个月的数据包含之前所有数据的总和。因此，你在插入新数据时，需要基于已有数据进行累加，确保数据不会被覆盖，而是正确地反映所有历史数据的总和。
+
+1. 历史数据表设计
+
+你的表结构是正确的，仍然使用以下定义：
+
+CREATE TABLE historical_data (
+    month VARCHAR(7) NOT NULL,      -- 年-月格式，如 "2024-03"
+    backlog INT DEFAULT 0,          -- backlog 状态的累计数量
+    in_progress INT DEFAULT 0,      -- in_progress 状态的累计数量
+    completed INT DEFAULT 0,        -- completed 状态的累计数量
+    PRIMARY KEY (month)             -- month 作为主键，确保唯一性
+);
+
+2. 计算新数据并插入到历史数据表
+
+核心思路
+	•	计算当前月份的数据（即 2024-03）。
+	•	获取上个月的历史数据，并与当前月份数据累加。
+	•	合并数据，插入或更新历史数据表。
+
+SQL 方案
+```sql
+WITH combined_data AS (
+    -- 1. 合并三张表的当月数据
+    SELECT 
+        FORMAT_TIMESTAMP('%Y-%m', created) AS month,
+        CASE 
+            WHEN status = 'Done' THEN 'Completed'
+            WHEN status IN ('Backlog', 'Discovery') THEN 'backlog'
+            WHEN status IN ('Analysis', 'Selected to Work on') THEN 'In progress'
+        END AS status_group
+    FROM 
+        `project.aibang_api_data.gcp_jira_info`
+    WHERE 
+        issue_type = 'Epic' 
+        AND FORMAT_TIMESTAMP('%Y-%m', created) = FORMAT_TIMESTAMP('%Y-%m', CURRENT_TIMESTAMP())
+    
+    UNION ALL
+    SELECT 
+        FORMAT_TIMESTAMP('%Y-%m', created) AS month,
+        CASE 
+            WHEN status = 'Done' THEN 'Completed'
+            WHEN status IN ('Backlog', 'Discovery') THEN 'backlog'
+            WHEN status IN ('Analysis', 'Selected to Work on') THEN 'In progress'
+        END AS status_group
+    FROM 
+        `project.aibang_api_data.ikp_jira_info`
+    WHERE 
+        issue_type = 'Epic' 
+        AND FORMAT_TIMESTAMP('%Y-%m', created) = FORMAT_TIMESTAMP('%Y-%m', CURRENT_TIMESTAMP())
+
+    UNION ALL
+    SELECT 
+        FORMAT_TIMESTAMP('%Y-%m', created) AS month,
+        CASE 
+            WHEN status = 'Done' THEN 'Completed'
+            WHEN status IN ('Backlog', 'Discovery') THEN 'backlog'
+            WHEN status IN ('Analysis', 'Selected to Work on') THEN 'In progress'
+        END AS status_group
+    FROM 
+        `project.aibang_api_data.whp_jira_info`
+    WHERE 
+        issue_type = 'Epic' 
+        AND FORMAT_TIMESTAMP('%Y-%m', created) = FORMAT_TIMESTAMP('%Y-%m', CURRENT_TIMESTAMP())
+),
+monthly_data AS (
+    -- 2. 计算当前月的状态统计
+    SELECT 
+        month,
+        status_group,
+        COUNT(*) AS status_count
+    FROM 
+        combined_data
+    GROUP BY 
+        month, status_group
+),
+last_month_data AS (
+    -- 3. 获取上个月的历史数据（如果有）
+    SELECT 
+        month,
+        backlog,
+        in_progress,
+        completed
+    FROM 
+        historical_data
+    WHERE 
+        month = FORMAT_TIMESTAMP('%Y-%m', DATE_SUB(CURRENT_DATE(), INTERVAL 1 MONTH))
+),
+new_data AS (
+    -- 4. 计算新数据：累加上个月数据
+    SELECT 
+        md.month,
+        COALESCE(lmd.backlog, 0) + COALESCE(SUM(CASE WHEN md.status_group = 'backlog' THEN md.status_count ELSE 0 END), 0) AS backlog,
+        COALESCE(lmd.in_progress, 0) + COALESCE(SUM(CASE WHEN md.status_group = 'In progress' THEN md.status_count ELSE 0 END), 0) AS in_progress,
+        COALESCE(lmd.completed, 0) + COALESCE(SUM(CASE WHEN md.status_group = 'Completed' THEN md.status_count ELSE 0 END), 0) AS completed
+    FROM 
+        monthly_data md
+    LEFT JOIN last_month_data lmd ON md.month = FORMAT_TIMESTAMP('%Y-%m', CURRENT_TIMESTAMP())
+    GROUP BY md.month, lmd.backlog, lmd.in_progress, lmd.completed
+)
+-- 5. 插入或更新历史数据表
+INSERT INTO historical_data (month, backlog, in_progress, completed)
+SELECT month, backlog, in_progress, completed FROM new_data
+ON DUPLICATE KEY UPDATE 
+    backlog = VALUES(backlog),
+    in_progress = VALUES(in_progress),
+    completed = VALUES(completed);
+``` 
+3. 方案解析
+
+📌 关键点
+	1.	合并三张数据表
+	•	只获取当前月份的数据。
+	•	使用 CASE 语句将 status 归类。
+	2.	计算每种状态的总数
+	•	先 GROUP BY 统计 backlog, In progress, Completed 的数量。
+	3.	获取上个月的数据
+	•	通过 DATE_SUB(CURRENT_DATE(), INTERVAL 1 MONTH) 找到上个月的历史数据。
+	4.	累加当前月份的数据
+	•	COALESCE(lmd.backlog, 0) + 新增的backlog 确保累加，避免 NULL 影响计算。
+	5.	插入或更新数据
+	•	如果当前月已经有数据，则使用 ON DUPLICATE KEY UPDATE 更新。
+	•	如果没有数据，则插入新数据。
+
+4. 预期数据示例
+```bash
+假设 historical_data 已有数据：
+
+month	backlog	in_progress	completed
+2024-01	10	20	30
+2024-02	15	25	40
+
+当前 2024-03 产生的数据：
+
+month	backlog	in_progress	completed
+2024-03	5	10	15
+
+执行 SQL 之后，最终 historical_data 应该是：
+
+month	backlog	in_progress	completed
+2024-01	10	20	30
+2024-02	15	25	40
+2024-03	20	35	55
+``` 
+5. 适用场景
+
+✅ 适用于增量更新，保证历史数据不会丢失。
+✅ 自动处理当月数据，无需手动指定月份。
+✅ 支持不同状态的分类和累加，符合业务需求。
+✅ 防止重复插入数据，避免数据覆盖问题。
+
+你可以测试这段 SQL 并结合你的数据情况进行调整！
+
 # Claude
 根据您的需求，我需要帮您完成两个任务：首先是创建历史数据表，然后是编写SQL查询来将当月数据插入到这个历史表中。以下是完整的解决方案：
 
