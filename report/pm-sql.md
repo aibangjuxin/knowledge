@@ -38,7 +38,7 @@ WITH combined_data AS (
             WHEN status = 'Analysis' OR status = 'Selected to Work on' THEN 'In progress'
         END AS status_group
     FROM 
-        `project.aibang_api_data.gcp_jira_info`
+        `project.aibang_api_data.google_jira_info`
     WHERE 
         issue_type = 'Epic' 
         AND EXTRACT(YEAR FROM created) != 2022
@@ -52,7 +52,7 @@ WITH combined_data AS (
             WHEN status = 'Analysis' OR status = 'Selected to Work on' THEN 'In progress'
         END AS status_group
     FROM 
-        `project.aibang_api_data.ikp_jira_info`
+        `project.aibang_api_data.k8s_jira_info`
     WHERE 
         issue_type = 'Epic' 
         AND EXTRACT(YEAR FROM created) != 2022
@@ -66,7 +66,7 @@ WITH combined_data AS (
             WHEN status = 'Analysis' OR status = 'Selected to Work on' THEN 'In progress'
         END AS status_group
     FROM 
-        `project.aibang_api_data.whp_jira_info`
+        `project.aibang_api_data.wgoogle_jira_info`
     WHERE 
         issue_type = 'Epic' 
         AND EXTRACT(YEAR FROM created) != 2022
@@ -128,7 +128,7 @@ WITH combined_data AS (
             WHEN status IN ('Backlog', 'Discovery') THEN 'backlog'
             WHEN status IN ('Analysis', 'Selected to Work on') THEN 'In progress'
         END AS status_group
-    FROM `project.aibang_api_data.gcp_jira_info`
+    FROM `project.aibang_api_data.google_jira_info`
     WHERE issue_type = 'Epic' 
         AND EXTRACT(YEAR FROM created) != 2022
     UNION ALL
@@ -139,7 +139,7 @@ WITH combined_data AS (
             WHEN status IN ('Backlog', 'Discovery') THEN 'backlog'
             WHEN status IN ('Analysis', 'Selected to Work on') THEN 'In progress'
         END AS status_group
-    FROM `project.aibang_api_data.ikp_jira_info`
+    FROM `project.aibang_api_data.k8s_jira_info`
     WHERE issue_type = 'Epic' 
         AND EXTRACT(YEAR FROM created) != 2022
     UNION ALL
@@ -150,7 +150,7 @@ WITH combined_data AS (
             WHEN status IN ('Backlog', 'Discovery') THEN 'backlog'
             WHEN status IN ('Analysis', 'Selected to Work on') THEN 'In progress'
         END AS status_group
-    FROM `project.aibang_api_data.whp_jira_info`
+    FROM `project.aibang_api_data.wgoogle_jira_info`
     WHERE issue_type = 'Epic' 
         AND EXTRACT(YEAR FROM created) != 2022
 ),
@@ -237,7 +237,7 @@ WITH combined_data AS (
             WHEN status IN ('Analysis', 'Selected to Work on') THEN 'In progress'
         END AS status_group
     FROM 
-        `project.aibang_api_data.gcp_jira_info`
+        `project.aibang_api_data.google_jira_info`
     WHERE 
         issue_type = 'Epic' 
         AND FORMAT_TIMESTAMP('%Y-%m', created) = FORMAT_TIMESTAMP('%Y-%m', CURRENT_TIMESTAMP())
@@ -251,7 +251,7 @@ WITH combined_data AS (
             WHEN status IN ('Analysis', 'Selected to Work on') THEN 'In progress'
         END AS status_group
     FROM 
-        `project.aibang_api_data.ikp_jira_info`
+        `project.aibang_api_data.k8s_jira_info`
     WHERE 
         issue_type = 'Epic' 
         AND FORMAT_TIMESTAMP('%Y-%m', created) = FORMAT_TIMESTAMP('%Y-%m', CURRENT_TIMESTAMP())
@@ -265,7 +265,7 @@ WITH combined_data AS (
             WHEN status IN ('Analysis', 'Selected to Work on') THEN 'In progress'
         END AS status_group
     FROM 
-        `project.aibang_api_data.whp_jira_info`
+        `project.aibang_api_data.wgoogle_jira_info`
     WHERE 
         issue_type = 'Epic' 
         AND FORMAT_TIMESTAMP('%Y-%m', created) = FORMAT_TIMESTAMP('%Y-%m', CURRENT_TIMESTAMP())
@@ -393,7 +393,7 @@ WITH combined_data AS (
             ELSE 'Other'
         END AS status_group
     FROM 
-        `project.aibang_api_data.gcp_jira_info`
+        `project.aibang_api_data.google_jira_info`
     WHERE 
         issue_type = 'Epic' 
         AND FORMAT_TIMESTAMP('%Y-%m', created) = current_month
@@ -409,7 +409,7 @@ WITH combined_data AS (
             ELSE 'Other'
         END AS status_group
     FROM 
-        `project.aibang_api_data.ikp_jira_info`
+        `project.aibang_api_data.k8s_jira_info`
     WHERE 
         issue_type = 'Epic' 
         AND FORMAT_TIMESTAMP('%Y-%m', created) = current_month
@@ -425,7 +425,7 @@ WITH combined_data AS (
             ELSE 'Other'
         END AS status_group
     FROM 
-        `project.aibang_api_data.whp_jira_info`
+        `project.aibang_api_data.wgoogle_jira_info`
     WHERE 
         issue_type = 'Epic' 
         AND FORMAT_TIMESTAMP('%Y-%m', created) = current_month
@@ -556,7 +556,7 @@ WITH combined_data AS (
             WHEN status = 'Analysis' OR status = 'Selected to Work on' THEN 'In progress'
         END AS status_group
     FROM 
-        `project.aibang_api_data.gcp_jira_info`
+        `project.aibang_api_data.google_jira_info`
     WHERE 
         issue_type = 'Epic' 
         AND EXTRACT(YEAR FROM created) != 2022
@@ -571,7 +571,7 @@ WITH combined_data AS (
             WHEN status = 'Analysis' OR status = 'Selected to Work on' THEN 'In progress'
         END AS status_group
     FROM 
-        `project.aibang_api_data.ikp_jira_info`
+        `project.aibang_api_data.k8s_jira_info`
     WHERE 
         issue_type = 'Epic' 
         AND EXTRACT(YEAR FROM created) != 2022
@@ -586,7 +586,7 @@ WITH combined_data AS (
             WHEN status = 'Analysis' OR status = 'Selected to Work on' THEN 'In progress'
         END AS status_group
     FROM 
-        `project.aibang_api_data.whp_jira_info`
+        `project.aibang_api_data.wgoogle_jira_info`
     WHERE 
         issue_type = 'Epic' 
         AND EXTRACT(YEAR FROM created) != 2022
@@ -708,15 +708,15 @@ WITH current_month_data AS (
     END AS status_group
   FROM (
     SELECT created, status
-    FROM `project.aibang_api_data.gcp_jira_info`
+    FROM `project.aibang_api_data.google_jira_info`
     WHERE issue_type = 'Epic' AND EXTRACT(YEAR FROM created) != 2022
     UNION ALL
     SELECT created, status
-    FROM `project.aibang_api_data.ikp_jira_info`
+    FROM `project.aibang_api_data.k8s_jira_info`
     WHERE issue_type = 'Epic' AND EXTRACT(YEAR FROM created) != 2022
     UNION ALL
     SELECT created, status
-    FROM `project.aibang_api_data.whp_jira_info`
+    FROM `project.aibang_api_data.wgoogle_jira_info`
     WHERE issue_type = 'Epic' AND EXTRACT(YEAR FROM created) != 2022
   )
   WHERE 
