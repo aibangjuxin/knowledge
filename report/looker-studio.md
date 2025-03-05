@@ -246,6 +246,98 @@ export default MonthlyDataVisualization;
 
 
 
+# Looker Studio: Creating a Combined Chart with Stacked Bars and Line
+
+## Detailed Step-by-Step Guide
+
+### 1. Connecting Data Source
+1. Open Looker Studio
+2. Click "Create" → "Report"
+3. Choose your data source (Google Sheets, Excel, etc.)
+4. Connect to your monthly data table
+
+### 2. Adding the Combined Chart
+1. In the report page, click the "+" icon to add a chart
+2. Scroll through chart types and select "Combo Chart"
+   - Look for a chart with both bars and lines
+   - Icon typically shows a bar graph with a line overlay
+
+### 3. Configuring the Chart
+
+#### Dimension (X-Axis)
+- In the "Setup" tab
+- Drag "Month" column to "Dimension" field
+
+#### Metrics Configuration
+##### Stacked Bar Setup
+1. Under "Metric" section
+2. Add first metric (Value A):
+   - Drag "Value A" to first bar metric
+   - Set chart type to "Bar"
+   - Choose a distinct color (e.g., blue)
+
+3. Add second metric (Value B):
+   - Drag "Value B" to second bar metric
+   - Keep chart type as "Bar"
+   - Choose a different color (e.g., green)
+
+4. Add third metric (Value C):
+   - Drag "Value C" to third bar metric
+   - Keep chart type as "Bar"
+   - Choose another distinct color (e.g., yellow)
+
+5. Enable Stacking:
+   - Look for "Stacked" option in chart settings
+   - Ensure this is turned ON
+
+##### Line Metric Setup
+1. Add Total Sum metric:
+   - Drag "Total" or calculated sum column to "Line" metric
+   - Set chart type to "Line"
+   - Choose a contrasting color (e.g., red)
+
+### 4. Advanced Configurations
+
+#### Axis Settings
+1. Go to "Style" tab
+2. Dual Axis Configuration:
+   - Left Y-Axis: For stacked bars
+   - Right Y-Axis: For total sum line
+3. Adjust scale if needed
+
+#### Formatting
+1. Add chart title
+2. Customize colors
+3. Adjust legend position
+4. Set hover tooltips
+
+### 5. Calculation Field (If No Total Column)
+1. Click "Add a field" in data source
+2. Create calculation:
+   ```
+   Value A + Value B + Value C
+   ```
+3. Name it "Total Sum"
+
+### Troubleshooting Tips
+- Ensure all data types match
+- Check data source connection
+- Verify metric calculations
+- Use consistent date/month formats
+
+### Pro Tips
+- Use consistent, readable colors
+- Ensure axes scales make sense
+- Add clear labels
+- Consider data filtering options
+
+## Common Interface Terms
+- "Dimension": X-axis categorization
+- "Metric": Numerical data to visualize
+- "Stacked": Bars that stack on top of each other
+- "Dual Axis": Two different Y-axis scales
+
+
 Google的Dashboard产品主要是指Google Data Studio，它现在被称为Looker Studio。Looker Studio是一款免费的数据可视化工具，可以连接到多种数据源（包括BigQuery），并创建交互式仪表板和报告。
 
 ### Looker Studio（原Google Data Studio）的主要功能：
