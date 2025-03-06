@@ -50,7 +50,7 @@ Deployment层面
      metadata:
        name: my-pdb
      spec:
-       minAvailable: 2  # 或使用 maxUnavailable: 1
+       minAvailable: 1  # 或使用 maxUnavailable: 1
        selector:
          matchLabels:
            app: my-app
