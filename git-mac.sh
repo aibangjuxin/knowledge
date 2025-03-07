@@ -1,7 +1,7 @@
 #!/bin/bash
-os_type=""
-os_name=$(uname -s)
 
+# 获取操作系统类型
+os_name=$(uname -s)
 case $os_name in
 Linux)
   os_type="Linux"
@@ -14,76 +14,68 @@ Darwin)
   ;;
 esac
 
-# 检查目录
+echo "操作系统: $os_type"
+
+# 检查并进入工作目录
 dir=$(pwd)
 if [ ! -d "$dir" ]; then
-  echo "Directory $dir does not exist."
+  echo "目录不存在: $dir"
   exit 1
 fi
 
 # 检查是否有改动
 if [ -z "$(git status --porcelain)" ]; then
-  echo "No changes to commit."
+  echo "没有需要提交的改动"
   exit 0
 fi
 
-# 显示改动摘要
-echo "Changes Summary:"
+# 获取并处理改动的文件
+changed_files=$(git diff --name-only HEAD)
+echo "改动的文件列表:"
 echo "==============="
 git diff --stat HEAD
 echo "==============="
 
-# 获取所有改变的文件列表
-changed_files=$(git diff --name-only HEAD)
-
 # 处理每个改动的文件
 for filename in $changed_files; do
   full_path="$dir/$filename"
+  echo "处理文件: $filename"
   /Users/lex/shell/replace.sh "$full_path"
   if [ $? -ne 0 ]; then
-    echo "Failed to execute replace script for $filename"
+    echo "处理文件失败: $filename"
     exit 1
   fi
 done
 
-# 添加所有改动
+# 添加改动
 git add .
+if [ $? -ne 0 ]; then
+  echo "添加改动失败"
+  exit 1
+fi
 
-# 获取改动统计
-files_changed=$(git diff --cached --numstat | wc -l | tr -d '[:space:]')
-insertions=$(git diff --cached --stat | tail -n1 | cut -d' ' -f5)
-deletions=$(git diff --cached --stat | tail -n1 | cut -d' ' -f7)
-
-# 提示用户输入自定义提交信息（可选）
-echo -n "Enter custom commit message (press Enter to skip): "
-read custom_message
+# 获取当前分支和最后改动的文件
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+last_file=$(git diff --name-only HEAD | tail -n 1)
 
 # 构建提交信息
-timestamp=$(date "+%Y-%m-%d %H:%M:%S")
-if [ -n "$custom_message" ]; then
-  commit_message="[$os_type] $custom_message
+commit_message="[$os_type][$current_branch] 自动提交
 
-Changes: $files_changed files modified ($insertions insertions, $deletions deletions)
-Time: $timestamp"
-else
-  commit_message="[$os_type] Auto commit
-
-Changes: $files_changed files modified ($insertions insertions, $deletions deletions)
-Time: $timestamp"
-fi
+最后改动: $last_file
+改动时间: $(date '+%Y-%m-%d %H:%M:%S')"
 
 # 提交改动
 git commit -m "$commit_message"
 if [ $? -ne 0 ]; then
-  echo "Failed to commit changes."
+  echo "提交失败"
   exit 1
 fi
 
 # 推送改动
 git push
 if [ $? -ne 0 ]; then
-  echo "Failed to push changes."
+  echo "推送失败"
   exit 1
 fi
-# 推送成功
-echo "Successfully committed and pushed changes."
+
+echo "成功提交并推送所有改动"
