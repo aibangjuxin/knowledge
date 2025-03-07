@@ -1,4 +1,14 @@
 - [Summary](#summary)
+- [issue](#issue)
+    - [问题分析](#问题分析)
+      - [你的疑问](#你的疑问)
+      - [场景示例](#场景示例)
+      - [结论](#结论)
+    - [解决方案](#解决方案)
+      - [实现步骤](#实现步骤)
+      - [示例配置](#示例配置)
+      - [效果](#效果)
+    - [总结](#总结)
 - [Claude](#claude)
   - [方案：创建自定义控制器](#方案创建自定义控制器)
   - [更简单的方法：使用 shell 脚本批量创建](#更简单的方法使用-shell-脚本批量创建)
@@ -12,6 +22,8 @@
 # Summary 
 
 If you only control all Pods through a namespace-level PodDisruptionBudget (PDB), its behavior is to minimize availability for all Pods in the entire namespace that match the selector rule, rather than individually guaranteeing that at least one Pod is available for each Deployment
+
+如果你 只 通过 命名空间级别 的 PodDisruptionBudget (PDB) 来控制 所有 Pod，它的行为是针对 整个命名空间下符合 selector 规则的所有 Pod 进行最小可用性控制，而 不会单独保障每个 Deployment 都至少有 1 个 Pod 可用
 
 都有至少一个Pod 可用,是不是不能通过namespace下面具有相同标签的Pod来实现我的需求?
 
