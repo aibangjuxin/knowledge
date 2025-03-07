@@ -85,5 +85,5 @@ if [ $? -ne 0 ]; then
   echo "Failed to push changes."
   exit 1
 fi
-
+# 推送成功
 echo "Successfully committed and pushed changes."
