@@ -1,5 +1,6 @@
 
 - [summary](#summary)
+  - [基于 Cloud Armor 自身的功能，配置路径匹配的规则 (强烈推荐)](#基于-cloud-armor-自身的功能配置路径匹配的规则-强烈推荐)
 - [Chatgpt](#chatgpt)
 - [Grok](#grok)
     - [方案 1：使用Cloud Armor的路径匹配规则](#方案-1使用cloud-armor的路径匹配规则)
@@ -33,8 +34,71 @@
 - [cloud-armor-path.md](./cloud-armor-path.md)
 
 基于 Cloud Armor 自身的功能，配置路径匹配的规则 (强烈推荐)
-
-
+---
+```mermaid
+sequenceDiagram
+    participant Client as Client
+    participant NginxL7 as Component A<br>(Layer 7 Nginx)
+    participant NginxL4 as Component B<br>(Layer 4 Nginx)
+    participant GKEGateway as GKE Gateway<br>(Cloud Armor)
+    participant KongDP as Kong Gateway
+    participant API as User API<br>(GKE Deployment)
+    
+    Client->>+NginxL7: Request www.aibang.com/api_name_version/v1/...
+    Note over NginxL7: Path-based routing<br>URL rewrite<br>Set Host header
+    NginxL7->>+NginxL4: Forward to 10.72.0.188:8081
+    Note over NginxL4: SSL Preread mode<br>TCP forwarding
+    NginxL4->>+GKEGateway: Forward to 192.168.64.33:443
+    Note over GKEGateway: Apply Cloud Armor security policy<br>(Path-based rules)
+    GKEGateway->>+KongDP: Route request
+    Note over KongDP: API Management<br>Routing, Authentication, etc.
+    KongDP->>+API: Forward to target API service
+    API-->>-KongDP: Return API response
+    KongDP-->>-GKEGateway: Return response
+    GKEGateway-->>-NginxL4: Return response
+    NginxL4-->>-NginxL7: Return response
+    NginxL7-->>-Client: Return final response
+```
+---
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant N7 as Component A<br>(Layer 7 Nginx)
+    participant N4 as Component B<br>(Layer 4 Nginx)
+    participant GW as GKE Gateway<br>(Cloud Armor)
+    participant K as Kong Gateway
+    participant A as User API<br>(GKE Deployment)
+    
+    rect rgb(255, 240, 240)
+    C->>+N7: Request www.aibang.com/api_name_version/v1/...
+    end
+    
+    rect rgb(240, 248, 255)
+    Note over N7: Path-based routing<br>URL rewrite<br>Set Host header
+    N7->>+N4: Forward to 10.72.0.188:8081
+    Note over N4: SSL Preread mode<br>TCP forwarding
+    end
+    
+    rect rgb(240, 255, 240)
+    N4->>+GW: Forward to 192.168.64.33:443
+    Note over GW: Apply Cloud Armor security policy<br>(Path-based rules)
+    end
+    
+    rect rgb(255, 240, 255)
+    GW->>+K: Route request
+    Note over K: API Management<br>Routing, Authentication, etc.
+    end
+    
+    rect rgb(255, 255, 240)
+    K->>+A: Forward to target API service
+    A-->>-K: Return API response
+    end
+    
+    K-->>-GW: Return response
+    GW-->>-N4: Return response
+    N4-->>-N7: Return response
+    N7-->>-C: Return final response
+```
 # Chatgpt 
 
 你的问题是 Cloud Armor 绑定在 GKE Gateway 上，但你只希望 部分 API 受 Cloud Armor 规则保护，而不是所有 API。
