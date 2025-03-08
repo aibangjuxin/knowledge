@@ -4,7 +4,7 @@ Looker Studio (Google Data Studio) SQL 查询时间字段最佳实践
 让我详细解释一下为什么这是最佳实践，以及如何有效地实现它，并提供一些具体的例子：
 
 **为什么在 SQL 中格式化时间是最佳实践？**
-- Use Legacy SQL Syntax:  使用 Legacy SQL 语法可以确保你的 SQL 查询在不同的数据库系统中都能正常运行。 Looker Studio 支持多种数据库，包括 MySQL, PostgreSQL, BigQuery, SQL Server 等。 不同的数据库可能使用不同的 SQL 语法，使用 Legacy SQL 可以确保你的查询在所有数据库中都能正确执行。
+- Use Legacy SQL Syntax:  使用 Legacy SQL 语法可以确保你的 SQL 查询在不同的数据库系统中都能正常运行。 Looker Studio 支持多种数据库，包括 MySQL, PostgreSQL, BigQuery, SQL Server 等。 不同的数据库可能使用不同的 SQL 语法，使用 Legacy SQL 可以确保你的查询在所有数据库中都能正确执行
 - enable data range parameters:  Looker Studio 中的日期范围参数可以直接应用于 SQL 查询，这意味着你可以在报表中使用日期过滤器，而无需手动在 SQL 查询中添加日期范围条件。
 - Enable viewer email address parameters:  Looker Studio 允许你将报表发送给特定的电子邮件地址，并且可以在报表中包含日期范围参数。 这意味着你可以根据不同的日期范围发送不同的报表。
 
