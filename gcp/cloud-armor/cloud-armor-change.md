@@ -30,6 +30,7 @@
 # summary
 - [针对匹配路径的请求启用安全防护，确保这些API受到保护](#方案-1使用cloud-armor的路径匹配规则)
 - [在nginx层面添加头部标记](#方案3在nginx层面添加头部标记)
+- [cloud-armor-path.md](./cloud-armor-path.md)
 
 基于 Cloud Armor 自身的功能，配置路径匹配的规则 (强烈推荐)
 
@@ -256,7 +257,7 @@ spec:
 ```nginx
 location /api_name_version1/v1/ {
     rewrite ^(.*)$ "://www.aibang.com$1" break;
-    proxy_pass https://10.98.0.188:8081/;
+    proxy_pass https://10.72.0.188:8081/;
     proxy_set_header Host www.aibang.com;
     proxy_set_header X-Real-Ip $remote_addr;
     proxy_set_header X-Security-Policy "high";  # 添加自定义头部
@@ -266,7 +267,7 @@ location /api_name_version1/v1/ {
 
 location /api_name2_version/v1/ {
     rewrite ^(.*)$ "://www.aibang.com$1" break;
-    proxy_pass https://10.98.0.188:8081/;
+    proxy_pass https://10.72.0.188:8081/;
     proxy_set_header Host www.aibang.com;
     proxy_set_header X-Real-Ip $remote_addr;
     proxy_read_timeout 300s;
