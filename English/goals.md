@@ -10,13 +10,12 @@
 
 个人专业技能提升目标：
 * 学习 Google GCP 相关知识
-在一年内基于我们目前使用的Google产品情况,达到更加深入的了解 .并学习适合平台发展的一些新技术比如multiple cluster and asm 等等
+在一年内基于我们目前使用的Google产品情况,达到更加深入的了解 .并学习适合平台发展的一些新技术比如multiple jiqun and asm 等等
 * 学习 Pipeline 相关知识
 在一年内能够熟练使用 Pipeline 了解我们现在在用的多数pipeline的工作流程
 * 学习 Google Dashboard
 学习并了解Google Dashboard及所需要的其他知识,比如Bigquery firestore的一些技术要点.达到能够理解这些技术点.并提出技术要求.自己完成
 统计分析.
-
 
 
 * Leading the team to achieve project goals
@@ -40,7 +39,7 @@ Personal goals for improving English proficiency:
 
 Personal goals for enhancing professional skills:
 * Learn Google GCP-related knowledge
-   Within a year, deepen understanding of Google products currently in use and learn new technologies suitable for platform development, such as multiple clusters and asm, based on our current Google product usage.
+   Within a year, deepen understanding of Google products currently in use and learn new technologies suitable for platform development, such as multiple jiquns and asm, based on our current Google product usage.
 
 * Learn Pipeline-related knowledge
    Within a year, become proficient in using Pipeline and understand the workflow of most pipelines currently in use.
@@ -51,3 +50,17 @@ Personal goals for enhancing professional skills:
 
 This is a scenario we tested so you can help us see if this model works. This is just a test because the test environment is always being cleaned up. If it's okay, can we set up a meeting to discuss it?
 
+- 2025 
+
+Optimize and enhance platform stability. Ensure high availability and reliability of the platform. Identify specific optimization opportunities from the infrastructure level.
+Understand core configurations and optimize based on existing settings.
+
+
+Ensure platform maintains high availability and stability during normal deployment and upgrade processes.
+
+
+优化和加强平台稳定性，确保平台的高可用性和可靠性。从基础设施层面识别具体的优化机会。
+了解核心配置，并基于现有设置进行优化。
+
+
+确保平台在正常的部署和升级过程中保持高可用性和稳定性。
