@@ -1,31 +1,30 @@
 个人英语水平提升目标：
 * 提高英语阅读能力
-在一年内将英语技术文档阅读速度提高到每分钟 200 字以上，并能够理解 80% 的内容。
+在一年内将英语 GCP 技术文档阅读速度提高到每分钟 200 字以上，并能够理解 80% 的内容。
 * 提高英语写作能力
-在一年内能够不参考翻译的情况下写出流利、准确的英语邮件。
+在一年内能够不参考翻译的情况下，每周写一封给客户的邮件，保证邮件的流利和准确性。
 * 提高英语口语能力
-在一年内能够分享文档的时候,使用英语,并于同事可以进行流利
+在一年内能够分享文档的时候,使用英语,并与同事可以进行流利地交流。在一年内能够用英语进行15分钟的项目更新分享，保证发音清晰易懂。
 
 
 
 个人专业技能提升目标：
 * 学习 Google GCP 相关知识
-在一年内基于我们目前使用的Google产品情况,达到更加深入的了解 .并学习适合平台发展的一些新技术比如multiple jiqun and asm 等等
+在一年内基于我们目前使用的Google产品情况,达到更加深入的了解。学习并掌握 Kubernetes、Istio，并考取GCP Associate Cloud Engineer 证书。
 * 学习 Pipeline 相关知识
-在一年内能够熟练使用 Pipeline 了解我们现在在用的多数pipeline的工作流程
+在一年内能够熟练使用 Pipeline，了解我们现在在用的多数pipeline的工作流程, 并且能够独立创建和部署新的pipeline。
 * 学习 Google Dashboard
-学习并了解Google Dashboard及所需要的其他知识,比如Bigquery firestore的一些技术要点.达到能够理解这些技术点.并提出技术要求.自己完成
-统计分析.
+学习并了解Google Dashboard及所需要的其他知识,比如Bigquery firestore的一些技术要点.达到能够理解这些技术点.并提出技术要求.自己完成统计分析。能够使用 Google Dashboard 独立完成用户行为分析报告。
 
 
 * Leading the team to achieve project goals
-   As the primary objective of a Pod leader. Complete projects within specified timelines and meet project quality requirements based on project specifics.
+   As the primary objective of a Pod leader. Complete 90% of projects within specified timelines and meet project quality requirements based on project specifics.
 
 * Developing the capabilities of team members
-   As a Pod leader, it's essential to assist team members in their growth. Encourage each team member to improve their technical skills or soft skills.
+   As a Pod leader, it's essential to assist team members in their growth. Encourage each team member to improve their technical skills or soft skills. Facilitate at least one training opportunity for each team member.
 
 * Enhancing one's own leadership skills
-   As a Pod leader, improving one's leadership abilities is crucial. Learn to effectively communicate with team members.
+   As a Pod leader, improving one's leadership abilities is crucial. Learn to effectively communicate with team members. Attend at least one leadership training course or workshop.
 
 Personal goals for improving English proficiency:
 * Improve English reading skills
@@ -53,8 +52,8 @@ This is a scenario we tested so you can help us see if this model works. This is
 - 2025 
 - Platform Stability and Reliability Enhancement Goals
 
-Optimize and enhance platform stability. Ensure high availability and reliability of the platform. Identify specific optimization opportunities from the infrastructure level.
-Understand core configurations and optimize based on existing settings.
+Optimize and enhance platform stability. Ensure high availability and reliability of the platform. Identify specific optimization opportunities from the infrastructure level. Reduce platform downtime to less than 1% per month.
+Understand core configurations (e.g., load balancing, autoscaling) and optimize based on existing settings.
 
 
 Ensure platform maintains high availability and stability during normal deployment and upgrade processes.
