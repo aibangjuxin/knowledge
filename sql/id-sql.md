@@ -133,6 +133,11 @@ ORDER BY platform, eid;
 | google   | ISSUE-1002 | P2       | P2       |
 | google   | ISSUE-1003 | P3       | P3       |
 | aliyun   | ALI-2001   | Critical | Critical |
+| google   | eid10 | P1       | S1      |
+| aliyun   | eid11 | P2       | S2      |
+| aws      | eid12 | P3       | S3      |
+| google   | eid13 | P4       | S4      |
+| aliyun   | eid14 | P5       | S5      |
 
 
 
