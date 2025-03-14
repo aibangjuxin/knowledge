@@ -343,19 +343,4 @@ Python 连接	代码操作 DuckDB	duckdb.connect("my_database.duckdb")
 如果你想长期存储数据，推荐 方法 2（数据库文件）。
 如果你要自动化查询，可以用 方法 3（命令行 SQL） 或 方法 4（Python）。
 
-# create a tables 
-CREATE TABLE gcp_jira_info (
-    id INTEGER PRIMARY KEY,
-    eimId STRING,
-    tier STRING,
-    issue_type STRING,
-    project STRING,
-    assignee STRING,
-    status STRING,
-    created_at TIMESTAMP
-);
-
-- insert data to gcp_jira_info
-
-INSERT INTO gcp_jira_info (eimId,tier,issue_type,project,assignee,status ) VALUES
 

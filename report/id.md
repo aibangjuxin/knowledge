@@ -1,3 +1,56 @@
+
+- flow
+```mermaid
+sequenceDiagram
+    participant API as API服务
+    participant BQ as BigQuery
+    participant Scheduler as 定时任务调度器
+    
+    Note over API,BQ: 数据获取和更新阶段
+    Scheduler->>Scheduler: 触发定时任务
+    Scheduler->>API: 请求Bug数据
+    API-->>Scheduler: 返回Bug数据
+    Scheduler->>BQ: 写入/更新 emid_tier 表
+    
+    Note over BQ: 数据比较阶段
+    BQ->>BQ: 执行SQL查询
+    Note right of BQ: WITH子句合并三个平台的Bug数据
+    Note right of BQ: 1. google平台的Bug数据
+    Note right of BQ: 2. aliyun平台的Bug数据
+    Note right of BQ: 3. aws平台的Bug数据
+    
+    BQ->>BQ: 与API数据(emid_tier表)进行LEFT JOIN
+    BQ->>BQ: 使用CASE语句比较优先级
+    Note right of BQ: 判断结果类型:
+    Note right of BQ: - MATCH (完全匹配)
+    Note right of BQ: - MISSING_FROM_API (API中未找到)
+    Note right of BQ: - MISSING_FROM_JIRA (JIRA中未找到)
+    Note right of BQ: - MISMATCH (优先级不匹配)
+    
+    BQ->>BQ: 按platform和eimId排序结果
+
+```
+---
+```mermaid
+sequenceDiagram
+    participant User
+    participant Scheduled Task
+    participant API Data Source
+    participant BigQuery (emid_tier)
+    participant BigQuery (Jira Tables)
+    participant SQL Query Engine
+
+    User->Scheduled Task: Request Data Update & Comparison (Implicitly)
+    Scheduled Task->API Data Source: Fetch API Data (e.g., /emid_tier_api)
+    API Data Source->Scheduled Task: Return API Data
+    Scheduled Task->BigQuery: Update/Insert API Data into emid_tier
+    Scheduled Task->SQL Query Engine: Trigger SQL Query Execution
+    SQL Query Engine->BigQuery (Jira Tables): Read Data from Jira Tables (gcp_jira_info, aliyun_jira_info, aws_jira_info)
+    SQL Query Engine->BigQuery (emid_tier): Read Data from emid_tier
+    SQL Query Engine->SQL Query Engine: Execute Comparison SQL
+    SQL Query Engine->User: Return Comparison Results
+```
+
 ```bash
 #!/bin/bash
 # 文件路径
