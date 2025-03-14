@@ -50,7 +50,41 @@ emid_tier
 -- 在 DuckDB CLI 中使用 .open 命令创建/连接数据库
 .open mydb.db
 
-D .open project.aibang_api_data
+D .open project.aibang_api_data.db
+用了DuckDB的默认内存模式（:memory:），这种模式下数据库在会话结束后会丢失。要实现数据持久化，
+你需要在创建数据库时指定一个文件路径，比如使用`.open my_database.db` 命令创建一个持久化的数据库文件。这样即使重启主机，数据也会保存在这个.duckdb文件中
+
+duckdb project.aibang_api_data.duckdb
+v1.2.1 8e52ec4395
+Enter ".help" for usage hints.
+D .databases
+project: project.aibang_api_data.duckdb
+D CREATE TABLE emid_tier (
+      eimId STRING,
+      tier STRING
+  );
+D 
+D 
+D INSERT INTO emid_tier (eimId, tier) VALUES
+      ('12345678901234567890123456789012', 'P1'),
+      ('23456789012345678901234567890123', 'P2'),
+      ('34567890123456789012345678901234', 'P3');
+D .quit
+duckdb project.aibang_api_data.duckdb
+v1.2.1 8e52ec4395
+Enter ".help" for usage hints.
+D .databases
+project: project.aibang_api_data.duckdb
+D .tables
+emid_tier
+D select * from emid_tier where eimId like '12%';
+┌──────────────────────────────────┬─────────┐
+│              eimId               │  tier   │
+│             varchar              │ varchar │
+├──────────────────────────────────┼─────────┤
+│ 12345678901234567890123456789012 │ P1      │
+└──────────────────────────────────┴─────────┘
+
 ```
 
 2. **查看当前数据库信息**
@@ -117,6 +151,8 @@ SELECT * FROM users;
 select * from emid_tier where eimId = '12345678901234567890123456789012';
 select * from emid_tier where eimId like '%12';
 这个是以12结尾的eimId
+如果是查询以12开头的eimId，那么就是
+select * from emid_tier where eimId like '12%';
 
 
 -- 条件查询
@@ -306,3 +342,20 @@ Python 连接	代码操作 DuckDB	duckdb.connect("my_database.duckdb")
 如果你只是想测试 SQL，推荐 方法 1（交互模式）。
 如果你想长期存储数据，推荐 方法 2（数据库文件）。
 如果你要自动化查询，可以用 方法 3（命令行 SQL） 或 方法 4（Python）。
+
+# create a tables 
+CREATE TABLE gcp_jira_info (
+    id INTEGER PRIMARY KEY,
+    eimId STRING,
+    tier STRING,
+    issue_type STRING,
+    project STRING,
+    assignee STRING,
+    status STRING,
+    created_at TIMESTAMP
+);
+
+- insert data to gcp_jira_info
+
+INSERT INTO gcp_jira_info (eimId,tier,issue_type,project,assignee,status ) VALUES
+

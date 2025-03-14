@@ -8,7 +8,6 @@
 DOMAIN-SUFFIX,ab.chatgpt.com
 DOMAIN-SUFFIX,ios.chat.openai.com
 DOMAIN-SUFFIX,ai.com
-DOMAIN-SUFFIX,trae.ai
 DOMAIN-SUFFIX,bard.google.com
 DOMAIN-SUFFIX,auth0.com
 DOMAIN-SUFFIX,challenges.cloudflare.com
@@ -22,9 +21,12 @@ DOMAIN-SUFFIX,sentry.io
 DOMAIN-SUFFIX,stripe.com
 DOMAIN-SUFFIX,oaistatic.com
 DOMAIN-SUFFIX,oaiusercontent.com
+# trae
+DOMAIN-SUFFIX,trae.ai
 DOMAIN-SUFFIX,mchost.guru
 DOMAIN-SUFFIX,byteoversea.com
 DOMAIN-SUFFIX,exp-tas.com
+DOMAIN-SUFFIX,bytednsdoc.com
 # trae-api-sg.mchost.guru:443
 # poe
 DOMAIN-SUFFIX,poe.com
@@ -43,5 +45,7 @@ DOMAIN-SUFFIX,perplexity.ai
 # groq
 DOMAIN-SUFFIX,groq.com
 DOMAIN-SUFFIX,labs.google
+# server.codeium.com
+DOMAIN-SUFFIX,codeium.com
 
 
