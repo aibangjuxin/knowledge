@@ -231,5 +231,30 @@ graph TD;
 这种方式可以更高效地满足上千个镜像批量查询 labels 的需求，同时适用于平台对用户提供丰富元数据展示的场景。
 
 
+下面是一个假设的 JSON 输出示例，展示了如果镜像在构建时设置了 labels，可能得到的输出结构（注意实际输出可能因镜像构建方式和 GAR 版本而异）：
 
+{
+  "name": "projects/my-project/locations/us/repositories/my-repo/dockerImages/my-image@sha256:123abc...",
+  "uri": "us-docker.pkg.dev/my-project/my-repo/my-image@sha256:123abc...",
+  "image_summary": {
+    "digest": "sha256:123abc...",
+    "fully_qualified_digest": "us-docker.pkg.dev/my-project/my-repo/my-image@sha256:123abc...",
+    "registry": "us-docker.pkg.dev",
+    "repository": "my-repo",
+    "slsa_build_level": "BUILD"
+  },
+  "labels": {
+    "maintainer": "John Doe",
+    "jdk.version": "11",
+    "source": "https://github.com/myorg/my-repo"
+  }
+}
+
+	说明
+		•	如果你的镜像在构建时没有设置 labels，或者 GAR 版本没有展示这些信息，则输出可能只包含 image_summary 相关的信息，如你所看到的 digest、registry、repository 以及 slsa_build_level。
+	•	为确保 labels 被正确记录，需要在构建镜像时通过 Dockerfile 的 LABEL 指令设置好对应信息。
+	•	此外，建议检查构建日志和镜像构建配置，确保 labels 已被嵌入镜像中。如果输出中没有 labels 字段，可能需要验证构建流水线或使用 docker inspect 检查本地镜像是否包含这些信息。
+	•	若需要批量提取 labels 信息，可以考虑结合 GAR API 或在 CI/CD 流水线中记录构建元数据，再将其存储到数据库中供查询使用。
+
+这种输出示例供参考，实际环境中可能会略有不同。
 √
