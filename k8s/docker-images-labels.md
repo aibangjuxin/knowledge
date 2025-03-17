@@ -88,15 +88,15 @@ graph TD;
 
 直接使用 docker inspect 命令可以查看镜像的所有元数据，其中就包含了 labels 信息。例如：
 
-docker inspect --format='{{json .Config.Labels}}' <image>:<tag>
+`docker inspect --format='{{json .Config.Labels}}' <image>:<tag>`
 
 这条命令会直接输出镜像中 Config.Labels 部分的 JSON 数据，便于快速查看。
 
 如果希望输出格式更美观，可以结合 jq 工具：
-
+```bash
 docker inspect <image>:<tag> | jq '.[0].Config.Labels'
 
-
+```
 
 ⸻
 
@@ -154,14 +154,14 @@ graph TD;
 Google Cloud CLI 提供了对 GAR 镜像的操作命令。你可以通过以下步骤实现批量查询：
 	•	列出所有镜像
 使用 gcloud artifacts docker images list 命令列出指定仓库内的所有镜像。例如：
-
+```bash
 gcloud artifacts docker images list <region>-docker.pkg.dev/<project>/<repository> --format="value(name)"
-
+```
 
 	•	批量描述镜像
 对于每个镜像，再使用 gcloud artifacts docker images describe 命令获取详细信息。详细信息中通常会包含镜像构建时嵌入的 labels 信息（如果镜像构建时设置了）。
 示例脚本：
-
+```bash
 #!/bin/bash
 # 列出所有镜像名称
 images=$(gcloud artifacts docker images list <region>-docker.pkg.dev/<project>/<repository> --format="value(name)")
@@ -175,7 +175,7 @@ for image in $images; do
     echo "$labels"
     echo "--------------------------------------"
 done
-
+```
 
 
 	注意：
@@ -210,13 +210,13 @@ Artifact Registry 提供 REST API，可以编程方式查询镜像元数据。�
 Mermaid 流程图
 
 下面的流程图展示了利用 gcloud 命令或 REST API 批量获取 GAR 镜像 labels 的过程：
-
+```mermaid
 graph TD;
     A[列出所有 GAR 镜像] --> B[对每个镜像调用 describe 命令或 API];
     B --> C[获取 JSON 格式的镜像详情];
     C --> D[提取 labels 字段];
     D --> E[存储或直接展示给用户];
-
+```
 
 
 ⸻
