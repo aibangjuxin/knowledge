@@ -1,5 +1,5 @@
 
-# genini 
+# gemini 
 
 Thoughts
 > The user is asking for a detailed explanation of the relationship between Horizontal Pod Autoscaler (HPA), Deployment replicas, and their definitions in Kubernetes.
@@ -52,6 +52,7 @@ Deployment 的 replicas 参数和 HPA 之间的关系可以用以下几点来概
  * 手动调整的影响:  如果您 手动修改了 Deployment 的 replicas 参数 （例如使用 kubectl scale deployment --replicas=N），HPA 会如何反应呢？  答案是 HPA 最终会覆盖您手动设定的值，以确保 Pod 副本数量符合 HPA 基于指标计算出的期望值。  HPA 会持续监控指标，并根据需要将 replicas 调整回其认为合适的数量。因此，在 HPA 启用后，不建议手动直接修改 Deployment 的 replicas，而是应该让 HPA 完全掌控自动扩缩容。
 关系流程图 (Sequence Diagram)
 以下是一个使用 Mermaid 语法绘制的 Sequence Diagram，展示了 Deployment 的 replicas 和 HPA 之间的关系流程：
+```mermaid
 sequenceDiagram
     participant User
     participant Deployment
@@ -83,7 +84,8 @@ sequenceDiagram
         Deployment-->KubeAPI:  Pod 数量调整完成
         KubeAPI-->HPA:  Deployment 更新完成
     end
-
+```
+- ![hpa-replicas.png](pic/replicas-hpa.png)
 这个流程图描述了以下步骤：
  * 用户创建 Deployment 和 HPA: 用户首先创建 Deployment 并设定一个初始的 replicas 值，然后创建 HPA 并指定目标 Deployment，以及 minReplicas、maxReplicas 和监控的指标。
  * HPA 监控指标: HPA 开始运行后，会定期从 Metrics Server (或其他指标来源) 获取目标 Deployment 的指标数据（例如 CPU 利用率）。

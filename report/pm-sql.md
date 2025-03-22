@@ -6,6 +6,9 @@
 □ 排序筛选条件
 □ 基于状态进行筛选 使用case语法筛选三种状态 比如
 
+
+select * from `project.aibang_api_data.google_jira_info` where format_timestamp('%Y-%m-%d', created) like '2023-03%' and issue_type = 'Epic'
+
   - 原样选择 `status` 字段。
 - **CASE ... END AS status_group**:
   - 使用 `CASE` 语句依据 `status` 字段的不同值，将任务状态划分为三组，具体如下：
