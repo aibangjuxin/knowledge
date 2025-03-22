@@ -1,3 +1,13 @@
+- [summary](#summary)
+- [My Request](#my-request)
+  - [Claude](#claude)
+    - [证书主题验证](#证书主题验证)
+  - [deepseek](#deepseek)
+    - [关键实现方案：](#关键实现方案)
+    - [验证流程：](#验证流程)
+    - [保留配置迁移对照表：](#保留配置迁移对照表)
+
+# summary
 根据您的描述，以下是您的网络流量路径概览：
 -	1.	GLB (Google Load Balancer) 接收外部流量。
 -	2.	流量进入 CEDMZ 网络，并经过名为 cedmz-nginx 的 Nginx 主机（VPC：cedmz-Asia-east2）。
@@ -13,6 +23,11 @@ graph TD;
     D --> E[internal-vpc1-Asia-east2-core];
 ```
 这个流程图简洁地展示了每个组件之间的流量流转路径。如果您有进一步的细节或需要更复杂的图示，我可以根据需求调整。
+
+
+上面是我的原来的环境，我现在想基于google提供的现有的产品。实现GLB https 的MTLS。你看帮我看下实现方案。后面的对应的网络可以直接从GLB到cidmz这个网络。整个过程我要求实现MTLS。cloud armor . Client validation .白名单，当然白名单也可以在cloud armor实现，我原来的cedmz-nginx里面有一个检查客户端主题名称的配置，我需要保留。
+就是说保留的一些要求，但是可以简化配置。请核对帮我实现？
+
 
 
 
@@ -52,6 +67,10 @@ graph TD;
 -	5.	GLB 会将合法流量转发到 cidmz-nginx，cidmz-nginx 做客户端主题名称检查并转发到后端服务。
 
 这种方案将大大简化您的架构，同时保留您现有的验证机制，并利用 Google Cloud 的原生功能来提高安全性和简化配置管理。如果需要进一步细化配置或有其他需求，欢迎随时告知。
+
+
+我需要确认一点，HTTPS的GLB会传递client cert到后面的Nginx ?我以前可以是因为是TCP的 GLB，现在改成了HTTPS那么是否支持？
+
 
 是的，Google Cloud Load Balancer (GLB) 支持在 HTTPS 模式下传递 客户端证书 到后端的服务（例如 Nginx）。
 
@@ -96,6 +115,12 @@ server {
 
 
 # My Request 
+我们目前使用google的GLB配置的TCP。后面配置为了满足双向验证也就是MTLS 
+我们有网络有严格的限制大概Flow如下
+GLB ==> CEDMZ网络里配置了一个nginx 我们暂时叫做cedmz-nginx 比如其对应的VPC是cedmz-Asia-east2是一个单网卡的主机
+然后这个主机会将请求转发到另一个主机 我们叫cidmz-nginx 其对应的VPC是cedmz-Asia-east2 和cidmz-Asia-east2
+然后我们会再一次跳转到下一跳是squid ,我们叫internal-squid 这个Squid又有2块网卡一个是cidmz-Asia-east2 另一个是internal-vpc1-Asia-east2-core 
+
 以下是我的网络流量路径概览：
 	1.	GLB (Google Load Balancer) 接收外部流量。
 	2.	流量进入 CEDMZ 网络，并经过名为 cedmz-nginx 的 Nginx 主机（VPC：cedmz-Asia-east2）。
@@ -114,6 +139,8 @@ graph TD;
 能否帮我可视化这个部分，再优化下输出
 
 上面的架构 是我的原来的架构，我现在想基于google提供的现有的产品。实现GLB https 的MTLS。你看帮我看下实现方案。后面的对应的网络可以直接从GLB到cidmz这个网络。整个过程我要求实现MTLS。cloud armor . Client validation .白名单，当然白名单也可以在cloud armor实现，我原来的cedmz-nginx里面有一个检查客户端主题名称的配置，我需要保留。
+这其中涉及到一个问题,因为是MTLS的双向认证,我们需要把用户的Client证书上传或者部署我我们服务中,是不是涉及到一个goggle的产品?使用 Google Cloud 的证书管理服务管理
+我需要确认一点，HTTPS的GLB会传递client cert到后面的Nginx ?我以前可以是因为是TCP的 GLB，现在改成了HTTPS那么是否支持？
 就是说保留的一些要求，但是可以简化配置。请核对帮我实现？
 
 ## Claude
@@ -156,7 +183,7 @@ sequenceDiagram
 
 2. 架构优化：
    - 移除原有的 cedmz-nginx 层，直接从 GLB 到 cidmz 网络
-   - 使用 Google Cloud 的证书管理服务管理 SSL 证书
+   - [使用 Google Cloud 的证书管理服务管理 SSL 证书](./gcp-certificate-manager.md)
    - 将安全控制集中在 Cloud Armor 和 GLB 层面
 
 3. 具体配置步骤：
