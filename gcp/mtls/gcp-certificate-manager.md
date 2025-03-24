@@ -1,4 +1,4 @@
-是的，在 Google Cloud HTTPS 负载均衡 (GLB) 的 MTLS 配置下，您需要管理客户端证书，而 Google 提供了一些产品来简化这个过程，包括 Google Cloud Certificate Manager 和 Google Cloud IAM 的 CA (Certificate Authority) 相关功能。
+在 Google Cloud HTTPS 负载均衡 (GLB) 的 MTLS 配置下，需要管理客户端证书，而 Google 提供了一些产品来简化这个过程，包括 Google Cloud Certificate Manager 和 Google Cloud IAM 的 CA (Certificate Authority) 相关功能。
 
 ⸻
 
@@ -42,22 +42,20 @@
 
 (1) 服务器端 HTTPS 证书
 	1.	在 Google Cloud Certificate Manager 创建 HTTPS 证书：
-
+```bash
 gcloud certificate-manager certificates create my-server-cert \
     --domains=my-api.example.com \
     --managed
-
+```
 
 	2.	将证书绑定到 HTTPS 负载均衡：
-
+```bash
 gcloud compute ssl-policies create my-ssl-policy \
     --profile MODERN \
     --min-tls-version 1.2
-
+```
 
 	3.	配置 HTTPS 负载均衡并关联 SSL 证书。
-
-⸻
 
 (2) 客户端证书管理
 	1.	创建 Google Cloud Private CA
@@ -119,9 +117,8 @@ server {
 ```
 
 
-⸻
 
-6. 额外的 Cloud Armor 配置
+1. 额外的 Cloud Armor 配置
 
 你可以用 Cloud Armor 进行白名单控制：
 ```bash
@@ -131,9 +128,9 @@ gcloud compute security-policies rules create 1000 \
 ```
 
 
-⸻
 
-7. 方案总结
+
+1. 方案总结
 	•	✅ GLB 负责 HTTPS 终止，并启用 MTLS 进行客户端身份验证。
 	•	✅ Google Cloud Certificate Manager 管理 服务器证书。
 	•	✅ Google Cloud Private CA 颁发 客户端证书，GLB 进行验证。
