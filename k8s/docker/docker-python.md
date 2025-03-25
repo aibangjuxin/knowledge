@@ -67,3 +67,88 @@ graph TD;
 通过将初始化脚本的执行用 || echo "No extra setup provided." 做容错处理，确保脚本执行失败时不会中断整个构建流程。
 
 这样一个示例 Dockerfile 就能帮助你在 Ubuntu 24.04 上顺利构建 Python 3.12 环境，同时解决 pip 安装依赖时可能出现的问题。
+
+
+可以采用多种方法来验证和调试系统中 pip 安装的包的版本信息，以及了解可用的版本。以下是几种常见的方法和命令示例：
+
+⸻
+
+1. 使用 pip 命令查看已安装的包版本
+	•	列出所有已安装的包及其版本：
+
+pip freeze
+
+或者
+
+pip list
+
+
+	•	对比 requirements.txt 文件：
+你可以将 pip freeze 的输出与 requirements.txt 文件进行对比，确保版本一致。如果存在版本冲突，可能需要手动调整或更新。
+
+⸻
+
+2. 查看 pip 可用的包版本
+	•	使用 pip index（pip 23.0 及以上版本支持）：
+
+pip index versions <package_name>
+
+这个命令会显示指定包在 PyPI 上可用的所有版本，便于你调试版本依赖问题。
+
+	•	手动查询：
+如果 pip 版本较低，可以直接访问 PyPI 网站 搜索对应包，查看所有可用版本信息。
+
+⸻
+
+3. 检查系统中的 deb 包版本
+
+如果你的系统中还安装了通过 apt 管理的 deb 包，可以使用以下命令获取可用版本信息：
+	•	查看 deb 包的版本信息：
+
+apt-cache policy <package_name>
+
+该命令会显示当前安装的版本以及仓库中可用的其他版本。
+
+⸻
+
+4. 使用依赖树工具调试依赖冲突
+
+有时依赖冲突并不明显，可以使用工具生成依赖树：
+	•	安装 pipdeptree：
+
+pip install pipdeptree
+
+
+	•	生成依赖树：
+
+pipdeptree
+
+这样可以清楚地看到各个包之间的依赖关系，便于定位问题。
+
+⸻
+
+调试思路流程图
+
+下面是一个简单的 Mermaid 流程图，描述了验证和调试 pip 包版本的基本流程：
+```mermaid
+graph TD;
+    A[检查 requirements.txt 文件] --> B[执行 pip freeze 或 pip list];
+    B --> C[对比输出版本与 requirements.txt];
+    C --> D{版本是否匹配？};
+    D -- 是 --> E[系统配置正常];
+    D -- 否 --> F[使用 pip index 或访问 PyPI 查看可用版本];
+    F --> G[调整 requirements.txt 或升级/降级相关包];
+    G --> H[使用 pipdeptree 检查依赖关系];
+    H --> I[解决依赖冲突];
+
+```
+
+⸻
+
+总结
+	•	验证安装的版本： 使用 pip freeze 和 pip list 命令；
+	•	检查可用版本： 使用 pip index versions <package_name> 或直接访问 PyPI；
+	•	调试依赖冲突： 安装 pipdeptree 查看依赖树，确保依赖链正确；
+	•	针对 deb 包： 使用 apt-cache policy <package_name> 来查看系统中的 deb 包版本。
+
+通过以上方法，你可以系统地检查和调试 Ubuntu 环境中 pip 安装包的版本情况。
