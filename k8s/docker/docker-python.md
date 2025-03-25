@@ -152,3 +152,71 @@ graph TD;
 	•	针对 deb 包： 使用 apt-cache policy <package_name> 来查看系统中的 deb 包版本。
 
 通过以上方法，你可以系统地检查和调试 Ubuntu 环境中 pip 安装包的版本情况。
+
+
+当 apt 源需要认证时，你需要提供认证信息给 apt 更新命令，常见的方式是通过配置文件来实现。下面介绍两种方案：
+
+⸻
+
+1. 使用 Secret 文件在构建阶段挂载认证信息
+
+在 Dockerfile 中，可以利用 --mount=type=secret 挂载认证文件（例如 /etc/apt/auth.conf），内容格式类似于：
+
+machine your.repo.domain
+login your_username
+password your_password
+
+示例 Dockerfile 片段：
+
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 使用 secret 挂载认证信息，然后执行 apt update
+RUN --mount=type=secret,id=apt_auth,target=/etc/apt/auth.conf \
+    apt update --fix-missing -y
+
+构建时传入 secret 文件：
+
+docker build --secret id=apt_auth,src=/path/to/your/auth.conf -t myimage:debug .
+
+这种方式在构建时挂载认证文件，apt update 就能正确使用认证信息。
+
+⸻
+
+2. 手动在容器内创建认证文件
+
+如果你已经登录到容器中进行调试，可以手动创建认证文件。例如：
+
+cat <<EOF > /etc/apt/auth.conf
+machine your.repo.domain
+login your_username
+password your_password
+EOF
+
+然后执行：
+
+apt update --fix-missing -y
+
+这样 apt 就能使用 /etc/apt/auth.conf 里的认证信息来更新源。
+
+⸻
+
+调试流程图
+
+以下是一个简单的 Mermaid 流程图，描述如何在容器中操作：
+
+graph TD;
+    A[进入容器] --> B[创建 /etc/apt/auth.conf 文件];
+    B --> C[填写认证信息: machine, login, password];
+    C --> D[执行 apt update --fix-missing -y];
+    D --> E[认证通过，更新源成功];
+
+
+
+⸻
+
+总结
+	•	构建时：利用 --mount=type=secret 挂载认证文件，确保 apt update 时可用认证信息。
+	•	调试时：手动在容器内创建 /etc/apt/auth.conf 文件并填写认证信息，然后运行 apt update。
+
+这两种方式都能帮助你在 apt 源需要登录认证的场景下正常执行更新操作。
