@@ -11,6 +11,17 @@ owner AS Teamname,
 From `tab`
 where Id IS NOT NUll
 and REGEXP_CONTAINS(Id,r'^\d+$')
+
+
+Using select table
+
+select a.* from `project.tab` a
+where a.`Id` is not null
+and REGEXP_CONTAINS(a.`Id`,r'^\d+$')
+and a.`owner` is not null
+and a.`owner` not like '%test%'
+and a.`owner` not like '%TEST%'
+and a.`owner` not like '%Test%'
 ```
 ## API
 假如我现在有个SQL语句,查询结果出来是有三个字段,比如
