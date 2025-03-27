@@ -1,3 +1,8 @@
+# Requirements
+- [ ] 1. 从GCP的SQL查询出ID,Teamname,Platform
+- [ ] 2. 调用API获取ID-Name,Appservicename
+- [ ] 3. 写入到Bigquery里面
+## GCP SQL Query
 ```sql
 select 
 DISTINCT Id,
@@ -7,9 +12,7 @@ From `tab`
 where Id IS NOT NUll
 and REGEXP_CONTAINS(Id,r'^\d+$')
 ```
-
-
-
+## API
 假如我现在有个SQL语句,查询结果出来是有三个字段,比如
 1 ID 2 Teamname 3 Platform
 
@@ -27,7 +30,7 @@ and REGEXP_CONTAINS(Id,r'^\d+$')
 比如我通过循环这个ID拿到了一些我想要的值, 比如ID-Name,Appservicename,
 我还想增加2个字段比如Updatetime,CreateTime.那么我如何将查询的结果这些都写入到一个Bigquery里面,比如我的bigquery是project.aibang_api_data.chstatus
 
-这样我期待的结果是
+## 期待的结果是
 
 | ID  | Teamname | Platform | ID-Name | Appservicename | Updatetime | CreateTime |
 | --- | -------- | -------- | ------- | -------------- | ---------- | ---------- |
