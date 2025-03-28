@@ -1,3 +1,55 @@
+# using which cacerts to connect appdynamics
+1. 检查当前容器中使用的证书
+	•	查找证书存储位置：对于 Java 应用，证书通常存储在 keystore 中，并且可以通过以下方式查找：
+	•	在你提供的路径 /opt/azulsajava/lib/security/ 下，应该有一个名为 cacerts 或类似的 keystore 文件。默认情况下，Java 会使用该文件来验证与远程服务（如 AppDynamics）的 SSL/TLS 连接。
+	•	如果你使用的是 AppDynamics 的管理服务，并且需要更新证书，你可能需要在普通容器中查看这个文件。
+	•	验证当前证书：你可以使用 keytool 来检查 keystore 中是否已经有 AppDynamics 的证书。你需要列出 keystore 中所有的证书，并查找与 abcd.appdynamics.com 相关的证书。
+
+keytool -list -keystore /opt/azulsajava/lib/security/cacerts -v
+
+该命令将列出 keystore 中的所有证书。查找与 abcd.appdynamics.com 相关的证书，可以查看它的别名（alias）和证书详情（如有效期、序列号等）。
+
+2. 更新证书
+	•	导入新的证书：如果你需要更新 keystore 中的证书（例如，替换旧的 AppDynamics 证书），你可以使用 keytool 导入新的证书。假设你已经有新的证书文件（例如 appdynamics_cert.crt），你可以将它导入到 keystore 中：
+
+keytool -importcert -keystore /opt/azulsajava/lib/security/cacerts -file appdynamics_cert.crt -alias appdynamics -storepass changeit
+
+这将会将新证书导入 keystore，并将其与别名 appdynamics 关联。
+
+	•	替换证书：如果只是替换现有证书，你可以首先删除旧证书，再导入新证书：
+
+keytool -delete -alias appdynamics -keystore /opt/azulsajava/lib/security/cacerts -storepass changeit
+keytool -importcert -keystore /opt/azulsajava/lib/security/cacerts -file appdynamics_cert.crt -alias appdynamics -storepass changeit
+
+
+
+3. 确认容器使用的是普通证书而不是 Init Container 的证书
+	•	确认普通容器与 Init Container 使用不同证书：在 Kubernetes 中，Init Containers 通常用于初始化容器所需的配置、资源或环境设置，通常它们不会在应用层面上保持持久的状态。因此，你的应用容器（普通容器）应该使用专门的证书，而 Init Container 一般不涉及直接的生产环境连接。确保你所查看和更新的证书是普通容器中使用的，而非 Init Container 使用的临时证书。
+	•	检查容器内的证书路径：确保你的应用程序（普通容器）所使用的 cacerts 是你在普通容器中部署的证书库，而不是 Init Container 的临时证书库。你可以通过检查容器的配置文件（如环境变量、JVM 参数等）来确认：
+
+echo $JAVA_HOME
+
+或者在容器内使用 keytool 工具检查实际路径是否指向正确的证书文件：
+
+keytool -list -keystore $JAVA_HOME/lib/security/cacerts -v
+
+
+
+4. 验证证书是否生效
+	•	你可以使用 openssl 来测试与 AppDynamics 管理服务的连接是否使用了正确的证书。你可以使用如下命令来查看与 AppDynamics 服务建立的 SSL 连接的证书信息：
+
+openssl s_client -connect abcd.appdynamics.com:443
+
+这将会返回与 AppDynamics 服务器建立的 SSL 连接的信息，包括证书链和证书详细信息。确保返回的证书是你更新的证书。
+
+总结：
+	1.	检查普通容器中使用的 keystore，确保它使用的是你更新后的证书，而不是 Init Container 使用的证书。
+	2.	使用 keytool 检查并更新普通容器中的 keystore，导入正确的证书。
+	3.	使用 openssl 等工具验证连接是否使用了正确的证书，确保与 AppDynamics 的 SSL 连接是有效的。
+
+这样你就可以确保你更新的证书用于连接 AppDynamics 的管理服务，并且不会受到 Init Container 临时证书的影响。
+
+
 下面是关于 JVM 相关内存池的一些统计信息的解释，包括您提到的参数及其含义。我们将这些内存池的用途和统计指标进行说明。
 
 ### 参数解释
