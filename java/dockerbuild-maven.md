@@ -14,6 +14,107 @@ Maven Build 的主要任务
 
 Maven 只关注 Java 项目的构建、依赖管理和测试，而不涉及将项目部署到容器化环境中运行。
 
+以下是一个包含 maven build.sh 的 Dockerfile 示例，并支持 SonarQube 代码质量检查。该 Dockerfile 会执行以下任务：
+	1.	安装 Maven 并构建项目：使用 maven build.sh 执行 mvn clean install 。
+	2.	集成 SonarQube：执行 mvn sonar:sonar 进行代码质量检查。
+	3.	打包最终的应用：使用 mvn package 构建 JAR 文件，并将其复制到最终的运行容器中。
+
+⸻
+
+目录结构示例：
+
+my-service/
+│── src/                   # 你的 Java 源代码
+│── pom.xml                # Maven 配置文件
+│── Dockerfile             # Docker 构建文件
+│── build.sh               # Maven 构建脚本
+
+
+
+⸻
+
+build.sh（Maven 构建脚本）
+```bash
+#!/bin/bash
+set -e
+
+echo "Running Maven build..."
+mvn clean install -DskipTests
+
+echo "Running SonarQube analysis..."
+mvn sonar:sonar \
+    -Dsonar.projectKey=my-service \
+    -Dsonar.host.url=http://sonarqube:9000 \
+    -Dsonar.login=my-sonar-token
+```
+说明：
+	•	mvn clean install -DskipTests：跳过测试，编译和安装依赖。
+	•	mvn sonar:sonar：执行 SonarQube 代码扫描。
+	•	-Dsonar.host.url=http://sonarqube:9000：SonarQube 服务器地址。
+	•	-Dsonar.login=my-sonar-token：SonarQube 认证 Token。
+
+⸻
+
+```Dockerfile
+
+# 使用官方 Maven 作为构建环境
+FROM maven:3.8.6-openjdk-17 AS builder
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制 Maven 配置文件（加速构建）
+COPY pom.xml ./
+RUN mvn dependency:go-offline
+
+# 复制源代码
+COPY src ./src
+COPY build.sh ./
+
+# 给予 build.sh 执行权限
+RUN chmod +x build.sh
+
+# 运行 Maven 构建和 SonarQube 检查
+RUN ./build.sh
+
+# 使用 OpenJDK 作为运行时环境
+FROM openjdk:17-jdk-slim
+
+# 设置工作目录
+WORKDIR /app
+
+# 从构建阶段复制 JAR 包
+COPY --from=builder /app/target/*.jar app.jar
+
+# 暴露端口
+EXPOSE 8080
+
+# 运行 Spring Boot 应用
+CMD ["java", "-jar", "app.jar"]
+```
+
+
+⸻
+
+使用方法：
+	1.	构建 Docker 镜像
+
+docker build -t my-service .
+
+
+	2.	运行容器
+
+docker run -p 8080:8080 my-service
+
+
+	3.	使用 SonarQube
+如果你的 SonarQube 运行在 http://localhost:9000，确保你已经配置了 my-sonar-token 并且服务可用。
+
+⸻
+
+这个 Dockerfile 结合了 Maven 构建、SonarQube 代码扫描 和 Docker 容器化，确保在 CI/CD 过程中代码质量和可复用性。如果你有更复杂的需求，比如 多阶段构建、缓存优化，也可以进一步调整。🚀
+
+
 2. Docker Image Build
 
 Docker Image Build 是通过 Dockerfile 构建一个包含所有依赖、应用和环境的 操作系统级镜像。这是一个独立的打包过程，可以在任何支持 Docker 的环境中运行。
