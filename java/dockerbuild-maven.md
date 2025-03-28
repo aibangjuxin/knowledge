@@ -22,15 +22,13 @@ Maven 只关注 Java 项目的构建、依赖管理和测试，而不涉及将�
 ⸻
 
 目录结构示例：
-
+```bash
 my-service/
 │── src/                   # 你的 Java 源代码
 │── pom.xml                # Maven 配置文件
 │── Dockerfile             # Docker 构建文件
 │── build.sh               # Maven 构建脚本
-
-
-
+```
 ⸻
 
 build.sh（Maven 构建脚本）
@@ -93,7 +91,8 @@ EXPOSE 8080
 CMD ["java", "-jar", "app.jar"]
 ```
 
-
+Starting from version 2.0, we provide custom Dockerfile support. You can use custom Dockerfiles in your project to implement customized build processes.
+以下是一个示例的自定义 Dockerfile，它结合了 Maven 构建、SonarQube 代码扫描 和 Docker 容器化，确保在 CI/CD 过程中代码质量和可复用性。
 ⸻
 
 使用方法：
@@ -115,7 +114,7 @@ docker run -p 8080:8080 my-service
 这个 Dockerfile 结合了 Maven 构建、SonarQube 代码扫描 和 Docker 容器化，确保在 CI/CD 过程中代码质量和可复用性。如果你有更复杂的需求，比如 多阶段构建、缓存优化，也可以进一步调整。🚀
 
 
-2. Docker Image Build
+1. Docker Image Build
 
 Docker Image Build 是通过 Dockerfile 构建一个包含所有依赖、应用和环境的 操作系统级镜像。这是一个独立的打包过程，可以在任何支持 Docker 的环境中运行。
 
