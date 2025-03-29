@@ -1,4 +1,11 @@
-# Recent Technical Work Achievements
+# summary 
+Here are some of the work cases we have completed recently.  
+resilience
+We have added affinity features for user deployments in the environment. This ensures that the container groups (Pods) under the same user deployment are distributed across different nodes, thereby ensuring high availability during rolling updates of the deployment.  
+In addition, we have currently configured Pod Disruption Budget (PDB) resources for core components. This ensures service high availability during Google Kubernetes Engine (GKE) upgrade processes.  
+Security 
+Regarding aibang requirements for internal Web Application Firewall (WAF) rules, we have migrated from the GKE ingress to the GKE gateway. In the long term, the gateway is Google's direction for long-term support and also a trend for future development.
+# Recent Technical Work
 ## Resilience Enhancements
 
 ### Affinity Features for User Deployments
@@ -38,7 +45,37 @@
                 topologyKey: topology.kubernetes.io/zone
       automountServiceAccountToken: false
     ```
+```mermaid
+graph TB
+    subgraph "Kubernetes Cluster"
+        subgraph "Node 1"
+            Pod1[Pod 1 User Deployment A]
+            Pod3[Pod 1 User Deployment B]
+        end
+        subgraph "Node 2"
+            Pod2[Pod 2 User Deployment A]
+            Pod4[Pod 2 User Deployment B]
+        end
+        subgraph "Node 3"
+            Pod5[Pod 3 User Deployment A]
+            Pod6[Pod 3 User Deployment B]
+        end
+    end
+    
+    classDef node fill:#f9f9f9,stroke:#999,stroke-width:1px;
+    classDef podA fill:#c2e0ff,stroke:#6baed6,stroke-width:2px;
+    classDef podB fill:#d4e4cb,stroke:#74c476,stroke-width:2px;
+    
+    class Node1,Node2,Node3 node;
+    class Pod1,Pod2,Pod5 podA;
+    class Pod3,Pod4,Pod6 podB;
+    
+    AntiAffinityRule[Pod Anti-Affinity Rule topologyKey: kubernetes.io/hostname]
+    AntiAffinityRule -->|Distributes| Pod1
+    AntiAffinityRule -->|Distributes| Pod2
+    AntiAffinityRule -->|Distributes| Pod5
 
+```
 
 ### Pod Disruption Budget (PDB) for Core Components
 ![PDB Working Mechanism]
@@ -61,6 +98,59 @@
   - ✅ Service high availability during GKE upgrade processes
   - ✅ Ensuring critical services are not completely interrupted
   - ✅ More robust and secure automated operations
+
+```mermaid
+graph TB
+        subgraph "GKE Cluster Node Drain"
+            subgraph "Initial State"
+                subgraph "Node 1"
+                    Pod1I[Pod 1<br>Deployment A]:::running
+                end
+                subgraph "Node 2"
+                    Pod2I[Pod 2<br>Deployment A]:::running
+                end
+                subgraph "Node 3"
+                    Pod3I[Pod 3<br>Deployment A]:::running
+                end
+            end
+        
+        subgraph "During Node 1 Drain"
+            subgraph "Node 1 (Draining)" 
+                Pod1D[Pod 1<br>Deployment A]:::draining
+            end
+            subgraph "Node 2 (Active)"
+                Pod2D[Pod 2<br>Deployment A]:::running
+            end
+            subgraph "Node 3 (Active)"
+                Pod3D[Pod 3<br>Deployment A]:::running
+                PDB[PDB<br>minAvailable: 1]
+            end
+            
+            PDB -->|Allows drain| Pod1D
+            PDB -->|Enforces availability| Pod2D
+            PDB -->|Enforces availability| Pod3D
+            AntiAffinityD[Pod Anti-Affinity]
+            AntiAffinityD -->|Ensures distribution| Pod1D
+            AntiAffinityD -->|Ensures distribution| Pod2D
+            AntiAffinityD -->|Ensures distribution| Pod3D
+        end
+        
+        subgraph "Without PDB & Anti-Affinity"
+            subgraph "Node X (Single Node)" 
+                Pod1W[Pod 1<br>Deployment A]:::draining
+                Pod2W[Pod 2<br>Deployment A]:::draining
+                Pod3W[Pod 3<br>Deployment A]:::draining
+            end
+            Danger[Service Disruption!]:::danger
+        end
+    end
+    
+    classDef running fill:#d4e4cb,stroke:#74c476,stroke-width:2px;
+    classDef draining fill:#ffd8b1,stroke:#f5a464,stroke-width:2px,stroke-dasharray: 5 2;
+    classDef danger fill:#f8d7da,stroke:#dc3545,stroke-width:2px;
+
+```
+
 
 ## Security Enhancements
 
@@ -214,8 +304,7 @@ graph TB
 - PDB
 
 
-
-理解了，我会根据你的实际情况再次调整图表，更准确地反映在节点逐个排水和升级的场景下，反亲和性与PDB如何协同工作。
+在节点逐个排水和升级的场景下，反亲和性与PDB如何协同工作。
 
 ```mermaid
 graph TB
@@ -269,7 +358,6 @@ graph TB
 
 ```
 
-我已经更新了图表，现在它更准确地反映了你描述的实际情况：
 
 1. **反亲和性与PDB的协同工作**：
    - 反亲和性确保同一部署的Pod分布在不同节点上
