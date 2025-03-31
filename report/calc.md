@@ -1,3 +1,383 @@
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GKE 成本计算器</title>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-dark: #0d47a1;
+            --secondary: #34a853;
+            --light-bg: #f8f9fa;
+            --border: #dadce0;
+            --text: #202124;
+            --text-secondary: #5f6368;
+            --error: #ea4335;
+            --shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text);
+            background-color: var(--light-bg);
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 30px;
+        }
+        
+        .header {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            color: var(--primary);
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: var(--text-secondary);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: var(--text);
+        }
+        
+        .input-group {
+            display: flex;
+            align-items: center;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 16px;
+            transition: border 0.2s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+        }
+        
+        .suffix {
+            margin-left: 10px;
+            color: var(--text-secondary);
+            font-weight: 500;
+            min-width: 40px;
+        }
+        
+        .buttons {
+            display: flex;
+            justify-content: center;
+            margin-top: 30px;
+        }
+        
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 16px;
+            font-weight: 500;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        
+        button:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        .reset-btn {
+            background-color: transparent;
+            color: var(--primary);
+            margin-left: 15px;
+        }
+        
+        .reset-btn:hover {
+            background-color: rgba(26, 115, 232, 0.1);
+        }
+        
+        .result {
+            margin-top: 30px;
+            text-align: center;
+            padding: 20px;
+            border-radius: 4px;
+            background-color: var(--light-bg);
+            display: none;
+        }
+        
+        .result.show {
+            display: block;
+            animation: fadeIn 0.4s;
+        }
+        
+        .result-value {
+            font-size: 36px;
+            font-weight: 600;
+            color: var(--secondary);
+            margin: 10px 0;
+        }
+        
+        .result-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+            text-align: left;
+        }
+        
+        .detail-item {
+            padding: 10px;
+            background-color: white;
+            border-radius: 4px;
+            border-left: 3px solid var(--primary);
+        }
+        
+        .detail-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .detail-value {
+            font-weight: 500;
+        }
+        
+        .error-message {
+            color: var(--error);
+            font-size: 14px;
+            margin-top: 6px;
+            display: none;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+            
+            .result-details {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>GKE 成本计算器</h1>
+            <p>计算您的 Google Kubernetes Engine 估计成本</p>
+        </div>
+        
+        <div class="form-group">
+            <label for="cpu">CPU 数量 (vCPU)</label>
+            <div class="input-group">
+                <input type="number" id="cpu" min="0" step="1" placeholder="输入CPU数量">
+                <span class="suffix">vCPU</span>
+            </div>
+            <div class="error-message" id="cpu-error">请输入有效的CPU数量</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="memory">内存大小</label>
+            <div class="input-group">
+                <input type="number" id="memory" min="0" step="0.5" placeholder="输入内存大小">
+                <span class="suffix">GB</span>
+            </div>
+            <div class="error-message" id="memory-error">请输入有效的内存大小</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="maxReplicas">最大副本数</label>
+            <div class="input-group">
+                <input type="number" id="maxReplicas" min="1" step="1" value="4" placeholder="输入最大副本数">
+                <span class="suffix">个</span>
+            </div>
+            <div class="error-message" id="replicas-error">请输入至少1个副本</div>
+        </div>
+        
+        <div class="buttons">
+            <button id="calculate-btn" onclick="calculateCost()">计算成本</button>
+            <button class="reset-btn" onclick="resetForm()">重置</button>
+        </div>
+        
+        <div class="result" id="result-container">
+            <h2>估计每月成本</h2>
+            <div class="result-value" id="result">$0.00</div>
+            
+            <div class="result-details">
+                <div class="detail-item">
+                    <div class="detail-label">基础成本</div>
+                    <div class="detail-value" id="base-cost">$180.00</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">资源成本</div>
+                    <div class="detail-value" id="resource-cost">$0.00</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">CPU 成本</div>
+                    <div class="detail-value" id="cpu-cost">$0.00</div>
+                </div>
+                <div class="detail-item">
+                    <div class="detail-label">内存成本</div>
+                    <div class="detail-value" id="memory-cost">$0.00</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function validateInput(id, errorId, errorMessage) {
+            const input = document.getElementById(id);
+            const errorElement = document.getElementById(errorId);
+            const value = parseFloat(input.value);
+            
+            if (isNaN(value) || value < 0 || input.value === '') {
+                errorElement.textContent = errorMessage;
+                errorElement.style.display = 'block';
+                input.style.borderColor = 'var(--error)';
+                return false;
+            } else {
+                errorElement.style.display = 'none';
+                input.style.borderColor = 'var(--border)';
+                return true;
+            }
+        }
+        
+        function calculateCost() {
+            const cpuValid = validateInput('cpu', 'cpu-error', '请输入有效的CPU数量');
+            const memoryValid = validateInput('memory', 'memory-error', '请输入有效的内存大小');
+            const replicasValid = validateInput('maxReplicas', 'replicas-error', '请输入至少1个副本');
+            
+            if (!cpuValid || !memoryValid || !replicasValid) {
+                return;
+            }
+            
+            let cpu = parseFloat(document.getElementById("cpu").value) || 0;
+            let memory = parseFloat(document.getElementById("memory").value) || 0;
+            let maxReplicas = parseInt(document.getElementById("maxReplicas").value) || 4;
+            
+            let base_cost = 180;
+            let cpu_cost = 19 * cpu * maxReplicas / 2;
+            let memory_cost = 19 * memory * maxReplicas / 2;
+            let resource_cost = cpu_cost + memory_cost;
+            let total_cost = base_cost + resource_cost;
+            
+            document.getElementById("result").innerText = "$" + total_cost.toFixed(2);
+            document.getElementById("base-cost").innerText = "$" + base_cost.toFixed(2);
+            document.getElementById("resource-cost").innerText = "$" + resource_cost.toFixed(2);
+            document.getElementById("cpu-cost").innerText = "$" + cpu_cost.toFixed(2);
+            document.getElementById("memory-cost").innerText = "$" + memory_cost.toFixed(2);
+            
+            document.getElementById("result-container").classList.add("show");
+        }
+        
+        function resetForm() {
+            document.getElementById("cpu").value = "";
+            document.getElementById("memory").value = "";
+            document.getElementById("maxReplicas").value = "4";
+            
+            document.getElementById("cpu-error").style.display = 'none';
+            document.getElementById("memory-error").style.display = 'none';
+            document.getElementById("replicas-error").style.display = 'none';
+            
+            document.getElementById("cpu").style.borderColor = 'var(--border)';
+            document.getElementById("memory").style.borderColor = 'var(--border)';
+            document.getElementById("maxReplicas").style.borderColor = 'var(--border)';
+            
+            document.getElementById("result-container").classList.remove("show");
+        }
+    </script>
+</body>
+</html>
+``` 
+ 是的，你可以很容易地使用GitHub Pages来发布这个静态页面。这是一种免费且简单的方法来托管你的GKE成本计算器。以下是具体步骤：
+
+### 使用GitHub Pages发布静态页面
+
+1. **创建GitHub账户**（如果你还没有）
+
+2. **创建新仓库**
+   - 登录GitHub并点击右上角的"+"图标
+   - 选择"New repository"
+   - 为仓库命名，例如"gke-cost-calculator"
+   - 保持仓库为"Public"（GitHub Pages需要公开仓库，除非你使用GitHub Pro）
+   - 点击"Create repository"
+
+3. **上传HTML文件**
+   - 在新创建的仓库中，点击"Add file" > "Upload files"
+   - 将我们之前创建的HTML文件拖拽到上传区域
+   - 重命名为"index.html"（这很重要，因为GitHub Pages会将其作为默认页面）
+   - 点击"Commit changes"
+
+4. **启用GitHub Pages**
+   - 在仓库页面，点击"Settings"
+   - 向下滚动到"GitHub Pages"部分
+   - 在"Source"下拉菜单中，选择"main"分支
+   - 点击"Save"
+   - GitHub会显示你的页面URL，通常是 `https://你的用户名.github.io/gke-cost-calculator/`
+
+5. **访问你的页面**
+   - 几分钟后，你的GKE成本计算器将在提供的URL上可用
+   - 你可以将此URL嵌入到Google Dashboard中
+
+### 进一步改进（可选）
+
+1. **添加自定义域名**
+   - 在仓库设置的GitHub Pages部分，你可以配置自定义域名
+   - 这样你的计算器URL可以是 `https://calculator.yourdomain.com`
+
+2. **使用分支管理更新**
+   - 创建开发分支进行更改
+   - 测试后再合并到main分支发布
+
+3. **添加README文件**
+   - 解释计算器的用途和使用方法
+   - 提供有关计算公式的信息
+
+4. **使用版本控制**
+   - 利用GitHub的版本控制功能跟踪对计算器的更改
+
+GitHub Pages是一个非常适合托管这类简单静态工具的平台，它提供了免费、可靠的托管，并且与GitHub的版本控制功能无缝集成，便于你管理和更新计算器。​​​​​​​​​​​​​​​​
+
+
+
 如果要快速搭建一个简单的页面，类似 Google 产品的计费页面，可以考虑以下方案：
 
 方案 1：Streamlit（Python 快速构建 Web 应用）
