@@ -52,7 +52,7 @@ streamlit run app.py
 pip install flask
 
 2. 创建 app.py
-
+```python
 from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
@@ -78,9 +78,9 @@ def calculate():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
+```
 3. 创建 templates/index.html
-
+```html
 <!DOCTYPE html>
 <html>
 <head>
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     <p id="result"></p>
 </body>
 </html>
-
+```
 4. 运行
 
 python app.py
@@ -177,7 +177,7 @@ https://YOUR_REGION-YOUR_PROJECT_ID.cloudfunctions.net/gke-cost-calculator
 2. 纯 HTML + JS 前端
 
 你的 HTML 直接调用这个 API 计算：
-
+```html
 <!DOCTYPE html>
 <html>
 <head>
@@ -208,7 +208,7 @@ https://YOUR_REGION-YOUR_PROJECT_ID.cloudfunctions.net/gke-cost-calculator
     <p id="result"></p>
 </body>
 </html>
-
+```
 最终效果
 	•	这个 HTML 页面可以直接在 Cloud Storage 作为静态网站 托管。
 	•	用户输入 CPU、内存、存储大小，前端调用 Google Cloud Functions 计算费用并返回结果。
