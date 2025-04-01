@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GKE 成本计算器</title>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-light: #e8f0fe;
+            --secondary: #34a853;
+            --secondary-light: #e6f4ea;
+            --border: #dadce0;
+            --text: #202124;
+            --text-secondary: #5f6368;
+            --bg-light: #f8f9fa;
+            --shadow: 0 1px 2px rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Google Sans', 'Segoe UI', Arial, sans-serif;
+        }
+        
+        body {
+            color: var(--text);
+            background-color: #fff;
+            line-height: 1.5;
+            font-size: 14px;
+            overflow-x: hidden;
+        }
+        
+        .header {
+            background-color: white;
+            padding: 16px 24px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 10;
+        }
+        
+        .header-content {
+            display: flex;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .logo {
+            font-size: 20px;
+            font-weight: 500;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+        }
+        
+        .logo-icon {
+            margin-right: 8px;
+            width: 24px;
+            height: 24px;
+            background-color: var(--primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .calculator-container {
+            display: flex;
+            max-width: 1400px;
+            margin: 0 auto;
+            position: relative;
+            height: calc(100vh - 60px);
+        }
+        
+        .configuration-panel {
+            width: 400px;
+            min-width: 300px;
+            background-color: white;
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            transition: width 0.3s ease;
+            height: 100%;
+            padding: 24px;
+        }
+        
+        .resizer {
+            width: 8px;
+            background-color: var(--border);
+            cursor: col-resize;
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 400px;
+            z-index: 5;
+            transition: background-color 0.2s;
+        }
+        
+        .resizer:hover, .resizer.active {
+            background-color: var(--primary);
+        }
+        
+        .result-panel {
+            flex: 1;
+            padding: 24px;
+            background-color: var(--bg-light);
+            overflow-y: auto;
+            height: 100%;
+        }
+        
+        .section {
+            margin-bottom: 24px;
+        }
+        
+        .section-title {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            color: var(--text);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            font-size: 14px;
+            color: var(--text);
+        }
+        
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        
+        input[type="number"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+        
+        input[type="number"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+        }
+        
+        .input-suffix {
+            position: absolute;
+            right: 12px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            pointer-events: none;
+        }
+        
+        .help-text {
+            margin-top: 4px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        
+        .input-slider {
+            width: 100%;
+            margin: 16px 0;
+        }
+        
+        .slider-container {
+            margin-top: 8px;
+        }
+        
+        .slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: var(--border);
+            outline: none;
+            border-radius: 2px;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+        }
+        
+        .slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+            border: none;
+        }
+        
+        .range-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        
+        .button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .button:hover {
+            background-color: #1765cc;
+        }
+        
+        .cost-summary {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        
+        .total-cost {
+            font-size: 32px;
+            font-weight: 500;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+        
+        .cost-period {
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+        }
+        
+        .cost-breakdown {
+            margin-top: 24px;
+        }
+        
+        .cost-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-top: 1px solid var(--border);
+        }
+        
+        .cost-item-label {
+            color: var(--text);
+        }
+        
+        .cost-item-value {
+            font-weight: 500;
+        }
+        
+        .info-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        
+        .info-card-title {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 12px;
+            color: var(--primary);
+        }
+        
+        .info-card-content {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .info-card-list {
+            list-style: none;
+            margin-top: 12px;
+        }
+        
+        .info-card-list li {
+            margin-bottom: 8px;
+            position: relative;
+            padding-left: 20px;
+        }
+        
+        .info-card-list li:before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 7px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: var(--secondary);
+        }
+        
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            .calculator-container {
+                flex-direction: column;
+                height: auto;
+            }
+            
+            .configuration-panel {
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+            }
+            
+            .resizer {
+                display: none;
+            }
+            
+            .result-panel {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">G</div>
+                GKE 成本计算器
+            </div>
+        </div>
+    </div>
+    
+    <div class="calculator-container">
+        <div class="configuration-panel" id="configPanel">
+            <div class="section">
+                <div class="section-title">计算 GKE 集群成本</div>
+                <div class="form-group">
+                    <label for="cpu">CPU 数量 (vCPU)</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="cpu" min="0" step="1" value="2" onchange="updateCost(); updateSliderValue('cpuSlider', 'cpu');">
+                        <span class="input-suffix">vCPU</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" min="0" max="96" value="2" class="slider" id="cpuSlider" oninput="updateInputValue('cpu', 'cpuSlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>0</span>
+                            <span>96</span>
+                        </div>
+                    </div>
+                    <div class="help-text">每个节点的CPU核心数量</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="memory">内存大小 (GB)</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="memory" min="0" step="0.5" value="4" onchange="updateCost(); updateSliderValue('memorySlider', 'memory');">
+                        <span class="input-suffix">GB</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" min="0" max="128" value="4" step="0.5" class="slider" id="memorySlider" oninput="updateInputValue('memory', 'memorySlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>0</span>
+                            <span>128</span>
+                        </div>
+                    </div>
+                    <div class="help-text">每个节点的内存大小</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="maxReplicas">最大副本数</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="maxReplicas" min="1" step="1" value="4" onchange="updateCost(); updateSliderValue('replicasSlider', 'maxReplicas');">
+                        <span class="input-suffix">个</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" min="1" max="20" value="4" class="slider" id="replicasSlider" oninput="updateInputValue('maxReplicas', 'replicasSlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>1</span>
+                            <span>20</span>
+                        </div>
+                    </div>
+                    <div class="help-text">集群中节点的最大副本数</div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <button class="button" onclick="updateCost()">更新成本估算</button>
+            </div>
+        </div>
+        
+        <div class="resizer" id="resizer"></div>
+        
+        <div class="result-panel">
+            <div class="cost-summary">
+                <div class="total-cost" id="totalCostDisplay">$180.00</div>
+                <div class="cost-period">预估每月成本</div>
+                
+                <div class="cost-breakdown">
+                    <div class="cost-item">
+                        <div class="cost-item-label">基础设施成本</div>
+                        <div class="cost-item-value">$180.00</div>
+                    </div>
+                    
+                    <div class="cost-item">
+                        <div class="cost-item-label">CPU 成本</div>
+                        <div class="cost-item-value" id="cpuCostDisplay">$0.00</div>
+                    </div>
+                    
+                    <div class="cost-item">
+                        <div class="cost-item-label">内存成本</div>
+                        <div class="cost-item-value" id="memoryCostDisplay">$0.00</div>
+                    </div>
+                    
+                    <div class="cost-item">
+                        <div class="cost-item-label">副本成本系数</div>
+                        <div class="cost-item-value" id="replicaFactorDisplay">x2.00</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="info-card">
+                <div class="info-card-title">计算说明</div>
+                <div class="info-card-content">
+                    此计算器基于以下公式估算 GKE 集群的每月成本：
+                    <div class="info-card-list">
+                        <li>基础成本: $180/月</li>
+                        <li>每 vCPU 的成本: $19 × vCPU数量 × 副本数 ÷ 2</li>
+                        <li>每 GB内存 的成本: $19 × 内存GB × 副本数 ÷ 2</li>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="info-card">
+                <div class="info-card-title">优化建议</div>
+                <div class="info-card-content">
+                    <div class="info-card-list">
+                        <li>考虑使用承诺使用折扣 (CUDs) 以节省长期运行工作负载的成本</li>
+                        <li>为无状态应用配置自动扩缩以优化资源利用率</li>
+                        <li>评估使用抢占式虚拟机以降低非关键工作负载的成本</li>
+                        <li>定期监控和审核集群资源利用率，调整规格以避免过度配置</li>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 成本计算函数
+        function calculateCost() {
+            let cpu = parseFloat(document.getElementById("cpu").value) || 0;
+            let memory = parseFloat(document.getElementById("memory").value) || 0;
+            let maxReplicas = parseInt(document.getElementById("maxReplicas").value) || 4;
+            
+            let base_cost = 180;
+            let cpu_cost = 19 * cpu * maxReplicas / 2;
+            let memory_cost = 19 * memory * maxReplicas / 2;
+            let total_cost = base_cost + cpu_cost + memory_cost;
+            
+            return {
+                total: total_cost,
+                base: base_cost,
+                cpu: cpu_cost,
+                memory: memory_cost,
+                replicaFactor: maxReplicas / 2
+            };
+        }
+        
+        // 更新成本显示
+        function updateCost() {
+            const costs = calculateCost();
+            
+            document.getElementById("totalCostDisplay").innerText = "$" + costs.total.toFixed(2);
+            document.getElementById("cpuCostDisplay").innerText = "$" + costs.cpu.toFixed(2);
+            document.getElementById("memoryCostDisplay").innerText = "$" + costs.memory.toFixed(2);
+            document.getElementById("replicaFactorDisplay").innerText = "x" + costs.replicaFactor.toFixed(2);
+        }
+        
+        // 滑块与输入框同步
+        function updateInputValue(inputId, sliderId) {
+            const slider = document.getElementById(sliderId);
+            const input = document.getElementById(inputId);
+            input.value = slider.value;
+        }
+        
+        function updateSliderValue(sliderId, inputId) {
+            const slider = document.getElementById(sliderId);
+            const input = document.getElementById(inputId);
+            slider.value = input.value;
+        }
+        
+        // 分隔条拖动功能
+        const resizer = document.getElementById('resizer');
+        const configPanel = document.getElementById('configPanel');
+        
+        let isResizing = false;
+        
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('active');
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', () => {
+                isResizing = false;
+                resizer.classList.remove('active');
+                document.removeEventListener('mousemove', handleMouseMove);
+            });
+        });
+        
+        function handleMouseMove(e) {
+            if (!isResizing) return;
+            
+            const containerLeft = document.querySelector('.calculator-container').getBoundingClientRect().left;
+            const newWidth = e.clientX - containerLeft;
+            
+            // 限制最小和最大宽度
+            if (newWidth >= 300 && newWidth <= 700) {
+                configPanel.style.width = newWidth + 'px';
+                resizer.style.left = newWidth + 'px';
+            }
+        }
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            updateCost();
+        });
+    </script>
+</body>
+</html>
