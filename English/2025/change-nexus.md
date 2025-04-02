@@ -7,3 +7,6 @@ Continue to use the old Ubuntu Images 2004.
 However, since the Nexus source is no longer supported, users need to replace the configuration in the Dockerfile to continue using the old Python3.9 and be able to use the new Nexus source.
 The core modified configuration is as follows.
 With the above configuration, it is possible to successfully use ubuntu20.04 + Nexus + Python3.9.
+
+
+During the support process, we found that users are not very familiar with Dockerfile. They are not familiar with some slightly complex statements or debugging techniques. So, it requires us to put in a bit more effort. Moreover, our 2.0 version supports user - defined settings, which is quite different from the standard templates we provide. Therefore, debugging takes time.
