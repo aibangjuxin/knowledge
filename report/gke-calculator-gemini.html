@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GKE 成本计算器 (美化版)</title>
+    <style>
+        :root {
+            --primary: #1a73e8; /* Google Blue */
+            --primary-dark: #1765cc;
+            --primary-light: #e8f0fe;
+            --secondary: #34a853; /* Google Green */
+            --secondary-light: #e6f4ea;
+            --border: #dadce0; /* Google Border Grey */
+            --text: #202124; /* Google Text Black */
+            --text-secondary: #5f6368; /* Google Text Grey */
+            --bg-main: #f8f9fa; /* Light grey background */
+            --bg-panel: #ffffff; /* White panel background */
+            --shadow: 0 1px 2px rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+            --input-height: 40px; /* Consistent input height */
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            /* Prefer Google Sans, fallback to common system fonts */
+            font-family: 'Google Sans', Roboto, 'Noto Sans SC', 'Segoe UI', Arial, sans-serif;
+        }
+
+        html {
+            font-size: 100%; /* Base font size */
+        }
+
+        body {
+            color: var(--text);
+            background-color: var(--bg-main); /* Use light grey for body */
+            line-height: 1.6; /* Slightly increased line height */
+            font-size: 14px;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background-color: var(--bg-panel);
+            padding: 12px 24px; /* Adjusted padding */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); /* Slightly softer shadow */
+            position: sticky; /* Make header sticky */
+            top: 0;
+            z-index: 100;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .logo {
+            font-size: 18px; /* Adjusted size */
+            font-weight: 500;
+            color: var(--text); /* Standard text color */
+            display: flex;
+            align-items: center;
+        }
+
+        .logo-icon {
+            margin-right: 10px; /* Increased spacing */
+            width: 28px; /* Adjusted size */
+            height: 28px;
+            background-color: var(--primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 16px; /* Adjusted font size */
+        }
+
+        .calculator-container {
+            display: flex;
+            max-width: 1400px;
+            margin: 0 auto; /* Center container */
+            position: relative;
+            /* Adjust height considering sticky header (approx height 53px) */
+            height: calc(100vh - 53px);
+        }
+
+        .configuration-panel {
+            width: 400px;
+            min-width: 300px;
+            background-color: var(--bg-panel); /* White background */
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            transition: width 0.3s ease;
+            height: 100%;
+            padding: 32px; /* Increased padding */
+        }
+
+        .resizer {
+            width: 8px;
+            background-color: transparent; /* Make transparent by default */
+            cursor: col-resize;
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 400px;
+            z-index: 5;
+            transition: background-color 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        /* Add a visual indicator inside the resizer */
+        .resizer::after {
+            content: '';
+            display: block;
+            width: 2px;
+            height: 40px;
+            background-color: var(--border);
+            transition: background-color 0.2s ease;
+            border-radius: 1px;
+        }
+
+
+        .resizer:hover, .resizer.active {
+             /* No background on hover, just change the inner indicator */
+        }
+         .resizer:hover::after, .resizer.active::after {
+             background-color: var(--primary);
+        }
+
+        .result-panel {
+            flex: 1;
+            padding: 32px; /* Increased padding */
+            background-color: var(--bg-main); /* Match body background */
+            overflow-y: auto;
+            height: 100%;
+        }
+
+        .section {
+            margin-bottom: 32px; /* Increased spacing */
+        }
+
+        .section-title {
+            font-size: 18px; /* Larger section title */
+            font-weight: 500;
+            margin-bottom: 24px; /* Increased spacing */
+            color: var(--text);
+            padding-bottom: 8px; /* Add space below title */
+            border-bottom: 1px solid var(--border); /* Add subtle separator */
+        }
+
+        .form-group {
+            margin-bottom: 24px; /* Increased spacing */
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500; /* Bolder label */
+            font-size: 13px; /* Slightly smaller label */
+            color: var(--text);
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            height: var(--input-height); /* Consistent height */
+            padding: 0 12px; /* Adjusted padding */
+            padding-right: 50px; /* Space for suffix */
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+            background-color: #fff; /* Ensure white background */
+        }
+        /* Remove spinner buttons for number input */
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        input[type=number] {
+          -moz-appearance: textfield; /* Firefox */
+        }
+
+
+        input[type="number"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+        }
+
+        .input-suffix {
+            position: absolute;
+            right: 12px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            pointer-events: none;
+            line-height: var(--input-height); /* Align vertically */
+        }
+
+        .help-text {
+            margin-top: 6px; /* Adjusted spacing */
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .slider-container {
+            margin-top: 12px; /* Adjusted spacing */
+            margin-bottom: 8px;
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            appearance: none; /* Override default look */
+            width: 100%;
+            height: 6px; /* Slightly thicker track */
+            background: #e0e0e0; /* Lighter grey track */
+            outline: none;
+            border-radius: 3px;
+            cursor: pointer;
+             transition: background 0.2s ease;
+        }
+         .slider:hover {
+            background: #d0d0d0;
+        }
+
+        /* Slider Thumb */
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px; /* Larger thumb */
+            height: 18px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+            border: 2px solid white; /* White border for contrast */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2); /* Subtle shadow */
+            margin-top: -6px; /* Adjust vertical position ( (thumb height + border*2 - track height) / 2 ) = (18+4-6)/2 = 8 -> negative value centers it*/
+        }
+
+        .slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .range-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px; /* Adjusted spacing */
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0 24px; /* Use padding for horizontal size */
+            height: 40px; /* Consistent height */
+            line-height: 40px; /* Vertically center text */
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s, box-shadow 0.2s;
+            outline: none;
+            display: inline-block; /* Allow height/padding */
+            text-align: center;
+        }
+
+        .button:hover {
+            background-color: var(--primary-dark);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+         .button:focus {
+            box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.3);
+         }
+
+        .cost-summary {
+            background-color: var(--bg-panel);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 24px;
+            margin-bottom: 24px;
+            border: 1px solid var(--border); /* Add subtle border */
+        }
+
+        .total-cost {
+            font-size: 32px; /* Slightly smaller */
+            font-weight: 400; /* Thinner weight for large numbers */
+            color: var(--text);
+            margin-bottom: 4px; /* Reduced margin */
+            line-height: 1.2;
+        }
+
+        .cost-period {
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+            font-size: 13px; /* Slightly smaller */
+        }
+
+        .cost-breakdown {
+            margin-top: 24px;
+        }
+
+        .cost-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center; /* Vertically align items */
+            padding: 16px 0; /* Increased padding */
+            border-top: 1px solid #e8eaed; /* Lighter border */
+            font-size: 14px;
+        }
+         .cost-item:first-child {
+             border-top: none; /* Remove top border for the first item */
+             padding-top: 0;
+         }
+
+        .cost-item-label {
+            color: var(--text-secondary); /* Grey label */
+        }
+
+        .cost-item-value {
+            font-weight: 500;
+            color: var(--text); /* Black value */
+        }
+
+        .info-card {
+            background-color: var(--bg-panel);
+            border-radius: 8px;
+            box-shadow: none; /* Remove shadow, rely on border */
+            padding: 20px 24px; /* Adjusted padding */
+            margin-bottom: 24px;
+            border: 1px solid var(--border); /* Use border for separation */
+        }
+
+        .info-card-title {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 16px; /* Increased spacing */
+            color: var(--text); /* Standard text color */
+            display: flex; /* Align icon if added later */
+            align-items: center;
+        }
+         /* Optional: Add an icon placeholder */
+        /* .info-card-title::before {
+            content: 'ℹ️';
+            margin-right: 8px;
+            color: var(--primary);
+        } */
+
+        .info-card-content {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.7; /* Increase line-height for lists */
+        }
+
+        .info-card-list {
+            list-style: none;
+            margin-top: 16px; /* Increased spacing */
+            padding-left: 0; /* Remove default padding */
+        }
+
+        .info-card-list li {
+            margin-bottom: 10px; /* Increased spacing */
+            position: relative;
+            padding-left: 24px; /* Increased indent */
+        }
+
+        .info-card-list li::before {
+            content: "";
+            position: absolute;
+            left: 4px; /* Adjusted position */
+            top: 9px; /* Adjusted position */
+            width: 8px; /* Larger bullet */
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--secondary); /* Use green */
+        }
+
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            body {
+                font-size: 13px; /* Slightly smaller base font on mobile */
+            }
+            .header {
+                padding: 10px 16px;
+            }
+             .logo {
+                font-size: 16px;
+            }
+            .logo-icon {
+                width: 24px;
+                height: 24px;
+                font-size: 14px;
+            }
+            .calculator-container {
+                flex-direction: column;
+                height: auto;
+            }
+
+            .configuration-panel {
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+                padding: 24px; /* Adjust padding */
+                height: auto; /* Allow height to adjust */
+            }
+
+            .resizer {
+                display: none;
+            }
+
+            .result-panel {
+                width: 100%;
+                padding: 24px; /* Adjust padding */
+                height: auto;
+            }
+             .section-title {
+                font-size: 16px;
+                margin-bottom: 20px;
+            }
+            .total-cost {
+                font-size: 28px;
+            }
+            .cost-item {
+                padding: 12px 0;
+            }
+             .info-card {
+                 padding: 16px;
+             }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">G</div>
+                GKE 成本计算器
+            </div>
+            <!-- Placeholder for potential header actions -->
+        </div>
+    </div>
+
+    <div class="calculator-container">
+        <div class="configuration-panel" id="configPanel">
+            <div class="section">
+                <div class="section-title">配置 GKE 资源</div> <!-- Changed title slightly -->
+                <div class="form-group">
+                    <label for="cpu">每个节点的 CPU (vCPU)</label> <!-- Clarified label -->
+                    <div class="input-wrapper">
+                        <input type="number" id="cpu" min="0" step="1" value="2" onchange="updateCost(); updateSliderValue('cpuSlider', 'cpu');">
+                        <span class="input-suffix">vCPU</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" min="0" max="96" value="2" class="slider" id="cpuSlider" oninput="updateInputValue('cpu', 'cpuSlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>0</span>
+                            <span>96</span>
+                        </div>
+                    </div>
+                    <!-- Help text removed for cleaner look, label is clearer -->
+                </div>
+
+                <div class="form-group">
+                    <label for="memory">每个节点的内存 (GB)</label> <!-- Clarified label -->
+                    <div class="input-wrapper">
+                        <input type="number" id="memory" min="0" step="0.5" value="4" onchange="updateCost(); updateSliderValue('memorySlider', 'memory');">
+                        <span class="input-suffix">GB</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" min="0" max="128" value="4" step="0.5" class="slider" id="memorySlider" oninput="updateInputValue('memory', 'memorySlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>0</span>
+                            <span>128</span>
+                        </div>
+                    </div>
+                    <!-- Help text removed -->
+                </div>
+
+                <div class="form-group">
+                    <label for="maxReplicas">节点池最大副本数</label> <!-- Clarified label -->
+                    <div class="input-wrapper">
+                        <input type="number" id="maxReplicas" min="1" step="1" value="4" onchange="updateCost(); updateSliderValue('replicasSlider', 'maxReplicas');">
+                        <span class="input-suffix">节点</span> <!-- Changed unit -->
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" min="1" max="20" value="4" class="slider" id="replicasSlider" oninput="updateInputValue('maxReplicas', 'replicasSlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>1</span>
+                            <span>20</span>
+                        </div>
+                    </div>
+                    <div class="help-text">集群中节点池的最大节点数量</div> <!-- Clarified help text -->
+                </div>
+            </div>
+
+            <!-- Update button removed as cost updates automatically on change -->
+            <!-- You can add it back if explicit update is desired -->
+            <!--
+            <div class="section" style="text-align: right;">
+                 <button class="button" onclick="updateCost()">更新估算</button>
+            </div>
+             -->
+        </div>
+
+        <div class="resizer" id="resizer"></div>
+
+        <div class="result-panel">
+            <div class="cost-summary">
+                <div class="total-cost" id="totalCostDisplay">$0.00</div> <!-- Initial value updated by JS -->
+                <div class="cost-period">预估每月成本</div>
+
+                <div class="cost-breakdown">
+                    <!-- Base cost item removed as it's fixed and included in total -->
+                    <div class="cost-item">
+                        <div class="cost-item-label">CPU 成本</div>
+                        <div class="cost-item-value" id="cpuCostDisplay">$0.00</div>
+                    </div>
+
+                    <div class="cost-item">
+                        <div class="cost-item-label">内存成本</div>
+                        <div class="cost-item-value" id="memoryCostDisplay">$0.00</div>
+                    </div>
+
+                    <div class="cost-item">
+                        <div class="cost-item-label">固定基础成本</div>
+                        <div class="cost-item-value" id="baseCostDisplay">$180.00</div> <!-- Display base cost -->
+                    </div>
+
+                    <div class="cost-item">
+                        <div class="cost-item-label">副本成本系数</div>
+                        <div class="cost-item-value" id="replicaFactorDisplay">x2.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-card-title">计算方式说明</div>
+                <div class="info-card-content">
+                    此计算器基于以下简化公式估算 GKE 集群的每月成本：
+                    <ul class="info-card-list"> <!-- Use UL for semantic list -->
+                        <li>总成本 = 固定基础成本 + CPU 成本 + 内存成本</li>
+                        <li>固定基础成本: $180/月</li>
+                        <li>CPU 成本: $19 × (每节点 vCPU) × (最大副本数 / 2)</li>
+                        <li>内存成本: $19 × (每节点内存 GB) × (最大副本数 / 2)</li>
+                    </ul>
+                     <p style="margin-top: 12px; font-size: 12px;">注意: 此为简化估算，实际费用可能因网络、存储、集群管理费等其他因素而异。</p>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-card-title">优化建议</div>
+                <div class="info-card-content">
+                    <ul class="info-card-list"> <!-- Use UL -->
+                        <li>考虑使用 <a href="https://cloud.google.com/compute/cud" target="_blank">承诺使用折扣 (CUDs)</a> 以节省长期运行工作负载的成本。</li>
+                        <li>为无状态应用配置<a href="https://cloud.google.com/kubernetes-engine/docs/concepts/cluster-autoscaler" target="_blank">自动扩缩</a>以优化资源利用率。</li>
+                        <li>评估使用<a href="https://cloud.google.com/kubernetes-engine/docs/concepts/spot-vms" target="_blank">抢占式虚拟机 (Spot VMs)</a> 以降低非关键工作负载的成本。</li>
+                        <li>定期监控和审核集群资源利用率，调整规格以避免过度配置。</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 成本计算函数 (保持不变)
+        function calculateCost() {
+            let cpu = parseFloat(document.getElementById("cpu").value) || 0;
+            let memory = parseFloat(document.getElementById("memory").value) || 0;
+            let maxReplicas = parseInt(document.getElementById("maxReplicas").value) || 1; // Default to 1 if invalid
+
+            // Ensure maxReplicas is at least 1 to avoid division by zero or negative costs
+             maxReplicas = Math.max(1, maxReplicas);
+
+            let base_cost = 180;
+            // Ensure replica factor isn't below 0.5 (when maxReplicas is 1)
+            let replicaMultiplier = Math.max(0.5, maxReplicas / 2);
+
+            let cpu_cost = 19 * cpu * replicaMultiplier;
+            let memory_cost = 19 * memory * replicaMultiplier;
+            let total_cost = base_cost + cpu_cost + memory_cost;
+
+            return {
+                total: total_cost,
+                base: base_cost,
+                cpu: cpu_cost,
+                memory: memory_cost,
+                replicaFactor: replicaMultiplier // Use the adjusted multiplier
+            };
+        }
+
+        // 更新成本显示
+        function updateCost() {
+            const costs = calculateCost();
+
+            document.getElementById("totalCostDisplay").innerText = "$" + costs.total.toFixed(2);
+            document.getElementById("baseCostDisplay").innerText = "$" + costs.base.toFixed(2); // Display base cost
+            document.getElementById("cpuCostDisplay").innerText = "$" + costs.cpu.toFixed(2);
+            document.getElementById("memoryCostDisplay").innerText = "$" + costs.memory.toFixed(2);
+            document.getElementById("replicaFactorDisplay").innerText = "x" + costs.replicaFactor.toFixed(2);
+        }
+
+        // 滑块与输入框同步 (保持不变)
+        function updateInputValue(inputId, sliderId) {
+            const slider = document.getElementById(sliderId);
+            const input = document.getElementById(inputId);
+            input.value = slider.value;
+        }
+
+        function updateSliderValue(sliderId, inputId) {
+            const slider = document.getElementById(sliderId);
+            const input = document.getElementById(inputId);
+            // Ensure slider value stays within its bounds if input is manually changed
+            const min = parseFloat(slider.min);
+            const max = parseFloat(slider.max);
+            let value = parseFloat(input.value);
+            if (isNaN(value)) {
+                value = min; // Default to min if input is invalid
+            }
+            slider.value = Math.min(max, Math.max(min, value));
+             // Optional: Update input value if it was out of bounds
+            if (input.value !== slider.value) {
+                input.value = slider.value;
+            }
+        }
+
+        // 分隔条拖动功能 (保持不变)
+        const resizer = document.getElementById('resizer');
+        const configPanel = document.getElementById('configPanel');
+        const resultPanel = document.querySelector('.result-panel'); // Need this for max width calculation
+        const container = document.querySelector('.calculator-container');
+
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('active');
+            // Prevent text selection during drag
+            document.body.style.userSelect = 'none';
+            document.body.style.pointerEvents = 'none'; // Prevent interactions with other elements
+
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+        });
+
+        function handleMouseMove(e) {
+            if (!isResizing) return;
+
+            const containerRect = container.getBoundingClientRect();
+            const containerLeft = containerRect.left;
+            // Calculate new width relative to container, prevent going outside bounds
+            let newWidth = e.clientX - containerLeft;
+
+            // Minimum width constraint
+            const minWidth = 300;
+            // Maximum width constraint (leave some space for result panel, e.g., 300px)
+            const maxWidth = containerRect.width - 300;
+
+            // Apply constraints
+            newWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
+
+            configPanel.style.width = newWidth + 'px';
+            resizer.style.left = newWidth + 'px';
+        }
+
+         function handleMouseUp() {
+             if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('active');
+                // Re-enable text selection and pointer events
+                document.body.style.userSelect = '';
+                document.body.style.pointerEvents = '';
+
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+             }
+        }
+
+        // 初始化 (保持不变)
+        document.addEventListener('DOMContentLoaded', () => {
+            updateCost();
+            // Set initial resizer position based on default config panel width
+            const initialWidth = configPanel.offsetWidth;
+            resizer.style.left = initialWidth + 'px';
+        });
+    </script>
+</body>
+</html>
