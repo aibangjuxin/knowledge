@@ -193,3 +193,5 @@ gcloud kms decrypt --project ${project_kms} --ciphertext-file=/etc/pki/tls/certs
 # other
 - https://github.com/LeCoupa/awesome-cheatsheets/blob/master/tools/gcp.md
 
+- get container name
+kubectl get deployment <deployment-name> -o jsonpath="{.spec.template.spec.containers[*].name}"

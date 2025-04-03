@@ -23,3 +23,8 @@
 ### 示例输出
 
 该命令的输出将是所有 `name` 字段中包含 `lex-pa-ri-py-samples` 的 JSON 对象。
+
+
+
+- get container name
+kubectl get deployment <deployment-name> -o jsonpath="{.spec.template.spec.containers[*].name}"
