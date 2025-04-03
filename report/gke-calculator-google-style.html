@@ -395,6 +395,22 @@
                     </div>
                     <div class="help-text">集群中节点的最大副本数</div>
                 </div>
+                
+                <div class="form-group">
+                    <label for="apiCount">API 数量</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="apiCount" min="1" step="1" value="1" onchange="updateCost(); updateSliderValue('apiSlider', 'apiCount');">
+                        <span class="input-suffix">个</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" min="1" max="100" value="1" class="slider" id="apiSlider" oninput="updateInputValue('apiCount', 'apiSlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>1</span>
+                            <span>100</span>
+                        </div>
+                    </div>
+                    <div class="help-text">需要部署的API数量</div>
+                </div>
             </div>
             
             <div class="section">
@@ -464,17 +480,18 @@
             let cpu = parseFloat(document.getElementById("cpu").value) || 0;
             let memory = parseFloat(document.getElementById("memory").value) || 0;
             let maxReplicas = parseInt(document.getElementById("maxReplicas").value) || 4;
+            let apiCount = parseInt(document.getElementById("apiCount").value) || 1;
             
             let base_cost = 180;
             let cpu_cost = 19 * cpu * maxReplicas / 2;
             let memory_cost = 19 * memory * maxReplicas / 2;
-            let total_cost = base_cost + cpu_cost + memory_cost;
+            let total_cost = (base_cost + cpu_cost + memory_cost) * apiCount;
             
             return {
                 total: total_cost,
-                base: base_cost,
-                cpu: cpu_cost,
-                memory: memory_cost,
+                base: base_cost * apiCount,
+                cpu: cpu_cost * apiCount,
+                memory: memory_cost * apiCount,
                 replicaFactor: maxReplicas / 2
             };
         }
