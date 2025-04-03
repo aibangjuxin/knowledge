@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GKE 成本计算器 - 增强版</title>
+    <link href="https://cdn.jsdelivr.net/npm/chart.js" rel="stylesheet">
+    <style>
+        :root {
+            /* 亮色主题变量 */
+            --primary: #1a73e8;
+            --primary-light: #e8f0fe;
+            --secondary: #34a853;
+            --secondary-light: #e6f4ea;
+            --border: #dadce0;
+            --text: #202124;
+            --text-secondary: #5f6368;
+            --bg-main: #f8f9fa;
+            --bg-panel: #ffffff;
+            --shadow: 0 1px 2px rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+            --error: #ea4335;
+            --success: #34a853;
+            --warning: #fbbc04;
+            --chart-bg: #ffffff;
+        }
+
+        [data-theme="dark"] {
+            /* 深色主题变量 */
+            --primary: #8ab4f8;
+            --primary-light: #1a2634;
+            --secondary: #81c995;
+            --secondary-light: #1e3229;
+            --border: #5f6368;
+            --text: #e8eaed;
+            --text-secondary: #9aa0a6;
+            --bg-main: #202124;
+            --bg-panel: #292a2d;
+            --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 1px 3px 1px rgba(0,0,0,0.15);
+            --chart-bg: #292a2d;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Google Sans', 'Segoe UI', Arial, sans-serif;
+        }
+
+        body {
+            color: var(--text);
+            background-color: var(--bg-main);
+            line-height: 1.5;
+            font-size: 14px;
+            overflow-x: hidden;
+            transition: background-color 0.3s ease;
+        }
+
+        .header {
+            background-color: var(--bg-panel);
+            padding: 16px 24px;
+            box-shadow: var(--shadow);
+            position: relative;
+            z-index: 10;
+            transition: background-color 0.3s ease;
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 500;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+        }
+
+        .logo-icon {
+            margin-right: 8px;
+            width: 24px;
+            height: 24px;
+            background-color: var(--primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--bg-panel);
+            font-weight: bold;
+        }
+
+        .theme-toggle {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background-color 0.2s;
+        }
+
+        .theme-toggle:hover {
+            background-color: var(--primary-light);
+        }
+
+        .calculator-container {
+            display: flex;
+            max-width: 1400px;
+            margin: 0 auto;
+            position: relative;
+            height: calc(100vh - 60px);
+            gap: 24px;
+            padding: 24px;
+        }
+
+        .configuration-panel {
+            width: 400px;
+            min-width: 300px;
+            background-color: var(--bg-panel);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            overflow-y: auto;
+            transition: all 0.3s ease;
+            height: 100%;
+            padding: 24px;
+        }
+
+        .result-panel {
+            flex: 1;
+            background-color: var(--bg-panel);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            overflow-y: auto;
+            height: 100%;
+            padding: 24px;
+            transition: background-color 0.3s ease;
+        }
+
+        .section {
+            margin-bottom: 24px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            color: var(--text);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            font-size: 14px;
+            color: var(--text);
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-error {
+            border-color: var(--error) !important;
+        }
+
+        .error-message {
+            color: var(--error);
+            font-size: 12px;
+            margin-top: 4px;
+            display: none;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+            transition: all 0.2s;
+            outline: none;
+            background-color: var(--bg-panel);
+            color: var(--text);
+        }
+
+        input[type="number"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px var(--primary-light);
+        }
+
+        .input-suffix {
+            position: absolute;
+            right: 12px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            pointer-events: none;
+        }
+
+        .help-text {
+            margin-top: 4px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .slider-container {
+            margin-top: 8px;
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: var(--border);
+            outline: none;
+            border-radius: 2px;
+            transition: background 0.3s ease;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        .range-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .button:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+        .cost-summary {
+            background-color: var(--bg-panel);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 24px;
+            margin-bottom: 24px;
+            transition: background-color 0.3s ease;
+        }
+
+        .total-cost {
+            font-size: 32px;
+            font-weight: 500;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+
+        .cost-period {
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+        }
+
+        .cost-breakdown {
+            margin-top: 24px;
+        }
+
+        .cost-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-top: 1px solid var(--border);
+        }
+
+        .cost-item-label {
+            color: var(--text);
+        }
+
+        .cost-item-value {
+            font-weight: 500;
+            color: var(--text);
+        }
+
+        .chart-container {
+            margin-top: 24px;
+            padding: 16px;
+            background-color: var(--chart-bg);
+            border-radius: 8px;
+            transition: background-color 0.3s ease;
+        }
+
+        .info-card {
+            background-color: var(--bg-panel);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 20px;
+            margin-bottom: 24px;
+            transition: background-color 0.3s ease;
+        }
+
+        .info-card-title {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 12px;
+            color: var(--primary);
+        }
+
+        .info-card-content {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .info-card-list {
+            list-style: none;
+            margin-top: 12px;
+        }
+
+        .info-card-list li {
+            margin-bottom: 8px;
+            position: relative;
+            padding-left: 20px;
+        }
+
+        .info-card-list li:before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 7px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: var(--secondary);
+        }
+
+        @media (max-width: 768px) {
+            .calculator-container {
+                flex-direction: column;
+                height: auto;
+                padding: 16px;
+                gap: 16px;
+            }
+
+            .configuration-panel,
+            .result-panel {
+                width: 100%;
+                height: auto;
+                max-height: none;
+            }
+
+            .header-content {
+                padding: 0 16px;
+            }
+
+            .total-cost {
+                font-size: 28px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">G</div>
+                GKE 成本计算器
+            </div>
+            <button class="theme-toggle" onclick="toggleTheme()" aria-label="切换主题">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="calculator-container">
+        <div class="configuration-panel" id="configPanel">
+            <div class="section">
+                <div class="section-title">计算 GKE 集群成本</div>
+                <div class="form-group">
+                    <label for="cpu">CPU 数量 (vCPU)</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="cpu" min="0" step="1" value="2" onchange="validateAndUpdate(this, 0, 96); updateCost();">
+                        <span class="input-suffix">vCPU</span>
+                    </div>
+                    <div class="error-message" id="cpuError">请输入0-96之间的值</div>
+                    <div class="slider-container">
+                        <input type="range" min="0" max="96" value="2" class="slider" id="cpuSlider" oninput="updateInputFromSlider('cpu', 'cpuSlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>0</span>
+                            <span>96</span>
+                        </div>
+                    </div>
+                    <div class="help-text">每个节点的CPU核心数量</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="memory">内存大小 (GB)</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="memory" min="0" step="0.5" value="4" onchange="validateAndUpdate(this, 0, 128); updateCost();">
+                        <span class="input-suffix">GB</span>
+                    </div>
+                    <div class="error-message" id="memoryError">请输入0-128之间的值</div>
+                    <div class="slider-container">
+                        <input type="range" min="0" max="128" value="4" step="0.5" class="slider" id="memorySlider" oninput="updateInputFromSlider('memory', 'memorySlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>0</span>
+                            <span>128</span>
+                        </div>
+                    </div>
+                    <div class="help-text">每个节点的内存大小</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="maxReplicas">最大副本数</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="maxReplicas" min="1" step="1" value="4" onchange="validateAndUpdate(this, 1, 20); updateCost();">
+                        <span class="input-suffix">个</span>
+                    </div>
+                    <div class="error-message" id="maxReplicasError">请输入1-20之间的值</div>
+                    <div class="slider-container">
+                        <input type="range" min="1" max="20" value="4" class="slider" id="replicasSlider" oninput="updateInputFromSlider('maxReplicas', 'replicasSlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>1</span>
+                            <span>20</span>
+                        </div>
+                    </div>
+                    <div class="help-text">集群中节点的最大副本数</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="apiCount">API 数量</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="apiCount" min="1" step="1" value="1" onchange="validateAndUpdate(this, 1, 100); updateCost();">
+                        <span class="input-suffix">个</span>
+                    </div>
+                    <div class="error-message" id="apiCountError">请输入1-100之间的值</div>
+                    <div class="slider-container">
+                        <input type="range" min="1" max="100" value="1" class="slider" id="apiSlider" oninput="updateInputFromSlider('apiCount', 'apiSlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>1</span>
+                            <span>100</span>
+                        </div>
+                    </div>
+                    <div class="help-text">需要部署的API数量</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <button class="button" onclick="updateCost()">更新成本估算</button>
+            </div>
+        </div>
+
+        <div class="result-panel">
+            <div class="cost-summary">
+                <div class="total-cost" id="totalCostDisplay">$180.00</div>
+                <div class="cost-period">预估每月成本</div>
+
+                <div class="cost-breakdown">
+                    <div class="cost-item">
+                        <div class="cost-item-label">基础设施成本</div>
+                        <div class="cost-item-value" id="baseCostDisplay">$180.00</div>
+                    </div>
+
+                    <div class="cost-item">
+                        <div class="cost-item-label">CPU 成本</div>
+                        <div class="cost-item-value" id="cpuCostDisplay">$0.00</div>
+                    </div>
+
+                    <div class="cost-item">
+                        <div class="cost-item-label">内存成本</div>
+                        <div class="cost-item-value" id="memoryCostDisplay">$0.00</div>
+                    </div>
+
+                    <div class="cost-item">
+                        <div class="cost-item-label">副本成本系数</div>
+                        <div class="cost-item-value" id="replicaFactorDisplay">x2.00</div>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="costChart"></canvas>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-card-title">计算说明</div>
+                <div class="info-card-content">
+                    此计算器基于以下公式估算 GKE 集群的每月成本：
+                    <div class="info-card-list">
+                        <li>基础成本: $180/月</li>
+                        <li>每 vCPU 的成本: $19 × vCPU数量 × 副本数 ÷ 2</li>
+                        <li>每 GB内存 的成本: $19 × 内存GB × 副本数 ÷ 2</li>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-card-title">优化建议</div>
+                <div class="info-card-content">
+                    <div class="info-card-list">
+                        <li>考虑使用承诺使用折扣 (CUDs) 以节省长期运行工作负载的成本</li>
+                        <li>为无状态应用配置自动扩缩以优化资源利用率</li>
+                        <li>评估使用抢占式虚拟机以降低非关键工作负载的成本</li>
+                        <li>定期监控和审核集群资源利用率，调整规格以避免过度配置</li>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // 主题切换
+        function toggleTheme() {
+            const body = document.body;
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateChartTheme();
+        }
+
+        // 初始化主题
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme) {
+                document.body.setAttribute('data-theme', savedTheme);
+            } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                document.body.setAttribute('data-theme', 'dark');
+            }
+        }
+
+        // 输入验证
+        function validateAndUpdate(input, min, max) {
+            const value = parseFloat(input.value);
+            const errorElement = document.getElementById(input.id + 'Error');
+            
+            if (isNaN(value) || value < min || value > max) {
+                input.classList.add('input-error');
+                errorElement.style.display = 'block';
+                return false;
+            }
+            
+            input.classList.remove('input-error');
+            errorElement.style.display = 'none';
+            updateSliderValue(input.id + 'Slider', input.id);
+            return true;
+        }
+
+        // 更新输入框值
+        function updateInputFromSlider(inputId, sliderId) {
+            const slider = document.getElementById(sliderId);
+            const input = document.getElementById(inputId);
+            input.value = slider.value;
+            input.classList.remove('input-error');
+            document.getElementById(inputId + 'Error').style.display = 'none';
+        }
+
+        // 更新滑块值
+        function updateSliderValue(sliderId, inputId) {
+            const slider = document.getElementById(sliderId);
+            const input = document.getElementById(inputId);
+            slider.value = input.value;
+        }
+
+        // 成本计算
+        function calculateCost() {
+            let cpu = parseFloat(document.getElementById("cpu").value) || 0;
+            let memory = parseFloat(document.getElementById("memory").value) || 0;
+            let maxReplicas = parseInt(document.getElementById("maxReplicas").value) || 4;
+            let apiCount = parseInt(document.getElementById("apiCount").value) || 1;
+            
+            let base_cost = 180;
+            let cpu_cost = 19 * cpu * maxReplicas / 2;
+            let memory_cost = 19 * memory * maxReplicas / 2;
+            let total_cost = (base_cost + cpu_cost + memory_cost) * apiCount;
+            
+            return {
+                total: total_cost,
+                base: base_cost * apiCount,
+                cpu: cpu_cost * apiCount,
+                memory: memory_cost * apiCount,
+                replicaFactor: maxReplicas / 2
+            };
+        }
+
+        // 更新成本显示
+        let costChart;
+        function updateCost() {
+            const costs = calculateCost();
+            
+            document.getElementById("totalCostDisplay").innerText = "$" + costs.total.toFixed(2);
+            document.getElementById("baseCostDisplay").innerText = "$" + costs.base.toFixed(2);
+            document.getElementById("cpuCostDisplay").innerText = "$" + costs.cpu.toFixed(2);
+            document.getElementById("memoryCostDisplay").innerText = "$" + costs.memory.toFixed(2);
+            document.getElementById("replicaFactorDisplay").innerText = "x" + costs.replicaFactor.toFixed(2);
+
+            updateChart(costs);
+        }
+
+        // 更新图表
+        function updateChart(costs) {
+            const ctx = document.getElementById('costChart').getContext('2d');
+            const isDark = document.body.getAttribute('data-theme') === 'dark';
+            const textColor = isDark ? '#e8eaed' : '#202124';
+
+            if (costChart) {
+                costChart.destroy();
+            }
+
+            costChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['基础设施', 'CPU', '内存'],
+                    datasets: [{
+                        data: [costs.base, costs.cpu, costs.memory],
+                        backgroundColor: [
+                            '#1a73e8',
+                            '#34a853',
+                            '#fbbc04'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: textColor,
+                                font: {
+                                    family: '"Google Sans", "Segoe UI", Arial, sans-serif',
+                                    size: 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw;
+                                    const percentage = ((value / costs.total) * 100).toFixed(1);
+                                    return `$${value.toFixed(2)} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 更新图表主题
+        function updateChartTheme() {
+            if (costChart) {
+                const costs = calculateCost();
+                updateChart(costs);
+            }
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            updateCost();
+        });
+
+        // 监听系统主题变化
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+            if (!localStorage.getItem('theme')) {
+                document.body.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+                updateChartTheme();
+            }
+        });
+    </script>
+</body>
+</html>
