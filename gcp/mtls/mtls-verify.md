@@ -1135,7 +1135,7 @@ http_access deny all
     *   您需要创建一个“服务器 TLS 策略”（Server TLS Policy），在其中配置信任配置（Trust Config）来验证客户端证书。
     *   **关键确认：**  HTTPS 负载均衡器会将客户端证书信息通过 HTTP 标头（如 `X-Forwarded-Client-Cert`）传递给后端实例（如您的 Nginx）。您的 Nginx 需要配置为从这些标头中提取证书信息并进行验证。
 
-2.  **证书管理:**
+2.  **证书管理:** [](./gcp-certificate-manager.md)
 
     *   Google Cloud 提供了 Certificate Manager 服务。它可以帮助您：
         *   上传您信任的客户端 CA 证书（根证书和中间证书）。
