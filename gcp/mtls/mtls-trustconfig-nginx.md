@@ -37,7 +37,7 @@ TrustConfig + Nginx 自定义证书信息路由
 缺点	所有客户端必须共享相同 Root/Intermediate CA
 
 Nginx 示例配置：
-
+```nginx
 map $http_x_goog_authenticated_user_cert_subject $client_cert_cn {
     default "unknown";
     ~CN=client-a\.example\.com "client-a";
@@ -52,7 +52,7 @@ location /api/ {
         proxy_pass http://backend-service-b;
     }
 }
-
+```
 适用场景：
 	•	多个客户端共享一个 CA；
 	•	后端为同一集群部署；
