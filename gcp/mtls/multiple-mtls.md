@@ -101,7 +101,8 @@ GLB将客户端证书信息传递到后端的方式有：
    - 配置GLB将客户端证书信息传递到Nginx
    - 在Nginx中继续使用现有的基于证书CN的路由逻辑
 
-综上所述，"将多个mTLS认证配置到Google Load Balancer并通过Nginx路由请求到不同的服务"这一说法是可行的，但实现方式主要是通过单一TrustConfig结合证书信息传递和Nginx路由逻辑，而非在GLB直接配置多套完全独立的mTLS认证系统。​​​​​​​​​​​​​​​​
+综上所述，"将多个mTLS认证配置到Google Load Balancer并通过Nginx路由请求到不同的服务"这一说法是可行的，
+但实现方式主要是通过单一TrustConfig结合证书信息传递和Nginx路由逻辑，而非在GLB直接配置多套完全独立的mTLS认证系统。​​​​​​​​​​​​​​​​
 
 
 
@@ -128,13 +129,14 @@ Google Cloud HTTPS Load Balancer 使用 Certificate Manager 配置客户端验�
 2. 使用单一 TrustConfig + 后端 Nginx 路由（推荐方案）
 	•	GLB 验证客户端证书，并在请求中添加以下 HTTP Header（自动）传递给后端（如 Nginx）：
 
-Header	说明
-x-goog-authenticated-user-cert-subject	客户端证书的 Subject DN
-x-goog-authenticated-user-cert-issuer	客户端证书的 Issuer DN
+| Header |	说明 |
+|----|------|
+| x-goog-authenticated-user-cert-subject	| 客户端证书的 Subject DN |
+| x-goog-authenticated-user-cert-issuer	|客户端证书的 Issuer DN |
 
 
 	•	Nginx 接收这些 header 并做路由，例如基于客户端证书的 CN 或 Issuer 区分服务：
-
+```nginx
 map $http_x_goog_authenticated_user_cert_subject $client_cert_cn {
     default "unknown";
     ~CN=client-a\.example\.com "client-a";
@@ -149,7 +151,7 @@ location /api/ {
         proxy_pass http://service-b;
     }
 }
-
+```
 
 
 结论：这是更灵活且适配多租户的方式，避免了为每个租户维护单独 Backend Service + ServerTLSPolicy 的复杂度。
@@ -158,9 +160,10 @@ location /api/ {
 
 3. 最佳实践建议
 
-方案	可行性	适用场景	备注
-多个 TrustConfig + 多个 ServerTLSPolicy	高，但复杂	每个租户完全隔离，服务独立部署	会导致 GLB 配置大量 Backend Service
-单个 TrustConfig + Nginx 自行验证	高，推荐	共享 LB + 后端路由场景	结合 Cloud Armor、Header 路由逻辑即可
+| 方案 |	可行性	| 适用场景| 	备注 |
+|----|----|----|----|
+| 多个 TrustConfig + 多个 ServerTLSPolicy	| 高，但复杂	| 每个租户完全隔离，服务独立部署	| 会导致 GLB 配置大量 Backend Service
+| 单个 TrustConfig + Nginx 自行验证 |	高，推荐 |	共享 LB + 后端路由场景	| 结合 Cloud Armor、Header 路由逻辑即可
 
 
 
@@ -188,13 +191,15 @@ location /api/ {
 	▪	REJECT_INVALID：只有提供有效且通过 TrustConfig 验证的客户端证书的请求才会被接受。
 	◦	GLB 本身无法直接根据客户端证书的 CN（Common Name）进行路由，但它可以将客户端证书的信息（如 CN）通过自定义请求头传递到后端服务。
 	2	Nginx 的路由能力
-	◦	您的 Nginx 配置示例已经展示了基于客户端证书 CN 的验证和路由能力。例如： location /abc-healthcheck-proxy/v2/ {
+	◦	您的 Nginx 配置示例已经展示了基于客户端证书 CN 的验证和路由能力。例如：
+```nginx location /abc-healthcheck-proxy/v2/ {
 	◦	    if ($ssl_client_s_dn_cn != "client-ext.aibang.com") {
 	◦	        return 406;  # 返回不接受的请求
 	◦	    }
 	◦	    proxy_pass http://abc-dev.internal:3128;
 	◦	}
-	◦	 这里使用了 $ssl_client_s_dn_cn 来检查客户端证书的 CN，并根据 CN 的值决定是否将请求转发到后端服务。
+	◦	
+``` 这里使用了 $ssl_client_s_dn_cn 来检查客户端证书的 CN，并根据 CN 的值决定是否将请求转发到后端服务。
 	◦	如果 GLB 将证书信息（如 CN）通过自定义头传递到后端，Nginx 可以利用这些头信息来实现更灵活的路由。
 	3	多层负载均衡架构
 	◦	您提到将 GLB 配置到后面对应的区域负载均衡器（LB），再路由到 instance 主机。这种多层架构是可行的。
@@ -209,26 +214,32 @@ location /api/ {
 以下是实现您目标的具体步骤：
 1. 配置 Google Load Balancer 的 mTLS
 	•	创建 TrustConfig：
-	◦	在 Google Cloud Console 或使用 gcloud 命令创建一个 TrustConfig，上传您的信任锚（根证书）和中间证书。例如： gcloud network-security trust-configs create my-trust-config \
+	◦	在 Google Cloud Console 或使用 gcloud 命令创建一个 TrustConfig，上传您的信任锚（根证书）和中间证书。例如：
+```bash gcloud network-security trust-configs create my-trust-config \
 	◦	    --location=global \
 	◦	    --trust-anchors=ca-cert.pem \
 	◦	    --intermediate-cas=intermediate-cert.pem
-	◦	
+```
 	•	创建 ServerTLSPolicy：
-	◦	创建一个 ServerTLSPolicy，指定客户端验证模式并关联 TrustConfig。例如： gcloud network-security server-tls-policies create my-tls-policy \
+	◦	创建一个 ServerTLSPolicy，指定客户端验证模式并关联 TrustConfig。例如：
+```bash gcloud network-security server-tls-policies create my-tls-policy \
 	◦	    --location=global \
 	◦	    --mtls-trust-config=my-trust-config \
 	◦	    --client-validation-mode=REJECT_INVALID
+```
 	◦	
-	◦	配置自定义请求头，将客户端证书的 CN 传递到后端。例如，将 CN 放入头 X-Client-CN： gcloud network-security server-tls-policies update my-tls-policy \
+	◦	配置自定义请求头，将客户端证书的 CN 传递到后端。例如，将 CN 放入头 X-Client-CN：
+```bash gcloud network-security server-tls-policies update my-tls-policy \
 	◦	    --location=global \
 	◦	    --custom-headers=X-Client-CN:"%CLIENT_CERT_SUBJECT_DN_CN%"
+```
 	◦	
 	•	将 ServerTLSPolicy 附加到 GLB：
 	◦	将 ServerTLSPolicy 应用到 GLB 的 HTTPS 代理，确保所有传入请求都经过 mTLS 验证。
 2. 配置 Nginx
 	•	修改 Nginx 配置，使用 GLB 传递的自定义头（例如 X-Client-CN）来路由请求。
-	•	更新后的配置示例： js_import njs/http.js;
+	•	更新后的配置示例：
+```nginx js_import njs/http.js;
 	•	js_set $ssl_client_s_dn_cn http.subjectcn;
 	•	
 	•	server {
@@ -256,6 +267,7 @@ location /api/ {
 	•	    }
 	•	}
 	•	
+```
 	◦	注意：$http_x_client_cn 是 Nginx 中引用自定义头 X-Client-CN 的变量，确保名称与 GLB 配置一致。
 3. 处理多层负载均衡
 	•	如果使用多层架构（GLB -> 区域 LB -> instance），确保区域 LB 配置为透明传递 GLB 添加的自定义头。
