@@ -30,6 +30,7 @@ Nginx 的 location 块允许为不同的 URL 路径定义不同的配置。locat
    * 基于标头检查的基于位置的路由： 为每个服务定义单独的 location 块。在每个 location 块中，使用 if 语句或 map 指令检查客户端证书标头的值。
    * 条件 proxy_pass： 基于客户端证书标头值和请求的位置，使用 proxy_pass 将请求转发到相应的后端服务。
      * 示例 Nginx 配置片段（仅供说明）：
+```nginx
        http {
     js_import njs/http.js;
     js_set $client_cn http.getHeader("X-Client-Cert-CN"); # 假设 GLB 在此标头中传递 CN
@@ -53,6 +54,7 @@ Nginx 的 location 块允许为不同的 URL 路径定义不同的配置。locat
         #... 其他 location 块...
     }
 }
+```
 
      * 说明： Nginx 充当智能路由器，根据经过身份验证的客户端的身份和请求的资源来导向流量。
  * 表规格：
