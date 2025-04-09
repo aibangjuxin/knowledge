@@ -70,7 +70,7 @@ Nginx 验证	✅ 已采用 $ssl_client_s_dn_cn，推荐继续使用 njs 实现�
 ⸻
 
 四、Mermaid 可视化流程
-``mermaid
+```mermaid
 flowchart TD
     A[Client (带证书)] -->|HTTPS + mTLS| B[GLB: HTTPS Load Balancer]
     B -->|L7 Routing (统一TLS策略)| C[Nginx Reverse Proxy]
@@ -178,7 +178,7 @@ Cloud Armor 是在 L7（HTTP 层） 执行规则，所以它的基本规则匹�
 1.2 IP 白名单 + Path 限制示例
 
 你可以为每个 API path 创建一条对应的 Cloud Armor Rule，匹配 IP + path：
-
+```json
 rule {
   description = "Allow only specific IPs for /abc-healthcheck-proxy/v2/"
   priority    = 1000
@@ -191,7 +191,7 @@ rule {
   }
   action = "allow"
 }
-
+```
 1.3 Cloud Armor 策略组合建议
 
 你可以这样设计策略集（Policy）：
@@ -220,7 +220,7 @@ $ssl_client_serial	客户端证书序列号
 $ssl_client_verify	是否通过验证（SUCCESS / FAILED）
 
 2.2 多条件校验示例：验证 CN + Issuer
-
+```nginx
 location /abc-healthcheck-proxy/v2/ {
     if ($ssl_client_s_dn_cn != "client-ext.aibang.com") {
         return 406;
@@ -232,7 +232,7 @@ location /abc-healthcheck-proxy/v2/ {
 
     proxy_pass http://abc-dev.internal:3128;
 }
-
+```
 2.3 拒绝非法中间证书或子 CA 签发的证书
 	•	如果你只信任特定的 Issuer（比如你们自己的 Root CA），你可以通过 $ssl_client_i_dn_cn 来拒绝其它中间机构签发的证书。
 
@@ -241,9 +241,10 @@ location /abc-healthcheck-proxy/v2/ {
 三、配合建议：完整路径级别授权设计
 
 你现在的安全架构可以是：
+
 ```mermaid
 graph TD
-    A[Client] -->|mTLS handshake| B[HTTPS GLB (终止 TLS + mTLS 验证)]
+    A[Client] -->|mTLS handshake| B[HTTPS GLB 终止 TLS + mTLS 验证]
     B -->|HTTP Header 转发 + Cert Info| C[Nginx]
     C -->|Location 路由 + CN/Issuer 校验| D[Backend API Service]
 
@@ -306,7 +307,7 @@ Nginx (Instance Group 内部主机)	实现 API 路由、客户端证书细粒度
 3.1 Cloud Armor 配置：Path + IP 白名单
 
 每个 API 路径绑定专属 IP 白名单策略：
-
+```json
 rule {
   description = "Allow specific IPs for /abc-healthcheck-proxy/v2/"
   priority    = 1000
@@ -328,6 +329,7 @@ rule {
   }
   action = "deny(403)"
 }
+```
 
 说明： 你可以为每个 Nginx 的 location 创建对应路径的 Cloud Armor 策略，实现 path + IP 的组合控制。
 
@@ -336,7 +338,7 @@ rule {
 3.2 Nginx mTLS 校验配置（增强）
 
 通过 $ssl_client_* 系列变量，对客户端证书内容进行验证。
-
+```nginx
 location /abc-healthcheck-proxy/v2/ {
     # 禁止特定 Content-Type
     if ($content_type ~ (multipart\/form-data|text\/plain)) {
@@ -355,13 +357,13 @@ location /abc-healthcheck-proxy/v2/ {
 
     proxy_pass http://abc-dev.internal:3128;
 }
-
+```
 
 
 ⸻
 
 四、整体流程可视化
-
+```mermaid
 sequenceDiagram
     participant Client
     participant GLB
@@ -385,6 +387,7 @@ sequenceDiagram
     else Fail
         CloudArmor-->>Client: 403 Forbidden
     end
+```
 
 
 
@@ -412,7 +415,7 @@ Nginx	实现更细粒度的证书字段验证、内容过滤和内部路由控�
 ⸻
 
 四、整体流程可视化（续）
-
+```mermaid
 sequenceDiagram
     participant Client
     participant GLB
@@ -437,7 +440,7 @@ sequenceDiagram
     else Not allowed by Cloud Armor
         CloudArmor-->>Client: Return 403
     end
-
+```
 
 
 ⸻
