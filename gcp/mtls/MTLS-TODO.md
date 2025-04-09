@@ -180,7 +180,7 @@ ServerTlsPolicy 配置	多个 Policy，复杂	单个 Policy 即可
 ⸻
 
 示例：你的场景映射图（Mermaid）
-
+```mermaid
 sequenceDiagram
     participant ClientA
     participant GLB
@@ -192,7 +192,7 @@ sequenceDiagram
     GLB->>Nginx: Forward Request + Cert Headers
     Nginx->>Nginx: Check CN == client-a.aibang.com
     Nginx->>ServiceA: Proxy to /service-a/v2/.well-known/health
-
+```
 
 
 ⸻
