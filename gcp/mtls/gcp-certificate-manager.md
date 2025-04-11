@@ -1,5 +1,42 @@
 在 Google Cloud HTTPS 负载均衡 (GLB) 的 MTLS 配置下，需要管理客户端证书，而 Google 提供了一些产品来简化这个过程，包括 Google Cloud Certificate Manager 和 Google Cloud IAM 的 CA (Certificate Authority) 相关功能。
 
+
+```bash
+#!/bin/bash
+
+# --- Configuration ---
+# Replace with your actual trust config name
+TRUST_CONFIG_NAME="your-trust-config-name"
+# Replace with the location of your trust config (e.g., global, us-central1)
+LOCATION="global"
+# Optional: Replace with your Google Cloud project ID if not using the default configured one
+# PROJECT_ID="your-project-id"
+
+# --- Script Logic ---
+echo "Describing Trust Config: $TRUST_CONFIG_NAME in location $LOCATION..."
+
+# Construct the gcloud command
+GCLOUD_COMMAND="gcloud certificate-manager trust-configs describe $TRUST_CONFIG_NAME --location=$LOCATION"
+
+# Add project ID if specified
+if [ -n "$PROJECT_ID" ]; then
+  GCLOUD_COMMAND="$GCLOUD_COMMAND --project=$PROJECT_ID"
+fi
+
+# Execute the command
+eval $GCLOUD_COMMAND
+
+# Check the exit status of the gcloud command
+if [ $? -eq 0 ]; then
+  echo "Successfully described trust config '$TRUST_CONFIG_NAME'."
+else
+  echo "Error describing trust config '$TRUST_CONFIG_NAME'." >&2
+  exit 1
+fi
+
+exit 0
+
+```
 ⸻
 
 1. 你需要管理的证书类型
