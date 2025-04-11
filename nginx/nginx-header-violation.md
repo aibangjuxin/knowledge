@@ -1,3 +1,6 @@
+CWE-16
+Misconfigured Access-Control-Allow-Origin Header
+
 好的，我们来详细解释一下如何修复这个 Nginx 的 `Missing X-Content-Type-Options Header` Violation 以及添加这个参数可能带来的影响。
 
 ---

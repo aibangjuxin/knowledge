@@ -41,7 +41,7 @@ if ($http_origin = "https://your-allowed-origin.com") {
 ```nginx
 add_header Access-Control-Allow-Origin "https://your-allowed-origin.com";
 add_header Access-Control-Allow-Credentials true;
-```
+``
 ⚠️ 注意：当设置了 Access-Control-Allow-Credentials: true 时，不能将 Access-Control-Allow-Origin 设置为 *，否则会被浏览器拒绝。
 
 ⸻
