@@ -74,6 +74,8 @@ flowchart TB
     class squid,kong,api internalStyle
 
 ```
+https://cloud.google.com/trace/docs/trace-context?hl=zh-cn
+
 
 好的，你的流程图清晰地展示了请求路径。要实现 E2E 请求跟踪并关联所有组件的日志，核心在于**确保有一个唯一的标识符（Trace ID）在请求的整个生命周期中传递，并且每个组件都能记录这个标识符**。
 
@@ -194,3 +196,8 @@ flowchart TB
 6.  **探索 Cloud Trace** 以获得可视化的分布式跟踪视图。
 
 通过这种方式，即使 Nginx 日志本身只显示了部分信息，你也可以通过关联 `trace_id` 在 Cloud Logging 中看到请求从 GLB 进入到最终 API 处理的完整旅程。
+
+
+
+
+在Nginx中，日志级别分为debug、info、notice、warn、error、crit、alert、emerg八个级别。要在info级别获取特定的debug或notice信息，你可以通过以下方式：1. 使用条件日志配置，根据特定变量或请求特征来启用debug日志 2. 使用error_log指令的if条件判断，针对特定请求启用更详细的日志级别 3. 在access_log中使用自定义log_format，将需要的debug信息通过变量方式记录 4. 使用Nginx的debug_connection指令，针对特定IP启用调试日志。这样可以在保持整体info日志级别的同时，获取到所需的特定debug信息。
