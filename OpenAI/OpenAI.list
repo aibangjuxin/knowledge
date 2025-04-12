@@ -50,5 +50,6 @@ DOMAIN-SUFFIX,labs.google
 DOMAIN-SUFFIX,codeium.com
 # Grok 
 DOMAIN-SUFFIX,x.ai
+DOMAIN-SUFFIX,grok.com
 
 
