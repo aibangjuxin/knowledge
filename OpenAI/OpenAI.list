@@ -48,5 +48,7 @@ DOMAIN-SUFFIX,groq.com
 DOMAIN-SUFFIX,labs.google
 # server.codeium.com
 DOMAIN-SUFFIX,codeium.com
+# Grok 
+DOMAIN-SUFFIX,x.ai
 
 
