@@ -18,6 +18,71 @@ TODO:
     - [ ] We need to verify all version have been upgrade to 3.4 
 
 
+Maintenance and Best Practices
+
+Periodic Certificate Cleanup:
+
+Create a scheduled task to check certificate expiration dates
+Notify users of soon-to-expire certificates
+Remove expired certificates that are no longer in use
+
+
+Trust Config Version Control:
+
+Record version for each Trust Config update
+Support rollback to previous versions in emergency situations
+
+
+Operation Audit Logging:
+
+Log all certificate additions and Trust Config updates
+Include operator, operation time, and change details
+
+
+Performance Considerations:
+
+Monitor Trust Config size as too many certificates may impact performance
+Consider splitting Trust Config by service type or department
+
+
+Automated Testing:
+
+Test mTLS connections for all user types after each Trust Config update
+Ensure updates do not break existing services
+
+
+
+后续维护与最佳实践
+
+定期清理过期证书:
+
+创建一个定期任务检查证书有效期
+对即将过期的证书通知用户
+移除过期且未被任何用户使用的证书
+
+
+Trust Config版本控制:
+
+为每次Trust Config更新记录版本
+在紧急情况下支持回滚到先前版本
+
+
+操作审计日志:
+
+记录所有证书添加和Trust Config更新操作
+包括操作人、操作时间和变更内容
+
+
+性能考虑:
+
+监控Trust Config大小，证书过多可能影响性能
+考虑按服务类型或部门分割多个Trust Config
+
+
+自动化测试:
+在每次更新Trust Config后，自动测试各类用户的mTLS连接
+确保更新不会破坏现有服务
+
 
 - [ ] **GCP GLB 配置**：GCP 负载均衡器会处理 SSL/TLS 握手并进行 MTLS 验证，但不会将证书信息传递给后端
 - [ ] 
