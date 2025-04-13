@@ -1,3 +1,23 @@
+TODO:
+- [ ]
+- [ ] SRE need care of PDB warning && when time to Deployment PDB for user 
+- [ ] IMRP ==> need simple the images ? Common-nginx ? Or direct use a new name Because some of the old complex logic may need to be modified
+- [ ] Trust config  violation . So we need to create region config to replace global config 
+- [ ] Design Trust config manage with old Logic 
+  - [ ] analysis the old logic through the onboarding process and pipeline
+    - [ ] Phase1 need to understand the old logic
+    - [ ] Phase2 need Dynamic update Trust config and Verify the Result 
+        - [ ] fingerprint 
+        - [ ] Capture the subject or issuer 
+        - [ ] How to save the fingerprint or issuer 
+        - [ ] save it in the Bucket?
+- [ ] Onboarding collection user certificates and will using same logic to attend to trust config ?
+- [ ] Load the collected user certificate and append it to the trust configuration using the same logic
+    - [ ] Trust config cover or 
+- [ ] GKE ingress HK environment paused upgrade. Because dedicated user upgrade no finish Version 3.4
+    - [ ] We need to verify all version have been upgrade to 3.4 
+
+
 
 - [ ] **GCP GLB 配置**：GCP 负载均衡器会处理 SSL/TLS 握手并进行 MTLS 验证，但不会将证书信息传递给后端
 - [ ] 
