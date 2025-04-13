@@ -1,5 +1,60 @@
 非常感谢你提供的详细流程图以及对 Cloud Load Balancing 中 Client Authentication 和 Server TLS Policy 部分的关注。
 以下我将以 Markdown 格式详细展开讲述 **Client Authentication** 和 **Server TLS Policy** 的相关知识点，帮助你更好地理解这一部分在 Google Cloud 环境中的作用和配置。
+```mermaid
+flowchart TB
+    classDef clientStyle fill:#f9f7f7,stroke:#333,stroke-width:2px,color:#333,font-weight:bold
+    classDef lbStyle fill:#e8f0fe,stroke:#4285f4,stroke-width:2px,color:#174ea6,font-weight:bold
+    classDef policyStyle fill:#f0f7ff,stroke:#4285f4,stroke-width:1px,color:#0b5394
+    classDef trustStyle fill:#e6f2ff,stroke:#4285f4,stroke-width:1px,color:#0b5394
+    classDef backendStyle fill:#e6f4ea,stroke:#34a853,stroke-width:1px,color:#137333
+
+    subgraph Client
+        client[Client System]
+    end
+
+    subgraph GoogleCloud[Google Cloud]
+        subgraph LoadBalancer[Cloud Load Balancing]
+            lb[Load Balancer]
+        end
+        subgraph SecurityConfig[Security Configuration]
+            subgraph TrustConfig[Trust Config]
+                trustStore[Trust Store]
+                rootCert[Root CA Certificate]
+                interCert[Intermediate CA Certificate]
+                trustStore --> rootCert
+                trustStore --> interCert
+            end
+            subgraph Policies[Security Policies]
+                clientAuth[Client Authentication]
+                tlsPolicy[Server TLS Policy]
+                clientAuth --> tlsPolicy
+            end
+            trustStore --> clientAuth
+            tlsPolicy --> lb
+        end
+    end
+
+    subgraph Backend
+        nginx[Nginx Reverse Proxy]
+        internal[Internal Services]
+        nginx --> internal
+    end
+
+    client --> |1 Initiate HTTPS Request| lb
+    lb --> |2 Apply TLS Configuration| tlsPolicy
+    tlsPolicy --> |3 Enforce mTLS if Configured| clientAuth
+    clientAuth --> |4 Validate Client Certificate| trustStore
+    trustStore --> |5 Return Validation Result| clientAuth
+    clientAuth --> |6 Allow or Deny Request| tlsPolicy
+    tlsPolicy --> |7 Forward Validated Request| lb
+    lb --> |8 Route to Backend| nginx
+
+    class client clientStyle
+    class lb lbStyle
+    class clientAuth,tlsPolicy policyStyle
+    class trustStore,rootCert,interCert trustStyle
+    class nginx,internal backendStyle
+```
 
 ---
 
