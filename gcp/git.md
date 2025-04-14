@@ -1,3 +1,4 @@
+```bash
 #!/bin/bash
 os_type=""
 
@@ -70,3 +71,4 @@ if [ -n "$(git status --porcelain)" ]; then
 else
   echo "No changes to commit."
 fi
+```
