@@ -1,4 +1,17 @@
 
+- [core concepts](#core-concepts)
+- [fullchain.pem = server cert + intermediate cert](#fullchainpem--server-cert--intermediate-cert)
+- [上传证书](#上传证书)
+- [绑定到 HTTPS 代理](#绑定到-https-代理)
+  - [certificate](#certificate)
+  - [fullchain get cn and SAN](#fullchain-get-cn-and-san)
+- [Claude](#claude)
+    - [创建 SSL 证书资源](#创建-ssl-证书资源)
+    - [绑定域名和设置 subjectAlternativeNames](#绑定域名和设置-subjectalternativenames)
+    - [查看证书详情](#查看证书详情)
+    - [证书类型](#证书类型)
+    - [将证书应用到负载均衡器](#将证书应用到负载均衡器)
+
 # core concepts
 
 
@@ -324,6 +337,64 @@ openssl req -new -x509 -key privkey.pem -out server.crt \
 
 如果你需要我帮你写 OpenSSL 命令生成 fullchain，或者解析现有 fullchain 的 CN/SAN 内容，我也可以帮你！
 
+## fullchain get cn and SAN 
+你想要解析一个 fullchain PEM 文件中的 CN 和 SAN 内容（即：服务端证书中绑定的域名信息），非常实用！下面是一个完整的 Shell 脚本，它可以帮你从 fullchain.pem 中提取出：
+	•	✅ CN（Common Name）
+	•	✅ SAN（Subject Alternative Names）
+
+⸻
+
+🛠️ 示例脚本：提取 CN / SAN
+```bash
+#!/bin/bash
+
+CERT_FILE="$1"
+
+if [ ! -f "$CERT_FILE" ]; then
+  echo "Usage: $0 <fullchain.pem>"
+  exit 1
+fi
+
+# 提取第一个证书（即服务端证书）
+SERVER_CERT=$(awk 'BEGIN{c=0}/BEGIN CERT/{c++} c==1{print}' "$CERT_FILE")
+
+# 写入临时文件
+TMP_CERT=$(mktemp)
+echo "$SERVER_CERT" > "$TMP_CERT"
+
+echo "🔍 Subject CN:"
+openssl x509 -in "$TMP_CERT" -noout -subject | sed -n 's/.*CN=\(.*\)/\1/p'
+
+echo "🔍 Subject Alternative Names (SAN):"
+openssl x509 -in "$TMP_CERT" -noout -text | awk '/X509v3 Subject Alternative Name/{getline; print}' | sed 's/DNS://g'
+
+rm -f "$TMP_CERT"
+```
+
+
+⸻
+
+✅ 使用方法：
+```bash
+chmod +x parse_cert.sh
+./parse_cert.sh fullchain.pem
+```
+
+
+⸻
+
+🔎 输出示例：
+```bash
+🔍 Subject CN:
+api.example.com
+🔍 Subject Alternative Names (SAN):
+api.example.com, api-alt.example.com
+```
+
+
+⸻
+
+需要我再给你加上多证书处理、或是解析多个 fullchain 的场景也可以 👍
 
 
 # Claude
