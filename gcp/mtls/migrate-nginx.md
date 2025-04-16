@@ -268,12 +268,20 @@ generate_rules() {
 
         echo "# Processing: $GEO_FILE"
 
-        # ... (保持现有的 MAP_NAME 和 VERSION 提取逻辑) ...
+        # Extract map name and version from the first line of geo file
+        MAP_NAME=$(grep proxy_protocol_addr "$GEO_FILE" | grep -o '\$[^ ]*' | tail -n1 | sed 's/\$//')
+        VERSION=$(echo "$MAP_NAME" | grep -o 'v[0-9]\+' || echo "v1")
+        
+        if [ -z "$MAP_NAME" ]; then
+            echo "Warning: Could not extract map name from $GEO_FILE"
+            continue
+        fi
 
         # Convert map name to path format for URL routing
         BASE_PATH=$(echo "$MAP_NAME" | sed -E 's/-v[0-9]+$//')
         REQUEST_PATH="/${BASE_PATH}/${VERSION}"
-        
+        echo "# Request path: $REQUEST_PATH"
+
         # Process each line in the geo file
         while IFS= read -r line; do
             # Skip empty lines, comments, default line, and lines without IP
