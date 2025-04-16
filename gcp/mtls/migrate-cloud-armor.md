@@ -1,3 +1,51 @@
+# create rule 
+
+是的，使用 create 命令确实更直接和安全。根据示例规则，我帮你生成对应的 create 命令：
+
+```bash
+# 创建安全策略
+gcloud compute security-policies create ${SECURITY_POLICY_NAME} \
+    --description="Security policy for API access control"
+
+# 添加规则1
+gcloud compute security-policies rules create ${SECURITY_POLICY_NAME} \
+    --description="Allow 1.2.3.4 to access /api/v1" \
+    --action=allow \
+    --priority=30000 \
+    --expression="request.path.matches('/api/v1/*') && inIpRange(origin.ip, '1.2.3.4/32')"
+
+# 添加规则2
+gcloud compute security-policies rules create ${SECURITY_POLICY_NAME} \
+    --description="Allow 5.6.7.8 to access /api/v2" \
+    --action=allow \
+    --priority=30001 \
+    --expression="request.path.matches('/api/v2/*') && inIpRange(origin.ip, '5.6.7.8/32')"
+
+# 添加规则3
+gcloud compute security-policies rules create ${SECURITY_POLICY_NAME} \
+    --description="Allow 9.10.11.12 to access /api/v3" \
+    --action=allow \
+    --priority=30002 \
+    --expression="request.path.matches('/api/v3/*') && inIpRange(origin.ip, '9.10.11.12/32')"
+
+# 添加默认拒绝规则（最低优先级）
+gcloud compute security-policies rules create ${SECURITY_POLICY_NAME} \
+    --description="Default deny rule" \
+    --action=deny-403 \
+    --priority=2147483647
+```
+
+优点：
+1. 不需要处理 fingerprint
+2. 自动创建默认规则
+3. 命令更直观，易于理解和维护
+4. 每条规则可以独立管理
+5. 出错时容易定位问题
+
+建议将这些命令保存为脚本，方便批量执行和管理。
+
+
+
 This script automates the creation and management of Google Cloud Armor security rules. Here's a summary of its main functions:
 
 1. **Configuration Setup**

@@ -224,6 +224,7 @@ EOF
 done
 ```
 ---
+- edit function `generate_rules` and `import_rules`
 ```bash
 #!/opt/homebrew/bin/bash
 
@@ -248,110 +249,77 @@ get_file_info() {
 
 # Function to generate Cloud Armor rules based on geo files
 generate_rules() {
-    # Initialize Cloud Armor rules file with JSON structure
-    cat > "$CLOUD_ARMOR_RULES" <<EOF
-{
-    "rules": [
-EOF
+    # Create security policy command
+    echo "# Create security policy"
+    echo "gcloud compute security-policies create ${SECURITY_POLICY_NAME} \\"
+    echo "    --description=\"Security policy for API access control\""
+    echo
 
-    # Set initial priority (starting from 30000)
+    # Set initial priority
     local PRIORITY=30000
-    local FIRST_RULE=true
     declare -A PROCESSED_IPS  # Hash to store processed IP addresses
 
-    # Process each geo file in the configuration directory
+    # Process each geo file
     for GEO_FILE in "$CONF_DIR"/*-geo.txt; do
         if [ ! -f "$GEO_FILE" ]; then
             echo "No geo files found in $CONF_DIR"
             exit 1
         fi
 
-        echo "Processing: $GEO_FILE"
+        echo "# Processing: $GEO_FILE"
 
-        # Extract map name and version from the first line of geo file
-        MAP_NAME=$(grep proxy_protocol_addr "$GEO_FILE" | grep -o '\$[^ ]*' | tail -n1 | sed 's/\$//')
-        VERSION=$(echo "$MAP_NAME" | grep -o 'v[0-9]\+' || echo "v1")
-        
-        if [ -z "$MAP_NAME" ]; then
-            echo "Warning: Could not extract map name from $GEO_FILE"
-            continue
-        fi
+        # ... (保持现有的 MAP_NAME 和 VERSION 提取逻辑) ...
 
         # Convert map name to path format for URL routing
         BASE_PATH=$(echo "$MAP_NAME" | sed -E 's/-v[0-9]+$//')
         REQUEST_PATH="/${BASE_PATH}/${VERSION}"
-        echo "Request path: $REQUEST_PATH"
-
-        # Process each line in the geo file to extract IP addresses
+        
+        # Process each line in the geo file
         while IFS= read -r line; do
             # Skip empty lines, comments, default line, and lines without IP
             [[ -z "$line" || "$line" =~ ^[[:space:]]*# || "$line" =~ "default" || ! "$line" =~ ^[[:space:]]*[0-9] ]] && continue
             
-            # Extract IP and value from the line
+            # Extract IP and value
             IP=$(echo "$line" | awk '{print $1}')
             VALUE=$(echo "$line" | awk '{print $2}' | tr -d ';')
 
             # Only process IPs with value 1 and skip default route
             if [ "$IP" != "0.0.0.0/0" ] && [ "$VALUE" = "1" ]; then
-                # Check if this IP and path combination has been processed
                 local IP_PATH_KEY="${IP}:${REQUEST_PATH}"
                 if [ "${PROCESSED_IPS[$IP_PATH_KEY]}" != "1" ]; then
                     PROCESSED_IPS[$IP_PATH_KEY]="1"
                     
-                    # Add comma for all rules except the first one
-                    if [ "$FIRST_RULE" = true ]; then
-                        FIRST_RULE=false
-                    else
-                        echo "        ," >> "$CLOUD_ARMOR_RULES"
-                    fi
-
-                    # Generate Cloud Armor rule for this IP and path
-                    cat >> "$CLOUD_ARMOR_RULES" <<EOF
-        {
-            "description": "Allow $IP to access $REQUEST_PATH",
-            "priority": $PRIORITY,
-            "match": {
-                "versionedExpr": "SRC_IPS_V1",
-                "config": {
-                    "srcIpRanges": ["$IP"]
-                },
-                "expr": {
-                    "expression": "request.path.matches('$REQUEST_PATH/*')"
-                }
-            },
-            "action": "allow"
-        }
-EOF
+                    # Generate create command for each rule
+                    echo "# Add rule for $IP to access $REQUEST_PATH"
+                    echo "gcloud compute security-policies rules create ${SECURITY_POLICY_NAME} \\"
+                    echo "    --description=\"Allow $IP to access $REQUEST_PATH\" \\"
+                    echo "    --action=allow \\"
+                    echo "    --priority=$PRIORITY \\"
+                    echo "    --expression=\"request.path.matches('$REQUEST_PATH/*') && inIpRange(origin.ip, '$IP')\""
+                    echo
+                    
                     PRIORITY=$((PRIORITY + 1))
                 fi
             fi
         done < "$GEO_FILE"
     done
 
-    # Close the JSON array and object
-    cat >> "$CLOUD_ARMOR_RULES" <<EOF
-    ]
-}
-EOF
+    # Add default deny rule
+    echo "# Add default deny rule"
+    echo "gcloud compute security-policies rules create ${SECURITY_POLICY_NAME} \\"
+    echo "    --description=\"Default deny rule\" \\"
+    echo "    --action=deny-403 \\"
+    echo "    --priority=2147483647"
 }
 
-# Function to import generated rules into Cloud Armor
+# Function to print import command
 import_rules() {
-    if [ -f "$CLOUD_ARMOR_RULES" ]; then
-        echo "Importing rules to security policy: $SECURITY_POLICY_NAME"
-        if gcloud compute security-policies rules import "$SECURITY_POLICY_NAME" \
-            --source="$CLOUD_ARMOR_RULES" \
-            --quiet; then
-            echo "Rules imported successfully"
-        else
-            echo "Error: Failed to import rules"
-            exit 1
-        fi
-    else
-        echo "Error: Rules file not found: $CLOUD_ARMOR_RULES"
-        exit 1
-    fi
+    echo "# Command to import rules (if needed):"
+    echo "gcloud compute security-policies rules import ${SECURITY_POLICY_NAME} \\"
+    echo "    --source=\"${CLOUD_ARMOR_RULES}\" \\"
+    echo "    --quiet"
 }
+
 
 # Generate Cloud Armor rules
 generate_rules
@@ -425,5 +393,4 @@ EOF
 
     echo "NGINX configuration file generated: $NEW_CONF"
 done
-
 ```
