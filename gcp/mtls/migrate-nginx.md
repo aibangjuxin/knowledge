@@ -224,7 +224,7 @@ EOF
 done
 ```
 ---
-- edit function `generate_rules` and `import_rules`
+- edit function `generate_rules` and `import_rules` successfully
 ```bash
 #!/opt/homebrew/bin/bash
 

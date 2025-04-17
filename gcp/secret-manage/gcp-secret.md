@@ -13,7 +13,7 @@ bindings:
 etag: BwYDEoWdFxA=
 version: 1
 ```
-- 异常结果分析
+- 异常结果分析 notice The uid parted
 ```bash
 bindings:
 - members:
