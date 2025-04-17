@@ -3,6 +3,7 @@
 - [企业CA](#企业ca)
 - [GCP mtls trustconfig 配置](#gcp-mtls-trustconfig-配置)
 - [Openssl 命令获取这个ca pem 的一些对应信息](#openssl-命令获取这个ca-pem-的一些对应信息)
+- [compare 命令](#compare-命令)
 
 # What is CA 
 CA CA 证书 解释一下什么是 **CA 证书 (CA Certificate)**。
@@ -392,3 +393,88 @@ Timestamping CA : No
 **总结:**
 
 通过这些 `openssl` 命令，你可以深入了解你的 CA 证书文件的内容，特别是它的身份（Subject, Issuer）、有效期（Validity）、是否真的是一个 CA（Basic Constraints, Key Usage, Purpose）以及它的唯一标识（Serial, Fingerprint）等关键信息。在处理 `TrustConfig` 时，理解这些信息非常有帮助。
+
+
+# compare 命令
+
+我现在有个证书名字是DigiCert EV RSA CA G2.crt 单纯打开看应该是DigiCert EV RSA CA G2.crt的Certification path 里是有 DigiCert Global Root G2.crt 它上层是DigiCert Global Root G2
+另外一个证书名字是DigiCert Global Root G2.crt 单纯打开看应该是DigiCert Global Root G2 且只有这个
+
+
+我们可以使用 openssl 命令来分析这两个证书的区别。以下是具体步骤：
+
+1. **查看基本信息**
+```bash
+# 查看 DigiCert EV RSA CA G2 证书信息
+openssl x509 -in "DigiCert EV RSA CA G2.crt" -noout -text
+
+# 查看 DigiCert Global Root G2 证书信息
+openssl x509 -in "DigiCert Global Root G2.crt" -noout -text
+```
+
+2. **快速对比关键信息**
+```bash
+# 对比两个证书的颁发者和主体
+echo "=== DigiCert EV RSA CA G2 ==="
+openssl x509 -in "DigiCert EV RSA CA G2.crt" -noout -issuer -subject
+
+echo "=== DigiCert Global Root G2 ==="
+openssl x509 -in "DigiCert Global Root G2.crt" -noout -issuer -subject
+```
+
+从名字可以推测：
+1. `DigiCert Global Root G2.crt` 应该是根证书（Root CA）
+2. `DigiCert EV RSA CA G2.crt` 应该是中间证书（Intermediate CA），专门用于签发 EV（扩展验证）类型的证书
+
+主要区别应该体现在：
+1. 证书链关系：Global Root G2 是自签名的根证书，而 EV RSA CA G2 是由 Global Root G2 签发的中间证书
+2. 用途：EV RSA CA G2 专门用于签发 EV 类型的证书
+3. 有效期：根证书的有效期通常更长
+4. 密钥用法和扩展：可能有不同的限制和权限
+
+运行上述命令后，我们可以看到具体的区别。
+
+根证书（Root CA）和中间证书（Intermediate CA）有几个关键区别：
+
+1. **自签名 vs 被签名**
+- Root CA：自签名（self-signed），即 Issuer 和 Subject 相同
+- Intermediate CA：由上级 CA（通常是 Root CA）签名，Issuer 和 Subject 不同
+
+2. **证书链位置**
+- Root CA：位于证书链的最顶端，是信任的起点
+- Intermediate CA：位于证书链的中间位置，连接 Root CA 和最终实体证书
+
+3. **Basic Constraints 扩展**
+- Root CA：通常没有 Path Length Constraint 限制
+- Intermediate CA：通常有 Path Length Constraint 限制，限制其下可以有多少层级的证书
+
+可以使用以下命令来查看区别：
+
+```bash
+# 查看证书的颁发者和主体，判断是否自签名
+openssl x509 -in certificate.crt -noout -issuer -subject
+
+# 查看完整信息，特别是 Basic Constraints 部分
+openssl x509 -in certificate.crt -noout -text | grep -A2 "Basic Constraints"
+```
+
+一个典型的例子：
+```plaintext
+# Root CA 示例
+Issuer: CN=DigiCert Global Root G2
+Subject: CN=DigiCert Global Root G2
+Basic Constraints: critical
+    CA:TRUE
+    # 通常没有 Path Length Constraint
+
+# Intermediate CA 示例
+Issuer: CN=DigiCert Global Root G2
+Subject: CN=DigiCert EV RSA CA G2
+Basic Constraints: critical
+    CA:TRUE
+    Path Length Constraint: 0
+```
+
+这些区别反映了它们在 PKI 体系中的不同角色和信任级别。
+
+
