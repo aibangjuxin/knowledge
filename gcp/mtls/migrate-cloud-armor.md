@@ -1,5 +1,94 @@
 # create rule 
 
+```bash
+#!/opt/homebrew/bin/bash
+
+# Directory settings for input and output files
+CONF_DIR="./conf.d"
+
+# Function to convert proxy name to path format
+# Example: service-proxy-v1 -> /service/v1
+convert_to_path() {
+    local proxy_name=$1
+    echo "/$(echo "$proxy_name" | sed -E 's/-v([0-9]+)$//')/v\1"
+}
+
+# Function to generate Cloud Armor security rules
+generate_rules() {
+    # Set initial priority (starting from 30000)
+    local PRIORITY=30000
+    # Hash map to store processed paths and their IPs
+    declare -A PATH_IPS
+
+    # Process each geo file in the configuration directory
+    for GEO_FILE in "$CONF_DIR"/*-geo.txt; do
+        if [ ! -f "$GEO_FILE" ]; then
+            echo "No geo files found in $CONF_DIR"
+            exit 1
+        fi
+
+        echo "Processing: $GEO_FILE"
+
+        # Extract map name and version from the first line of geo file
+        MAP_NAME=$(grep proxy_protocol_addr "$GEO_FILE" | grep -o '\$[^ ]*' | tail -n1 | sed 's/\$//')
+        VERSION=$(echo "$MAP_NAME" | grep -o 'v[0-9]\+' || echo "v1")
+        
+        if [ -z "$MAP_NAME" ]; then
+            echo "Warning: Could not extract map name from $GEO_FILE"
+            continue
+        fi
+
+        # Convert map name to path format for URL routing
+        BASE_PATH=$(echo "$MAP_NAME" | sed -E 's/-v[0-9]+$//')
+        # if we no need Version in URL routing, we can use:
+        # REQUEST_PATH="/${BASE_PATH}/${VERSION}"
+        REQUEST_PATH="/${BASE_PATH}"
+        echo "Request path: $REQUEST_PATH"
+
+        # Initialize array for this path's IPs if not exists
+        PATH_IPS[$REQUEST_PATH]=""
+
+        # Process each line in the geo file to extract IP addresses
+        while IFS= read -r line; do
+            # Skip empty lines, comments, default line, and lines without IP
+            [[ -z "$line" || "$line" =~ ^[[:space:]]*# || "$line" =~ "default" || ! "$line" =~ ^[[:space:]]*[0-9] ]] && continue
+            
+            # Extract IP and value from the line
+            # Format expected: IP_ADDRESS VALUE;
+            IP=$(echo "$line" | awk '{print $1}')
+            VALUE=$(echo "$line" | awk '{print $2}' | tr -d ';')
+
+            # Skip default route and only process IPs with value 1
+            # [ "$IP" != "0.0.0.0/0" ] && [ "$VALUE" = "1" ]
+            if [ "$VALUE" = "1" ]; then
+                # Add IP to the path's IP list if not already included
+                if [[ ! "${PATH_IPS[$REQUEST_PATH]}" =~ "$IP" ]]; then
+                    if [ -z "${PATH_IPS[$REQUEST_PATH]}" ]; then
+                        PATH_IPS[$REQUEST_PATH]="inIpRange(origin.ip, '$IP')"
+                    else
+                        PATH_IPS[$REQUEST_PATH]="${PATH_IPS[$REQUEST_PATH]} || inIpRange(origin.ip, '$IP')"
+                    fi
+                fi
+            fi
+        done < "$GEO_FILE"
+
+        # Generate Cloud Armor rule for this path if we have IPs
+        if [ -n "${PATH_IPS[$REQUEST_PATH]}" ]; then
+            echo "gcloud compute security-policies rules create $PRIORITY \\"
+            echo "    --description=\"Allow access to $REQUEST_PATH\" \\"
+            echo "    --action=allow \\"
+            echo "    --expression=\"request.path.matches('$REQUEST_PATH') && (${PATH_IPS[$REQUEST_PATH]})\""
+            echo
+            
+            PRIORITY=$((PRIORITY + 1))
+        fi
+    done
+}
+
+# Main execution flow
+generate_rules
+```
+
 是的，使用 create 命令确实更直接和安全。根据示例规则，我帮你生成对应的 create 命令：
 
 ```bash
