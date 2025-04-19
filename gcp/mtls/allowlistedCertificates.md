@@ -138,7 +138,7 @@
 支持多个 CA 验证
 Google Cloud Certificate Manager 提供信任配置（trust configs）功能，用于管理 mTLS 场景中的证书验证。根据 Manage trust configs | Certificate Manager | Google Cloud，信任配置支持多个 CA，通过以下方式实现：
 	•	使用多个 pemCertificate 字段定义信任锚点（root CAs）、中间 CA 和允许列表证书。
-	•	例如，YAML 文件中可以包含： name: "TRUST_CONFIG_ID"
+	•	例如，YAML 文件中可以包含：name: "TRUST_CONFIG_ID"
 	•	trustStores:
 	•	- trustAnchors:
 	•	  - pemCertificate: "CERTIFICATE_PEM_PAYLOAD_1"
@@ -199,7 +199,7 @@ GET
 	1	检索文件：gsutil cp gs://trust-config-bucket/configs/trust-config.yaml ./trust-config.yaml
 	2	解析 YAML，检查新 CA：
 	◦	使用 Python 或其他工具解析 YAML，检查 pemCertificate 列表。
-	◦	如果新 CA 不存在，添加新证书，例如： allowlistedCertificates:
+	◦	如果新 CA 不存在，添加新证书，例如：allowlistedCertificates:
 	◦	  - pemCertificate: "NEW_CERT_PEM"
 	◦	
 	3	上传更新：gsutil cp trust-config.yaml gs://trust-config-bucket/configs/trust-config.yaml
@@ -224,11 +224,11 @@ GET
 	•	看起来，YAML 文件中可以使用 | 符号来保留多行格式，方便阅读。
 
 `allowlistedCertificates` 的解释
-什么是 allowlistedCertificates？ allowlistedCertificates 是一个字段，用于在信任配置中指定一组特定的证书。这些证书会被视为始终有效，即使它们已过期，只要满足以下条件：
+什么是 allowlistedCertificates？allowlistedCertificates 是一个字段，用于在信任配置中指定一组特定的证书。这些证书会被视为始终有效，即使它们已过期，只要满足以下条件：
 	•	证书格式正确（可解析）。
 	•	证书证明了私钥所有权。
 	•	证书的 SAN（Subject Alternative Name）字段符合特定约束。
-pemCertificate 字段的内容 pemCertificate 字段应该包含证书的 PEM 编码格式。PEM 是一种以 base64 编码的文本格式，用于存储加密对象，如证书。它的典型格式包括：
+pemCertificate 字段的内容pemCertificate 字段应该包含证书的 PEM 编码格式。PEM 是一种以 base64 编码的文本格式，用于存储加密对象，如证书。它的典型格式包括：
 	•	开头标记：-----BEGIN CERTIFICATE-----
 	•	base64 编码的证书内容。
 	•	结尾标记：-----END CERTIFICATE-----
@@ -243,7 +243,7 @@ dHkgU2VydmljZTEbMBkGA1UEAwwSUGF5bWVudCBTZXJ2ZXIgLSBBMTAvBgkqhkiG9w0B
 CQEWEmluZm9Ad2lzZS5jby5nYjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABL8d9aZ+
 ...
 -----END CERTIFICATE-----
-示例 假设你有一个名为 allowlisted.cert 的文件，内容如下：
+示例假设你有一个名为 allowlisted.cert 的文件，内容如下：
 -----BEGIN CERTIFICATE-----
 MIICwjCCAaqgAwIBAgIVAMIIuwK+MDowDQYJKoZIhvcNAQELBQAwgYQxCzAJBgNV
 BAYTAkdCMQ8wDQYDVQQIDAZMb25kb24xDTALBgNVBAoMBFdpc2UxHDAaBgNVBAsME0dy
@@ -367,8 +367,8 @@ Certificate Manager 的 REST API 和 CLI 都支持通过 YAML 文件管理信任
 	•	证据倾向于，这些证书由客户端呈现，服务器始终接受它们为有效。
 	•	看起来，allowlistedCertificates 不会用于服务器证书，专注于客户端验证。
 直接回答
-allowlistedCertificates 使用的是什么证书？ allowlistedCertificates 部分通常包含客户端证书（client certificates），这些证书在互信 TLS（mTLS）认证中由客户端提供给服务器。服务器会始终将这些证书视为有效，即使它们已过期（只要满足某些条件，如格式正确和证明私钥所有权）。这允许服务器对特定客户端进行特殊信任，而无需依赖完整的证书链。
-为什么是客户端证书？ 在 mTLS 场景中，服务器需要验证客户端的证书，而 allowlistedCertificates 正是为此设计的，用于确保某些特定客户端证书始终被接受。这与默认的信任锚点（root certificates）和中间 CA 证书不同，后者用于标准的证书链验证。
+allowlistedCertificates 使用的是什么证书？allowlistedCertificates 部分通常包含客户端证书（client certificates），这些证书在互信 TLS（mTLS）认证中由客户端提供给服务器。服务器会始终将这些证书视为有效，即使它们已过期（只要满足某些条件，如格式正确和证明私钥所有权）。这允许服务器对特定客户端进行特殊信任，而无需依赖完整的证书链。
+为什么是客户端证书？在 mTLS 场景中，服务器需要验证客户端的证书，而 allowlistedCertificates 正是为此设计的，用于确保某些特定客户端证书始终被接受。这与默认的信任锚点（root certificates）和中间 CA 证书不同，后者用于标准的证书链验证。
 支持的资源
 	•	更多详情请参考 Manage trust configs 和 Set up frontend mTLS。
 
@@ -397,7 +397,7 @@ allowlistedCertificates 是信任配置中的一个字段，用于指定一组�
 	4	具体示例与实践
 	◦	在设置 mTLS 的过程中，用户可以创建自签名证书（如通过 OpenSSL），并将其添加到 allowlistedCertificates 中。例如：
 	▪	使用命令 openssl req -x509 -new -sha256 -newkey rsa:2048 -nodes -days 3650 -subj '/CN=localhost' -keyout allowlisted.key -out allowlisted.cert 创建自签名证书。
-	▪	然后，将该证书的 PEM 编码内容添加到信任配置的 YAML 文件中： allowlistedCertificates:
+	▪	然后，将该证书的 PEM 编码内容添加到信任配置的 YAML 文件中：allowlistedCertificates:
 	▪	  - pemCertificate: |
 	▪	      -----BEGIN CERTIFICATE-----
 	▪	      MIICwjCCAaqgAwIBAgIVAMIIuwK+MDowDQYJKoZIhvcNAQELBQAwgYQxCzAJBgNV
@@ -440,8 +440,8 @@ Certificate Manager 的 REST API 和 CLI 都支持管理 allowlistedCertificates
 	•	证据倾向于，这些证书由客户端呈现，服务器始终接受它们为有效。
 	•	看起来，allowlistedCertificates 不会用于服务器证书，专注于客户端验证。
 直接回答
-allowlistedCertificates 使用的是什么证书？ allowlistedCertificates 部分通常包含客户端证书（client certificates），这些证书在互信 TLS（mTLS）认证中由客户端提供给服务器。服务器会始终将这些证书视为有效，即使它们已过期（只要满足某些条件，如格式正确和证明私钥所有权）。这允许服务器对特定客户端进行特殊信任，而无需依赖完整的证书链。
-为什么是客户端证书？ 在 mTLS 场景中，服务器需要验证客户端的证书，而 allowlistedCertificates 正是为此设计的，用于确保某些特定客户端证书始终被接受。这与默认的信任锚点（root certificates）和中间 CA 证书不同，后者用于标准的证书链验证。
+allowlistedCertificates 使用的是什么证书？allowlistedCertificates 部分通常包含客户端证书（client certificates），这些证书在互信 TLS（mTLS）认证中由客户端提供给服务器。服务器会始终将这些证书视为有效，即使它们已过期（只要满足某些条件，如格式正确和证明私钥所有权）。这允许服务器对特定客户端进行特殊信任，而无需依赖完整的证书链。
+为什么是客户端证书？在 mTLS 场景中，服务器需要验证客户端的证书，而 allowlistedCertificates 正是为此设计的，用于确保某些特定客户端证书始终被接受。这与默认的信任锚点（root certificates）和中间 CA 证书不同，后者用于标准的证书链验证。
 支持的资源
 	•	更多详情请参考 Manage trust configs 和 Set up frontend mTLS。
 
@@ -470,7 +470,7 @@ allowlistedCertificates 是信任配置中的一个字段，用于指定一组�
 	4	具体示例与实践
 	◦	在设置 mTLS 的过程中，用户可以创建自签名证书（如通过 OpenSSL），并将其添加到 allowlistedCertificates 中。例如：
 	▪	使用命令 openssl req -x509 -new -sha256 -newkey rsa:2048 -nodes -days 3650 -subj '/CN=localhost' -keyout allowlisted.key -out allowlisted.cert 创建自签名证书。
-	▪	然后，将该证书的 PEM 编码内容添加到信任配置的 YAML 文件中： allowlistedCertificates:
+	▪	然后，将该证书的 PEM 编码内容添加到信任配置的 YAML 文件中：allowlistedCertificates:
 	▪	  - pemCertificate: |
 	▪	      -----BEGIN CERTIFICATE-----
 	▪	      MIICwjCCAaqgAwIBAgIVAMIIuwK+MDowDQYJKoZIhvcNAQELBQAwgYQxCzAJBgNV

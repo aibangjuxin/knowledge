@@ -70,6 +70,41 @@ graph TD
     end
 ```
 
+- About Trust config yaml 
+- [allowlistedCertificates](./allowlistedCertificates.md)
+- 为了安全性和禁止废弃证书访问平台,我们不使用allowlistedCertificates配置
+```yaml
+name: "TRUST_CONFIG_ID"
+trustStores:
+  - trustAnchors:
+      - pemCertificate: |
+          -----BEGIN CERTIFICATE-----
+          (根证书内容)
+          -----END CERTIFICATE-----
+      - pemCertificate: |
+          -----BEGIN CERTIFICATE-----
+          (另一个根证书内容)
+          -----END CERTIFICATE-----
+    intermediateCas:
+      - pemCertificate: |
+          -----BEGIN CERTIFICATE-----
+          (中间证书内容)
+          -----END CERTIFICATE-----
+      - pemCertificate: |
+          -----BEGIN CERTIFICATE-----
+          (另一个中间证书内容)
+          -----END CERTIFICATE-----
+allowlistedCertificates:
+  - pemCertificate: |
+      -----BEGIN CERTIFICATE-----
+      (允许列表中的证书内容)
+      -----END CERTIFICATE-----
+  - pemCertificate: |
+      -----BEGIN CERTIFICATE-----
+      (另一个允许列表中的证书内容)
+      -----END CERTIFICATE-----
+```
+
 ## 流程说明
 
 1. **证书上传与验证**
