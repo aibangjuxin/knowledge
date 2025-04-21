@@ -3,6 +3,11 @@
 - [reference](#reference)
 - [My Template setting](#my-template-setting)
     - [概述三个探针的作用](#概述三个探针的作用)
+    - [`startupProbe` 默认参数值](#startupprobe-默认参数值)
+    - [探针类型及其默认行为](#探针类型及其默认行为)
+    - [说明](#说明)
+    - [示例：未配置参数的 `startupProbe`](#示例未配置参数的-startupprobe)
+    - [注意事项](#注意事项)
     - [当前配置分析](#当前配置分析)
     - [优化建议](#优化建议)
     - [优化后的完整配置建议](#优化后的完整配置建议)
@@ -112,6 +117,63 @@ sequenceDiagram
    - 用于判断容器是否已经完成启动
    - 在启动探针运行时，会暂停其他探针
    - 适用于需要较长启动时间的应用
+
+在Kubernetes（K8S）中，如果您没有为 `startupProbe` 配置任何参数，Kubernetes会为每个参数分配默认值。以下是 `startupProbe` 的所有相关参数及其默认值的详细说明。这些默认值基于Kubernetes的官方文档和源码定义。
+
+### `startupProbe` 默认参数值
+`startupProbe` 的配置参数与 `livenessProbe` 和 `readinessProbe` 类似，主要包括以下几项：
+
+| 参数名              | 默认值       | 描述                                                                 |
+|---------------------|--------------|----------------------------------------------------------------------|
+| `timeoutSeconds`    | 1 秒         | 探针等待响应的最长时间，超过此时间则认为检查失败。                   |
+| `periodSeconds`     | 10 秒        | 探针检查的间隔时间，即多久执行一次探针。                            |
+| `successThreshold`  | 1 次         | 探针成功多少次后认为容器状态正常（对于 `startupProbe` 通常为1）。    |
+| `failureThreshold`  | 3 次         | 探针失败多少次后认为容器启动失败并执行重启策略。                    |
+| `initialDelaySeconds` | 0 秒       | 容器启动后，首次执行探针前的延迟时间。                              |
+
+### 探针类型及其默认行为
+`startupProbe` 必须指定具体的探针类型（如 `httpGet`、`tcpSocket` 或 `exec`），否则无法生效。如果未配置具体的探针类型，Kubernetes不会执行任何探针操作。以下是每种探针类型的默认行为说明（如果未指定探针的具体参数）：
+
+- **`httpGet`**: 如果未指定路径（`path`），默认路径为 `/`；如果未指定端口（`port`），需要确保容器定义了端口。
+- **`tcpSocket`**: 需要指定端口（`port`），否则无法执行。
+- **`exec`**: 需要指定具体的命令（`command`），否则无法执行。
+
+### 说明
+1. **默认值来源**：这些默认值是Kubernetes在解析PodSpec时硬编码的，具体可以在Kubernetes的API定义和源码中找到（如 `k8s.io/api/core/v1/types.go`）。
+2. **未配置探针**：如果Pod定义中完全未配置 `startupProbe`，Kubernetes不会执行任何启动探针检查，容器会直接进入运行状态（假设没有其他依赖或限制）。
+3. **与其他探针的关系**：`startupProbe` 在容器启动阶段生效，一旦成功，Kubernetes会停止 `startupProbe` 检查，并开始执行 `livenessProbe` 和 `readinessProbe`（如果配置了的话）。
+
+### 示例：未配置参数的 `startupProbe`
+以下是一个极简的 `startupProbe` 配置，仅指定了探针类型和目标：
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod
+spec:
+  containers:
+  - name: example-container
+    image: nginx
+    startupProbe:
+      httpGet:
+        path: /health
+        port: 80
+```
+
+在此配置中，未显式指定的参数将使用上述默认值：
+- `timeoutSeconds` = 1秒
+- `periodSeconds` = 10秒
+- `successThreshold` = 1次
+- `failureThreshold` = 3次
+- `initialDelaySeconds` = 0秒
+
+### 注意事项
+- **调整默认值**：如果您的应用启动时间较长，或者探针目标响应较慢，建议显式配置参数（如增加 `timeoutSeconds` 或 `failureThreshold`），以避免容器被误判为启动失败。
+- **探针失败后果**：如果 `startupProbe` 达到 `failureThreshold` 次失败，Kubernetes会根据Pod的 `restartPolicy` 决定是否重启容器（默认情况下是重启）。
+
+如果您有其他关于Kubernetes探针或其他相关的问题，欢迎继续提问！
+
 
 ### 当前配置分析
 
