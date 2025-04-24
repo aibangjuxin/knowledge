@@ -178,8 +178,10 @@ PDB 是基于 Ready 状态的 Pod 数量进行评估，而非 Running 或 Pod �
 一、PDB 的基本行为回顾
 
 PodDisruptionBudget 的目的是 限制「自愿性中断」(voluntary disruption) 的发生，比如升级、手动驱逐、节点维护等情况。核心指标：
-	•	minAvailable: 保证中断过程中 至少有多少个 Pod 是 Ready 状态的
-	•	maxUnavailable: 最多允许多少个不可用
+	
+  •	minAvailable: 保证中断过程中 至少有多少个 Pod 是 Ready 状态的
+	
+  •	maxUnavailable: 最多允许多少个不可用
 
 注意：PDB 不会保护 Pod 本身在异常状态下的情况，它仅关注「Ready」状态。
 
@@ -188,13 +190,18 @@ PodDisruptionBudget 的目的是 限制「自愿性中断」(voluntary disruptio
 二、你的问题场景分析
 
 情景：
-	1.	你所有的 Deployment 都配置了 PDB(minAvailable: 1)；
+	
+  1.	你所有的 Deployment 都配置了 PDB(minAvailable: 1)；
+
 	2.	某些 Deployment 下的所有 Pod 状态都是异常（NotReady / Crash）；
+
 	3.	GKE 执行升级，涉及节点重建、Pod 驱逐；
+
 	4.	此时 PDB 会“阻止”节点上的 Pod 被驱逐，因为它判断当前 available 数为 0，驱逐将导致 minAvailable 不能满足。
 
 结果：
 	•	升级会卡住（node drain 被阻塞）；
+
 	•	异常 Pod 阻止集群升级，导致雪崩效应。
 
 ⸻
@@ -205,15 +212,16 @@ PodDisruptionBudget 的目的是 限制「自愿性中断」(voluntary disruptio
 
 不是所有服务都必须配置 PDB，建议只给 关键服务（需要高可用） 配置 minAvailable，其余服务配置可选项（或使用 maxUnavailable 更宽松策略）。
 
-# 对非关键服务使用更宽容策略
+- 对非关键服务使用更宽容策略
+```yaml
 spec:
   maxUnavailable: 1
-
+``
 2. 结合 priorityClass 与 PDB 实现分层保护
 	•	高优先级服务配合 minAvailable 确保不中断；
 	•	中低优先级服务使用 maxUnavailable 或不配置 PDB，防止升级阻塞；
 	•	可使用以下方式定义优先级类：
-
+```yaml
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
@@ -221,7 +229,7 @@ metadata:
 value: 1000000
 globalDefault: false
 description: "Priority for critical API services"
-
+```
 3. PDB + Readiness 状态联动的风险提示
 	•	若 Deployment 中所有 Pod 都不处于 Ready 状态，PDB 将认为没有 Pod 可用，从而禁止驱逐；
 	•	这在实际操作中是一个 “软死锁”问题，GKE node drain 阻塞、无法升级。
@@ -277,6 +285,7 @@ graph TD;
 
 背景理解
 你为Deployment配置了如下PDB资源：
+```yaml
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -286,6 +295,7 @@ spec:
   selector:
     matchLabels:
       app: api-service
+```
 这表示在任何自愿中断（voluntary disruptions，例如GKE集群升级或节点维护）期间，至少要保证1个Pod保持可用。这是Kubernetes提供的一种机制，用于确保服务在维护操作中的高可用性。
 但你提到了一种特殊情况：如果在GKE升级过程中，某个Deployment下的所有Pod都处于异常状态（例如CrashLoopBackOff或其他失败状态），这会对PDB的配置和集群行为产生影响。我们需要分析这种情况，并给出应对策略。
 
