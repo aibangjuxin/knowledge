@@ -77,12 +77,12 @@ gcloud compute security-policies rules update	更新已有安全策略规则
 ```
 注意事项
 	•	权限配置： 确保执行脚本的服务账号（例如 Cloud Function 的服务账号）拥有读取 GCS 存储桶和更新 Cloud Armor 的相应权限。例如需要 roles/storage.objectViewer、roles/cloudfunctions.invoker、roles/compute.securityAdmin 等权限。以下表格列出了各组件所需的 IAM 角色：
-
+```bash
 资源组件	需要的 IAM 角色	说明
 GCS 存储桶	roles/storage.objectViewer	读取白名单文件
 Cloud Function	roles/cloudfunctions.invoker	执行触发函数
 Cloud Armor 安全策略	roles/compute.securityAdmin	更新安全策略
-
+```
 
 	•	安全策略命名： 建议预先创建 Cloud Armor 安全策略并统一命名（如 USER-ONBOARDING-POLICY），或者在脚本中进行判断后动态创建。命名、项目和地区要保持一致，避免混淆。
 	•	优先级管理： Cloud Armor 安全策略中的规则有优先级（priority）字段，请合理设置，避免与已有规则冲突。通常，将允许访问的白名单规则设置较低的优先级值（优先级值越低优先级越高）。
@@ -99,33 +99,42 @@ Cloud Armor 安全策略	roles/compute.securityAdmin	更新安全策略
 	1	触发条件：
 	◦	用户更新或上传ipwhitelist.yaml到GCS Bucket。
 	◦	GCS事件（如对象创建或更新）触发Cloud Build或类似CI/CD Pipeline。
+
 	2	读取白名单：
 	◦	从GCS Bucket下载ipwhitelist.yaml。
 	◦	解析YAML文件，提取API名称、请求路径（request_path）和IP白名单（可能包含多个IP或CIDR范围）。
+
 	3	检查现有Cloud Armor规则：
 	◦	使用gcloud compute security-policies rules list列出当前Security Policy中的所有规则，获取已使用的优先级（Priority）。
 	◦	检查是否存在与当前API名称对应的规则（基于描述或元数据中的API名称）。
+
 	4	确定优先级：
 	◦	从30000开始，查找未使用的优先级（递增分配）。
 	◦	确保新规则的优先级不会与现有规则冲突。
+
 	5	生成规则表达式：
 	◦	根据ipwhitelist.yaml中的IP列表，构造Cloud Armor规则的表达式，例如： request.path.matches('$REQUEST_PATH') && (inIpRange(origin.ip, 'IP1') || inIpRange(origin.ip, 'IP2') ...)
-	◦	
+	
 	6	创建或更新规则：
 	◦	如果规则不存在，使用gcloud compute security-policies rules create创建新规则。
 	◦	如果规则存在，使用gcloud compute security-policies rules update更新现有规则。
+
 	7	验证和日志记录：
 	◦	验证规则是否成功创建或更新（通过gcloud命令或API调用）。
 	◦	记录操作日志（成功/失败），便于调试和审计。
+
 	8	错误处理：
 	◦	处理GCS文件读取失败、YAML解析错误、优先级冲突、Cloud Armor API调用失败等异常。
 	◦	通知用户或系统管理员（如通过Cloud Logging或Pub/Sub）。
+
 	9	Pipeline集成：
 	◦	将上述逻辑封装为脚本（建议使用Python或Bash），在Pipeline中执行。
 	◦	Pipeline触发器基于GCS事件，运行环境为Cloud Build或其他CI/CD工具。
+
 2. 实现建议与脚本框架
 以下是一个基于Python的脚本框架，用于实现上述流程。假设使用Google Cloud SDK和Python的google-cloud-storage、google-cloud-compute库。
 脚本框架
+```python
 import yaml
 from google.cloud import storage
 from google.cloud import compute_v1
@@ -250,7 +259,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
 ipwhitelist.yaml 示例
+```yaml
 apis:
   - api_name: "user-api"
     request_path: "/api/v1/user/*"
@@ -261,8 +272,10 @@ apis:
     request_path: "/api/v1/order/*"
     ip_ranges:
       - "203.0.113.0/24"
+```
 Pipeline 配置（Cloud Build 示例）
 在cloudbuild.yaml中定义Pipeline步骤，触发于GCS对象变化：
+```yaml
 steps:
   - name: 'python:3.9'
     entrypoint: 'bash'
@@ -275,6 +288,7 @@ triggers:
   - event: 'storage.objects.create'
     bucket: 'your-bucket-name'
     object: 'ipwhitelist.yaml'
+```
 3. 关键点说明
 	1	优先级管理：
 	◦	从30000开始递增，避免与默认规则（如1000、2000）冲突。
