@@ -1,12 +1,3 @@
-明白了，我会帮你把上面的内容严格按照 GitHub 标准 Markdown 格式重新整理，包括：
-	•	使用规范的二级标题（##）划分结构，如 "流程概述"、"流程图"、"脚本示例"、"注意事项"。
-	•	Mermaid 流程图独立成节，并且符合 mermaid 包裹规则。
-	•	所有代码示例用标准的 bash 或 ``` 格式包裹。
-	•	表格使用标准 Markdown 表格语法，且列对齐良好。
-	•	不包含多余的注释或不规范字符，保证复制后直接可以在 GitHub 上渲染正确。
-	•	不额外生成 TOC（目录），除非你后续另有要求。
-
-我这就帮你格式化好。
 
 基于存储桶白名单自动创建或更新 Cloud Armor 规则的用户 Onboarding 流程
 
@@ -23,7 +14,7 @@
 流程图
 
 下图示例展示了基于存储桶白名单自动创建或更新 Cloud Armor 规则的完整 Onboarding 流程：
-
+```mermaid
 flowchart TD
     A[用户提交 Onboarding 需求] --> B[生成并上传白名单文件至存储桶]
     B --> C[触发 Cloud Function]
@@ -31,7 +22,7 @@ flowchart TD
     D --> E[调用 Cloud Armor API]
     E --> F[创建或更新安全策略规则]
     F --> G[流程结束]
-
+```
 流程图说明：
 	•	用户提交 Onboarding 需求： 管理员或自动化系统发起新的用户接入申请。
 	•	生成并上传白名单文件： 系统根据申请生成允许列表（如 IP 地址清单），并将文件上传到 GCS 的指定存储桶。
@@ -47,38 +38,43 @@ flowchart TD
 示例 1：上传白名单文件至 GCS 存储桶
 
 # 将本地的 white_list.txt 上传到指定的 GCS 存储桶
+```bash
 gsutil cp white_list.txt gs://my-whitelist-bucket/path/to/white_list.txt
-
+```
 示例 2：更新 Cloud Armor 安全策略规则
 
 # 假设安全策略名为 USER-ONBOARDING-POLICY，以下命令更新其规则
+```bash
 gcloud compute security-policies rules update 100 \
     --security-policy=USER-ONBOARDING-POLICY \
     --action=allow \
     --src-ip-ranges="203.0.113.0/24,198.51.100.0/24" \
     --description="更新 Onboarding 白名单"
-
+```
 示例 3：创建新的安全策略及规则（如果策略不存在）
 
 # 创建新的 Cloud Armor 安全策略
+```bash
 gcloud compute security-policies create USER-ONBOARDING-POLICY \
     --description="用户 Onboarding 白名单策略"
-
+```
 # 在策略中创建允许规则（优先级设为100）
+```basg
 gcloud compute security-policies rules create 100 \
     --security-policy=USER-ONBOARDING-POLICY \
     --action=allow \
     --src-ip-ranges="203.0.113.0/24,198.51.100.0/24" \
     --description="允许 Onboarding 白名单 IP"
-
+```
 下面的表格列出了上述脚本中使用的常见命令及其功能简介：
 
 脚本命令	描述
+```bash
 gsutil cp <本地路径> gs://<bucket>/<路径>/	上传本地文件到 GCS 存储桶
 gcloud compute security-policies create	创建 Cloud Armor 安全策略
 gcloud compute security-policies rules create	向策略中添加新的安全规则
 gcloud compute security-policies rules update	更新已有安全策略规则
-
+```
 注意事项
 	•	权限配置： 确保执行脚本的服务账号（例如 Cloud Function 的服务账号）拥有读取 GCS 存储桶和更新 Cloud Armor 的相应权限。例如需要 roles/storage.objectViewer、roles/cloudfunctions.invoker、roles/compute.securityAdmin 等权限。以下表格列出了各组件所需的 IAM 角色：
 
