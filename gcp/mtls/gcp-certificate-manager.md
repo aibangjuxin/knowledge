@@ -120,7 +120,7 @@ gcloud compute ssl-policies update my-ssl-policy \
     --custom-ca-certs=root-ca.pem
 ```
 
-	4.	在 GLB 启用 MTLS
+	4.	在 GLB 启用 MTLS ==> Using this one success 
 ```bash
 
 gcloud compute target-https-proxies update my-proxy \

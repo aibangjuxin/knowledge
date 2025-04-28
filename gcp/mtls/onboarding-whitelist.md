@@ -113,7 +113,7 @@ Cloud Armor 安全策略	roles/compute.securityAdmin	更新安全策略
 	◦	确保新规则的优先级不会与现有规则冲突。
 
 	5	生成规则表达式：
-	◦	根据ipwhitelist.yaml中的IP列表，构造Cloud Armor规则的表达式，例如： request.path.matches('$REQUEST_PATH') && (inIpRange(origin.ip, 'IP1') || inIpRange(origin.ip, 'IP2') ...)
+	◦	根据ipwhitelist.yaml中的IP列表，构造Cloud Armor规则的表达式，例如：request.path.matches('$REQUEST_PATH') && (inIpRange(origin.ip, 'IP1') || inIpRange(origin.ip, 'IP2') ...)
 	
 	6	创建或更新规则：
 	◦	如果规则不存在，使用gcloud compute security-policies rules create创建新规则。
