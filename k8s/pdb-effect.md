@@ -154,45 +154,51 @@ done
 
 set -euo pipefail
 
-echo "⏳ 正在检查所有配置了 PDB 的 Deployment 是否存在异常 Pod..."
+# 定义颜色代码
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+echo -e "${YELLOW}Checking all Deployments with PDB for abnormal Pods...${NC}"
 
 NAMESPACES=$(kubectl get pdb --all-namespaces -o json | jq -r '.items[].metadata.namespace' | sort | uniq)
 
 for ns in $NAMESPACES; do
   PDBS=$(kubectl get pdb -n "$ns" -o json)
 
-  echo "📦 命名空间: $ns"
+  echo -e "${YELLOW}Namespace: $ns${NC}"
 
   echo "$PDBS" | jq -c '.items[]' | while read -r pdb; do
     pdb_name=$(echo "$pdb" | jq -r '.metadata.name')
     selector=$(echo "$pdb" | jq -r '.spec.selector')
 
-    # 提取 label selector 用于查找 Pod
+    # Extract label selector to find Pods
     match_labels=$(echo "$selector" | jq -r '.matchLabels | to_entries | map("\(.key)=\(.value)") | join(",")')
 
     if [[ -z "$match_labels" ]]; then
-      echo "⚠️  PDB $pdb_name 在 $ns 中无 matchLabels，跳过"
+      echo -e "${YELLOW}PDB $pdb_name in $ns has no matchLabels, skipping${NC}"
       continue
     fi
 
-    # 查找被此 PDB 匹配的 Pod
+    # Find Pods matched by this PDB
     pods=$(kubectl get pods -n "$ns" -l "$match_labels" -o json)
 
-    # 检查 Pod 状态
+    # Check Pod status
     unhealthy_count=$(echo "$pods" | jq '[.items[] | select(.status.phase != "Running" or (.status.containerStatuses[]?.ready == false))] | length')
 
     if [[ "$unhealthy_count" -gt 0 ]]; then
-      echo "🚨 WARNING: PDB [$pdb_name] 对应的 Pod 有 $unhealthy_count 个异常状态！"
+      echo -e "${RED}WARNING: PDB [$pdb_name] has $unhealthy_count Pods in abnormal state!${NC}"
 
-      echo "🗑️  删除 PDB: $pdb_name"
+      echo -e "${RED}Deleting PDB: $pdb_name${NC}"
       kubectl delete pdb "$pdb_name" -n "$ns"
     else
-      echo "✅ PDB [$pdb_name] 所属 Pod 状态正常"
+      echo -e "${GREEN}PDB [$pdb_name] Pods are healthy${NC}"
     fi
   done
 done
 
-echo "✅ 检查完成"
+echo -e "${YELLOW}Check completed${NC}"
 ```
 
 ---
