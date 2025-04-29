@@ -237,7 +237,7 @@ pip install pyyaml
 在导入新的 YAML 文件之前，验证其格式和内容：
 	•	检查 YAML 语法：使用 yaml 工具或在线 YAML 验证器。
 	•	检查 PEM 证书：确保每个 pemCertificate 的格式正确（包含 BEGIN/END 标记，每行 64 字符）。
-	•	检查证书有效性：使用 openssl 验证证书： openssl x509 -in formatted_cert.pem -text -noout
+	•	检查证书有效性：使用 openssl 验证证书：openssl x509 -in formatted_cert.pem -text -noout
 	•	
 步骤 5：导入更新后的 Trust Config
 使用 gcloud 命令将修改后的 YAML 文件导入，覆盖现有的 Trust Config：
@@ -259,7 +259,7 @@ gcloud certificate-manager trust-configs import TRUST_CONFIG_ID \
 	2	避免多余字符：
 	◦	移除多余的换行符、空格或制表符。
 	◦	确保 YAML 缩进正确（通常为 2 或 4 个空格）。
-	3	环境变量辅助（可选）： 如果证书内容需要动态注入，可以将证书存储为环境变量并在 YAML 文件中使用。例如： export NEW_ROOT_CERT=$(cat new_root_cert.pem | sed 's/^[ ]*//g' | tr '\n' '\\n')
+	3	环境变量辅助（可选）： 如果证书内容需要动态注入，可以将证书存储为环境变量并在 YAML 文件中使用。例如：export NEW_ROOT_CERT=$(cat new_root_cert.pem | sed 's/^[ ]*//g' | tr '\n' '\\n')
 	4	export NEW_INTER_CERT=$(cat new_inter_cert.pem | sed 's/^[ ]*//g' | tr '\n' '\\n')
 	5	cat << EOF > trust_config_new.yaml
 	6	name: "TRUST_CONFIG_ID"
@@ -269,8 +269,8 @@ gcloud certificate-manager trust-configs import TRUST_CONFIG_ID \
 	10	    intermediateCas:
 	11	      - pemCertificate: "${NEW_INTER_CERT}"
 	12	EOF
-	13	 注意：这种方法需要确保环境变量中的换行符 (\n) 被正确处理。
-	14	批量处理多个证书： 如果需要添加多个证书，建议使用脚本循环处理。例如： for cert_file in ["cert1.pem", "cert2.pem"]:
+	13	注意：这种方法需要确保环境变量中的换行符 (\n) 被正确处理。
+	14	批量处理多个证书： 如果需要添加多个证书，建议使用脚本循环处理。例如：for cert_file in ["cert1.pem", "cert2.pem"]:
 	15	    with open(cert_file, "r") as f:
 	16	        cert = format_pem_certificate(f.read())
 	17	        trust_anchors.append({"pemCertificate": cert})
@@ -283,7 +283,7 @@ gcloud certificate-manager trust-configs import TRUST_CONFIG_ID \
 	◦	使用 Git diff 检查新旧 YAML 文件的差异。
 	2	去重检查：
 	◦	在追加新证书前，检查是否已存在相同的证书（基于证书的指纹或序列号）。
-	◦	使用 openssl 获取证书指纹： openssl x509 -in cert.pem -noout -fingerprint -sha256
+	◦	使用 openssl 获取证书指纹：openssl x509 -in cert.pem -noout -fingerprint -sha256
 	◦	
 	3	自动化流水线：
 	◦	使用 CI/CD 工具（例如 GitHub Actions 或 Cloud Build）自动化导出、修改和导入 Trust Config 的流程。
@@ -296,21 +296,21 @@ gcloud certificate-manager trust-configs import TRUST_CONFIG_ID \
 	◦	使用 GCP 的日志和监控工具检查是否有证书验证失败的错误。
 	5	回滚计划：
 	◦	在导入新配置前备份现有 Trust Config。
-	◦	如果更新失败，使用备份文件快速恢复： gcloud certificate-manager trust-configs import TRUST_CONFIG_ID \
+	◦	如果更新失败，使用备份文件快速恢复：gcloud certificate-manager trust-configs import TRUST_CONFIG_ID \
 	◦	  --project=PROJECT_ID \
 	◦	  --source=trust_config_old.yaml \
 	◦	  --location=LOCATION
 	◦	
 
 5. 处理复杂场景
-	1	多 Trust Store： 如果需要支持多个 trustStores，确保在 YAML 中正确组织。例如： trustStores:
+	1	多 Trust Store： 如果需要支持多个 trustStores，确保在 YAML 中正确组织。例如：trustStores:
 	2	  - trustAnchors: [...]
 	3	    intermediateCas: [...]
 	4	  - trustAnchors: [...]
 	5	    intermediateCas: [...]
-	6	 增量更新时，指定目标 trustStores 索引。
+	6	增量更新时，指定目标 trustStores 索引。
 	7	证书过期管理：
-	◦	定期检查 trustAnchors 和 intermediateCas 中的证书有效期： openssl x509 -in cert.pem -noout -dates
+	◦	定期检查 trustAnchors 和 intermediateCas 中的证书有效期：openssl x509 -in cert.pem -noout -dates
 	◦	
 	◦	替换即将过期的证书，保持链的完整性。
 	8	区域 vs 全局 Trust Config：
