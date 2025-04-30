@@ -50,6 +50,21 @@
     - [Test Execution Order](#test-execution-order)
     - [Test Results Recording](#test-results-recording)
   - [Conclusion](#conclusion)
+- [Grok](#grok)
+- [Test Case for GCP HTTPS mTLS Migration with GLB and Instance Validation](#test-case-for-gcp-https-mtls-migration-with-glb-and-instance-validation)
+  - [Test Case Overview](#test-case-overview)
+  - [Test Case Details](#test-case-details)
+    - [1. HTTPS mTLS Connectivity Test with GLB](#1-https-mtls-connectivity-test-with-glb)
+    - [2. Certificate and Trust Config Validation](#2-certificate-and-trust-config-validation)
+    - [3. Cloud Armor Security Policy Validation](#3-cloud-armor-security-policy-validation)
+    - [4. Backend Service and Custom Header Validation](#4-backend-service-and-custom-header-validation)
+    - [5. Nginx Configuration and CN Validation on Instance](#5-nginx-configuration-and-cn-validation-on-instance)
+    - [6. Instance Health Status Validation](#6-instance-health-status-validation)
+    - [7. Auto-Scaling Behavior Validation](#7-auto-scaling-behavior-validation)
+  - [Test Environment Cleanup](#test-environment-cleanup)
+  - [Mermaid Flowchart for Test Process](#mermaid-flowchart-for-test-process)
+  - [Notes](#notes)
+- [Gemini](#gemini)
   - [Chinese](#chinese)
 - [one](#one)
 - [Two](#two)
@@ -317,6 +332,309 @@ Verify that the entire system's end-to-end workflow operates correctly.
 ## Conclusion
 
 By executing the above test/following cases, we can comprehensively verify the migration from TCP MTLS to HTTPS MTLS GLB and ensure that the system operates correctly. The tests should cover certificate management, HTTPS and mTLS configuration, Cloud Armor, Backend Service, Nginx configuration, client certificate validation, custom headers, performance, and error handling. Only when all test cases pass should we consider the migration successful.
+
+
+
+# Grok
+
+# Test Case for GCP HTTPS mTLS Migration with GLB and Instance Validation
+
+Below is a comprehensive test case designed to validate the migration from TCP mTLS to HTTPS mTLS using Google Cloud Platform (GCP) Global Load Balancer (GLB), incorporating components like Google Cloud Certificate Manager, Trust Config, Cloud Armor, SSL Certificates, Backend Services with custom headers, and Nginx configuration on an Instance within a Managed Instance Group (MIG). The test case also includes validation of instance health, CN (Common Name) validation, and auto-scaling settings.
+
+This test case is structured to ensure all components work together seamlessly post-migration.
+
+---
+
+## Test Case Overview
+
+**Objective:** Validate the end-to-end functionality of the HTTPS mTLS setup with GLB, ensure proper certificate handling, backend communication, instance health, and auto-scaling behavior.
+
+**Scope:**
+- Validate HTTPS mTLS configuration with GLB.
+- Verify Google Cloud Certificate Manager and Trust Config setup.
+- Confirm Cloud Armor and SSL Certificate integration.
+- Test Backend Service with custom headers.
+- Validate Nginx configuration on MIG instances for mTLS and CN checks.
+- Verify instance health status and auto-scaling behavior.
+
+**Pre-requisites:**
+- GCP project with necessary permissions.
+- HTTPS mTLS GLB setup completed (including Certificate Manager, Trust Config, Cloud Armor, SSL Certificates, and Backend Services).
+- MIG created via Terraform with Nginx configuration for CN validation.
+- Monitoring and logging enabled for debugging.
+- Test client or tool (e.g., `curl`, browser, or custom script) with mTLS certificates for testing.
+
+---
+
+## Test Case Details
+
+### 1. HTTPS mTLS Connectivity Test with GLB
+**Objective:** Ensure that the GLB is correctly configured for HTTPS mTLS and can establish a secure connection with clients.
+
+- **Test Steps:**
+  1. Use a test client with valid mTLS certificates to connect to the GLB's public IP or DNS.
+  2. Verify the handshake completes successfully using HTTPS.
+  3. Check if the connection fails when using an invalid or expired client certificate.
+
+- **Expected Result:**
+  - Successful HTTPS mTLS connection with valid certificates (HTTP 200 or appropriate response).
+  - Connection rejection with invalid certificates (HTTP 403 or similar error).
+  - Logs in GLB or Cloud Armor should show successful and failed connection attempts.
+
+- **Tools:** `curl` with mTLS certificates, browser with client certificate installed.
+
+---
+
+### 2. Certificate and Trust Config Validation
+**Objective:** Verify that the Google Cloud Certificate Manager and Trust Config are correctly set up and used by GLB.
+
+- **Test Steps:**
+  1. Check the GLB configuration in GCP Console or via `gcloud` CLI to confirm the correct SSL certificate is attached.
+  2. Validate that the Trust Config for mTLS is applied to the GLB.
+  3. Simulate a connection with a client certificate signed by an untrusted CA and verify rejection.
+
+- **Expected Result:**
+  - GLB uses the correct server certificate (visible in connection details or via `openssl s_client`).
+  - Trust Config enforces client certificate validation.
+  - Connections with untrusted client certificates are rejected.
+
+- **Tools:** `gcloud` CLI, `openssl s_client`, GCP Console.
+
+---
+
+### 3. Cloud Armor Security Policy Validation
+**Objective:** Ensure Cloud Armor policies are applied to protect the GLB and filter unwanted traffic.
+
+- **Test Steps:**
+  1. Send a legitimate HTTPS mTLS request to GLB and confirm access.
+  2. Simulate malicious traffic (e.g., SQL injection patterns or known bad IPs if rules are configured) and verify blocking.
+  3. Check Cloud Armor logs for allowed and denied requests.
+
+- **Expected Result:**
+  - Legitimate traffic is allowed.
+  - Malicious traffic is blocked based on defined rules.
+  - Cloud Armor logs reflect policy enforcement.
+
+- **Tools:** Custom scripts, `curl`, GCP Logging.
+
+---
+
+### 4. Backend Service and Custom Header Validation
+**Objective:** Confirm that the Backend Service is correctly configured and custom headers are passed to the backend instances.
+
+- **Test Steps:**
+  1. Send an HTTPS request to GLB and capture the response from the backend.
+  2. Check backend instance logs (or response headers if configured) to verify custom headers are received.
+  3. Validate that Backend Service health checks pass for all instances.
+
+- **Expected Result:**
+  - Custom headers (e.g., `X-Custom-Header`) are present in backend requests.
+  - Backend Service shows healthy status for all instances in GCP Console.
+
+- **Tools:** `curl`, backend instance logs, GCP Console.
+
+---
+
+### 5. Nginx Configuration and CN Validation on Instance
+**Objective:** Ensure Nginx on MIG instances is correctly configured for mTLS and performs CN validation.
+
+- **Test Steps:**
+  1. SSH into an instance in the MIG or use a test endpoint to simulate a client request.
+  2. Send a request with a client certificate containing the expected CN and verify acceptance.
+  3. Send a request with a certificate having an incorrect CN and verify rejection.
+  4. Check Nginx access and error logs for validation details.
+
+- **Expected Result:**
+  - Requests with correct CN are processed (HTTP 200 or appropriate response).
+  - Requests with incorrect CN are rejected (HTTP 403 or similar).
+  - Nginx logs show CN validation results.
+
+- **Tools:** SSH, `curl` with certificates, Nginx logs.
+
+---
+
+### 6. Instance Health Status Validation
+**Objective:** Verify that the MIG instances are healthy and properly integrated with the Backend Service.
+
+- **Test Steps:**
+  1. Check the health status of instances in the MIG via GCP Console or `gcloud` CLI.
+  2. Simulate a failure by stopping Nginx or making an instance unhealthy (e.g., block health check endpoint).
+  3. Verify that GLB stops routing traffic to the unhealthy instance.
+  4. Restart Nginx or restore health and confirm traffic resumes.
+
+- **Expected Result:**
+  - Healthy instances receive traffic.
+  - Unhealthy instances are marked as such and excluded from traffic routing.
+  - Recovery of health restores traffic routing.
+
+- **Tools:** GCP Console, `gcloud` CLI, custom scripts to simulate failure.
+
+---
+
+### 7. Auto-Scaling Behavior Validation
+**Objective:** Confirm that the MIG auto-scaling settings work as expected under load or failure conditions.
+
+- **Test Steps:**
+  1. Review the auto-scaling configuration in Terraform or GCP Console (e.g., CPU utilization threshold, min/max instances).
+  2. Simulate high load on the MIG instances using a load testing tool to trigger scaling out.
+  3. Simulate low load or instance failure to trigger scaling in.
+  4. Monitor the number of instances and health status during scaling events.
+
+- **Expected Result:**
+  - MIG scales out when CPU utilization exceeds the defined threshold.
+  - MIG scales in when load decreases or instances fail (if configured).
+  - New instances are healthy and integrated into the Backend Service.
+
+- **Tools:** Load testing tools (e.g., `ab`, `locust`), GCP Monitoring, `gcloud` CLI.
+
+---
+
+## Test Environment Cleanup
+- After testing, ensure any temporary changes (e.g., failed instance simulations) are reverted.
+- Review logs for any anomalies during testing.
+- Document test results for future reference.
+
+---
+
+## Mermaid Flowchart for Test Process
+
+```mermaid
+graph TD
+    A[Start Test] --> B[HTTPS mTLS Connectivity Test]
+    B --> C[Certificate & Trust Config Validation]
+    C --> D[Cloud Armor Policy Validation]
+    D --> E[Backend Service & Custom Header Test]
+    E --> F[Nginx CN Validation on Instance]
+    F --> G[Instance Health Status Check]
+    G --> H[Auto-Scaling Behavior Validation]
+    H --> I[End Test & Cleanup]
+    subgraph GLB_and_Components
+        B
+        C
+        D
+        E
+    end
+    subgraph Instance_and_MIG
+        F
+        G
+        H
+    end
+```
+
+This flowchart illustrates the sequence of test steps and groups them into GLB-related validations and Instance/MIG-related validations.
+
+---
+
+## Notes
+- Ensure logging is enabled for all components (GLB, Cloud Armor, Nginx) to debug issues during testing.
+- Use automation scripts (e.g., Bash or Python) to simulate load or failures for consistent test results.
+- If any test fails, isolate the component (e.g., GLB, Nginx, MIG) and rerun the specific test after troubleshooting.
+
+This test case ensures a thorough validation of the migrated HTTPS mTLS setup and associated configurations. Let me know if you need deeper details on any specific test or additional scenarios!
+
+
+
+# Gemini 
+
+Okay, let's design a comprehensive test plan to validate your migration from GCP TCP Proxy mTLS to HTTPS GLB mTLS, including the instance-level Nginx configuration and autoscaling aspects managed by Terraform.
+
+---
+
+**Test Plan: GCP HTTPS GLB mTLS Migration Validation**
+
+**1. Objective:**
+To verify the successful migration from the legacy TCP Proxy mTLS setup to the new Global HTTPS Load Balancer (GLB) mTLS architecture. This includes validating the functionality of the GLB, Certificate Manager (Server Certs & Trust Config), Cloud Armor integration, Backend Service configuration (including custom headers), Nginx configuration on backend instances (specifically CN validation), Managed Instance Group (MIG) health, and autoscaling behavior. The infrastructure (especially the MIG) is provisioned via Terraform.
+
+**2. Scope:**
+
+*   **In Scope:**
+    *   GLB endpoint reachability and responsiveness (HTTPS).
+    *   Server certificate presentation by the GLB (via Certificate Manager).
+    *   mTLS handshake validation at the GLB level (using Trust Config).
+    *   Client certificate validation:
+        *   Valid certificate from trusted CA.
+        *   Invalid/expired certificate.
+        *   Certificate from untrusted CA.
+        *   Connection attempt without a client certificate.
+    *   Backend Service configuration (protocol, health checks).
+    *   Custom header injection/forwarding by the GLB (e.g., `X-Forwarded-Client-Cert`).
+    *   Nginx configuration on backend instances (via MIG/Instance Template).
+    *   **Instance-level CN (Common Name) validation performed by Nginx.**
+    *   MIG health checks and instance status reporting.
+    *   MIG autoscaling functionality (scale-up and scale-down based on policy).
+    *   Basic Cloud Armor policy validation (if applicable, e.g., IP whitelisting/blacklisting alongside mTLS).
+    *   Logging and monitoring verification (GLB logs, Nginx logs, Cloud Monitoring metrics).
+*   **Out of Scope:**
+    *   Performance benchmarking beyond validating autoscaling triggers.
+    *   Underlying GCP network infrastructure testing (VPC, Firewall rules beyond basic connectivity).
+    *   Terraform code linting, syntax checking, or plan validation (this plan focuses on the *result* of the Terraform deployment).
+    *   Detailed application-level functional testing beyond validating connectivity and CN-based authorization.
+    *   Certificate lifecycle management testing (rotation, renewal) unless explicitly part of the immediate deployment.
+
+**3. Prerequisites:**
+
+*   The new HTTPS GLB, Certificate Manager resources (Server Cert, Trust Config), Backend Service, MIG (with Nginx configured instances), and any relevant Cloud Armor policies have been deployed (presumably via Terraform).
+*   Access to the GCP console and relevant permissions (Compute Engine, Load Balancing, Certificate Manager, Cloud Armor, Logging, Monitoring).
+*   Access to backend instance VMs (e.g., via SSH) for log inspection and configuration verification.
+*   Test client environment with tools like `curl`, `openssl`.
+*   Valid client certificate(s) signed by a CA present in the Trust Config.
+    *   At least one certificate with a CN expected/allowed by the Nginx configuration.
+    *   At least one certificate with a CN *not* expected/allowed by the Nginx configuration.
+*   An invalid or expired client certificate (signed by a trusted CA, if possible).
+*   A client certificate signed by a CA *not* present in the Trust Config.
+*   Load generation tool (e.g., `wrk`, `ab`, `JMeter`, `hey`) for autoscaling tests.
+*   IP addresses for testing Cloud Armor rules (if applicable).
+
+**4. Test Environment:**
+
+*   GCP Project where the new infrastructure is deployed.
+*   Client machine(s) external to GCP or within a different VPC/network segment for realistic testing.
+
+**5. Test Cases:**
+
+| Test Case ID | Category                  | Test Description                                                                                                                               | Test Steps                                                                                                                                                                                                                                                                                                                         | Expected Result                                                                                                                                                                                          | Actual Result | Status (Pass/Fail) |
+| :----------- | :------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------ | :----------------- |
+| **GLB-001**  | Connectivity              | Verify GLB HTTPS endpoint reachability (without client cert).                                                                                | 1. `curl -v https://[GLB_IP_OR_DNS]`                                                                                                                                                                                                                                                                                             | TLS handshake fails, likely with a "certificate required" error or similar (e.g., HTTP 400 Bad Request if GLB handles it that way). Connection should not timeout. Server certificate details should be visible. |               |                    |
+| **GLB-002**  | Connectivity              | Verify GLB HTTP endpoint behavior (if configured).                                                                                           | 1. `curl -v http://[GLB_IP_OR_DNS]`                                                                                                                                                                                                                                                                                              | If redirection to HTTPS is configured: 3xx redirect. If HTTP is disabled: Connection refused or error.                                                                                                    |               |                    |
+| **GLB-003**  | Server Certificate        | Verify the correct server certificate is presented by the GLB.                                                                               | 1. `openssl s_client -connect [GLB_IP_OR_DNS]:443 -showcerts` <br> 2. Inspect the presented server certificate details (Subject, Issuer, Validity).                                                                                                                                                                           | The presented server certificate matches the one configured in Google Cloud Certificate Manager and associated with the GLB Target Proxy.                                                               |               |                    |
+| **MTLS-001** | mTLS Handshake (Valid)    | Test connection with a valid client certificate from a trusted CA.                                                                           | 1. `curl -v --cert /path/to/valid_client.crt --key /path/to/valid_client.key https://[GLB_IP_OR_DNS]/` <br> *(Assume this cert's CN is allowed by Nginx for now)*                                                                                                                                                           | Successful TLS handshake. Connection established. HTTP 2xx or other success code returned (depends on backend/Nginx).                                                                                    |               |                    |
+| **MTLS-002** | mTLS Handshake (Untrusted)| Test connection with a client certificate from an untrusted CA.                                                                               | 1. `curl -v --cert /path/to/untrusted_client.crt --key /path/to/untrusted_client.key https://[GLB_IP_OR_DNS]/`                                                                                                                                                                                                              | TLS handshake fails. Connection rejected by the GLB. `curl` likely reports a TLS handshake error. Check GLB logs for rejection details.                                                                  |               |                    |
+| **MTLS-003** | mTLS Handshake (No Cert)  | Test connection without providing a client certificate (same as GLB-001, confirming behavior).                                                 | 1. `curl -v https://[GLB_IP_OR_DNS]/`                                                                                                                                                                                                                                                                                             | TLS handshake fails or results in an HTTP error code (e.g., 400) indicating a required certificate was not provided. Connection rejected by the GLB.                                                         |               |                    |
+| **MTLS-004** | mTLS Handshake (Invalid)  | Test connection with an invalid/expired client certificate (if available).                                                                   | 1. `curl -v --cert /path/to/invalid_client.crt --key /path/to/invalid_client.key https://[GLB_IP_OR_DNS]/`                                                                                                                                                                                                             | TLS handshake fails. Connection rejected by the GLB. Behavior might depend on specific invalidity (expired vs. revoked if CRL/OCSP used).                                                                  |               |                    |
+| **HDR-001**  | Custom Headers            | Verify custom headers (e.g., client cert details) are forwarded to the backend.                                                              | 1. Ensure Nginx access logs are configured to log the required header (e.g., `$ssl_client_escaped_cert` or custom headers like `X-Forwarded-Client-Cert` set by LB). <br> 2. Make a successful mTLS request (like MTLS-001). <br> 3. SSH into a backend instance. <br> 4. Check Nginx access logs (`/var/log/nginx/access.log`). | The relevant header(s) (e.g., containing client certificate details) should be present in the Nginx access log entry for the request.                                                                        |               |                    |
+| **NGX-001**  | Instance Config           | Verify Nginx configuration file content on a backend instance.                                                                               | 1. SSH into a backend instance created by the MIG. <br> 2. Inspect `/etc/nginx/nginx.conf` and included files (e.g., in `sites-enabled` or `conf.d`).                                                                                                                                                                        | Configuration matches the expected settings deployed via Terraform/startup script (correct listen ports, server names, location blocks, header processing logic, CN validation logic).                  |               |                    |
+| **NGX-002**  | Instance CN Validation (Pass) | Test request with a valid client cert (trusted CA) AND a CN that IS ALLOWED by Nginx config.                                            | 1. `curl -v --cert /path/to/valid_cert_allowed_cn.crt --key /path/to/valid_cert_allowed_cn.key https://[GLB_IP_OR_DNS]/[TARGET_PATH]`                                                                                                                                                                             | Successful mTLS handshake. Request reaches Nginx. Nginx processes the request successfully based on the allowed CN. Expected application response (e.g., HTTP 200 OK).                                     |               |                    |
+| **NGX-003**  | Instance CN Validation (Fail) | Test request with a valid client cert (trusted CA) BUT a CN that IS NOT ALLOWED by Nginx config.                                        | 1. `curl -v --cert /path/to/valid_cert_disallowed_cn.crt --key /path/to/valid_cert_disallowed_cn.key https://[GLB_IP_OR_DNS]/[TARGET_PATH]`                                                                                                                                                                          | Successful mTLS handshake. Request reaches Nginx. Nginx rejects the request due to the disallowed CN. Expected error response (e.g., HTTP 403 Forbidden). Check Nginx error logs for details.              |               |                    |
+| **MIG-001**  | Instance Health           | Verify initial instances in the MIG are healthy.                                                                                             | 1. Go to GCP Console -> Compute Engine -> Instance Groups -> Select the MIG. <br> 2. Check the status of all instances. <br> 3. Check Backend Service health status in Load Balancing section.                                                                                                                            | All instances in the MIG should be listed as `RUNNING`. The Backend Service health check status for instances should be `HEALTHY`. The number of instances should match the `minReplicas` setting.       |               |                    |
+| **MIG-002**  | Health Check Failure      | Simulate an instance failure and verify LB/MIG reaction.                                                                                    | 1. SSH into one instance in the MIG. <br> 2. Stop the Nginx service (`sudo systemctl stop nginx`) or block health check port via firewall. <br> 3. Monitor the Backend Service health status for that instance. <br> 4. Monitor traffic distribution (if possible). <br> 5. Monitor MIG actions.                             | The instance should become `UNHEALTHY` in the Backend Service view. The GLB should stop sending traffic to the unhealthy instance. The MIG should eventually detect the failure and initiate repair/replacement. |               |                    |
+| **MIG-003**  | Autoscaling (Scale Up)    | Verify MIG scales up under load.                                                                                                              | 1. Note the current number of instances (`minReplicas`). <br> 2. Start load test tool targeting the GLB endpoint using a valid client cert (`curl` options might be needed in the tool): `[LOAD_TOOL] -c [connections] -d [duration] -H "Authorization: Bearer ..." https://[GLB_IP_OR_DNS]/` (adjust tool syntax). Ensure load exceeds the scale-up threshold (e.g., CPU utilization). <br> 3. Monitor MIG size and instance status in GCP Console. <br> 4. Monitor CPU utilization metrics in Cloud Monitoring. | The number of instances in the MIG should increase according to the autoscaling policy. New instances should become `RUNNING` and `HEALTHY` and start serving traffic.                                     |               |                    |
+| **MIG-004**  | Autoscaling (Scale Down)  | Verify MIG scales down when load decreases.                                                                                                  | 1. Stop the load generation tool used in MIG-003. <br> 2. Wait for the cool-down period specified in the autoscaling policy. <br> 3. Monitor MIG size in GCP Console.                                                                                                                                                 | The number of instances in the MIG should decrease back towards `minReplicas` after the cool-down period.                                                                                                   |               |                    |
+| **CA-001**   | Cloud Armor (Block)       | If IP blocking rules exist, test access from a blocked IP.                                                                                  | 1. Attempt a connection (e.g., `curl`) from an IP address that should be blocked by Cloud Armor policy. Use a valid client cert.                                                                                                                                                                                           | Connection should be rejected, likely with an HTTP 403 Forbidden or other error configured in the Cloud Armor policy. Check Cloud Armor logs.                                                             |               |                    |
+| **CA-002**   | Cloud Armor (Allow)       | If IP allowing rules exist, test access from an allowed IP.                                                                                 | 1. Attempt a connection (e.g., `curl`) from an IP address that should be allowed by Cloud Armor policy. Use a valid client cert.                                                                                                                                                                                           | Connection attempt should pass the Cloud Armor check and proceed to the mTLS validation stage (tested in MTLS-* / NGX-* cases).                                                                             |               |                    |
+| **LOG-001**  | Logging                   | Verify GLB and Nginx logs capture relevant information.                                                                                     | 1. Perform various test requests (valid mTLS, invalid mTLS, CN allowed, CN denied). <br> 2. Check Cloud Logging for HTTP Load Balancer logs. <br> 3. SSH into backend instances and check Nginx access and error logs (`/var/log/nginx/*`).                                                                               | GLB logs should show request details, status codes, latency, and potentially mTLS info. Nginx logs should show received requests, custom headers, status codes, and any errors related to CN validation.   |               |                    |
+| **MON-001**  | Monitoring                | Verify key metrics are available in Cloud Monitoring.                                                                                       | 1. Go to Cloud Monitoring -> Metrics Explorer. <br> 2. Check for metrics related to: <br>    - HTTPS Load Balancer (Request Count, Latency, Backend Request Count, Response Codes) <br>    - Instance Group (CPU Utilization, Instance Count) <br>    - VM Instance (CPU, Network)                                            | Relevant metrics should be populated and reflect the activity during testing (e.g., increased request counts, CPU spikes during load test, instance count changes during autoscaling).                   |               |                    |
+
+**6. Success Criteria:**
+
+*   All test cases categorized as critical (e.g., GLB-001, MTLS-001, NGX-002, NGX-003, MIG-001) must pass.
+*   At least 95% of all test cases must pass.
+*   No blocking issues preventing legitimate clients (valid cert, allowed CN) from accessing the service.
+*   Unauthorized access attempts (no cert, untrusted cert, disallowed CN) are correctly blocked at the appropriate layer (GLB or Nginx).
+*   Autoscaling behaves as configured based on load.
+*   Instances remain healthy under normal load, and the MIG recovers from simulated failures.
+*   Logging and Monitoring provide adequate visibility into the system's operation.
+
+**7. Reporting:**
+
+*   Record the "Actual Result" and "Status" for each test case in the table above.
+*   Document any failures with detailed steps to reproduce, error messages, relevant log snippets, and screenshots.
+*   Summarize the overall test results and adherence to Success Criteria.
+*   List any identified defects or areas requiring further investigation.
+
+---
+
+This test plan provides a structured approach to validate your new HTTPS mTLS setup. Remember to adapt specific paths, commands, IP addresses, DNS names, and expected CNs to your actual environment. Good luck with your testing!
+
 
 ## Chinese
 
