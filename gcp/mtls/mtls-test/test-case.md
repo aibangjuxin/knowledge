@@ -189,7 +189,7 @@ Verify that the entire system's end-to-end workflow operates correctly.
 
 ## Conclusion
 
-By executing the above test cases, we can comprehensively verify the migration from TCP MTLS to HTTPS MTLS GLB and ensure that the system operates correctly. The tests should cover certificate management, HTTPS and mTLS configuration, Cloud Armor, Backend Service, Nginx configuration, client certificate validation, custom headers, performance, and error handling. Only when all test cases pass should we consider the migration successful.
+By executing the above test/following cases, we can comprehensively verify the migration from TCP MTLS to HTTPS MTLS GLB and ensure that the system operates correctly. The tests should cover certificate management, HTTPS and mTLS configuration, Cloud Armor, Backend Service, Nginx configuration, client certificate validation, custom headers, performance, and error handling. Only when all test cases pass should we consider the migration successful.
 
 
 
