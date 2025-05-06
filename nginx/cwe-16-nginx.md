@@ -513,6 +513,69 @@ server {
 不会相互覆盖，而是都会生效。最终的 HTTP 响应会同时包含这三个头部。如果您有更多疑问或需要进一步澄清，请随时告诉我！
 
 
+根据您的需求，您希望在 Nginx 配置文件中完成以下操作：
+	1	删除 http 段落中的 add_header X-Content-Type-Options nosniff always; 这一行。
+	2	在 server 段落中的 add_header Strict-Transport-Security 前一行 添加 add_header X-Content-Type-Options nosniff always;。
+以下是如何使用 Shell 脚本实现这一需求的完整解答。
+
+实现方法
+我们将使用 Shell 脚本结合 sed 命令来编辑 Nginx 配置文件。以下是具体的实现步骤和脚本。
+步骤
+	1	备份配置文件 在修改配置文件之前，先备份原始文件，以防出现问题。
+	2	删除 http 段落中的指定行 使用 sed 定位到 http 块并删除指定的 add_header 行。
+	3	在 server 段落中插入新行 使用 sed 定位到 server 块中的 add_header Strict-Transport-Security 行，并在它之前插入新行。
+Shell 脚本
+假设您的 Nginx 配置文件位于 /etc/nginx/nginx.conf，以下是实现脚本：
+#!/bin/bash
+
+# 备份原始配置文件
+cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak
+
+# 删除 http 段落中的 add_header X-Content-Type-Options nosniff always;
+sed -i '/http {/,/}/ { /add_header X-Content-Type-Options nosniff always;/d }' /etc/nginx/nginx.conf
+
+# 在 server 段落中的 add_header Strict-Transport-Security 前插入新行
+sed -i '/server {/,/}/ { /add_header Strict-Transport-Security/ i\    add_header X-Content-Type-Options nosniff always;' /etc/nginx/nginx.conf
+
+脚本解释
+	1	备份配置文件
+	◦	命令：cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak
+	◦	作用：将原始配置文件备份为 nginx.conf.bak，以便在出错时可以恢复。
+	2	删除 http 段落中的指定行
+	◦	命令：sed -i '/http {/,/}/ { /add_header X-Content-Type-Options nosniff always;/d }' /etc/nginx/nginx.conf
+	◦	解释：
+	▪	/http {/,/}/：匹配 http 块的范围，从 http { 到对应的 }。
+	▪	/add_header X-Content-Type-Options nosniff always;/d：在 http 块内，删除包含 add_header X-Content-Type-Options nosniff always; 的行。
+	▪	-i：直接修改文件内容。
+	3	在 server 段落中插入新行
+	◦	命令：sed -i '/server {/,/}/ { /add_header Strict-Transport-Security/ i\ add_header X-Content-Type-Options nosniff always;' /etc/nginx/nginx.conf
+	◦	解释：
+	▪	/server {/,/}/：匹配 server 块的范围，从 server { 到对应的 }。
+	▪	/add_header Strict-Transport-Security/ i\ add_header X-Content-Type-Options nosniff always;：在 server 块内，找到 add_header Strict-Transport-Security 行，并在它之前插入 add_header X-Content-Type-Options nosniff always;。
+	▪	\ ：表示插入的行以四个空格开头，保持配置文件缩进格式。
+
+注意事项
+	•	配置文件路径 请根据您的实际 Nginx 配置文件路径调整脚本中的 /etc/nginx/nginx.conf。您可以通过命令 nginx -t 查看 Nginx 使用的配置文件路径。
+	•	多个 server 块 如果您的配置文件中有多个 server 块，脚本会在所有 server 块的 add_header Strict-Transport-Security 前插入新行。如果您只想修改特定的 server 块，可以根据需要添加更多条件（例如通过 server_name 定位）。
+	•	缩进调整 脚本中假设 server 块内的行以四个空格缩进。如果您的配置文件使用不同的缩进（例如两个空格或 Tab），请调整 sed 命令中的 \ 部分。
+	•	测试脚本 在运行脚本之前，建议：
+	1	在测试环境中试运行脚本。
+	2	执行后使用 nginx -t 检查配置文件语法是否正确。
+
+使用方法
+	1	将上述脚本保存为文件，例如 modify_nginx.sh。
+	2	赋予执行权限： chmod +x modify_nginx.sh
+	3	
+	4	执行脚本： ./modify_nginx.sh
+	5	
+	6	检查配置： nginx -t
+	7	 如果语法正确，可以重载 Nginx 以应用更改： systemctl reload nginx
+	8	
+
+通过这个脚本，您可以自动完成从 http 段落中删除 add_header X-Content-Type-Options nosniff always;，并在 server 段落的 add_header Strict-Transport-Security 前添加该行的操作。
+
+
+
 
 
 
