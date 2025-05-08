@@ -198,10 +198,11 @@ Access-Control-Allow-Credentials	是（如使用 Cookie/Auth）	增加安全性�
 
 此类 CWE-942 漏洞通常由以下原因引起：
 
-错误方式	风险
-Access-Control-Allow-Origin: *	在认证请求中允许任意来源，信息泄露
-动态回显 Origin 而未做校验	可被伪造 Origin 利用，CORS绕过攻击
-多个 Access-Control-Allow-Origin 头	浏览器忽略或行为不一致，功能不可靠
+| 错误方式 | 风险 |
+|----------|------|
+| Access-Control-Allow-Origin: * | 在认证请求中允许任意来源，信息泄露 |
+| 动态回显 Origin 而未做校验 | 可被伪造 Origin 利用，CORS绕过攻击 |
+| 多个 Access-Control-Allow-Origin 头 | 浏览器忽略或行为不一致，功能不可靠 |
 
 
 
@@ -285,11 +286,12 @@ curl -i -H "Origin: https://www.abc.com" https://kong.dp.internal/apiname1/v1/.w
 
 五、总结建议
 
-位置	建议
-Nginx	设置 CORS Header（使用 map + add_header + always）
-Kong	启用 CORS 插件，配置安全来源
-应用服务	不设置或仅作为兜底，防止重复 header
-验证	curl 结合浏览器 DevTools 检查 header 传递路径
+| 位置 | 建议 |
+|------|------|
+| Nginx | 设置 CORS Header（使用 map + add_header + always） |
+| Kong | 启用 CORS 插件，配置安全来源 |
+| 应用服务 | 不设置或仅作为兜底，防止重复 header |
+| 验证 | curl 结合浏览器 DevTools 检查 header 传递路径 |
 
 
 
