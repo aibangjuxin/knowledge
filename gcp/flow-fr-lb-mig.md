@@ -98,3 +98,64 @@ flowchart LR
 - 快速响应流量变化
 - 自动管理服务器实例
 - 保持服务的稳定性和性能
+
+
+```mermaid
+flowchart LR
+    subgraph UserAndInternet ["用户与互联网"]
+        Client["用户 (Client)"]
+        style Client fill:#fff59d,stroke:#fbc02d
+    end
+
+    subgraph GCPEdge ["GCP 全球边缘网络"]
+        GFR["全局转发规则 (Global Forwarding Rule)<br/>公共IP:端口443"]
+        style GFR fill:#bbdefb,stroke:#1976d2
+    end
+
+    subgraph HTTPSLoadBalancerCore ["HTTPS 负载均衡器核心"]
+        direction LR
+        THP["目标HTTPS代理 (Target HTTPS Proxy)<br/>TLS终止<br/>关联SSL证书"]
+        URLMap["URL映射 (URL Map)<br/>基于主机/路径的路由规则"]
+        style THP fill:#c8e6c9,stroke:#388e3c
+        style URLMap fill:#c8e6c9,stroke:#388e3c
+    end
+
+    subgraph BackendLayer ["后端服务层"]
+        direction LR
+        BS["后端服务 (Backend Service)<br/>协议: HTTP/HTTPS/HTTP2<br/>负载均衡策略, 会话亲和性"]
+        HC["健康检查 (Health Check)<br/>定期探测实例健康"]
+        style BS fill:#e1bee7,stroke:#7b1fa2
+        style HC fill:#ffccbc,stroke:#e64a19
+    end
+
+    subgraph ComputeLayer ["计算基础设施层"]
+        MIG["托管实例组 (MIG)<br/>VM实例池<br/>自动扩缩容, 自我修复"]
+        style MIG fill:#ffccbc,stroke:#e64a19
+    end
+
+    %% Request Flow
+    Client -- "1. HTTPS 请求" --> GFR
+    GFR -- "2. 流量转发" --> THP
+    THP -- "3. TLS终止 (使用SSL证书)<br/>解密为 HTTP/S 流量" --> URLMap
+    URLMap -- "4. 根据规则路由" --> BS
+    BS -- "5. 选择健康实例并转发" --> MIG
+
+    %% Instance Processing
+    MIG -- "6. VM实例处理请求" -- MIG
+
+    %% Health Checking (Parallel Process)
+    BS -. "定义/关联" .-> HC
+    HC -. "持续探测实例健康" .-> MIG
+
+    %% Response Flow
+    MIG -- "7. HTTP/S 响应" --> BS
+    BS -- "8. 响应" --> URLMap
+    URLMap -- "9. 响应" --> THP
+    THP -- "10. TLS加密<br/>形成 HTTPS 响应" --> GFR
+    GFR -- "11. HTTPS 响应" --> Client
+
+    classDef default fill:#f9f9f9,stroke:#333,stroke-width:2px
+    linkStyle default stroke:#666,stroke-width:1.5px
+    linkStyle 0,1,2,3,4,6,7,8,9,10 stroke-width:2.5px,stroke:#0277bd % Main flow links
+    linkStyle 5 stroke-dasharray: 5 5, stroke:#757575 % Health check links
+```
