@@ -338,7 +338,7 @@ http {
 	◦	降低因 server 或 location 中其他 add_header 覆盖导致的安全风险。
 	•	例外情况：
 	◦	如果某些 server 或 location 需要特殊配置（如禁用该头），可以在对应块中明确覆盖。
-	◦	使用 include 指令将安全头配置抽取到单独文件，方便复用： # /etc/nginx/conf.d/security_headers.conf
+	◦	使用 include 指令将安全头配置抽取到单独文件，方便复用：# /etc/nginx/conf.d/security_headers.conf
 	◦	add_header X-Content-Type-Options nosniff always;
 	◦	
 	◦	# 主配置文件
@@ -375,7 +375,7 @@ graph TD
 	◦	使用 curl -I http://example.com 验证响应头是否包含 X-Content-Type-Options: nosniff。
 	3	其他安全头：
 	◦	考虑同时配置其他安全头（如 X-Frame-Options、Content-Security-Policy）以进一步增强安全性。
-	◦	示例： http {
+	◦	示例：http {
 	◦	    add_header X-Content-Type-Options nosniff always;
 	◦	    add_header X-Frame-Options DENY always;
 	◦	    add_header Content-Security-Policy "default-src 'self'" always;
@@ -406,7 +406,7 @@ graph TD
 解决方法
 为了确保 X-Content-Type-Options 头能够正确应用，您可以按照以下步骤检查和调整配置：
 	1	检查现有配置：
-	◦	查看 server 和 location 段落中是否已经定义了其他 add_header 指令。例如： server {
+	◦	查看 server 和 location 段落中是否已经定义了其他 add_header 指令。例如：server {
 	◦	    listen 80;
 	◦	    server_name example.com;
 	◦	    add_header Cache-Control "no-store";  # 这里可能会覆盖 http 段落的设置
@@ -414,7 +414,7 @@ graph TD
 	◦	
 	◦	如果存在这样的指令，它们会导致 http 段落的 X-Content-Type-Options 头被忽略。
 	2	显式添加头部：
-	◦	如果 server 或 location 段落中需要定义其他 add_header，您可以在这些块中显式添加 X-Content-Type-Options。例如： server {
+	◦	如果 server 或 location 段落中需要定义其他 add_header，您可以在这些块中显式添加 X-Content-Type-Options。例如：server {
 	◦	    listen 80;
 	◦	    server_name example.com;
 	◦	    add_header X-Content-Type-Options nosniff always;  # 显式添加
@@ -425,15 +425,15 @@ graph TD
 	◦	}
 	◦	
 	3	验证配置：
-	◦	修改配置后，运行以下命令检查语法是否正确： nginx -t
+	◦	修改配置后，运行以下命令检查语法是否正确：nginx -t
 	◦	
-	◦	然后使用 curl 检查响应头是否包含预期的头部： curl -I http://example.com
+	◦	然后使用 curl 检查响应头是否包含预期的头部：curl -I http://example.com
 	◦	
 
 最佳实践
 为了避免类似问题并提高配置的可维护性，建议遵循以下最佳实践：
 	1	全局配置安全头部：
-	◦	将通用的安全头部（如 X-Content-Type-Options、X-Frame-Options 等）放在 http 段落中，确保所有请求默认都包含这些头部。例如： http {
+	◦	将通用的安全头部（如 X-Content-Type-Options、X-Frame-Options 等）放在 http 段落中，确保所有请求默认都包含这些头部。例如：http {
 	◦	    add_header X-Content-Type-Options nosniff always;
 	◦	    add_header X-Frame-Options DENY always;
 	◦	    # 其他全局配置
@@ -442,7 +442,7 @@ graph TD
 	2	避免无意覆盖：
 	◦	在 server 或 location 段落中谨慎使用 add_header，确保不会意外覆盖 http 段落的设置。如果需要添加额外的头部，可以同时保留上层配置所需的头部。
 	3	使用 include 指令：
-	◦	将安全头部配置抽取到单独的文件中，并在 http 段落中引入。这样可以方便管理和复用。例如： # /etc/nginx/conf.d/security_headers.conf
+	◦	将安全头部配置抽取到单独的文件中，并在 http 段落中引入。这样可以方便管理和复用。例如：# /etc/nginx/conf.d/security_headers.conf
 	◦	add_header X-Content-Type-Options nosniff always;
 	◦	add_header X-Frame-Options DENY always;
 	◦	add_header Content-Security-Policy "default-src 'self'" always;
@@ -483,8 +483,8 @@ server {
 换句话说，这三个头部都会生效，并且会在响应中同时出现。
 验证方法
 您可以通过以下方式确认这些头部是否都已正确添加：
-	1	使用 curl 命令： curl -I http://your-domain.com
-	2	 输出中应该能看到类似以下的响应头部： HTTP/1.1 200 OK
+	1	使用 curl 命令：curl -I http://your-domain.com
+	2	输出中应该能看到类似以下的响应头部：HTTP/1.1 200 OK
 	3	Server: nginx/1.18.0
 	4	Date: Wed, 09 Oct 2024 12:34:56 GMT
 	5	Content-Type: text/html
@@ -496,14 +496,14 @@ server {
 注意事项
 虽然在同一个 server 块内多个 add_header 指令会累加，但在不同层级的配置块（如 location 块）中，add_header 的行为可能有所不同：
 	•	如果在 location 块中定义了 add_header，它会覆盖上层 server 块或 http 块中的 add_header 设置，而不是累加。
-	•	例如： server {
+	•	例如：server {
 	•	    add_header X-Content-Type-Options nosniff always;
 	•	    add_header X-Frame-Options DENY always;
 	•	    location / {
 	•	        add_header Cache-Control "no-store";
 	•	    }
 	•	}
-	•	 在这个例子中，对于 / 路径的请求，响应中只会有 Cache-Control: no-store 头部，而 X-Content-Type-Options 和 X-Frame-Options 不会出现。
+	•	在这个例子中，对于 / 路径的请求，响应中只会有 Cache-Control: no-store 头部，而 X-Content-Type-Options 和 X-Frame-Options 不会出现。
 	•	要避免这种覆盖，您需要在 location 块中显式添加所有所需的头部，或者依赖 Nginx 的新版本（1.15.8 及以上）支持的 add_header 继承特性。
 总结
 在您的示例中，server 块内的三行 add_header 指令：
@@ -521,9 +521,9 @@ server {
 实现方法
 我们将使用 Shell 脚本结合 sed 命令来编辑 Nginx 配置文件。以下是具体的实现步骤和脚本。
 步骤
-	1	备份配置文件 在修改配置文件之前，先备份原始文件，以防出现问题。
-	2	删除 http 段落中的指定行 使用 sed 定位到 http 块并删除指定的 add_header 行。
-	3	在 server 段落中插入新行 使用 sed 定位到 server 块中的 add_header Strict-Transport-Security 行，并在它之前插入新行。
+	1	备份配置文件在修改配置文件之前，先备份原始文件，以防出现问题。
+	2	删除 http 段落中的指定行使用 sed 定位到 http 块并删除指定的 add_header 行。
+	3	在 server 段落中插入新行使用 sed 定位到 server 块中的 add_header Strict-Transport-Security 行，并在它之前插入新行。
 Shell 脚本
 假设您的 Nginx 配置文件位于 /etc/nginx/nginx.conf，以下是实现脚本：
 #!/bin/bash
@@ -555,21 +555,21 @@ sed -i '/server {/,/}/ { /add_header Strict-Transport-Security/ i\    add_header
 	▪	\ ：表示插入的行以四个空格开头，保持配置文件缩进格式。
 
 注意事项
-	•	配置文件路径 请根据您的实际 Nginx 配置文件路径调整脚本中的 /etc/nginx/nginx.conf。您可以通过命令 nginx -t 查看 Nginx 使用的配置文件路径。
-	•	多个 server 块 如果您的配置文件中有多个 server 块，脚本会在所有 server 块的 add_header Strict-Transport-Security 前插入新行。如果您只想修改特定的 server 块，可以根据需要添加更多条件（例如通过 server_name 定位）。
-	•	缩进调整 脚本中假设 server 块内的行以四个空格缩进。如果您的配置文件使用不同的缩进（例如两个空格或 Tab），请调整 sed 命令中的 \ 部分。
-	•	测试脚本 在运行脚本之前，建议：
+	•	配置文件路径请根据您的实际 Nginx 配置文件路径调整脚本中的 /etc/nginx/nginx.conf。您可以通过命令 nginx -t 查看 Nginx 使用的配置文件路径。
+	•	多个 server 块如果您的配置文件中有多个 server 块，脚本会在所有 server 块的 add_header Strict-Transport-Security 前插入新行。如果您只想修改特定的 server 块，可以根据需要添加更多条件（例如通过 server_name 定位）。
+	•	缩进调整脚本中假设 server 块内的行以四个空格缩进。如果您的配置文件使用不同的缩进（例如两个空格或 Tab），请调整 sed 命令中的 \ 部分。
+	•	测试脚本在运行脚本之前，建议：
 	1	在测试环境中试运行脚本。
 	2	执行后使用 nginx -t 检查配置文件语法是否正确。
 
 使用方法
 	1	将上述脚本保存为文件，例如 modify_nginx.sh。
-	2	赋予执行权限： chmod +x modify_nginx.sh
+	2	赋予执行权限：chmod +x modify_nginx.sh
 	3	
-	4	执行脚本： ./modify_nginx.sh
+	4	执行脚本：./modify_nginx.sh
 	5	
-	6	检查配置： nginx -t
-	7	 如果语法正确，可以重载 Nginx 以应用更改： systemctl reload nginx
+	6	检查配置：nginx -t
+	7	如果语法正确，可以重载 Nginx 以应用更改：systemctl reload nginx
 	8	
 
 通过这个脚本，您可以自动完成从 http 段落中删除 add_header X-Content-Type-Options nosniff always;，并在 server 段落的 add_header Strict-Transport-Security 前添加该行的操作。

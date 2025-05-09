@@ -1,5 +1,8 @@
 要完整跟踪请求在「多层 Nginx + Kong Gateway + 后端 Runtime」中的每一跳响应头（尤其是安全相关 header 如 X-Content-Type-Options），可以采用如下方法分层定位与验证：
 
+
+add_header X-Content-Type-Options nosniff always;
+proxy_hide_header x-content-type-options;
 ⸻
 
 一、使用 curl 分层查看各层响应头
