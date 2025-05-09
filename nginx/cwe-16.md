@@ -42,11 +42,12 @@ curl -k -v https://www.abc.com/apiname1/v1/.well-known/health
 
 为便于跨层调试，可考虑如下措施：
 
-跳点	措施
-Nginx Ingress	设置 add_header X-Content-Type-Options nosniff always; 并使用统一 include
-Proxy 到 Kong	增加自定义 header（如 X-From-Gateway: nginx1）用于调试路径追踪
-Kong DP	使用插件如 response-transformer 添加 header 或记录日志
-Runtime Pod	明确在返回响应中增加 X-Content-Type-Options 并避免被中间层覆盖
+| 跳点 | 措施 |
+|------|------|
+| Nginx Ingress | 设置 add_header X-Content-Type-Options nosniff always; 并使用统一 include |
+| Proxy 到 Kong | 增加自定义 header（如 X-From-Gateway: nginx1）用于调试路径追踪 |
+| Kong DP | 使用插件如 response-transformer 添加 header 或记录日志 |
+| Runtime Pod | 明确在返回响应中增加 X-Content-Type-Options 并避免被中间层覆盖 |
 
 
 
@@ -55,7 +56,7 @@ Runtime Pod	明确在返回响应中增加 X-Content-Type-Options 并避免被�
 四、调试配置建议（配置样例）
 
 在 Nginx 层级：
-
+```nginx.conf
 location /apiname1/v1 {
     proxy_pass https://ip;
     proxy_set_header Host $host;
@@ -65,13 +66,15 @@ location /apiname1/v1 {
     add_header X-Debug-Stage "nginx-entry" always;
     add_header X-Content-Type-Options "nosniff" always;
 }
-
+```
 在 Kong Gateway 层，可配置响应变换插件（若使用 OSS 版本，使用 custom plugin）：
 
 -- Kong plugin (response phase)
+```nginx.conf
 header_filter_by_lua_block {
     ngx.header["X-Debug-Stage"] = "kong-dp"
 }
+```
 
 
 
@@ -97,7 +100,7 @@ curl -k -s -D - https://www.abc.com/apiname1/v1/.well-known/health -o /dev/null 
 Nginx 的配置分为多个层级：http、server 和 location，每个层级的 add_header 作用范围和行为有所不同：
 	•	http 块：
 	◦	作用范围：全局，影响所有 server 块（除非被更具体的配置覆盖）。
-	◦	配置示例： http {
+	◦	配置示例：http {
 	◦	    add_header X-Content-Type-Options nosniff always;
 	◦	}
 	◦	
@@ -105,7 +108,7 @@ Nginx 的配置分为多个层级：http、server 和 location，每个层级的
 	◦	注意：如果 server 或 location 块中定义了其他 add_header，http 块的头可能被覆盖（详见覆盖关系）。
 	•	server 块：
 	◦	作用范围：特定虚拟主机（server 块）内的所有请求。
-	◦	配置示例： server {
+	◦	配置示例：server {
 	◦	    listen 80;
 	◦	    server_name www.abc.com;
 	◦	    add_header X-Content-Type-Options nosniff always;
@@ -115,7 +118,7 @@ Nginx 的配置分为多个层级：http、server 和 location，每个层级的
 	◦	优势：更精细的控制，适合不同域名有不同安全头需求的情况。
 	•	location 块：
 	◦	作用范围：仅限匹配该 location 的请求。
-	◦	配置示例： server {
+	◦	配置示例：server {
 	◦	    location /apiname/v1 {
 	◦	        add_header X-Content-Type-Options nosniff always;
 	◦	    }
@@ -132,20 +135,20 @@ Nginx 的配置分为多个层级：http、server 和 location，每个层级的
 可能的原因如下：
 	1	覆盖机制：
 	◦	Nginx 的 add_header 指令遵循“最具体优先”原则。如果 server 或 location 块中定义了其他 add_header，它们会完全覆盖 http 块中的 add_header。
-	◦	示例： http {
+	◦	示例：http {
 	◦	    add_header X-Content-Type-Options nosniff always;
 	◦	}
 	◦	server {
 	◦	    add_header X-Frame-Options DENY always; # 这会覆盖 http 块的 nosniff
 	◦	}
-	◦	 在此例中，server 块的 add_header 会导致 X-Content-Type-Options 失效。
+	◦	在此例中，server 块的 add_header 会导致 X-Content-Type-Options 失效。
 	2	include 文件的影响：
 	◦	你提到使用了 include 引用其他配置文件。如果这些文件中包含 server 或 location 块的 add_header，它们可能覆盖了 http 块的配置。
-	◦	示例： http {
+	◦	示例：http {
 	◦	    add_header X-Content-Type-Options nosniff always;
 	◦	    include other.conf;
 	◦	}
-	◦	 如果 other.conf 中的 server 块有 add_header，则 http 块的头可能被覆盖。
+	◦	如果 other.conf 中的 server 块有 add_header，则 http 块的头可能被覆盖。
 	3	配置加载顺序：
 	◦	Nginx 按配置文件加载顺序处理指令。如果 include 的文件中定义了更具体的 add_header，它们会覆盖 http 块的配置。
 	4	调试建议：
@@ -163,24 +166,24 @@ server {
     add_header X-Frame-Options DENY always;
 }
 	•	行为：以上三个头都会添加到响应中，互不冲突。
-	•	验证：客户端收到的响应头将包含： X-Content-Type-Options: nosniff
+	•	验证：客户端收到的响应头将包含：X-Content-Type-Options: nosniff
 	•	Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
 	•	X-Frame-Options: DENY
 	•	
 注意：
-	•	如果在不同层级（如 http、server、location）定义了相同的头（如 X-Content-Type-Options），更具体的层级会覆盖上层。例如： http {
+	•	如果在不同层级（如 http、server、location）定义了相同的头（如 X-Content-Type-Options），更具体的层级会覆盖上层。例如：http {
 	•	    add_header X-Content-Type-Options nosniff always;
 	•	}
 	•	server {
 	•	    add_header X-Content-Type-Options sniff always; # 覆盖 http 块
 	•	}
-	•	 最终响应头将是 X-Content-Type-Options: sniff。
+	•	最终响应头将是 X-Content-Type-Options: sniff。
 
 4. 最佳实践
 基于你的场景（开源 Nginx、多个 location、使用 include、多次跳转），以下是最佳实践建议：
 	1	优先在 server 块配置安全头：
 	◦	将 add_header X-Content-Type-Options nosniff always; 放在 server 块，确保所有请求都应用此头，避免 location 块分散配置导致遗漏。
-	◦	示例： server {
+	◦	示例：server {
 	◦	    listen 80;
 	◦	    server_name www.abc.com;
 	◦	    add_header X-Content-Type-Options nosniff always;
@@ -193,11 +196,11 @@ server {
 	◦	}
 	◦	
 	2	统一管理安全头：
-	◦	将所有安全头集中在一个 include 文件中，避免重复定义。例如： # security_headers.conf
+	◦	将所有安全头集中在一个 include 文件中，避免重复定义。例如：# security_headers.conf
 	◦	add_header X-Content-Type-Options nosniff always;
 	◦	add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
 	◦	add_header X-Frame-Options DENY always;
-	◦	 在 server 块中引用： server {
+	◦	在 server 块中引用：server {
 	◦	    include security_headers.conf;
 	◦	}
 	◦	
@@ -212,7 +215,7 @@ server {
 	▪	Nginx 层：在 server 块添加安全头，确保初始响应包含该头。
 	▪	Kong 层：检查 Kong 的配置（如插件），确保没有移除或覆盖安全头。如果 Kong 使用 Nginx 作为底层，同样在 Kong 的 Nginx 配置中添加 add_header。
 	▪	Runtime 层：如果 Runtime 是你控制的应用服务器（如 Node.js、Java），确保它也返回相同的头（以防 Kong 转发时丢失）。
-	◦	配置示例（Nginx）： server {
+	◦	配置示例（Nginx）：server {
 	◦	    server_name www.abc.com;
 	◦	    add_header X-Content-Type-Options nosniff always;
 	◦	
@@ -231,23 +234,23 @@ server {
 	1	使用浏览器开发者工具：
 	◦	打开浏览器（Chrome、Firefox 等），访问 http://www.abc.com/apiname/v1/health。
 	◦	按 F12 打开开发者工具，切换到“网络”选项卡。
-	◦	刷新页面，点击请求，查看“响应头”部分，确认是否存在： X-Content-Type-Options: nosniff
+	◦	刷新页面，点击请求，查看“响应头”部分，确认是否存在：X-Content-Type-Options: nosniff
 	◦	
 	2	使用 curl 命令：
-	◦	在终端运行： curl -I http://www.abc.com/apiname/v1/health
+	◦	在终端运行：curl -I http://www.abc.com/apiname/v1/health
 	◦	
-	◦	检查输出，确认是否存在： X-Content-Type-Options: nosniff
+	◦	检查输出，确认是否存在：X-Content-Type-Options: nosniff
 	◦	
 	3	验证多次跳转：
 	◦	对每个跳转节点（Nginx、Kong、Runtime）单独发送请求，检查响应头：
 	▪	直接访问 Nginx（如 http://www.abc.com/apiname/v1/health）。
 	▪	如果可能，绕过 Nginx 直接访问 Kong 的上游地址，检查是否保留了安全头。
 	▪	访问 Runtime 的实际服务，确认其响应头。
-	◦	示例（假设 Kong 监听在 http://kong:8000）： curl -I http://kong:8000/apiname/v1/health
+	◦	示例（假设 Kong 监听在 http://kong:8000）：curl -I http://kong:8000/apiname/v1/health
 	◦	
 	4	自动化测试：
 	◦	使用工具如 curl 或 Postman 编写脚本，批量检查所有 API 端点的响应头。
-	◦	示例脚本（bash）： endpoints=(
+	◦	示例脚本（bash）：endpoints=(
 	◦	    "http://www.abc.com/apiname/v1/health"
 	◦	    "http://www.abc.com/otherapi/v1/status"
 	◦	)
@@ -262,13 +265,13 @@ server {
 	6	验证 MIME 类型嗅探行为：
 	◦	上传一个故意错误 MIME 类型的文件（如将 .txt 文件伪装为 image/png），通过 Nginx 访问。
 	◦	如果配置正确，浏览器会拒绝嗅探 MIME 类型，直接使用服务器声明的类型。
-	◦	示例配置： location /test {
+	◦	示例配置：location /test {
 	◦	    alias /path/to/test.txt;
 	◦	    types { text/plain txt; }
 	◦	    add_header Content-Type "image/png";
 	◦	    add_header X-Content-Type-Options nosniff always;
 	◦	}
-	◦	 访问后，浏览器应显示错误或按 image/png 处理，而不是尝试嗅探为 text/plain。
+	◦	访问后，浏览器应显示错误或按 image/png 处理，而不是尝试嗅探为 text/plain。
 
 6. 多次跳转的额外注意事项
 在你的场景中，请求经过 Nginx → Kong → Runtime，需要确保每个环节都正确处理安全头：
@@ -278,7 +281,7 @@ server {
 	2	Kong：
 	◦	如果 Kong 使用 Nginx 作为底层，检查其 Nginx 配置，添加相同的 add_header。
 	◦	如果 Kong 使用插件（如 response-transformer），确保没有移除安全头。
-	◦	示例（Kong Nginx 配置）： server {
+	◦	示例（Kong Nginx 配置）：server {
 	◦	    add_header X-Content-Type-Options nosniff always;
 	◦	    location / {
 	◦	        proxy_pass http://runtime;
@@ -287,7 +290,7 @@ server {
 	◦	
 	3	Runtime：
 	◦	确保应用服务器（如 Node.js、Java）在响应中包含 X-Content-Type-Options: nosniff。
-	◦	示例（Node.js Express）： app.use((req, res, next) => {
+	◦	示例（Node.js Express）：app.use((req, res, next) => {
 	◦	    res.setHeader('X-Content-Type-Options', 'nosniff');
 	◦	    next();
 	◦	});
