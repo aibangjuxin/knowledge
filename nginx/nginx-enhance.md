@@ -144,8 +144,8 @@
   - 使用 `upstream` 配置多个后端服务器。
     ```nginx
     upstream backend {
-        server 10.98.0.188:8081 max_fails=3 fail_timeout=30s;
-        server 10.98.0.189:8081 max_fails=3 fail_timeout=30s;
+        server 10.72.0.188:8081 max_fails=3 fail_timeout=30s;
+        server 10.72.0.189:8081 max_fails=3 fail_timeout=30s;
     }
 
     location /api/ {
@@ -156,8 +156,8 @@
     ```nginx
     upstream backend {
         least_conn;
-        server 10.98.0.188:8081;
-        server 10.98.0.189:8081;
+        server 10.72.0.188:8081;
+        server 10.72.0.189:8081;
     }
     ```
 
@@ -300,7 +300,7 @@
 1. **简化配置**：移除不必要的 `rewrite` 规则，减少 CPU 开销。
    ```nginx
    location /api_name1_version/v1/ {
-       proxy_pass https://10.98.0.188:8081/;
+       proxy_pass https://10.72.0.188:8081/;
        proxy_set_header Host www.aibang.com;
        proxy_set_header X-Real-Ip $remote_addr;
        proxy_read_timeout 60s;
@@ -312,6 +312,6 @@
 2. **启用缓存**：如果 API 响应内容可以缓存，使用 `proxy_cache` 减少后端压力。
 3. **调整 Worker 参数**：根据服务器 CPU 核心数设置 `worker_processes` 和 `worker_connections`。
 4. **监控与限流**：启用 `stub_status` 监控性能，配置 `limit_req` 防止流量突发。
-5. **优化后端**：确保后端服务 `10.98.0.188:8081` 响应速度，避免成为瓶颈。
+5. **优化后端**：确保后端服务 `10.72.0.188:8081` 响应速度，避免成为瓶颈。
 
-通过以上方法，可以有效降低 CPU 使用率并提高 Nginx 的吞吐量。如果有具体的硬件环境或流量数据，可以进一步定制优化方案。欢迎继续交流！
+通过以上方法，可以有效降低 CPU 使用率并提高 Nginx 的吞吐量。如果有具体的硬件环境或流量数据，可以进一步定制优化方案。
