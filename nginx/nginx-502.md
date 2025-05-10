@@ -4,6 +4,8 @@
 第二条处理后: https://www.aibang.com/api_name1_version/v1/generic/entity/query 
 
 
+
+
 你的问题非常关键，异常URL `https://10.72.0.188:8081https://www.aibang.com/abc-proxy/v1/generic/entity/query` 表明在某些情况下，Nginx 的请求处理生成了错误的 URL 拼接，导致后端服务器接收到不正确的请求。这可能与你的 `rewrite` 规则直接相关，尤其是在高并发或特定请求模式下。以下我会详细分析你的配置，解释这种异常 URL 是否可能由你的 `rewrite` 规则生成，以及在什么情况下可能出现这种拼接错误。
 
 ---
