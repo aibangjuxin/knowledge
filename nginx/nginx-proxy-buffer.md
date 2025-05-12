@@ -22,6 +22,7 @@ location /api_name1_version/v1/ {
     proxy_buffers 4 256k;
     proxy_busy_buffers_size 512k;
 }
+```
 帮我具体解释参数含义 和可行性 如果增加会有什么影响等
 
 
