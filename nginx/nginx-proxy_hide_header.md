@@ -56,3 +56,18 @@ proxy_hide_header x-content-type-options;
 - **安全性**：强制`nosniff`可以有效防止浏览器误执行恶意内容，提升网站的安全性。
 
 简单来说，你用这两行配置告诉Nginx：“我要自己掌控`X-Content-Type-Options`，后端别插手，所有响应都要按我的标准来，确保安全。”
+
+# effect
+一般对nginx 来说做什么调整会造成如下情况 麻烦问下，我们用postman call API，传过去的http header 都变成了小写，但是APl call API，传来的http header就是正常的。这是改了什么配置了吗？
+导致我们现在没办法用postman测试API,code也不能做fix，因为2种：
+为不一致
+ 我最近仅仅是增加了下面这样一个配置
+你要帮我确认一下下面这个配置是否会影响到上面这个情况
+
+add_header X-Content-Type-Options nosniff always;
+        proxy_hide_header x-content-type-options;
+
+
+
+
+
