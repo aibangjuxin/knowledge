@@ -1,3 +1,16 @@
+
+关于GCP Cloud Armor的最佳实践
+1 要基于API的location Path做白名单允许访问
+2 默认Deny ALl所有访问 规则比如是2147483647 
+3 会有某些特殊国家的禁止比如region_code的配置
+4 有WAF规则配置
+5 有Rate based ban的配置 也就是source IP throttling 
+比如关于第一点我们的API的都是动态添加的，所以需要关注priority的设计
+
+帮我规划这些规则的priority 防止优先级短路的问题
+
+
+
 # Grok
 以下是关于在 Google Cloud Armor 中实现基于 API 的 location path 白名单、默认 Deny All、特定国家/地区限制、WAF 规则以及基于源 IP 的 Rate-based Ban（限流和封禁）的最佳实践规划。重点解决优先级（priority）设计，以防止优先级短路问题，并确保规则按预期执行。输出将采用 Markdown 格式，包含流程图（Mermaid 格式）和代码示例。
 
