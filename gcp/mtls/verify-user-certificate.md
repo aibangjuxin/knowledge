@@ -6,6 +6,8 @@
   - [知道签发您证书的 CA 的名称](#知道签发您证书的-ca-的名称)
   - [cat ca.cert](#cat-cacert)
 - [Verify User certificate is signed by the CA](#verify-user-certificate-is-signed-by-the-ca)
+- [](#)
+- [获取指纹](#获取指纹)
 
 # Summary
 ## as user 
@@ -270,3 +272,242 @@ openssl verify -CAfile intermediate_ca.pem client.crt
 5.  **GLB 配置:** 这个验证只检查证书链本身。它不能保证 GLB 的其他配置（如防火墙规则、Target Proxy 设置）是正确的。
 
 通过 `openssl verify` 命令进行预先检查，是确认客户端证书是否符合 `TrustConfig` 要求、能否通过 GLB mTLS 验证的有效方法。
+
+
+
+# 
+
+你可以通过 gcloud certificate-manager trust-configs describe 命令获取 TrustConfig 的详细配置，包括所有已信任的 CA（root 和 intermediate）信息，这是目前校验 TrustConfig 最直接的方式。下面是你可以执行的操作来校验和查看你都信任了哪些证书：
+
+⸻
+
+✅ 1. 查看 TrustConfig 内容（确认信任了哪些 CA）
+```bash
+gcloud certificate-manager trust-configs describe $TRUSTCONFIG_NAME \
+    --location=global \
+    --format=json
+```
+
+输出中你将看到类似结构：
+```json
+"trustStores": [
+  {
+    "trustAnchors": [
+      {
+        "pemCertificate": "-----BEGIN CERTIFICATE-----\nMIID....\n-----END CERTIFICATE-----"
+      }
+    ],
+    "intermediateCas": [
+      {
+        "pemCertificate": "-----BEGIN CERTIFICATE-----\nMIIF....\n-----END CERTIFICATE-----"
+      }
+    ]
+  }
+]
+```
+你可以使用 jq 或 shell 解析 pemCertificate 内容提取指纹。
+
+⸻
+
+✅ 2. 校验 TrustConfig 中的证书内容（fingerprint/hash）
+
+有两个方向：
+
+方法 A：提取并生成 SHA256 指纹（推荐方式）
+
+你可以通过下面的 shell 命令快速获取所有证书的 SHA256 指纹进行比对：
+```bash
+gcloud certificate-manager trust-configs describe $TRUSTCONFIG_NAME \
+  --location=global \
+  --format="value(trustStores[].trustAnchors[].pemCertificate)" > root.pem
+
+gcloud certificate-manager trust-configs describe $TRUSTCONFIG_NAME \
+  --location=global \
+  --format="value(trustStores[].intermediateCas[].pemCertificate)" > intermediate.pem
+```
+# 获取指纹
+openssl x509 -noout -fingerprint -sha256 -in root.pem
+openssl x509 -noout -fingerprint -sha256 -in intermediate.pem
+
+这可用于比对你当前是否导入了你期望信任的 CA，比如可与你手动计算的值进行比对。
+
+⸻
+
+✅ 3. 自动化比对（结合 GCS fingerprint.json）
+
+如果你已有一份标准的 fingerprint.json（比如结构如下）：
+
+{
+  "trusted_certs": [
+    {
+      "name": "GlobalSign Root CA",
+      "fingerprint": "SHA256:AB:CD:EF:..."
+    },
+    {
+      "name": "Some Intermediate",
+      "fingerprint": "SHA256:12:34:56:..."
+    }
+  ]
+}
+
+你可以写个脚本读取 trust config 中的证书并计算实际指纹，然后比对这个 json 是否包含或遗漏目标证书。
+
+⸻
+
+✅ 4. 可视化校验方式（备选）
+
+你也可以在 Cloud Console → Certificate Manager → TrustConfig 页面中：
+	•	查看所有导入的根证书和中间证书
+	•	手动展开每一个证书内容
+	•	下载 .pem 内容进行验证
+
+⸻
+
+✅ 总结（推荐方式）
+
+校验内容	推荐操作
+已导入哪些证书？	gcloud certificate-manager trust-configs describe
+检查证书指纹是否一致？	openssl x509 -fingerprint -sha256 -in cert.pem
+与预期证书列表比对？	将 describe 输出证书与 GCS 中 fingerprint.json 比较
+
+
+⸻
+
+需要我帮你写一个自动校验 trust config 是否包含你定义的 cert 的 shell 脚本吗？可以基于指纹来对比 GCS 中的 JSON。
+
+
+下面是一个自动化校验 TrustConfig 是否包含你定义的证书的 Shell 脚本，它会执行以下步骤：
+	1.	从 TrustConfig 中提取所有 root 和 intermediate 的证书；
+	2.	为每个证书计算其 SHA256 指纹；
+	3.	下载你定义的 fingerprint.json（从 GCS）；
+	4.	校验这些指纹是否都出现在 fingerprint.json 中；
+	5.	报告缺失或多余的证书。
+
+⸻
+
+✅ Shell 脚本：校验 TrustConfig 中的 CA 指纹
+```bash
+#!/bin/bash
+
+set -e
+
+# 设置变量
+TRUSTCONFIG_NAME="$1"    # 第一个参数: trust config 名称
+GCS_PATH="$2"            # 第二个参数: gs://bucket/path/fingerprint.json
+TMP_DIR=$(mktemp -d)
+FINGERPRINT_FILE="$TMP_DIR/fingerprint.json"
+
+# 获取 trust config 中的所有 pemCertificate（root + intermediate）
+gcloud certificate-manager trust-configs describe "$TRUSTCONFIG_NAME" \
+  --location=global \
+  --format="value(trustStores[].trustAnchors[].pemCertificate)" \
+  > "$TMP_DIR/root.pem"
+
+gcloud certificate-manager trust-configs describe "$TRUSTCONFIG_NAME" \
+  --location=global \
+  --format="value(trustStores[].intermediateCas[].pemCertificate)" \
+  > "$TMP_DIR/intermediate.pem"
+
+# 分离多个证书
+awk 'BEGIN {n=0} /BEGIN CERTIFICATE/ {n++; out=sprintf("'"$TMP_DIR"'/cert_%03d.pem",n)} {print > out}' "$TMP_DIR/root.pem" "$TMP_DIR/intermediate.pem"
+
+# 提取指纹
+declare -A trustconfig_fingerprints
+for cert_file in "$TMP_DIR"/cert_*.pem; do
+    fp=$(openssl x509 -noout -fingerprint -sha256 -in "$cert_file" | sed 's/^SHA256 Fingerprint=//;s/://g')
+    trustconfig_fingerprints["$fp"]=1
+done
+
+# 下载 GCS 中的 fingerprint.json
+gsutil cp "$GCS_PATH" "$FINGERPRINT_FILE"
+if [[ ! -f "$FINGERPRINT_FILE" ]]; then
+    echo "无法下载 fingerprint.json"
+    exit 1
+fi
+
+# 读取 fingerprint.json 中的指纹
+declare -A expected_fingerprints
+while read -r line; do
+    fp=$(echo "$line" | sed 's/^.*SHA256:\(.*\)".*/\1/;s/://g')
+    [[ -n "$fp" ]] && expected_fingerprints["$fp"]=1
+done < <(jq -r '.trusted_certs[].fingerprint' "$FINGERPRINT_FILE")
+
+# 比较结果
+echo "🔍 比对结果："
+
+for fp in "${!expected_fingerprints[@]}"; do
+    if [[ -n "${trustconfig_fingerprints[$fp]}" ]]; then
+        echo "✅ 包含预期证书指纹: $fp"
+    else
+        echo "❌ 缺失证书指纹: $fp"
+    fi
+done
+
+for fp in "${!trustconfig_fingerprints[@]}"; do
+    if [[ -z "${expected_fingerprints[$fp]}" ]]; then
+        echo "⚠️ 多余的证书指纹: $fp"
+    fi
+done
+
+# 清理
+rm -rf "$TMP_DIR"
+```
+
+⸻
+
+✅ 使用方式
+
+chmod +x verify_trustconfig.sh
+
+./verify_trustconfig.sh my-trustconfig gs://my-bucket/fingerprint.json
+
+
+⸻
+
+✅ fingerprint.json 示例格式（必须这样写）
+
+{
+  "trusted_certs": [
+    {
+      "name": "GlobalSign Root CA",
+      "fingerprint": "SHA256:AB:CD:EF:12:34:56:78:90:..."
+    },
+    {
+      "name": "My Intermediate CA",
+      "fingerprint": "SHA256:98:76:54:32:10:FE:DC:BA:..."
+    }
+  ]
+}
+
+
+⸻
+
+需要我再帮你把这段脚本封装成 Cloud Build 或 Airflow Task 来做定期校验也可以。这个脚本支持你 CI/CD pipeline 中对 TrustConfig 的自动校验场景。是否需要我再帮你加上报告导出（例如 CSV）？
+
+
+```bash
+#!/bin/bash
+# get the trust config name
+TRUSTCONFIG_NAME=$(gcloud certificate-manager trust-configs list --location=global --format="value(name)")
+# format the trust config pem 
+gcloud certificate-manager trust-configs describe $TRUSTCONFIG_NAME \
+    --location=global \
+    |awk '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/' \
+    |sed 's/^[\t]*//' > all_certs.pem
+# Using csplit to split the file into individual certificates
+csplit -z -f cert- all_certs.pem '/-----BEGIN CERTIFICATE-----/' '{*}'
+# Loop through each certificate file
+for cert_file in cert-*; do
+    # Extract the certificate name
+    cert_name=$(openssl x509 -noout -subject -in "$cert_file" | sed -n 's/^.*CN=\(.*\)$/\1/p')
+    # Extract the certificate fingerprint
+    cert_fingerprint=$(openssl x509 -noout -fingerprint -sha256 -in "$cert_file" | sed 's/^SHA256 Fingerprint=//')
+    # Print the certificate name and fingerprint
+    echo "Certificate Name: $cert_name"
+    echo "Certificate Fingerprint: $cert_fingerprint"
+    echo "-------------------------"
+done
+
+# housekeeping tmp files
+rm cert-* all_certs.pem
+```

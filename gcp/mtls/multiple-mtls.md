@@ -192,14 +192,14 @@ location /api/ {
 	◦	GLB 本身无法直接根据客户端证书的 CN（Common Name）进行路由，但它可以将客户端证书的信息（如 CN）通过自定义请求头传递到后端服务。
 	2	Nginx 的路由能力
 	◦	您的 Nginx 配置示例已经展示了基于客户端证书 CN 的验证和路由能力。例如：
-```nginx location /abc-healthcheck-proxy/v2/ {
+```nginxlocation /abc-healthcheck-proxy/v2/ {
 	◦	    if ($ssl_client_s_dn_cn != "client-ext.aibang.com") {
 	◦	        return 406;  # 返回不接受的请求
 	◦	    }
 	◦	    proxy_pass http://abc-dev.internal:3128;
 	◦	}
 	◦	
-``` 这里使用了 $ssl_client_s_dn_cn 来检查客户端证书的 CN，并根据 CN 的值决定是否将请求转发到后端服务。
+```这里使用了 $ssl_client_s_dn_cn 来检查客户端证书的 CN，并根据 CN 的值决定是否将请求转发到后端服务。
 	◦	如果 GLB 将证书信息（如 CN）通过自定义头传递到后端，Nginx 可以利用这些头信息来实现更灵活的路由。
 	3	多层负载均衡架构
 	◦	您提到将 GLB 配置到后面对应的区域负载均衡器（LB），再路由到 instance 主机。这种多层架构是可行的。
@@ -215,21 +215,21 @@ location /api/ {
 1. 配置 Google Load Balancer 的 mTLS
 	•	创建 TrustConfig：
 	◦	在 Google Cloud Console 或使用 gcloud 命令创建一个 TrustConfig，上传您的信任锚（根证书）和中间证书。例如：
-```bash gcloud network-security trust-configs create my-trust-config \
+```bashgcloud network-security trust-configs create my-trust-config \
 	◦	    --location=global \
 	◦	    --trust-anchors=ca-cert.pem \
 	◦	    --intermediate-cas=intermediate-cert.pem
 ```
 	•	创建 ServerTLSPolicy：
 	◦	创建一个 ServerTLSPolicy，指定客户端验证模式并关联 TrustConfig。例如：
-```bash gcloud network-security server-tls-policies create my-tls-policy \
+```bashgcloud network-security server-tls-policies create my-tls-policy \
 	◦	    --location=global \
 	◦	    --mtls-trust-config=my-trust-config \
 	◦	    --client-validation-mode=REJECT_INVALID
 ```
 	◦	
 	◦	配置自定义请求头，将客户端证书的 CN 传递到后端。例如，将 CN 放入头 X-Client-CN：
-```bash gcloud network-security server-tls-policies update my-tls-policy \
+```bashgcloud network-security server-tls-policies update my-tls-policy \
 	◦	    --location=global \
 	◦	    --custom-headers=X-Client-CN:"%CLIENT_CERT_SUBJECT_DN_CN%"
 ```
@@ -239,7 +239,7 @@ location /api/ {
 2. 配置 Nginx
 	•	修改 Nginx 配置，使用 GLB 传递的自定义头（例如 X-Client-CN）来路由请求。
 	•	更新后的配置示例：
-```nginx js_import njs/http.js;
+```nginxjs_import njs/http.js;
 	•	js_set $ssl_client_s_dn_cn http.subjectcn;
 	•	
 	•	server {
