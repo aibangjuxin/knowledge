@@ -28,7 +28,21 @@ For example, regarding the first point, our APIs are dynamically added, so we ne
 - 避免了规则冲突或短路的问题
 
 在实际配置中，就是确保你的允许规则(API 白名单、可信 IP)的优先级数值比拒绝规则(WAF、地区限制、速率限制)小，最后以默认拒绝规则收尾。
-
+```mermaid
+graph TD
+    A[Incoming Request] --> B[Evaluate Priority 1000: Whitelist API Path]
+    B -->|Match| C[Allow Access]
+    B -->|No Match| D[Evaluate Priority 5000: Block Specific Countries]
+    D -->|Match| E[Deny Access: 403]
+    D -->|No Match| F[Evaluate Priority 6000: WAF Rules]
+    F -->|Match| G[Deny Access: 403]
+    F -->|No Match| H[Evaluate Priority 7000: DDoS Rules]
+    H -->|Match| I[Deny Access: 403]
+    H -->|No Match| J[Evaluate Priority 8000: Rate-based Ban]
+    J -->|Match| K[Throttle or Deny]
+    J -->|No Match| L[Evaluate Priority 2147483647: Default Deny]
+    L --> M[Deny Access: 403]
+```
 
 # chatgpt 
 
@@ -64,6 +78,17 @@ For example, regarding the first point, our APIs are dynamically added, so we ne
 | 3000 | waf-preconfigured-rules | Cloud Armor WAF 检测（SQLi/XSS 等） | deny(403) |
 | 4000 | rate-limit-ip | 基于来源 IP 的速率限制与封禁 | deny(429) |
 | 2147483647 | default-deny-all | 默认拒绝所有未命中规则的流量 | deny(403) |
+
+
+| Priority | Rule Name | Description | Action |
+|----------|-----------|-------------|--------|
+| 1000 | allow-api-path-whitelist | 允许访问指定 API 路径（动态更新，可绑定标签或脚本生成） | allow |
+| 1100 | allow-trusted-ip | 信任的 VPN/办公网段等可访问全部/特定路径 | allow |
+| 2000 | deny-region-block | 拒绝来自特定国家或地区的请求（如 RU、IR、KP） | deny(403) |
+| 3000 | waf-rules | 启用预置的 WAF 检测（如 XSS、SQLi、RFI 等） | deny(403) |
+| 4000 | ddos-protection | 基于连接数、QPS、异常行为等启发式阻断（推荐结合 Cloud Armor Adaptive） | deny(403) |
+| 5000 | rate-limit-ip | 基于 source IP 的访问频率控制（如每分钟100请求） | deny(429) |
+| 2147483647 | default-deny-all | 所有未命中的请求默认拒绝 | deny(403) |
 
 
 ⸻
