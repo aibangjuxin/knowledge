@@ -95,6 +95,10 @@
 	- [ ] https://www.aibang.com/api_name/v1/api
 	- [ ] [https://www.aibang.com/api_name/v2/api](https://www.aibang.com/api_name/v2/api)
 
+  - [混合蓝绿部署 + 默认路由保留（基于 Header）](#-示例混合蓝绿部署--默认路由保留基于-header)
+  - [使用金丝雀流量百分比（基于 weight）](#-示例使用金丝雀流量百分比基于-weight)
+
+
 通过自己的旧方式都能访问 我现在想要在GKE   Gateway上做一些规则来实现蓝绿部署或者金丝雀发布
 - [ ] (1) 调研 GKE Gateway `HTTPRoute` 资源规范，重点关注： 
 	- [ ] (a) 流量切分机制（例如，基于路径、基于标头、基于权重）。 
@@ -921,7 +925,7 @@ spec:
 - [GKE Gateway Traffic Management Documentation](https://cloud.google.com/kubernetes-engine/docs/concepts/traffic-management)
 - [HTTP Traffic Splitting with Gateway API](https://gateway-api.sigs.k8s.io/guides/traffic-splitting/)
 - [Kong Blue-Green Deployments Guide](https://docs.konghq.com/gateway/latest/production/blue-green/)
-- [Deploying Multi-Cluster Gateways in GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-multi-cluster-gateways)
+- [Deploying Multi-Cluster Gateways in GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-multi-jiqun-gateways)
 - [Customize GKE Gateway Traffic with Service Extensions](https://cloud.google.com/kubernetes-engine/docs/how-to/configure-gke-service-extensions)
 - [Deploying Gateways in GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-gateways)
 - [Best Practices for GKE Networking](https://cloud.google.com/kubernetes-engine/docs/best-practices/networking)
@@ -960,7 +964,7 @@ spec:
 
 ### **✅ 示例：混合蓝绿部署 + 默认路由保留（基于 Header）**
 
-```
+```yaml
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
@@ -1008,7 +1012,7 @@ spec:
 
 ### **✅ 示例：使用金丝雀流量百分比（基于 weight）**
 
-```
+```yaml
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
@@ -1069,7 +1073,7 @@ backendRefs 中的 name 对应的是你在 Kubernetes 中暴露服务（Service�
 
 下面是三个 Service 对应的配置，它们分别代理到你的 Kong DP 的不同部署版本：
 
-```
+```yaml
 # 原始版本 Kong DP (旧逻辑)
 apiVersion: v1
 kind: Service
@@ -1261,7 +1265,7 @@ rules:
 
 使用 GKE Gateway 的 HTTPRoute 支持根据 Header 做转发，实现流量拆分，例如：
 
-```
+```yaml
 rules:
 - matches:
   - path:
@@ -1302,7 +1306,7 @@ curl -H "X-Canary: true" https://www.aibang.com/api_name/v1/api
 
 GKE Gateway 从 GKE 1.28 开始支持使用 weight 字段实现金丝雀发布（[文档参考](https://cloud.google.com/kubernetes-engine/docs/how-to/gateway-api#canary-traffic-split)）。
 
-```
+```yaml
 rules:
 - matches:
   - path:
@@ -1323,7 +1327,7 @@ rules:
 
 ## **✅ Mermaid 流程图**
 
-```
+```mermaid
 flowchart TD
     A[Client]
     B[GKE Gateway]
@@ -1414,7 +1418,7 @@ flowchart TD
 
 #### **示例 Kong 配置片段：**
 
-```
+```yaml
 - name: route-v1
   paths:
     - /api
@@ -1451,7 +1455,7 @@ flowchart TD
 
 #### **示例结构：**
 
-```
+```mermaid
 graph TD;
     client --> A --> B --> C;
     C -->|HTTPRoute-1| D1[Kong DP -> RT v1];
