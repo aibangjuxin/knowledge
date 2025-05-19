@@ -1,4 +1,49 @@
 
+- [nginx](#nginx)
+  - [**✅ 参数解析**](#-参数解析)
+  - [**📌 实际含义（整体限制）**](#-实际含义整体限制)
+  - [**✅ 对 GET 请求的影响**](#-对-get-请求的影响)
+  - [**⚠️ 示例错误行为**](#️-示例错误行为)
+  - [**✅ 推荐配置场景**](#-推荐配置场景)
+  - [**✅ 搭配配置建议**](#-搭配配置建议)
+- [Gemini](#gemini)
+  - [HTTP 请求长度限制对比 (GCP Public Ingress, Nginx, Kong)](#http-请求长度限制对比-gcp-public-ingress-nginx-kong)
+- [ChatGPT](#chatgpt)
+  - [**✅ Query String Length Limit Overview**](#-query-string-length-limit-overview)
+  - [**🔍 How to Check/Verify the Query String Length?**](#-how-to-checkverify-the-query-string-length)
+    - [**1.** ](#1)
+    - [**Test with CURL (local or from pod)**](#test-with-curl-local-or-from-pod)
+    - [**2.** ](#2)
+    - [**GCP Ingress Logs / GCLB Logs**](#gcp-ingress-logs--gclb-logs)
+    - [**3.** ](#3)
+    - [**Nginx Configuration**](#nginx-configuration)
+    - [**4.** ](#4)
+    - [**Kong Gateway (via Nginx)**](#kong-gateway-via-nginx)
+    - [**5.** ](#5)
+    - [**Upstream App Check**](#upstream-app-check)
+  - [**✅ Recommendation Flow (Mermaid)**](#-recommendation-flow-mermaid)
+  - [**🛡️ Hardening Tips**](#️-hardening-tips)
+  - [**✅ Step-by-step: Verifying Query String Length via GCP Load Balancer Logs**](#-step-by-step-verifying-query-string-length-via-gcp-load-balancer-logs)
+    - [**🔧 1.** ](#-1)
+    - [**Enable Load Balancer Logging (if not already)**](#enable-load-balancer-logging-if-not-already)
+    - [**🔍 2.** ](#-2)
+    - [**Query Logs in Cloud Logging**](#query-logs-in-cloud-logging)
+    - [**🔎 3.** ](#-3)
+    - [**Extract Query String Length from httpRequest.requestUrl**](#extract-query-string-length-from-httprequestrequesturl)
+  - [**✅ Optional: Detect and Block Too-Long Requests Using Cloud Armor**](#-optional-detect-and-block-too-long-requests-using-cloud-armor)
+  - [**❗ Important Notes**](#-important-notes)
+  - [**✅ HTTP 请求长度的主要分类**](#-http-请求长度的主要分类)
+  - [**📌 GCP HTTP(S) Load Balancer 的关键限制**](#-gcp-https-load-balancer-的关键限制)
+  - [**✅ 如何实际验证 GET 请求长度**](#-如何实际验证-get-请求长度)
+    - [**1.** ](#1-1)
+    - [**构造超长 URI 测试**](#构造超长-uri-测试)
+    - [**2.** ](#2-1)
+    - [**使用 GCP Load Balancer 日志分析 URI 长度**](#使用-gcp-load-balancer-日志分析-uri-长度)
+  - [**✅ 结论总结**](#-结论总结)
+  - [**✅ 脚本功能说明**](#-脚本功能说明)
+  - [**🧪 测试脚本（Bash + curl）**](#-测试脚本bash--curl)
+  - [**✅ 示例输出**](#-示例输出)
+  - [**🛠 可扩展点**](#-可扩展点)
 
 # nginx 
 
@@ -221,7 +266,7 @@ Request Header Or Cookie Too Large
 6.  **替代方案**: 如果GET请求的查询字符串过长，应考虑使用POST请求并将参数放在请求体中。
 
 这个表格应该能帮助你更好地理解和配置你的系统。记得查阅各组件的官方文档以获取最准确和最新的信息。
-```
+
 
 
 # ChatGPT  
@@ -350,7 +395,7 @@ flowchart TD
     Start[Client Sends GET with Query]
     Start --> GCP[GCP Public HTTPS LB]
     GCP -->|<8KB| NGINX
-    GCP -->|>=8KB| Reject_414[HTTP 414 Error]
+    GCP -->|">=8KB"| Reject_414[HTTP 414 Error]
     NGINX -->|<Limit| Kong
     NGINX -->|>=Limit| Error_Nginx[HTTP 400/414 from Nginx]
     Kong -->|Proxy| Upstream[Backend Service]
