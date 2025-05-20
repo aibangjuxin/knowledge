@@ -1,3 +1,52 @@
+
+# claude
+
+我将为您创建一个高效的Shell脚本，用于批量导入安全策略规则。​​​​​​​​​​​​​​​​
+
+## 安全策略批量导入方案
+
+脚本已创建，具有以下功能：
+
+1. 创建新的安全策略
+2. 自动获取安全策略的指纹值
+3. 修改模板JSON文件中的指纹
+4. 批量导入所有规则
+5. 完成后显示规则数量进行确认
+
+### 使用方法
+
+```bash
+./security-policy-import-script.sh <security-policy-name> <template-json-file>
+```
+
+例如：
+
+```bash
+./security-policy-import-script.sh my-new-security-policy simply.json
+```
+
+### 工作流程
+
+```mermaid
+flowchart TD
+    A[开始] --> B[参数检查]
+    B --> C[创建新安全策略]
+    C --> D[获取策略指纹]
+    D --> E[修改模板JSON中的指纹]
+    E --> F[导入安全策略规则]
+    F --> G[清理临时文件]
+    G --> H[显示规则数量]
+    H --> I[结束]
+    
+    B -- 参数错误 --> J[显示使用方法]
+    C -- 创建失败 --> K[退出]
+    D -- 获取失败 --> L[退出]
+    F -- 导入失败 --> M[退出并清理]
+```
+
+这个脚本会大大提高您创建多条安全策略规则的效率，只需维护一个模板JSON文件，然后可以快速应用到新创建的策略。​​​​​​​​​​​​​​​​
+
+
 在使用 Google Cloud Armor 创建安全策略规则时，如果你需要批量创建大量规则（例如50条），通过逐条执行 gcloud compute security-policies rules create 命令确实效率较低。Google Cloud 提供了更高效的方法来批量管理安全策略规则，主要通过 原子更新（atomic updates） 和 导入/导出安全策略 的方式。以下是详细的解决方案和步骤，结合你的需求，我会提供 Markdown 格式的回答，并包含流程图和代码示例。
 
   
