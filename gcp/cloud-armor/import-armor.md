@@ -3,6 +3,88 @@
 
 我将为您创建一个高效的Shell脚本，用于批量导入安全策略规则。​​​​​​​​​​​​​​​​
 
+```bash
+#!/bin/bash
+
+# 安全策略批量导入脚本
+# 用途：从模板JSON创建新的安全策略并导入所有规则
+
+# 颜色定义
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+# 使用方法
+function show_usage {
+  echo -e "使用方法: $0 <security-policy-name> <template-json-file>"
+  echo -e "例如: $0 my-new-security-policy simply.json"
+  exit 1
+}
+
+# 参数检查
+if [ $# -ne 2 ]; then
+  show_usage
+fi
+
+POLICY_NAME=$1
+TEMPLATE_JSON=$2
+TEMP_JSON="/tmp/modified_policy_$(date +%s).json"
+
+# 检查模板文件是否存在
+if [ ! -f "$TEMPLATE_JSON" ]; then
+  echo -e "${RED}错误: 模板文件 $TEMPLATE_JSON 不存在${NC}"
+  exit 1
+fi
+
+echo -e "${YELLOW}步骤 1: 创建新的安全策略 $POLICY_NAME ${NC}"
+gcloud compute security-policies create $POLICY_NAME --description "Created by automation script"
+
+if [ $? -ne 0 ]; then
+  echo -e "${RED}创建安全策略失败，请检查策略名称是否已存在${NC}"
+  exit 1
+fi
+
+echo -e "${YELLOW}步骤 2: 获取新安全策略的指纹${NC}"
+FINGERPRINT=$(gcloud compute security-policies describe $POLICY_NAME --format="value(fingerprint)")
+
+if [ -z "$FINGERPRINT" ]; then
+  echo -e "${RED}获取指纹失败${NC}"
+  exit 1
+fi
+
+echo -e "${GREEN}获取到指纹: $FINGERPRINT${NC}"
+
+echo -e "${YELLOW}步骤 3: 修改模板JSON文件中的指纹${NC}"
+# 检查JSON是否有fingerprint字段
+if grep -q "fingerprint" "$TEMPLATE_JSON"; then
+  # 替换指纹
+  cat $TEMPLATE_JSON | sed "s/\"fingerprint\": \"[^\"]*\"/\"fingerprint\": \"$FINGERPRINT\"/" > $TEMP_JSON
+else
+  # 添加指纹（假设是有效的JSON格式）
+  cat $TEMPLATE_JSON | sed "s/{/{\"fingerprint\": \"$FINGERPRINT\",/" > $TEMP_JSON
+fi
+
+echo -e "${YELLOW}步骤 4: 导入安全策略规则${NC}"
+gcloud compute security-policies import $POLICY_NAME --file-name $TEMP_JSON
+
+if [ $? -ne 0 ]; then
+  echo -e "${RED}导入安全策略规则失败${NC}"
+  rm -f $TEMP_JSON
+  exit 1
+fi
+
+echo -e "${GREEN}成功导入安全策略规则${NC}"
+echo -e "${YELLOW}步骤 5: 清理临时文件${NC}"
+rm -f $TEMP_JSON
+
+echo -e "${GREEN}完成！新的安全策略 $POLICY_NAME 已创建并导入所有规则${NC}"
+
+# 显示规则数量进行确认
+RULE_COUNT=$(gcloud compute security-policies rules list $POLICY_NAME --format="value(priority)" | wc -l)
+echo -e "${GREEN}安全策略包含 $RULE_COUNT 条规则${NC}"
+``` 
+
 ## 安全策略批量导入方案
 
 脚本已创建，具有以下功能：
