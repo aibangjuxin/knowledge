@@ -22,7 +22,7 @@ curl 是一个功能强大的命令行工具，广泛用于进行 HTTP(S) 请求
    * 使用 --resolve 选项指定 SNI：
      --resolve 选项允许将特定的主机名和端口解析到指定的 IP 地址。这使得 curl 在 TLS 握手时能够发送正确的 SNI，GLB 从而可以返回与该主机名匹配的服务器证书。
      命令格式：curl --resolve <域名>:<端口>:<GLB_IP地址> https://<域名> --cert client.pem --key client.key -v
-     例如：curl --resolve your.domain.com:443:34.120.88.88 https://your.domain.com --cert client.pem --key client.key -v 。
+     例如：`curl --resolve your.domain.com:443:34.120.88.88 https://your.domain.com --cert client.pem --key client.key -v 。`
    * 处理服务器证书验证错误：
      * -k 或 --insecure：此选项会使 curl 跳过服务器证书的验证。强烈不建议在生产环境或最终验证中使用此选项，因为它会使连接容易受到中间人攻击 。它仅适用于早期调试，以确认 mTLS 的客户端认证部分是否工作，而不考虑服务器证书的有效性。
      * 使用 --cacert：如前所述，提供正确的 CA 证书包是验证 GLB 服务器证书的安全方法。
@@ -30,6 +30,7 @@ curl 是一个功能强大的命令行工具，广泛用于进行 HTTP(S) 请求
    * 成功：如果 mTLS 配置正确，并且客户端证书被 GLB 接受，curl 将成功完成 TLS 握手并收到来自后端服务的 HTTP 响应。详细输出 (-v) 会显示 TLS 握手过程，包括服务器证书和客户端证书的交换。
    * 失败：如果配置错误（例如，客户端证书无效、CA 不受信任、私钥不匹配等），curl 会报告 TLS 握手错误。详细输出将提供关于失败原因的线索，例如 "alert handshake failure"、"certificate verify failed" 等。
 下表总结了 curl 进行 mTLS 测试时常用的参数：
+
 | curl 参数 | 描述 | 参考资料 |
 |---|---|---|
 | --cert <文件路径> | 指定客户端证书文件 (PEM 格式)。 |  |
@@ -40,6 +41,7 @@ curl 是一个功能强大的命令行工具，广泛用于进行 HTTP(S) 请求
 | -v 或 --verbose | 显示详细的通信过程，包括 TLS 握手信息。 |  |
 | --cert-type <类型> | 指定客户端证书类型 (如 PEM, DER)。默认为 PEM。 |  |
 | --key-type <类型> | 指定客户端私钥类型 (如 PEM, DER)。默认为 PEM。 |  |
+
 B. 使用 openssl s_client 进行 mTLS 测试
 openssl s_client 是一个非常强大的 SSL/TLS 诊断工具，可以提供比 curl 更底层的 TLS 握手信息 。
  * 基本 mTLS 测试命令结构：
@@ -66,6 +68,7 @@ openssl s_client 是一个非常强大的 SSL/TLS 诊断工具，可以提供比
    * depth=X... verify return:1: 逐级显示证书链的验证状态。
    * 如果 mTLS 成功，命令行会进入一个交互模式，可以输入字符发送到服务器。如果 mTLS 失败，通常会看到 TLS 警报（如 handshake_failure）并且连接被关闭。
 下表总结了 openssl s_client 进行 mTLS 测试时常用的参数：
+
 | openssl s_client 参数 | 描述 | 参考资料 |
 |---|---|---|
 | -connect <主机:端口> | 指定要连接的目标服务器及其端口。 |  |
@@ -79,6 +82,7 @@ openssl s_client 是一个非常强大的 SSL/TLS 诊断工具，可以提供比
 | -verify_return_error | 如果验证失败则返回错误代码，而不是继续连接。 |  |
 | -state | 打印 SSL 会话状态。 |  |
 | -msg | 显示所有 TLS 协议消息的十六进制转储。 |  |
+
 使用 curl 和 openssl s_client 直接通过 IP 地址测试，并结合 SNI (--resolve 或 -servername)，是在域名切换前验证 GLB mTLS 配置的核心手段。它们能够模拟真实客户端的连接行为，并提供详细的诊断信息，帮助定位配置问题。
 C. 本地 hosts 文件测试方法 (可选)
 作为 --resolve (curl) 或 -servername (openssl) 的替代或补充方法，可以临时修改测试机器上的 hosts 文件，将目标域名直接映射到 GLB 的 IP 地址。这样，所有使用该域名的网络请求（包括浏览器、curl 等不指定 IP 的工具）都会被导向配置的 GLB IP。
@@ -146,6 +150,7 @@ jsonPayload.statusDetails="client_cert_not_provided"
    * tls.earlyDataRequest: 指示请求是否包含 TLS 早期数据 。
    * jsonPayload.proxyStatus.proxy_status_error: 对于区域性或内部负载均衡器，此字段可能包含有关 TLS 错误的更详细信息，例如客户端未能证明其拥有私钥时 。
 下表列出了对 GLB mTLS 问题诊断至关重要的 jsonPayload.statusDetails 值：
+
 | jsonPayload.statusDetails 值 | 含义 | 可能原因/故障排除方向 |
 |---|---|---|
 | client_cert_not_provided | 客户端未提供证书。 | 客户端未配置证书发送；服务器未正确请求客户端证书。 |
@@ -156,6 +161,7 @@ jsonPayload.statusDetails="client_cert_not_provided"
 | client_cert_unsupported_key_algorithm | 客户端证书使用了不受支持的密钥算法。 | 客户端证书应使用 RSA 或 ECDSA。 |
 | failed_to_connect_to_backend | 负载均衡器无法连接到后端。 | 虽然不是直接的 mTLS 客户端错误，但如果所有后端都因其他原因不健康，即使 mTLS 成功，请求也会失败。检查后端健康状况和防火墙规则。 |
 | ssl_certificate_error (通用，需结合其他信息) | 通用 SSL 证书错误。 | 可能是服务器端证书问题或更广泛的 TLS 配置问题。 |
+
 C. 理解后端服务日志和自定义标头 (传递给后端的 mTLS 上下文)
 GLB 在与客户端完成 mTLS 握手后，可以将关于该 mTLS 连接和客户端证书的上下文信息通过自定义 HTTP 标头传递给后端服务 。这对于后端应用根据 mTLS 验证结果执行进一步的授权逻辑至关重要。
  * mTLS 信息如何到达后端：
@@ -203,6 +209,7 @@ CustomLog logs/access_log mtls_combined
      (一般标头记录概念来自 ；特定的 mTLS 标头来自 )
    在后端日志中检查这些标头，可以确认 GLB 不仅执行了 mTLS 验证，而且将验证结果正确地传递给了后端应用。如果后端应用依赖这些信息进行授权决策，那么这一环节的验证就尤为重要。
 下表汇总了 GCP GLB 可以传递给后端的关键 mTLS 自定义请求标头：
+
 | 标头名称 (在后端服务中配置) | 占位符变量 | 描述的信息 |
 |---|---|---|
 | X-Client-Cert-Present | {client_cert_present} | 客户端是否提供了证书 (true/false)。 |
@@ -213,6 +220,8 @@ CustomLog logs/access_log mtls_combined
 | X-Client-Cert-SPIFFE-Id | {client_cert_spiffe_id} | 客户端叶证书的 SPIFFE ID (如果存在)。 |
 | X-Client-Cert-URI-SANs | {client_cert_uri_sans} | 客户端叶证书中所有 URI 类型的 Subject Alternative Names (逗号分隔)。 |
 | X-Client-Cert-DNSName-SANs | {client_cert_dnsname_sans} | 客户端叶证书中所有 DNSName 类型的 Subject Alternative Names (逗号分隔)。 |
+
+
 通过结合 GLB 日志和后端应用日志，可以全面了解 mTLS 握手的全过程及其结果如何影响到最终的应用请求处理。
 IV. 全面 GCP 配置审计
 除了客户端测试和日志分析，对 GCP 中涉及 mTLS 的各项资源配置进行彻底审计也至关重要。这能确保所有组件都按照预期协同工作。
@@ -272,6 +281,7 @@ C. 确保后端服务健康和配置
    再次确认后端服务已配置为添加期望的 mTLS 上下文标头（例如 X-Client-Cert-Present 等），以便后端应用可以接收到这些信息 。
    GLB 充当代理。在通过 mTLS 对客户端进行身份验证后，它需要将请求转发到健康的后端。如果所有后端都不健康，即使 mTLS 成功，GLB 也会返回错误（例如 502 failed_to_pick_backend）。同样，如果未在后端服务上配置用于将 mTLS 上下文传递到后端的自定义标头，则后端应用程序将丢失此关键信息。
 下表汇总了用于验证 mTLS 各配置组件的 gcloud 命令：
+
 | GCP 资源 | gcloud 命令 (示例) | 关键检查信息 |
 |---|---|---|
 | TargetHTTPSProxy | gcloud compute target-https-proxies describe <PROXY_NAME> --global | 关联的客户端身份验证策略 (例如 clientTlsPolicy 或 mtlsPolicy 块)，服务器 SSL 证书，SSL 策略。 |
@@ -281,6 +291,8 @@ C. 确保后端服务健康和配置
 | SSL 策略 | gcloud compute ssl-policies describe <SSL_POLICY_NAME> --global | 最低 TLS 版本，启用的 TLS 特性/密码套件。 |
 | 后端服务健康 | gcloud compute backend-services get-health <BACKEND_SERVICE_NAME> --global | 后端实例组或 NEG 的健康状况。 |
 | 后端服务自定义标头 | gcloud compute backend-services describe <BACKEND_SERVICE_NAME> --global | 检查 customRequestHeaders 字段是否包含配置的 mTLS 上下文标头 (如 X-Client-Cert-Present:{client_cert_present}). |
+
+
 通过系统地执行这些审计步骤，可以大大提高在域名切换前发现并修复 mTLS 配置问题的几率。
 V. 高级诊断与上线前最佳实践
 除了直接的客户端测试、日志分析和配置审计，还可以利用一些高级诊断工具和遵循最佳实践来进一步确保 mTLS 配置的稳健性。
@@ -321,6 +333,7 @@ B. 常见 mTLS 错误配置与故障排除步骤
 C. 域名切换前 mTLS 验证清单
 在进行最终的 DNS 域名切换之前，强烈建议执行以下全面的验证清单，以确保 mTLS 配置按预期工作，并最大限度地降低对生产环境造成影响的风险。
 下表提供了一个结构化的清单：
+
 | 验证步骤 | 工具/方法 | 关键成功标准/检查点 | 相关报告章节 |
 |---|---|---|---|
 | 1. 客户端 curl 测试 (IP 直连) | curl 命令行工具 | 使用 --resolve 指定 SNI，提供客户端证书和密钥。成功建立 TLS 连接并收到预期 HTTP 响应。详细输出 (-v) 显示正确的证书交换和握手成功。 | II.A |
@@ -335,6 +348,7 @@ C. 域名切换前 mTLS 验证清单
 | 10. SSL 策略审计 | gcloud compute ssl-policies describe... | 确认 SSL 策略定义的 TLS 版本和密码套件符合安全要求和客户端兼容性。 | IV.B |
 | 11. 后端服务健康检查 | gcloud compute backend-services get-health... | 确认所有后端实例或 NEG 端点均处于健康状态。防火墙规则允许健康检查流量。 | IV.C |
 | 12. (可选) GCP 连接性测试 | GCP Console (网络智能中心 -> 连接性测试) | 验证从代表性客户端源到 GLB VIP (端口 443) 以及从 GLB 到后端的 L3/L4 网络路径通畅。 | V.A |
+
 完成此清单中的所有适用步骤，并确认各项检查均符合预期，将为域名切换提供坚实的基础和高度的信心。
 VI. 结论与最终建议
 在将生产域名切换到配置了 mTLS 的 GCP 全局负载均衡器 (GLB) 之前，进行全面细致的验证是确保服务平稳过渡和安全运行的不可或缺的环节。本报告详细阐述了多种验证方法和诊断途径，旨在帮助用户系统地完成这一过程。
