@@ -1,11 +1,11 @@
 # gemini
 
 全面验证GCP GLB mTLS配置：域名切换前的深度校验与日志分析指南
-I. 引言
+## I. 引言
 在现代网络安全架构中，双向传输层安全性 (mTLS) 已成为确保客户端与服务器之间通信完整性与机密性的关键机制。与传统的 TLS 单向认证（仅服务器向客户端证明其身份）不同，mTLS 要求客户端和服务器双方都出示并验证数字证书，从而建立更高级别的信任和安全防护 。对于部署在 Google Cloud Platform (GCP) 上的应用，特别是通过全局负载均衡器 (GLB) 暴露的服务，正确配置 mTLS 至关重要，它能够有效抵御中间人攻击、未经授权的访问和数据泄露，助力实现零信任安全模型 。
-用户在 GCP 项目中为 GLB 配置 mTLS 后，通常面临一个挑战：在将生产域名正式切换到新的 GLB IP 地址之前，如何全面验证 mTLS 配置的正确性？直接使用 IP 地址（例如 34.120.88.88）进行测试时，可能会遇到证书域名不匹配等问题。此外，如何有效地从 GCP 获取并分析相关的日志信息，以诊断潜在的配置缺陷，也是一个常见的痛点。
+用户在 GCP 项目中为 GLB 配置 mTLS 后，通常面临一个挑战：在将生产域名正式切换到新的 GLB IP 地址之前，如何全面验证 mTLS 配置的正确性？直接使用 IP 地址（例如 88.88.88.88）进行测试时，可能会遇到证书域名不匹配等问题。此外，如何有效地从 GCP 获取并分析相关的日志信息，以诊断潜在的配置缺陷，也是一个常见的痛点。
 本报告旨在提供一个详尽的指南，专门解决在域名切换前验证 GCP GLB mTLS 配置的各项挑战。报告将深入探讨多种验证方法，包括使用命令行工具如 curl 和 openssl s_client 直接通过 IP 地址进行测试，并阐述如何正确处理服务器名称指示 (SNI) 和证书校验问题。同时，本报告将详细介绍如何从 GCP Cloud Logging 中获取和解读与 mTLS 相关的日志条目，特别是关键的 jsonPayload.statusDetails 字段，以及如何检查后端服务收到的 mTLS 上下文信息。最后，报告将提供一份全面的 GCP 配置审计清单和上线前的最佳实践，帮助用户在域名切换前建立充分的信心，确保 mTLS 功能按预期工作。
-II. 通过 IP 地址进行客户端测试（域名切换前）
+## II. 通过 IP 地址进行客户端测试（域名切换前）
 在将 DNS 记录指向新的 GLB IP 地址之前，通过直接使用 IP 地址进行测试是验证 mTLS 配置的第一步。这有助于隔离 GLB 本身的 mTLS 设置问题，排除 DNS 传播延迟或配置错误的干扰。
 A. 使用 curl 进行 mTLS 测试
 curl 是一个功能强大的命令行工具，广泛用于进行 HTTP(S) 请求测试。对于 mTLS 验证，需要向 curl 提供客户端证书和私钥。
@@ -13,16 +13,16 @@ curl 是一个功能强大的命令行工具，广泛用于进行 HTTP(S) 请求
    使用 curl 测试 mTLS 时，主要涉及以下参数：
    * --cert <client_cert.pem>: 指定 PEM 格式的客户端证书文件。
    * --key <client_key.pem>: 指定 PEM 格式的客户端私钥文件。
-   * --cacert <ca_bundle.pem> (可选但推荐): 指定用于验证 GLB 服务器证书的 CA 证书包。如果 GLB 使用的是公共 CA 签发的证书，curl 通常能自动验证。如果使用私有 CA，则必须提供此 CA 的根证书或中间证书链。
+   * **--cacert <ca_bundle.pem> (可选但推荐): 指定用于验证 GLB 服务器证书的 CA 证书包。如果 GLB 使用的是公共 CA 签发的证书，curl 通常能自动验证。如果使用私有 CA，则必须提供此 CA 的根证书或中间证书链。**
    * -v 或 --verbose: 显示详细的握手信息和头部，有助于调试。
  * 针对 GLB IP 地址进行测试：
-   可以直接向 GLB 的 IP 地址发起请求，例如 https://34.120.88.88。
+   可以直接向 GLB 的 IP 地址发起请求，例如 https://88.88.88.88。
  * 处理服务器名称指示 (SNI) 和证书主机名验证：
    当直接使用 IP 地址访问时，GLB 可能无法确定客户端期望访问哪个域名，导致其无法提供正确的服务器证书，或者客户端因证书中的主机名与请求的 IP 不匹配而拒绝连接。
    * 使用 --resolve 选项指定 SNI：
      --resolve 选项允许将特定的主机名和端口解析到指定的 IP 地址。这使得 curl 在 TLS 握手时能够发送正确的 SNI，GLB 从而可以返回与该主机名匹配的服务器证书。
      命令格式：curl --resolve <域名>:<端口>:<GLB_IP地址> https://<域名> --cert client.pem --key client.key -v
-     例如：`curl --resolve your.domain.com:443:34.120.88.88 https://your.domain.com --cert client.pem --key client.key -v 。`
+     例如：`curl --resolve your.domain.com:443:88.88.88.88 https://your.domain.com --cert client.pem --key client.key -v 。`
    * 处理服务器证书验证错误：
      * -k 或 --insecure：此选项会使 curl 跳过服务器证书的验证。强烈不建议在生产环境或最终验证中使用此选项，因为它会使连接容易受到中间人攻击 。它仅适用于早期调试，以确认 mTLS 的客户端认证部分是否工作，而不考虑服务器证书的有效性。
      * 使用 --cacert：如前所述，提供正确的 CA 证书包是验证 GLB 服务器证书的安全方法。
@@ -45,13 +45,13 @@ curl 是一个功能强大的命令行工具，广泛用于进行 HTTP(S) 请求
 B. 使用 openssl s_client 进行 mTLS 测试
 openssl s_client 是一个非常强大的 SSL/TLS 诊断工具，可以提供比 curl 更底层的 TLS 握手信息 。
  * 基本 mTLS 测试命令结构：
-   * -connect <IP地址>:<端口>: 指定要连接的服务器 IP 地址和端口，例如 34.120.88.88:443 。
+   * -connect <IP地址>:<端口>: 指定要连接的服务器 IP 地址和端口，例如 88.88.88.88:443 。
    * -cert <client_cert.pem>: 指定客户端证书文件 。
    * -key <client_key.pem>: 指定客户端私钥文件 。
    * -CAfile <ca_bundle.pem>: 指定用于验证服务器证书的 CA 证书文件。这对于确保连接到正确的 GLB 实例并验证其身份至关重要 。
    * -servername <域名>: 此参数用于在 TLS ClientHello 消息中设置 SNI 扩展。即使是连接 IP 地址，也应提供 GLB 配置的预期域名，以便 GLB 返回正确的服务器证书 。
  * 示例命令：
-   openssl s_client -connect 34.120.88.88:443 -servername your.domain.com -cert client.pem -key client.key -CAfile your_glb_ca.pem -status -brief
+   openssl s_client -connect 88.88.88.88:443 -servername your.domain.com -cert client.pem -key client.key -CAfile your_glb_ca.pem -status -brief
  * 解读输出：
    openssl s_client 的输出非常详细，需要关注以下关键部分：
    * Certificate chain: 显示服务器提供的证书链。可以检查颁发者、使用者、有效期等信息。
@@ -89,7 +89,7 @@ C. 本地 hosts 文件测试方法 (可选)
  * 修改 hosts 文件：
    * Linux/macOS: sudo nano /etc/hosts 
    * Windows: 以管理员身份运行记事本，打开 C:\Windows\System32\drivers\etc\hosts 
-   * 添加一行，格式为：34.120.88.88 your.domain.com
+   * 添加一行，格式为：88.88.88.88 your.domain.com
  * 进行测试：
    修改 hosts 文件后，可以直接使用域名通过 curl、浏览器或其他客户端工具进行测试，无需特殊指定 IP 地址或 SNI（因为操作系统层面已经做了映射）。
    curl https://your.domain.com --cert client.pem --key client.key -v
@@ -107,11 +107,12 @@ Google Cloud Load Balancing 的日志记录功能需要为关联的后端服务�
    * 可以在创建新的后端服务时启用日志记录，或为现有的后端服务更新配置。
    * 通过 Google Cloud Console：导航到“负载均衡”，选择相应的负载均衡器，编辑其“后端配置”，然后编辑目标后端服务。在“日志记录”部分，勾选“启用日志记录”并可以设置“采样率”（0.0 到 1.0 之间，1.0 表示记录所有请求）。
    * 通过 gcloud 命令：
+    ```bash
      gcloud compute backend-services update BACKEND_SERVICE_NAME \
     --global \
     --enable-logging \
     --logging-sample-rate=1.0
-
+    ```
      （如果不是全局后端服务，请移除 --global 或替换为相应的区域标志）。
  * 访问日志：
    * GLB 的日志会发送到 Cloud Logging。
@@ -135,16 +136,18 @@ GLB 日志条目包含丰富的字段，其中一些对于诊断 mTLS 问题特�
    理解这些 statusDetails 值，可以直接揭示 mTLS 握手失败的具体环节。例如，看到 client_cert_chain_invalid_eku 就应检查客户端证书是否包含正确的 EKU。
  * 查询示例 (Cloud Logging Query Language)：
    * 查找所有与客户端证书相关的错误：
+```bash
      resource.type="http_load_balancer"
 resource.labels.forwarding_rule_name="YOUR_FORWARDING_RULE_NAME" # 可选，替换为您的转发规则名称
 jsonPayload.statusDetails=~"client_cert"
 jsonPayload.@type="type.googleapis.com/google.cloud.loadbalancing.type.LoadBalancerLogEntry"
-
+```
      (改编自 )
    * 查找特定错误，例如客户端未提供证书：
+```bash
      resource.type="http_load_balancer"
-jsonPayload.statusDetails="client_cert_not_provided"
-
+     jsonPayload.statusDetails="client_cert_not_provided"
+```
  * 其他相关日志字段：
    * httpRequest.status: HTTP 响应状态码。对于 mTLS 失败，如果 GLB 配置为拒绝无效证书，通常不会有 HTTP 状态码，连接会在 TLS 层终止。如果配置为允许无效证书并转发，则后端可能会返回错误，或者此字段可能为 0，表示连接在 LB 响应前中断 。
    * tls.earlyDataRequest: 指示请求是否包含 TLS 早期数据 。
@@ -182,28 +185,34 @@ GLB 在与客户端完成 mTLS 握手后，可以将关于该 mTLS 连接和客�
  * 在后端服务上配置自定义请求标头：
    * 通过 Google Cloud Console：编辑后端服务，在“高级配置”下的“自定义请求标头”部分添加上述标头及其占位符 。
    * 通过 gcloud 命令：
+```bash
      gcloud compute backend-services update BACKEND_SERVICE_NAME \
     --global \
     --custom-request-header='X-Client-Cert-Present:{client_cert_present}' \
     --custom-request-header='X-Client-Cert-Chain-Verified:{client_cert_chain_verified}' \
     --custom-request-header='X-Client-Cert-Error:{client_cert_error}'
+```
     # 添加其他需要的标头
 
  * 配置后端应用 (例如 Nginx, Apache) 记录这些标头：
    为了验证这些 mTLS 上下文信息是否正确传递并被后端应用接收，需要在后端应用的访问日志中记录这些自定义标头。
    * Nginx 示例 (nginx.conf 中的 log_format 指令)：
+    ```nginx
      log_format mtls_log '$remote_addr - $remote_user [$time_local] "$request" '
                    '$status $body_bytes_sent "$http_referer" '
                    '"$http_user_agent" "$http_x_forwarded_for" '
                    '"X-Client-Cert-Present: $http_x_client_cert_present" '
                    '"X-Client-Cert-Chain-Verified: $http_x_client_cert_chain_verified" '
                    '"X-Client-Cert-Error: $http_x_client_cert_error"';
-access_log /var/log/nginx/access.log mtls_log;
+    access_log /var/log/nginx/access.log mtls_log;
+     ```
 
      (Nginx 变量名通常是 HTTP 标头名称的小写形式，并用 http_ 前缀替换破折号)
    * Apache 示例 (httpd.conf 或虚拟主机配置中的 LogFormat 和 CustomLog 指令)：
+   ```bash
      LogFormat "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\" \"X-Client-Cert-Present: %{X-Client-Cert-Present}i\" \"X-Client-Cert-Chain-Verified: %{X-Client-Cert-Chain-Verified}i\" \"X-Client-Cert-Error: %{X-Client-Cert-Error}i\"" mtls_combined
-CustomLog logs/access_log mtls_combined
+      CustomLog logs/access_log mtls_combined
+    ```
 
      (Apache 中使用 %{Header-Name}i 来引用请求标头)
      (一般标头记录概念来自 ；特定的 mTLS 标头来自 )
@@ -294,13 +303,13 @@ C. 确保后端服务健康和配置
 
 
 通过系统地执行这些审计步骤，可以大大提高在域名切换前发现并修复 mTLS 配置问题的几率。
-V. 高级诊断与上线前最佳实践
+## V. 高级诊断与上线前最佳实践
 除了直接的客户端测试、日志分析和配置审计，还可以利用一些高级诊断工具和遵循最佳实践来进一步确保 mTLS 配置的稳健性。
 A. 利用 GCP 连接性测试 (主要用于网络路径验证)
 GCP 连接性测试 (Connectivity Tests) 是一个强大的诊断工具，可以帮助验证网络路径的连通性 。
  * 功能与范围：连接性测试通过分析网络配置（如 VPC 网络、防火墙规则、路由、VPN 通道等）并模拟数据包的预期转发路径，来检查两个网络端点之间的连接性。在某些情况下，它还会执行实际的数据平面分析，发送探测包以验证连接并提供延迟和丢包的基线诊断 。
  * 对于 GLB mTLS 的应用：
-   * 可以创建从代表性客户端源（例如，互联网上的某个 IP，或 VPC 内的某个 VM）到 GLB VIP 地址（例如 34.120.88.88）的连接性测试。
+   * 可以创建从代表性客户端源（例如，互联网上的某个 IP，或 VPC 内的某个 VM）到 GLB VIP 地址（例如 88.88.88.88）的连接性测试。
    * 还可以测试从 GLB（作为源）到后端实例的连接性。
    * 这有助于诊断是否存在底层网络问题，例如防火墙规则阻止了到 GLB IP 地址 443 端口的流量，或者 GLB 无法访问后端实例。
  * 局限性：需要明确的是，连接性测试主要关注 L3/L4 层的网络可达性，它不直接诊断 TLS/mTLS 握手的具体细节，如证书交换、密码套件协商或客户端身份验证逻辑 。它的作用是排除或确认网络层面的故障。如果连接性测试显示从客户端到 GLB IP 和端口 443 的路径是通畅的，那么 curl 或 openssl s_client 测试的失败更有可能归因于 TLS/mTLS 配置本身。
@@ -398,7 +407,7 @@ curl
 
 你可以使用下面命令验证：
 
-curl -v https://34.120.88.88 \
+curl -v https://88.88.88.88 \
 
   --cert client.crt \
 
@@ -425,7 +434,7 @@ curl -v https://34.120.88.88 \
 
   
 
-curl -v https://34.120.88.88 --cert client.crt --key client.key --cacert ca.crt -H "Host: yourdomain.com"
+curl -v https://88.88.88.88 --cert client.crt --key client.key --cacert ca.crt -H "Host: yourdomain.com"
 
   
 
@@ -445,7 +454,7 @@ curl -v https://34.120.88.88 --cert client.crt --key client.key --cacert ca.crt 
 
 可以分析 TLS 连接和证书握手过程：
 
-openssl s_client -connect 34.120.88.88:443 \
+openssl s_client -connect 88.88.88.88:443 \
 
   -cert client.crt \
 
@@ -733,7 +742,7 @@ resource.type="k8s_container"
 
 resource.labels.project_id="your-project-id"
 
-resource.labels.cluster_name="your-cluster-name"
+resource.labels.jiqun_name="your-jiqun-name"
 
 resource.labels.namespace_name="your-namespace"
 
@@ -775,7 +784,7 @@ textPayload:"X-Client-Cert"
 
   
 
-curl -v https://34.120.88.88 \
+curl -v https://88.88.88.88 \
 
   --cert client.crt \
 
@@ -796,7 +805,7 @@ curl -v https://34.120.88.88 \
 是否需要我帮你定制一个完整的 curl 脚本 + Cloud Logging 查询模板（包括你当前使用的 forwarding rule name 和 backend service name）？你也可以提供项目 ID 和 LB 名称，我来为你组合完整的可执行命令。
 
 # Grok 
-在 Google Cloud Platform (GCP) 中配置了全局负载均衡器（Global Load Balancer, GLB）的 mTLS（Mutual TLS）后，在域名切换之前验证配置是否正确非常重要。你提到使用 curl -v https://34.120.88.88 可以看到一些返回信息，但需要进一步验证 mTLS 配置的正确性以及获取相关日志。本回答将详细说明如何验证 GLB 的 mTLS 配置、提供多种校验方法，并指导如何获取和分析日志，全部以 Markdown 格式输出，并附带流程图以帮助理解。
+在 Google Cloud Platform (GCP) 中配置了全局负载均衡器（Global Load Balancer, GLB）的 mTLS（Mutual TLS）后，在域名切换之前验证配置是否正确非常重要。你提到使用 curl -v https://88.88.88.88 可以看到一些返回信息，但需要进一步验证 mTLS 配置的正确性以及获取相关日志。本回答将详细说明如何验证 GLB 的 mTLS 配置、提供多种校验方法，并指导如何获取和分析日志，全部以 Markdown 格式输出，并附带流程图以帮助理解。
 
   
 
@@ -806,7 +815,7 @@ curl -v https://34.120.88.88 \
 
 1. 使用 `curl` 测试 mTLS 配置
 
-你已经尝试了 curl -v https://34.120.88.88，但为了验证 mTLS，你需要显式提供客户端证书和密钥，以模拟真实的 mTLS 握手。以下是具体步骤：
+你已经尝试了 curl -v https://88.88.88.88，但为了验证 mTLS，你需要显式提供客户端证书和密钥，以模拟真实的 mTLS 握手。以下是具体步骤：
 
 步骤
 
@@ -816,7 +825,7 @@ curl -v https://34.120.88.88 \
 - 确认证书满足 GCP mTLS 的要求（例如，证书链有效，Subject Alternative Name (SAN) 符合要求，签名算法支持等）。
 
 3. 执行 curl 测试： 使用以下命令测试 mTLS：  
-    curl -v --cert client-cert.crt --key client-key.key https://34.120.88.88
+    curl -v --cert client-cert.crt --key client-key.key https://88.88.88.88
 4.   
     
 
@@ -834,7 +843,7 @@ curl -v https://34.120.88.88 \
 - 查看详细的 TLS 错误信息，例如握手失败的原因。
 
 8. 测试无证书情况（可选）： 如果你的 ServerTlsPolicy 设置为 ALLOW_INVALID_OR_MISSING_CLIENT_CERT，可以尝试不提供证书：  
-    curl -v https://34.120.88.88
+    curl -v https://88.88.88.88
 9.   
     
 
@@ -876,7 +885,7 @@ curl -v https://34.120.88.88 \
 
 * TLSv1.3 (OUT), TLS alert, handshake failure (552):
 
-* OpenSSL SSL_connect: SSL_ERROR_SYSCALL in connection to 34.120.88.88:443
+* OpenSSL SSL_connect: SSL_ERROR_SYSCALL in connection to 88.88.88.88:443
 
 注意事项
 
@@ -893,7 +902,7 @@ curl 提供的高级信息可能不足以调试复杂的 mTLS 问题。openssl s
 步骤
 
 1. 运行 openssl s_client：  
-    openssl s_client -connect 34.120.88.88:443 -cert client-cert.pem -key client-key.pem -CAfile ca-cert.pem
+    openssl s_client -connect 88.88.88.88:443 -cert client-cert.pem -key client-key.pem -CAfile ca-cert.pem
 2.   
     
 
@@ -909,7 +918,7 @@ curl 提供的高级信息可能不足以调试复杂的 mTLS 问题。openssl s
 - 如果失败，输出会显示类似 handshake failure 或 certificate verify failed 的错误。
 
 6. 测试不同 TLS 版本（可选）： GLB 支持 TLS 1.0、1.1、1.2 和 1.3（具体版本取决于负载均衡器类型）。可以指定 TLS 版本测试兼容性：  
-    openssl s_client -connect 34.120.88.88:443 -cert client-cert.pem -key client-key.pem -CAfile ca-cert.pem -tls1_2
+    openssl s_client -connect 88.88.88.88:443 -cert client-cert.pem -key client-key.pem -CAfile ca-cert.pem -tls1_2
 7.   
     
 
@@ -1021,13 +1030,13 @@ pkcs12_password = 'your_password'
 
 session = requests.Session()
 
-session.mount('https://34.120.88.88', Pkcs12Adapter(pkcs12_filename=pkcs12_file, pkcs12_password=pkcs12_password))
+session.mount('https://88.88.88.88', Pkcs12Adapter(pkcs12_filename=pkcs12_file, pkcs12_password=pkcs12_password))
 
   
 
 # 发送请求
 
-response = session.get('https://34.120.88.88')
+response = session.get('https://88.88.88.88')
 
 print(response.status_code)
 
@@ -1084,7 +1093,7 @@ GLB 的健康检查可以帮助验证后端服务是否可达，以及 mTLS 配�
 
 5. 验证 DNS 配置（可选）：
 
-- 虽然你尚未切换域名，但可以临时设置一个测试域名，指向 GLB 的 IP（34.120.88.88），并使用 Google 管理的 SSL 证书进行测试。
+- 虽然你尚未切换域名，但可以临时设置一个测试域名，指向 GLB 的 IP（88.88.88.88），并使用 Google 管理的 SSL 证书进行测试。
 - 更新 DNS A 记录，指向 GLB IP，然后使用以下命令测试：  
     curl -v --cert client-cert.crt --key client-key.key https://test-domain.com
 -   
@@ -1092,7 +1101,7 @@ GLB 的健康检查可以帮助验证后端服务是否可达，以及 mTLS 配�
 
 7. 检查防火墙规则：
 
-- 确保 GCP 的防火墙规则允许从客户端到 GLB IP（34.120.88.88）的 HTTPS 流量（端口 443）。
+- 确保 GCP 的防火墙规则允许从客户端到 GLB IP（88.88.88.88）的 HTTPS 流量（端口 443）。
 - 使用以下命令检查：  
     gcloud compute firewall-rules list --filter="targetTags:load-balancer"
 -   
@@ -1100,7 +1109,7 @@ GLB 的健康检查可以帮助验证后端服务是否可达，以及 mTLS 配�
 
 9. 模拟高负载测试：
 
-- 使用工具如 ab（Apache Benchmark）或 wrk 模拟多客户端请求，验证 mTLS 在高并发场景下的稳定性：ab -n 1000 -c 10 -C client-cert.pem:client-key.pem https://34.120.88.88/
+- 使用工具如 ab（Apache Benchmark）或 wrk 模拟多客户端请求，验证 mTLS 在高并发场景下的稳定性：ab -n 1000 -c 10 -C client-cert.pem:client-key.pem https://88.88.88.88/
 -   
     
 
@@ -1259,7 +1268,7 @@ Cloud Monitoring 提供负载均衡器的性能指标，可以帮助你监控 mT
 
 - 在 GCP 控制台中，导航到 Cloud Run > 服务 > Logs。
 - 过滤包含 mTLS 头的日志：  
-    httpRequest.requestUrl:"34.120.88.88" X-Client-Cert-Present
+    httpRequest.requestUrl:"88.88.88.88" X-Client-Cert-Present
 -   
     
 
@@ -1364,7 +1373,7 @@ graph TD
 使用 curl 命令可以测试 mTLS 连接，需要提供客户端证书和密钥：
 
 ```bash
-curl -v https://34.120.88.88 \
+curl -v https://88.88.88.88 \
   --cert /path/to/client.crt \
   --key /path/to/client.key \
   --cacert /path/to/ca.crt
@@ -1400,7 +1409,7 @@ gcloud logging read 'resource.type="http_load_balancer" AND jsonPayload.statusDe
 
 1. 修改本地 hosts 文件
 ```bash
-sudo echo "34.120.88.88 your-intended-domain.com" >> /etc/hosts
+sudo echo "88.88.88.88 your-intended-domain.com" >> /etc/hosts
 ```
 
 2. 然后使用域名进行测试：
@@ -1415,7 +1424,7 @@ curl -v https://your-intended-domain.com \
 ## 4. 使用 OpenSSL 进行验证
 
 ```bash
-openssl s_client -connect 34.120.88.88:443 \
+openssl s_client -connect 88.88.88.88:443 \
   -cert /path/to/client.crt \
   -key /path/to/client.key \
   -CAfile /path/to/ca.crt
@@ -1426,7 +1435,7 @@ openssl s_client -connect 34.120.88.88:443 \
 ## 5. 利用 tcpdump 捕获流量
 
 ```bash
-sudo tcpdump -i any host 34.120.88.88 -w tls_capture.pcap
+sudo tcpdump -i any host 88.88.88.88 -w tls_capture.pcap
 ```
 
 然后使用 Wireshark 分析 TLS 握手过程。
