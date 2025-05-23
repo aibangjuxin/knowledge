@@ -1,3 +1,36 @@
+# Q 
+
+About aliyun.cloud armor 
+GCP Cloud Armor Best Practices
+1. Create whitelist access based on API location Path
+2. Default Deny All access with rule priority like 2147483647
+3. Block specific countries using region_code configuration
+4. Configure WAF rules
+5. DDOS attack protection rules
+6. Rate-based ban configuration (source IP throttling) For example, regarding the first point, our APIs are dynamically added, so we need to focus on priority design
+
+我现在关心这样一个场景.比如1的部分也就是API location Path如果priority 高于Rate-based ban 那么我的规则仅仅命中API location Path. 因为这个是Allow.所以不会命中Rate-based ban ?
+另外Rate-based ban 高于API location Path 那么仅仅会命中 Rate-Base? 我其实还是要确保正确请求到我的API location Path.所以如果这么配置只有对于API location Path的访问Trigger了对应的频率限制,才会在这里Deny? 我的理解是否正确?
+Cloud Armor 规则评估是 短路机制：
+建议都是将频率限制放在了API Path之后.那么如果API Path比如我允许了一些IP那么如果这些IP有攻击是不是Cloud Armor的Rate-Base就无法保护了?
+我的核心问题这样,比如Rate-Base的priority 我直接设置为1 那么用户请求到了我的Cloud Armor,那么如果它没有Trigger到频率限制.那么就直接允许了.根本不会有后面基于路径的白名单之类的配置. 我们默认2147483647是Deny ALL
+
+# 任何规则（包括 rate-based ban）一旦匹配成功，评估即终止
+核心机制：一旦规则匹配，即停止评估后续规则
+无论规则动作是：
+	•	allow 还会继续往下走规则
+	•	deny 但是一般来说Deny是真正的终止了
+	•	rate-based ban（即使当前未触发频率限制）
+只要匹配表达式成功，Cloud Armor 就不会再向下匹配其他规则。
+
+
+
+
+
+
+
+
+
 根据您的查询，我理解您希望所有Cloud Armor安全策略的动作（例如限制IP访问、限制请求速率、启用WAF规则）都基于条件 `request.path.matches("/api_name_version1/v1/*")` 来配置，同时对于不匹配此路径的流量，设置一个默认规则允许其通过。以下是针对您的需求，详细的配置步骤和示例。
 
 ---
