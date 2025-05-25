@@ -1,4 +1,9 @@
 - [my request](#my-request)
+- [关于代理服务器与DNS解析的问题分析](#关于代理服务器与dns解析的问题分析)
+  - [代理服务器的工作方式](#代理服务器的工作方式)
+  - [关键问题](#关键问题)
+  - [解决方案](#解决方案)
+  - [公司网络限制的影响](#公司网络限制的影响)
 - [Deepseek](#deepseek)
 - [请求差异分析](#请求差异分析)
 - [CONNECT方法时序图](#connect方法时序图)
@@ -66,6 +71,80 @@ $ curl -v https://recaptchaenterprise.googleapis.com:443 -x my.squid.proxy.aiban
 < X-Content-Type-Options: nosniff
 <
 ```
+在这个请求中：
+
+1. 当您使用 -x my.squid.proxy.aibang:3128 参数时，curl首先会连接到您指定的代理服务器（ my.squid.proxy.aibang ，IP为 192.168.1.133 ）
+2. 从输出可以看到： * Trying 192.168.1.133:3128... ，这表明curl正在尝试连接代理服务器
+3. 然后curl通过HTTP CONNECT方法建立了一个到目标服务器的隧道： * Establish HTTP proxy tunnel to recaptchaenterprise.googleapis.com:443
+4. 重要的是，在这个过程中， 域名解析是由代理服务器完成的 。当curl发送CONNECT请求时，它只是将域名 recaptchaenterprise.googleapis.com 传递给代理服务器，然后由代理服务器负责解析这个域名并建立到目标服务器的连接
+
+
+```bash
+curl --resolve recaptchaenterprise.googleapis.com:443:120.120.88.88 \
+     -v \
+     --cert client_certificate.pem \
+     --key client_private_key.pem \
+     --cacert server_ca_bundle.pem \
+     https://recaptchaenterprise.googleapis.com:443 \
+     -x my.squid.proxy.aibang:3128
+```
+
+
+
+          
+# 关于代理服务器与DNS解析的问题分析
+
+您提出了一个很好的问题。虽然您在第二个请求中使用了`--resolve`参数来指定域名解析到`120.120.88.88`，但实际上请求可能仍然没有访问到这个IP地址。这里有几个关键点需要理解：
+
+## 代理服务器的工作方式
+
+当您使用HTTPS代理（通过CONNECT方法）时，流程大致如下：
+
+1. 您的curl客户端使用`--resolve`参数在**本地**将`recaptchaenterprise.googleapis.com:443`解析为`120.120.88.88`
+2. curl连接到代理服务器（`my.squid.proxy.aibang:3128`）
+3. curl发送CONNECT请求，请求连接到`recaptchaenterprise.googleapis.com:443`（而不是直接请求IP地址）
+4. 代理服务器看到这个CONNECT请求后，会**自己解析**这个域名，然后建立连接
+
+## 关键问题
+
+**即使您在本地使用`--resolve`参数，代理服务器仍然会自己解析域名**。这是因为：
+
+1. CONNECT请求中包含的是域名，而不是IP地址
+2. 代理服务器收到CONNECT请求后，会忽略您本地的DNS解析结果，而是使用自己的DNS服务器来解析域名
+3. 因此，最终连接到的服务器IP是由代理服务器决定的，而不是您在`--resolve`参数中指定的IP
+
+## 解决方案
+
+如果您希望强制代理服务器连接到特定IP，有几种可能的方法：
+
+1. **修改CONNECT请求**：不幸的是，标准的HTTP代理协议不允许在CONNECT请求中直接指定IP地址而保留域名用于TLS SNI。
+
+2. **使用SOCKS代理**：如果可能，使用SOCKS代理而不是HTTP代理。SOCKS代理工作在更低层次，可以直接传递您的DNS解析结果。
+   ```bash
+   curl --resolve recaptchaenterprise.googleapis.com:443:120.120.88.88 \
+        -v \
+        https://recaptchaenterprise.googleapis.com:443 \
+        --socks5 my.socks.proxy:1080
+   ```
+
+3. **修改代理服务器配置**：如果您有权限，可以在Squid代理服务器上配置hosts文件或DNS覆盖，强制它将特定域名解析到您想要的IP地址。
+
+4. **使用IP直接访问**：如果服务支持，可以尝试直接使用IP地址访问，但这在HTTPS中通常会失败，因为证书验证需要匹配域名。
+
+## 公司网络限制的影响
+
+您提到公司内部所有对外访问是禁止的，只能通过代理上网。在这种情况下：
+
+1. 所有流量必须经过代理服务器
+2. 代理服务器可能有自己的安全策略和访问控制列表
+3. 代理服务器可能会拦截或修改某些请求
+
+因此，即使您尝试使用`--resolve`参数指定特定IP，最终连接的目标仍然由代理服务器控制，这解释了为什么您的请求可能没有连接到`120.120.88.88`。
+
+如果您需要确认实际连接的IP地址，可以在服务器端（如果您有权限）查看连接日志，或者使用网络抓包工具分析代理服务器的出站流量。
+        
+
+
 # Deepseek
 以下是对两个请求的分析及正确的CONNECT方法可视化：
 
