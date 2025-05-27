@@ -1,58 +1,18 @@
 这是一个非常常见的问题，尤其是在处理 CSV 文件时，**文件编码格式（特别是 UTF-8 BOM 和无 BOM 的 UTF-8）**往往会影响 Java 程序对文件头部的解析行为，导致看似“隐藏的 Bug”。
-
-  
-
-  
-
-  
-
-  
-
 ✅ 回答关键问题
-
-  
-
-  
-
-  
-
 CSV 是否支持 UTF-8 BOM？
 
-  
-
-  
-
 技术上可以包含 BOM，但绝大多数 CSV 解析库（包括 OpenCSV、Apache Commons CSV 等）默认不处理 BOM。
-
-  
 
 - BOM (Byte Order Mark) 是 UTF-8 编码的一种可选前缀（3 个字节：0xEF 0xBB 0xBF），其目的是标识文本编码。
 - 但 CSV 文件格式规范中并没有明确要求或推荐使用 BOM。
 - 很多 Java CSV 库在读取 UTF-8 BOM 文件时，会把 BOM 当作内容处理，导致第一列字段前缀多了不可见字符 \uFEFF，从而出现字段不匹配等问题。
-
-  
-
-  
-
-  
-
-  
-
   
 
 🧭 如何判断和定位这个问题？
 
-  
-
-  
-
-  
-
 1. 查看文件是否有 BOM
 
-  
-
-  
 
 可以用 Linux xxd 或 file 命令查看：
 
@@ -71,13 +31,6 @@ file your_file.csv
 your_file.csv: UTF-8 Unicode (with BOM) text
 
   
-
-  
-
-  
-
-  
-
 2. Java 中如何打印 BOM 问题？
 
   
@@ -85,7 +38,7 @@ your_file.csv: UTF-8 Unicode (with BOM) text
   
 
 如果你怀疑是 BOM，可以临时添加代码读取文件前几个字节确认：
-
+```java
 try (InputStream is = new FileInputStream("your_file.csv")) {
 
     for (int i = 0; i < 3; i++) {
@@ -97,7 +50,7 @@ try (InputStream is = new FileInputStream("your_file.csv")) {
     }
 
 }
-
+```
 如果打印出 0xEF 0xBB 0xBF 就是带 BOM 的 UTF-8。
 
   
