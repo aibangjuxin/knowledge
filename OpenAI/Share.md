@@ -79,7 +79,7 @@ graph TD;
     B --> C[Deploy Application];
 
 - Before executing commands, ensure you have set up the necessary permissions and configurations.
-- Verify that there are no errors in the deployment YAML file before applying it to the GKE cluster.
+- Verify that there are no errors in the deployment YAML file before applying it to the GKE jiqun.
 
 If the output contains tables, they must be in Markdown table format. Each column in the table should be separated by a vertical line `|`, and make sure to add a separator line between the header and data rows to correctly display the Markdown table format.
 For example, column headers should include api_name, env, region, total_cpu_limit, and total_memory_limit. The table format should look like this:
@@ -172,4 +172,4 @@ AI's Ubiquitous Presence
    2. eg: help me write a sql query.
    3. Debug sql 
       1. Help me review this sql .I don’t know why api abc missing org filed . Help me debug .
-   4. 
+   4. Knowledge Graph or mindmap 
