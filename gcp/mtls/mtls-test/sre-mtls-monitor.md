@@ -139,3 +139,36 @@ These monitoring items can help SRE teams quickly identify issues in the HTTPS M
 ⸻
 
 这些监控项可以帮助 SRE 快速定位 HTTPS MTLS 链路上的问题，同时也能提供预警信息避免中断。
+
+```bash
+#!/bin/bash
+
+while true; do
+  echo "[$(date)] Sending request..."
+
+  # 执行 curl 请求，只获取头部，保存到变量 headers
+  headers=$(curl --key ./cn-cn-aibang-client.key \
+                 --cert ./cn-cn-aibang-client.cer \
+                 --request GET \
+                 --url https://www.aibang.com/health/v1/.well-known \
+                 --header 'Authorization: Basic Passwd' \
+                 --proxy inpproxy.aibang.com:8080 \
+                 -s -D - -o /dev/null)
+
+  # 取字段值（不区分大小写）
+  cache_status=$(echo "$headers" | grep -i "^Cache_Status:" | awk -F': ' '{print $2}' | tr -d '\r')
+  x_cache_lookup=$(echo "$headers" | grep -i "^X-Cache_Lookup:" | awk -F': ' '{print $2}' | tr -d '\r')
+  via=$(echo "$headers" | grep -i "^Via:" | awk -F': ' '{print $2}' | tr -d '\r')
+
+  echo "[Debug] Cache_Status: $cache_status"
+  echo "[Debug] X-Cache_Lookup: $x_cache_lookup"
+  echo "[Debug] Via: $via"
+
+  if [[ -n "$cache_status" && -z "$x_cache_lookup" && -z "$via" ]]; then
+    echo "the new components"
+    break
+  fi
+
+  sleep 1
+done
+```
