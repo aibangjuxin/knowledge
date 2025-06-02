@@ -9,6 +9,10 @@
 	    - 如果技术方案无法完全解决 Cloud Armor 响应头问题，可以与 Cyber 安全扫描团队协商，说明 Cloud Armor 拦截的 403 响应缺少安全头是平台限制，而非实际安全风险。
 	    - 提供其他证据（如 Cloud Armor 规则配置、拦截日志）证明请求已被安全处理，请求豁免此扫描规则。
 - Gemini
+  - 在后端服务中创建自定义标头
+    - https://cloud.google.com/load-balancing/docs/https/custom-headers?hl=zh-cn
+    -  https://cloud.google.com/load-balancing/docs/https/custom-headers#working-with-response
+    -  https://cloud.google.com/load-balancing/docs/https/custom-headers?hl=zh-cn#custom-headers-armor
 	- Cloud Armor 规则中直接修改响应标头的能力
 		- 不推荐直接修改 Cloud Armor 规则以添加响应标头
 		- 推荐解决方案：负载均衡器自定义错误响应与 Google Cloud Storage (GCS)
@@ -21,8 +25,84 @@
 		- 这个存储在 GCS 中的 HTML 对象本身配置了必要的 HTTP 安全标头（如 `X-Content-Type-Options: nosniff`）作为其对象元数据的一部分。
 		- 负载均衡器将 GCS 提供的 HTML 内容连同其元数据中定义的 HTTP 标头一起返回给原始客户端。
 
+- update backend service
+```bash
+使用 Strict-Transport-Security 标头的示例：
+以下示例展示了如何添加自定义响应标头以支持 HTTP 严格传输安全协议 (HSTS)：
+gcloud compute backend-services update customer-bs-name \
+    --global \
+    --custom-response-header='Strict-Transport-Security: max-age=63072000'
+```
+- https://cloud.google.com/load-balancing/docs/https/custom-headers?hl=zh-cn#working-with-request
+- https://cloud.google.com/load-balancing/docs/https/custom-headers?hl=zh-cn#working-with-response
 
 
+# AI Studio
+你遇到的问题非常典型，安全扫描器通常只检查响应本身，而不关心响应是如何产生的（例如，是被WAF拦截还是应用本身返回）。
+
+你的理解是正确的：
+*   Cloud Armor 拦截了恶意请求，返回 403。
+*   这个 403 响应本身缺少 `X-Content-Type-Options: nosniff` 等安全头部。
+*   安全扫描器因此报警。
+
+你提到的 `gcloud compute backend-services update --custom-response-header` 是用来给**后端服务正常响应**（即请求通过了Cloud Armor，到达了你的GKE Pods，然后由Pod中的应用处理并返回）添加自定义头部的。它**不会**影响 Cloud Armor 自身生成的响应（如403拦截页面）。
+
+**如何解决：在 Cloud Armor 规则中配置自定义响应头**
+
+Cloud Armor 允许你为“拒绝”（deny）操作配置自定义的响应代码和响应头。这样，当 Cloud Armor 规则匹配并拒绝请求时，它会使用你指定的头部返回 403。
+
+**步骤和 gcloud 命令示例：**
+
+假设你有一个 Cloud Armor 安全策略，并且其中有一条规则（比如优先级为 `1000` 的规则）拦截了这类恶意请求。你需要更新这条规则的 `action`，使其在拒绝时包含自定义头部。
+
+1.  **查看现有规则（可选，但推荐）：**
+    首先，确定是哪条规则拦截了请求。你可以查看 Cloud Armor 的日志。假设你知道规则的优先级。
+
+2.  **更新 Cloud Armor 规则以添加自定义响应头：**
+    你需要使用 `gcloud compute security-policies rules update` 命令。关键参数是 `--action` 和 `--response-headers-to-add`。
+
+    假设你的安全策略名为 `my-security-policy`，规则优先级为 `1000`，你希望在其拒绝操作（比如默认是 `deny(403)`）上添加 `X-Content-Type-Options: nosniff` 和 `X-Frame-Options: DENY`。
+
+    ```bash
+    gcloud compute security-policies rules update 1000 \
+        --security-policy my-security-policy \
+        --action "deny-403" \
+        --response-headers-to-add "X-Content-Type-Options=nosniff,X-Frame-Options=DENY"
+    ```
+    *   `1000`: 规则的优先级。
+    *   `--security-policy my-security-policy`: 你的安全策略名称。
+    *   `--action "deny-403"`: 指定拒绝操作并返回 HTTP 403。你也可以选择其他如 `deny-404`, `deny-502`。
+    *   `--response-headers-to-add "HEADER_NAME1=VALUE1,HEADER_NAME2=VALUE2"`: 添加自定义响应头。多个头用逗号分隔。
+
+    **重要**：
+    *   如果你的规则当前使用了简单的 `deny` action，例如 `gcloud ... --action "deny(403)"`，你需要将其改为明确指定状态码的 action，如 `deny-403`、`deny-404` 等，才能使用 `--response-headers-to-add`。
+    *   确保你的规则 `action` 确实是 `deny` 类型。如果规则是 `allow`，这个选项不适用。
+
+**关于你问的风险：“我如果单纯的去修改这个 `custom-response-header` 那么有什么风险么?”**
+
+如果你指的是修改 `gcloud compute backend-services update --custom-response-header`：
+1.  **主要风险：无法解决当前问题。** 如前所述，这个设置只影响后端服务正常返回的响应，不影响 Cloud Armor 的拦截响应。所以扫描器依然会报警。
+2.  **对正常流量的影响：**
+    *   **普适性：** 添加的头部将应用于所有通过该后端服务的正常响应（2xx, 3xx, 4xx, 5xx，只要是应用返回的）。对于 `X-Content-Type-Options: nosniff` 这样的安全头部，通常是期望全局应用的，所以这本身风险不大，甚至是推荐做法。
+    *   **覆盖：** 如果你的 GKE 应用本身已经设置了这些头部，负载均衡器的设置可能会覆盖应用设置的头部，或者应用设置的头部会覆盖负载均衡器的设置，具体行为取决于Google Cloud的实现（通常应用设置的会优先，或者负载均衡器会添加如果不存在）。你需要测试确认。对于 `--custom-response-header`，它默认会添加。如果你想替换，可以使用 `--custom-response-header "Header-Name:Header-Value:REPLACE"`。
+    *   **头部大小：** 添加过多的自定义头部可能会增加响应大小，但对于几个安全头部来说，影响微乎其微。
+    *   **兼容性：** `X-Content-Type-Options: nosniff` 是广泛支持的，不太可能有兼容性问题。
+
+**总结与建议：**
+
+1.  **解决核心问题：** 使用 `gcloud compute security-policies rules update ... --action "deny-403" --response-headers-to-add "X-Content-Type-Options=nosniff"` 来修改 Cloud Armor 规则，使其在拦截恶意请求并返回 403 时，也带上必要的安全头部。这是最直接且正确的做法。
+2.  **增强后端服务安全性（可选但推荐）：** 另外，你依然可以考虑为你的后端服务也配置 `custom-response-header`，例如：
+    ```bash
+    gcloud compute backend-services update YOUR_BACKEND_SERVICE_NAME \
+        --global \
+        --custom-response-header "X-Content-Type-Options: nosniff" \
+        --custom-response-header "X-Frame-Options: DENY" \
+        --custom-response-header "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload"
+        # ... 以及其他你需要的安全头部
+    ```
+    这样，即使请求通过了 Cloud Armor（或没有被特定规则拦截），你的应用响应也会包含这些安全头部。这是一个纵深防御的策略。
+
+通过在 Cloud Armor 层面处理拦截响应的头部，你可以直接满足 Cyber 扫描的要求，而无需修改应用代码或依赖后端服务的头部配置来处理 WAF 拦截的情况。
 
 
 # Gemini
@@ -646,7 +726,7 @@ metadata:
   name: api-ingress
   annotations:
     kubernetes.io/ingress.class: "gce"
-    ingress.gcp.cloud.com/backend-config: '{"default": "security-backend-config"}'
+    ingress.aliyun.cloud.com/backend-config: '{"default": "security-backend-config"}'
 spec:
   rules:
   - host: www.abc.com
