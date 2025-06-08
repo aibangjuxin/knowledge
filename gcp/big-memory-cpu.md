@@ -1,4 +1,98 @@
+- [Gemini](#gemini)
+- [Chatgpt](#chatgpt)
+- [创建一个高资源节点池，比如 e2-highmem-8 或 n2-highmem-8（8vCPU / 64GB）](#创建一个高资源节点池比如-e2-highmem-8-或-n2-highmem-88vcpu--64gb)
+- [为新 Node Pool 添加标签与污点](#为新-node-pool-添加标签与污点)
+- [Gemini](#gemini-1)
+# Analysis
 
+下面是一个 **Shell 脚本**，可以在 GKE 环境下通过 kubectl 和 jq 分析当前所有 Node 的资源分配情况，并估算能部署多少个类似「4 Core / 16Gi」Pod 的数量。
+
+  
+
+### **🧾 脚本说明：**
+
+- 使用 kubectl get node 获取节点信息
+    
+- 使用 kubectl describe node 和 kubectl top node 获取资源上限和当前使用量
+    
+- 计算出每个 Node 剩余的 allocatable CPU 和 Memory
+    
+- 判断是否能部署至少 1 个高资源 Pod，并估算最多可部署的数量
+    
+
+---
+
+```
+#!/bin/bash
+
+# 每个Pod需要的资源
+REQUIRED_CPU=4000         # 单位：m (millicore)，即 4 Core
+REQUIRED_MEM=16           # 单位：GiB
+
+echo "| node_name | cpu_free(m) | mem_free(Gi) | max_pod_schedulable |"
+echo "|-----------|-------------|--------------|----------------------|"
+
+total_pods=0
+
+# 获取所有节点名称
+nodes=$(kubectl get nodes --no-headers | awk '{print $1}')
+
+for node in $nodes; do
+  # 获取 allocatable 资源
+  allocatable_cpu=$(kubectl get node $node -o jsonpath='{.status.allocatable.cpu}' | sed 's/[^0-9]*//g')
+  allocatable_mem=$(kubectl get node $node -o jsonpath='{.status.allocatable.memory}' | sed 's/Ki//' | awk '{printf "%.2f", $1/1048576}')
+
+  # 获取已使用资源
+  usage_cpu=$(kubectl top node $node --no-headers | awk '{print $2}' | sed 's/m//')
+  usage_mem=$(kubectl top node $node --no-headers | awk '{print $4}' | sed 's/Mi//' | awk '{printf "%.2f", $1/1024}')
+
+  # 计算空闲资源
+  cpu_free=$(expr $allocatable_cpu - $usage_cpu)
+  mem_free=$(awk "BEGIN {printf \"%.2f\", $allocatable_mem - $usage_mem}")
+
+  # 计算该节点最多能部署几个高资源Pod
+  cpu_pod_fit=$(expr $cpu_free / $REQUIRED_CPU)
+  mem_pod_fit=$(awk "BEGIN {printf \"%d\", $mem_free / $REQUIRED_MEM}")
+  pod_fit=$(($cpu_pod_fit < $mem_pod_fit ? $cpu_pod_fit : $mem_pod_fit))
+
+  echo "| $node | ${cpu_free}m | ${mem_free}Gi | $pod_fit |"
+
+  total_pods=$((total_pods + pod_fit))
+done
+
+echo ""
+echo "✅ Total high-resource Pods that can be scheduled: $total_pods"
+echo "🚀 Max Deployment (each 2 Pods, spread across nodes): $((total_pods / 2))"
+```
+
+---
+
+### **✅ 输出样例（Markdown 格式）**
+
+```
+| node_name | cpu_free(m) | mem_free(Gi) | max_pod_schedulable |
+|-----------|-------------|--------------|----------------------|
+| gke-node1 | 5500m       | 20.00Gi      | 1                    |
+| gke-node2 | 6000m       | 22.00Gi      | 1                    |
+...
+✅ Total high-resource Pods that can be scheduled: 15
+🚀 Max Deployment (each 2 Pods, spread across nodes): 7
+```
+
+---
+
+### **📦 注意事项：**
+
+- 需安装 kubectl 和 kubectl top 需启用 Metrics Server
+    
+- 需要在有权限的用户下运行脚本
+    
+- 如果你的节点是 vCPU 格式（非 millicore），需要稍微调整 CPU 的提取逻辑
+    
+
+  
+
+是否需要我帮你加一个导出为 Markdown 表格的功能，例如输出成 node-report.md？
 # Gemini 
 
 这是一个非常典型的资源规划问题，最佳实践是为这类具有特殊资源需求的 Pod 创建专门的节点池（Node Pool）。我们来详细分析：
@@ -47,7 +141,7 @@
     *   在GKE控制台或使用 `gcloud` 命令创建新的节点池。
         ```bash
         gcloud container node-pools create <new-pool-name> \
-            --cluster <your-cluster-name> \
+            --jiqun <your-jiqun-name> \
             --machine-type <chosen-machine-type> \ # 例如 e2-standard-8 或 n2-standard-16
             --num-nodes 1 \ # 初始节点数，可以设为1，然后配置自动伸缩
             --enable-autoscaling --min-nodes 1 --max-nodes <max-desired-nodes> \ # 强烈建议启用自动伸缩
@@ -218,7 +312,7 @@
 
 gcloud container node-pools create high-mem-pool \
 
-  --cluster=[your-cluster-name] \
+  --jiqun=[your-jiqun-name] \
 
   --machine-type=n2-highmem-8 \
 
