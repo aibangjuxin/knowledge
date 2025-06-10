@@ -28,37 +28,23 @@
 或者 onboarding.count_memory > actual.count_memory
 
 ✅ 推荐 SQL 示例：
-
+```sql
 SELECT
-
 o.team_name,
-
 o.count_cpu AS onboarding_cpu,
-
 a.count_cpu AS actual_cpu,
-
 o.count_memory AS onboarding_memory,
-
 a.count_memory AS actual_memory
-
 FROM
-
 `project.dataset.onboarding_resources` o
-
 JOIN
-
 `project.dataset.actual_resources` a
-
 ON
-
 o.team_name = a.team_name
-
 WHERE
-
 o.count_cpu > a.count_cpu
-
 OR o.count_memory > a.count_memory
-
+```
 📋 说明：
 
 |                |                              |
