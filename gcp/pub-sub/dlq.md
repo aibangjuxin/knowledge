@@ -362,7 +362,8 @@ GKE和后端优化：
 	◦	无DLQ时，消息可能无限重试，建议结合DLQ限制尝试次数。
 3. GKE和后端优化
 	•	并行处理：
-	◦	确保GKE Deployment有多个副本（通过replicas设置），例如： ```bash
+	◦	确保GKE Deployment有多个副本（通过replicas设置），例如：
+```yaml
 apiVersion: apps/v1
 		kind: Deployment
 		metadata:
@@ -409,7 +410,6 @@ apiVersion: apps/v1
 
 流程图（Mermaid）
 以下是优化流程的Mermaid流程图，便于理解：
----
 
 
 ```mermaid
