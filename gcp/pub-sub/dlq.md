@@ -354,7 +354,7 @@ GKE和后端优化：
 	•	指数退避配置：
 	◦	设置min-retry-delay=5s（符合您的minBackoffDuration）。
 	◦	设置max-retry-delay=600s（GCP最大限制，您的3600秒不可用）。
-	◦	示例命令： gcloud pubsub subscriptions create user-a-subscription --topic=topic-id --min-retry-delay=5s --max-retry-delay=600s
+	◦	示例命令： `gcloud pubsub subscriptions create user-a-subscription --topic=topic-id --min-retry-delay=5s --max-retry-delay=600s`
 	◦	
 	◦	指数退避减少后端负载，适合处理瞬时失败。
 	•	注意事项：
@@ -364,23 +364,24 @@ GKE和后端优化：
 	•	并行处理：
 	◦	确保GKE Deployment有多个副本（通过replicas设置），例如： ```yaml
 apiVersion: apps/v1
-	◦	kind: Deployment
-	◦	metadata:
-	◦	  name: schedule-service
-	◦	spec:
-	◦	  replicas: 3
-	◦	  selector:
-	◦	    matchLabels:
-	◦	      app: schedule-service
-	◦	  template:
-	◦	    metadata:
-	◦	      labels:
-	◦	        app: schedule-service
-	◦	    spec:
-	◦	      containers:
-	◦	      - name: schedule-service
-	◦	        image: your-image
+		kind: Deployment
+		metadata:
+		  name: schedule-service
+		spec:
+		  replicas: 3
+		  selector:
+		    matchLabels:
+		      app: schedule-service
+		  template:
+		    metadata:
+		      labels:
+		        app: schedule-service
+		    spec:
+		      containers:
+		      - name: schedule-service
+		        image: your-image
 ```
+
 	◦	
 	◦	多个副本可并行拉取和处理Pub/Sub消息。
 	•	Java应用优化：
@@ -402,6 +403,7 @@ apiVersion: apps/v1
 	•	为何选择：
 	◦	指数退避减少瞬时失败的负载，600秒最大延迟符合GCP限制。
 	◦	DLQ限制尝试次数，确保失败任务不无限阻塞。
+
 流程图（Mermaid）
 以下是优化流程的Mermaid流程图，便于理解：
 ```mermaid
