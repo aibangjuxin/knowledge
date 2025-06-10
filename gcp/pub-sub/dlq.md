@@ -381,8 +381,9 @@ apiVersion: apps/v1
 		      - name: schedule-service
 		        image: your-image
 ```
+---
 
-	◦	
+
 	◦	多个副本可并行拉取和处理Pub/Sub消息。
 	•	Java应用优化：
 	◦	使用线程池或异步框架（如Spring WebFlux）处理消息，避免顺序依赖。
