@@ -59,7 +59,6 @@ Example Configuration Workflow
 Below is a Mermaid flowchart illustrating the NGINX configuration process, applicable to both versions with slight variations in module selection.
 
 ```mermaid
-```
 graph TD
 
     A[Start: NGINX Source Code] --> B[Run ./configure]
@@ -117,11 +116,11 @@ graph TD
     W --> X[Install: make install]
 
     X --> Y[NGINX Ready]
-
+```
 Example NGINX Configuration Snippet
 
 For NGINX 1.26.0, you can leverage the new modules. Here’s an example configuration using http_v2_module and http_realip_module:
-
+```nginx
 http {
 
     server {
@@ -155,9 +154,9 @@ http {
     }
 
 }
-
+```
 For stream SSL (enabled by --with-stream_ssl_module):
-
+```nginx
 stream {
 
     server {
@@ -175,7 +174,7 @@ stream {
     }
 
 }
-
+```
 Notes
 
 - Dependencies: Ensure OpenSSL is installed for http_ssl_module and stream_ssl_module. For HTTP/2, OpenSSL 1.0.2 or higher is required.
