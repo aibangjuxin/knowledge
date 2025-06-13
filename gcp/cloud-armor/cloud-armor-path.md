@@ -168,7 +168,67 @@ gcloud compute security-policies rules create 1001 \
  --action=allow
 
 ⸻
+非常好，使用 地址组（Address Group） 功能是 Cloud Armor 的推荐做法，尤其当你需要维护超过 10 个 IP 范围时。这可以有效绕过 --src-ip-ranges 的 10 个 IP 限制，同时避免 expression 子句数超标的问题。
 
+⸻
+
+✅ 什么是地址组（Address Group）？
+	•	地址组是一个在 Network Security 中管理的 IP 列表对象（Address Group resource）。
+	•	可供 Cloud Armor policy 的 inIpRange(origin.ip, 'ADDRESS_GROUP') 使用。
+	•	每个地址组可包含 多达 1000 个 IP 前缀（CIDR）。
+
+⸻
+
+✅ 使用地址组的步骤
+
+🔹 步骤 1：创建地址组
+
+gcloud network-security address-groups create my-api-allowed-ips \
+    --project=${PROJECT_ID} \
+    --type=IPV4 \
+    --items="1.2.3.4/24,5.6.7.8/24,9.10.11.0/24" \
+    --description="Allowed IPs for /api_name_version1/v1/*"
+
+若有更多 IP，可用 --items-from-file 参数从 CSV 或文本文件加载。
+
+⸻
+
+🔹 步骤 2：在 Cloud Armor 中引用地址组
+
+gcloud compute security-policies rules create 1000 \
+    --security-policy=cloud-armor-policy \
+    --project=${PROJECT_ID} \
+    --description="Allow traffic to /api_name_version1/v1/* from address group" \
+    --expression='request.path.matches("/api_name_version1/v1/*") && inIpRange(origin.ip, "address-group://NETWORKSECURITY_GOOGLEAPIS_COM/projects/${PROJECT_ID}/locations/global/addressGroups/my-api-allowed-ips")' \
+    --action=allow
+
+✅ 表达式中只有两个表达式（path + inIpRange），完全符合限制。
+
+⸻
+
+✅ Mermaid 流程图
+
+graph TD;
+    A[定义地址组: my-api-allowed-ips] --> B[配置 Cloud Armor Expression]
+    B --> C[rule expression: path.matches + inIpRange(address group)]
+    C --> D[Cloud Armor policy 匹配请求]
+    D --> E[允许访问 /api_name_version1/v1/*]
+
+
+⸻
+
+✅ 优势总结
+
+优势	说明
+扩展性高	每个地址组支持 1000 个 CIDR
+易于维护	统一管理，更新地址组不需要改 Armor policy
+表达式精简	只用一个 inIpRange()
+支持多个规则共用	多个规则可以共用一个地址组资源
+
+
+⸻
+
+如你需要，我可以帮你写一个脚本自动生成 address group + cloud armor 的创建命令，以及更新地址组的命令。需要吗？
 根据您的查询，我理解您希望所有 Cloud Armor 安全策略的动作（例如限制 IP 访问、限制请求速率、启用 WAF 规则）都基于条件 `request.path.matches("/api_name_version1/v1/*")` 来配置，同时对于不匹配此路径的流量，设置一个默认规则允许其通过。以下是针对您的需求，详细的配置步骤和示例。
 
 ---
