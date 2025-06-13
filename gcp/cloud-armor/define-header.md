@@ -134,7 +134,90 @@
     [--request-headers-to-add=[REQUEST_HEADERS_TO_ADD,...]]
 ```
 
+# how to request-headers-to-add
+`gcloud compute security-policies rules create` 命令用于在 Google Cloud Armor 安全策略中创建规则。`--request-headers-to-add` 参数允许您指定当此安全策略规则匹配时，要添加到请求中的 HTTP 头。
 
+**`--request-headers-to-add` 参数的用法：**
+
+这个参数接受一个或多个 `HEADER_NAME=HEADER_VALUE` 格式的键值对，用逗号分隔。每个键值对代表一个要添加或覆盖的 HTTP 头。
+
+**基本语法：**
+
+Bash
+
+```
+gcloud compute security-policies rules create PRIORITY \
+    --security-policy=POLICY_NAME \
+    --expression="EXPRESSION" \
+    --action=ACTION \
+    --request-headers-to-add="HEADER_NAME1=HEADER_VALUE1,HEADER_NAME2=HEADER_VALUE2" \
+    [--description="DESCRIPTION"] \
+    [其他可选参数]
+```
+
+**参数解释：**
+
+- `PRIORITY`: 规则的优先级，一个唯一的正整数。数字越小，优先级越高（0 是最高优先级）。规则按照优先级从高到低进行评估。
+- `--security-policy=POLICY_NAME`: 您要为其创建规则的安全策略的名称。
+- `--expression="EXPRESSION"`: Cloud Armor 规则语言表达式，用于匹配传入的流量。如果表达式评估为 `true`，则执行相应的操作。
+- `--action=ACTION`: 如果请求与匹配条件匹配，则要采取的操作。常见的值包括：
+    - `allow`: 允许访问目标。
+    - `deny-403`: 拒绝访问目标，返回 HTTP 403 响应码。
+    - `deny-404`: 拒绝访问目标，返回 HTTP 404 响应码。
+    - `deny-502`: 拒绝访问目标，返回 HTTP 502 响应码。
+    - `rate-based-ban`: 基于速率限制客户端流量并禁止超出阈值的客户端。
+    - `redirect`: 重定向到不同的目标。
+    - `throttle`: 将客户端流量限制到配置的阈值。
+- `--request-headers-to-add="HEADER_NAME1=HEADER_VALUE1,HEADER_NAME2=HEADER_VALUE2"`: **关键参数**。指定要添加到请求中的 HTTP 头。
+    - `HEADER_NAME`: 要设置的 HTTP 头的名称。
+    - `HEADER_VALUE`: 要设置的 HTTP 头的值。
+    - 您可以添加多个头，用逗号分隔。
+
+**示例：**
+
+假设您有一个名为 `my-security-policy` 的安全策略，您想添加一个规则，当请求来自 IP 地址 `192.0.2.1` 时，允许该请求，并且同时向该请求添加一个名为 `X-Custom-Header` 值为 `MyValue` 的自定义头。
+
+Bash
+
+```
+gcloud compute security-policies rules create 100 \
+    --security-policy=my-security-policy \
+    --expression="origin.ip == '192.0.2.1'" \
+    --action=allow \
+    --request-headers-to-add="X-Custom-Header=MyValue" \
+    --description="Allow traffic from specific IP and add custom header"
+```
+
+**另一个示例（添加多个头）：**
+
+Bash
+
+```
+gcloud compute security-policies rules create 200 \
+    --security-policy=my-security-policy \
+    --expression="request.path.matches('/api/v1/internal')" \
+    --action=deny-403 \
+    --request-headers-to-add="X-Internal-Call=true,X-Denied-Reason=PolicyViolation" \
+    --description="Deny internal API access and add headers"
+```
+
+**使用场景：**
+
+`--request-headers-to-add` 参数在以下场景中非常有用：
+
+- **将元数据传递给后端服务：** 您可以根据 Cloud Armor 规则的匹配条件，向后端服务添加特定的头，例如指示请求已通过某个安全检查，或者包含有关客户端的额外信息（例如，来自哪个地理位置）。
+- **调试和日志记录：** 添加自定义头可以帮助您在后端服务的日志中更容易地识别和跟踪由特定 Cloud Armor 规则处理的请求。
+- **与后端应用程序集成：** 某些应用程序可能需要特定的 HTTP 头才能正确处理请求。您可以使用此功能动态地添加这些头。
+- **A/B 测试或功能标志：** 根据规则匹配的条件，您可以添加特定的头来控制后端服务的行为，例如启用或禁用某个功能。
+
+**重要提示：**
+
+- `--request-headers-to-add` 只能用于全局安全策略。
+- 如果您添加的头名称已经存在于原始请求中，`--request-headers-to-add` 将会覆盖其值。
+- 请确保您的 `EXPRESSION` 正确无误，以便规则按预期触发。
+- 在实际部署之前，建议在预览模式下测试规则（使用 `--preview` 标志），以确保其行为符合预期，避免意外影响生产流量。
+
+希望这些信息能帮助您更好地理解和使用 `gcloud compute security-policies rules create --request-headers-to-add` 命令！
 
 # Claude 
 对于 Cloud Armor 拦截后的响应头定制，这确实是一个常见需求，但有一些限制和解决方案。
