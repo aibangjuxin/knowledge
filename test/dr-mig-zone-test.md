@@ -166,45 +166,49 @@ graph TD;
 ```
 #!/bin/bash
 
-# 替换为你的 MIG 名称与区域
+# 替换以下变量为你自己的值
 MIG_NAME="your-mig-name"
 REGION="europe-west2"
-TARGET_SIZE=4   # 扩容目标实例数
-TMP_BEFORE="/tmp/mig_before.txt"
-TMP_AFTER="/tmp/mig_after.txt"
+NEW_SIZE=4   # 增加后的实例数
+OLD_MIN=2
+OLD_MAX=4
+TARGET_CPU_UTIL=0.6
 
-# 获取当前实例信息
-echo "[1] 当前 MIG 实例分布:"
-gcloud compute instance-groups managed list-instances "$MIG_NAME" \
+# Step 1: 关闭 autoscaling（如果存在）
+echo "Disabling autoscaler..."
+gcloud compute instance-groups managed set-autoscaling "$MIG_NAME" \
   --region="$REGION" \
-  --format="table(instance, zone)" | tee "$TMP_BEFORE"
+  --mode=off
 
-# Resize 实例组
-echo -e "\n[2] 开始将实例数扩展至 $TARGET_SIZE ..."
+# Step 2: 执行 Resize 操作
+echo "Resizing MIG to $NEW_SIZE instances..."
 gcloud compute instance-groups managed resize "$MIG_NAME" \
   --region="$REGION" \
-  --size="$TARGET_SIZE"
+  --size="$NEW_SIZE"
 
-# 等待实例初始化
-echo -e "\n[3] 等待实例启动完成 ..."
-sleep 60  # 可视情况调整等待时间
+# Step 3: 等待几秒钟，观察实例分布
+echo "Sleeping 60s to wait for instance creation..."
+sleep 60
 
-# 获取扩容后实例信息
-echo -e "\n[4] 扩容后 MIG 实例分布:"
+# Step 4: 显示实例分布（zone 分布）
+echo "Listing instance zone distribution:"
 gcloud compute instance-groups managed list-instances "$MIG_NAME" \
   --region="$REGION" \
-  --format="table(instance, zone)" | tee "$TMP_AFTER"
+  --format="table(instance, zone, status)"
 
-# 分析 zone 分布变更
-echo -e "\n[5] 对比前后 zone 分布变化:"
-echo -e "\n--- 之前 ---"
-cut -f2 "$TMP_BEFORE" | sort | uniq -c
-
-echo -e "\n--- 之后 ---"
-cut -f2 "$TMP_AFTER" | sort | uniq -c
-
-# 清理临时文件
-rm -f "$TMP_BEFORE" "$TMP_AFTER"
+# Step 5: 恢复 autoscaling（可选）
+read -p "Do you want to re-enable autoscaler with previous policy (min=$OLD_MIN, max=$OLD_MAX)? (y/n): " confirm
+if [[ "$confirm" == "y" ]]; then
+  echo "Restoring autoscaler..."
+  gcloud compute instance-groups managed set-autoscaling "$MIG_NAME" \
+    --region="$REGION" \
+    --min-num-replicas="$OLD_MIN" \
+    --max-num-replicas="$OLD_MAX" \
+    --target-cpu-utilization="$TARGET_CPU_UTIL" \
+    --cool-down-period="60s"
+else
+  echo "Autoscaler not restored. Done."
+fi
 ```
 
 ---
