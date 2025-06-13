@@ -172,7 +172,7 @@ REGION="europe-west2"
 NEW_SIZE=4   # 增加后的实例数
 OLD_MIN=2
 OLD_MAX=4
-TARGET_CPU_UTIL=0.6
+TARGET_CPU_UTIL=0.9
 
 # Step 1: 关闭 autoscaling（如果存在）
 echo "Disabling autoscaler..."
@@ -205,7 +205,7 @@ if [[ "$confirm" == "y" ]]; then
     --min-num-replicas="$OLD_MIN" \
     --max-num-replicas="$OLD_MAX" \
     --target-cpu-utilization="$TARGET_CPU_UTIL" \
-    --cool-down-period="60s"
+    --cool-down-period="180s"
 else
   echo "Autoscaler not restored. Done."
 fi
