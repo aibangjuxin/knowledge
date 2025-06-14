@@ -1,3 +1,6 @@
+这个文档的一些命令是错误的
+参考
+- ![define-header](./define-header.md)
 这是一个用于创建Cloud Armor安全策略规则的命令，用于阻止恶意XSS扫描并添加安全响应头。
 
 ```bash
