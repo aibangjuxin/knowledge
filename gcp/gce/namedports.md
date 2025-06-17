@@ -43,11 +43,11 @@ Port
 ```mermaid
 graph TD;
 
-A[Client Request to LB] --> B[Load Balancer: Listener Port e.g. 443 or 80];
+A[Client Request to LB] --> B[Load Balancer: Listener 80];
 
 B --> C[Backend Service: Protocol TCP, Port 80, PortName = Lexport];
 
-C --> D[MIG: Named Port "Lexport" = 443];
+C --> D[MIG: Named Port Lexport  443];
 
 D --> E[Backend VM 实际监听 443];
 ```
