@@ -1,7 +1,7 @@
 你的疑问非常合理。在 GCP 使用 Load Balancer（尤其是 TCP/SSL LB 或 HTTPS LB + Backend Service）时，端口配置确实容易令人困惑。以下是你提供的信息简化版和分析：
 
 你的配置摘要：
-
+```yaml
 Backend Service:
 
 name: my-lb-backend-svc
@@ -25,7 +25,7 @@ NamedPorts:
 - Name: Lexport
 
 Port: 443
-
+```
 🌟 核心疑问解析
 
 为什么 Backend Service 的 Port 是 80，但是 Health Check 和实际服务是 443，并且服务正常？
@@ -40,7 +40,7 @@ Port
 
 🔄 流程解构（结合你的情况）
 
-``
+```mermaid
 graph TD;
 
 A[Client Request to LB] --> B[Load Balancer: Listener Port e.g. 443 or 80];
@@ -50,7 +50,7 @@ B --> C[Backend Service: Protocol TCP, Port 80, PortName = Lexport];
 C --> D[MIG: Named Port "Lexport" = 443];
 
 D --> E[Backend VM 实际监听 443];
-
+```
 - Backend Service 的 Port = 80（数值本身无实际用途）
 
 - 因为设置了 PortName = Lexport，GCP 实际是使用此名称去找 MIG 中的 NamedPort。
