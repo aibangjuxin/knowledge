@@ -24,13 +24,14 @@ Cloud Armor 规则评估是 短路机制：
 • deny 但是一般来说 Deny 是真正的终止了
 • rate-based ban（即使当前未触发频率限制）
 只要匹配表达式成功，Cloud Armor 就不会再向下匹配其他规则。
-
+```bash
 gcloud compute security-policies rules create 1000 \
  --security-policy=cloud-armor-policy \
  --project=${PROJECT_ID} \
  --description="Allow traffic to /api_name_version1/v1/_" \
  --expression='request.path.matches("/api_name_version1/v1/_") && (inIpRange(origin.ip, "1.2.3.4/24") || inIpRange(origin.ip, "5.6.7.8/24"))'
 --action=allow
+```
 
 Error parsing Cloud armor rule matcher expression: expression count of 7 exceed maxinum 0f 5 expressions.
 
