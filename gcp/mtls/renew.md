@@ -78,3 +78,43 @@ graph TD;
 ---
 
 如果你对 fingerprint 的生成、TrustConfig 的更新、或如何自动化管理这部分有兴趣，我可以继续帮你整理相关脚本或策略。
+非常好，那我们来补充你提到的 **平台侧通过 fingerprint 判断是否需要更新 TrustConfig** 的逻辑，并将其集成进 Mermaid 流程图中。
+
+---
+
+## **✅ 补充后的 Cert Renew 流程图（包含 fingerprint 检查）**
+
+```mermaid
+graph TD;
+    A[客户端证书过期] --> B[客户端向CA重新签名];
+    B --> C[获取新的 client.crt 和 client.key];
+    C --> D[尝试访问 GLB HTTPS];
+    D --> E{新证书的 CA 是否在平台 TrustConfig 中?};
+    E -- 是 --> F[验证通过，正常访问];
+    E -- 否 --> G[平台侧接收新证书];
+    G --> H[提取 Root / Intermediate CA 证书];
+    H --> I[生成 SHA256 Fingerprint];
+    I --> J{Fingerprint 是否已存在于 TrustConfig?};
+    J -- 是 --> K[无需更新 TrustConfig];
+    J -- 否 --> L[更新 TrustConfig，加入新 CA];
+    L --> M[重新部署 TrustConfig];
+    M --> F;
+```
+
+---
+
+## **📝 说明**
+
+| **步骤** | **描述**                                                               |
+| -------- | ---------------------------------------------------------------------- |
+| H        | 平台解析用户提交的新证书，提取出完整链中的 Root / Intermediate CA 证书 |
+| I        | 计算这些 CA 证书的 SHA256 Fingerprint                                  |
+| J        | 与现有的 TrustConfig 配置中记录的 fingerprint 进行比对                 |
+| L        | 若发现有新增（即新 Root/Intermediate），则更新 TrustConfig             |
+| M        | 使用 gcloud 或 Terraform 部署更新后的配置                              |
+
+---
+
+这个流程也可以方便你将来做成自动化检测，比如定期或触发式地通过脚本检查 fingerprint.json 与 GCS 现状是否一致。若有新增 fingerprint，可自动更新 TrustConfig 并触发部署流程。
+
+如你后续想做这部分脚本自动化（例如支持 GCS 存储 fingerprint 列表、增量更新 TrustConfig 等），我可以进一步帮你生成脚本逻辑结构或样例。
