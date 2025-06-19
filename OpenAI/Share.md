@@ -173,3 +173,15 @@ AI's Ubiquitous Presence
    3. Debug sql 
       1. Help me review this sql .I don’t know why api abc missing org filed . Help me debug .
    4. Knowledge Graph or mindmap 
+
+
+4. mcp 
+   1. 提取我最近的一些pull Request然后分析我提交的内容.帮我分析并
+   2. 在 Markdown 中以图形化方式展示我的知识点，并且在根目录下帮我生成一个简单的 MindMap 树形图
+
+- Summary 
+  - 提取我最近的一些pull Request然后分析我提交的内容.帮我分析并
+  - 在 Markdown 中以图形化方式展示我的知识点，并且在根目录下帮我生成一个简单的 MindMap 树形图
+- ![trace-build](./trae-build-mcp.png)
+- ![trae-process.png](./trae-process.png)
+- ![mindmap.png](./mindmap.png)
