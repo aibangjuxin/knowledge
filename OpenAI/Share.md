@@ -185,3 +185,4 @@ AI's Ubiquitous Presence
 - ![trace-build](./trae-build-mcp.png)
 - ![trae-process.png](./trae-process.png)
 - ![mindmap.png](./mindmap.png)
+- ![mcp-push.png](./mcp-push.png)
