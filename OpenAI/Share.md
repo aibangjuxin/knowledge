@@ -101,9 +101,8 @@ I configured mTLS for GLB in the GCP project. For example, the currently bound G
     - If you install the corresponding services on different terminals, you will receive a notification after the report is generated.
 - ![gemini-search.png](./gemini-search.png)
 - [Verifying GLB mTLS Configuration](./Verifying-GLB.md)
-
-
-
+- https://aistudio.google.com/prompts/new_chat
+- ![aistudio.png](./aistudio.png)
 
 2. **Some AI tools I use personally.**  
 - By the way, the following table was also generated for me by AI.
