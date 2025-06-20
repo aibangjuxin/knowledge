@@ -118,6 +118,75 @@ Port: 443
 gcloud compute backend-services update my-lb-backend-svc \
     --protocol=HTTPS \
     --global
+
+你这个错误信息的核心是：
+
+protocol must be TCP/SSL if the backend service is associated with a targetTcpProxy
+
+⸻
+
+🔍 原因解释
+
+你当前的架构是基于 TCP Load Balancer（使用 targetTcpProxy）。在这种架构下：
+	•	前端协议：TCP
+	•	后端服务协议（backend-service protocol）：只能是 TCP 或 SSL（不支持 HTTPS）
+
+⸻
+
+✅ GCP 协议支持对照表
+
+Proxy 类型	支持的后端协议 (--protocol)
+targetTcpProxy	TCP / SSL（终端透明传递）
+targetHttpProxy	HTTP
+targetHttpsProxy	HTTPS
+targetSslProxy	SSL
+targetGrpcProxy	GRPC
+
+
+⸻
+
+🛠 如果你真的要使用 --protocol=HTTPS，你需要满足以下前提：
+	1.	使用 L7 Load Balancer
+	•	即你要创建一个 HTTPS 负载均衡器，需要配套使用：
+	•	targetHttpsProxy
+	•	URL map
+	•	backend-service --protocol=HTTPS
+	2.	同时你的后端也必须是支持 HTTPS（比如服务开启了 TLS）
+
+⸻
+
+✅ 正确做法（根据你的目标）：
+
+如果你当前使用的是 TCP 代理（targetTcpProxy）
+
+# 正确的做法就是保持原样：
+gcloud compute backend-services update my-lb-backend-svc \
+    --protocol=TCP \
+    --global
+
+如果你希望使用 HTTPS L7 LB（适配 ALB）
+
+你需要重建一个 HTTPS Load Balancer，例如：
+
+gcloud compute backend-services create my-lb-backend-svc \
+    --protocol=HTTPS \
+    --port-name=https \
+    --health-checks=my-hc \
+    --global
+
+并且关联到：
+	•	targetHttpsProxy
+	•	url-map
+	•	forwarding-rule（监听 443）
+
+⸻
+
+✅ 总结
+
+你当前的 backend service 是挂在 targetTcpProxy 上的，因此它 只能使用 TCP 或 SSL 协议。
+如果你希望使用 HTTPS 协议，需要完全改为 L7 HTTP(S) LB 架构。
+
+是否需要我为你画出对比图：TCP Proxy vs HTTPS Proxy 架构差异？
 ```
 
 **执行这个命令后会发生什么？**
