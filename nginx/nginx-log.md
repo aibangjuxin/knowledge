@@ -883,3 +883,92 @@ logrotate -f /etc/logrotate.d/nginx_stream
 - 对不同类型日志使用单独 logrotate 文件
 
 如果你希望我帮你生成一个 bash 脚本来自动创建以上配置，也可以提供我帮助。
+
+是的，rotate 0 是 **合法配置**，但它的行为要特别注意：
+
+---
+
+## **✅** 
+
+## **rotate 0**
+
+##  **的含义**
+
+```
+rotate 0
+```
+
+表示：
+
+  
+
+> **不保留任何旧日志副本（即不做轮转）**。
+
+> 日志文件会在符合条件时（如达到一定大小或每天触发）被删除或清空。
+
+---
+
+## **🚫 潜在副作用（尤其需小心）**
+
+- 如果配合 copytruncate：当前日志文件将被截断为 0，但不会被重命名，也不会备份。
+    
+- 如果没有 copytruncate 且进程仍在写旧文件，日志可能丢失或文件句柄失效（尤其 Nginx / Java）。
+    
+- **如不小心配置 rotate 0 + missingok + notifempty，日志会被直接删除或清零，可能造成排查困难。**
+    
+
+---
+
+## **✅ 安全示例（若你明确只保留 Cloud Logging 中的日志）：**
+
+```
+/opt/log/nginx/*.log {
+    daily
+    rotate 0
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 0640 root root
+    sharedscripts
+    postrotate
+        [ -f /var/run/nginx.pid ] && kill -HUP $(cat /var/run/nginx.pid) || true
+    endscript
+}
+```
+
+---
+
+## **⚠️ 替代建议（更稳健）**
+
+  
+
+如果你只是想避免日志堆积，又怕误删日志，可考虑：
+
+```
+rotate 1
+maxage 1
+```
+
+这意味着：
+
+- 最多保留 1 个副本。
+    
+- 日志只保留 1 天。
+    
+
+  
+
+这样比 rotate 0 更安全，不容易导致误删所有日志。
+
+---
+
+## **✅ 总结**
+
+|**设置**|**含义**|**是否推荐**|
+|---|---|---|
+|rotate 0|不保留任何日志副本|✅ 可用，需小心处理|
+|rotate 1|保留最近一次日志副本（更安全）|✅ 推荐|
+|rotate 0 + copytruncate|会清空当前日志文件但不重命名，风险高|⚠️ 谨慎使用|
+
+如你确定日志 **全部已上传至 Cloud Logging 且本地不再需要保留**，可以用 rotate 0。但建议配合 missingok、notifempty 并做好告警/验证。需要的话我也可以帮你出一份“最小日志保留策略”的标准模板。
