@@ -187,6 +187,56 @@ gcloud compute backend-services create my-lb-backend-svc \
 如果你希望使用 HTTPS 协议，需要完全改为 L7 HTTP(S) LB 架构。
 
 是否需要我为你画出对比图：TCP Proxy vs HTTPS Proxy 架构差异？
+
+
+
+
+
+          
+您遇到的错误提示 "Invalid value for field 'resouce.protocol' 'HTTPS'. protocol must be TCP/SSL if the backend service is associated with a targetTCPPROXY" 是因为后端服务（`backend-services`）的协议类型与您使用的目标代理（`targetTcpProxy`）不兼容。
+
+根据 GCP 的负载均衡器设计，如果您将后端服务关联到 `targetTcpProxy`，那么后端服务的协议只能是 `TCP` 或 `SSL`。`HTTPS` 协议是为 `targetHttpsProxy` 或 `targetSslProxy` 设计的。
+
+在您提供的 <mcfile name="namedports.md" path="/Users/lex/git/knowledge/gcp/gce/namedports.md"></mcfile> 文件中，关于“后端服务支持的协议”部分有详细说明：
+
+```markdown:/Users/lex/git/knowledge/gcp/gce/namedports.md
+// ... existing code ...
+## 后端服务支持的协议
+
+下表总结了各种负载均衡器代理类型和后端服务协议的兼容性：
+
+| 代理类型             | 支持的后端服务协议     |
+|--------------------|--------------------|
+| `targetHttpProxy`    | `HTTP`, `HTTPS`, `HTTP/2` |
+| `targetHttpsProxy`   | `HTTP`, `HTTPS`, `HTTP/2` |
+| `targetSslProxy`     | `SSL`, `TCP`       |
+| `targetTcpProxy`     | `TCP`, `SSL`       |
+| `targetVpnGateway`   | `UDP`              |
+| `targetGrpcProxy`    | `GRPC`, `HTTP`, `HTTPS`, `HTTP/2` |
+
+// ... existing code ...
+
+```
+
+因此，要解决此问题，您需要根据实际需求选择：
+
+1.  **如果您的目标是 TCP/SSL 负载均衡**：将后端服务的协议更改为 `TCP` 或 `SSL`。
+    ```bash
+    gcloud compute backend-services update my-lb-backend-svc \
+        --protocol=TCP \
+        --global
+    ```
+    或者
+    ```bash
+    gcloud compute backend-services update my-lb-backend-svc \
+        --protocol=SSL \
+        --global
+    ```
+
+2.  **如果您确实需要 `HTTPS` 协议**：您需要使用 `targetHttpsProxy` 或 `targetSslProxy` 来关联您的后端服务，而不是 `targetTcpProxy`。这通常意味着您正在构建一个 L7 负载均衡器（例如 HTTPS 负载均衡器），而不是 L4 负载均衡器（TCP/SSL 代理）。
+
+请检查您的负载均衡器配置，确认后端服务所关联的目标代理类型，并据此调整协议。
+        
 ```
 
 **执行这个命令后会发生什么？**

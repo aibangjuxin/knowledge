@@ -185,3 +185,14 @@ AI's Ubiquitous Presence
 - ![trae-process.png](./trae-process.png)
 - ![mindmap.png](./mindmap.png)
 - ![mcp-push.png](./mcp-push.png)
+
+
+
+
+创造是一件对主观能动性要求很强的事情，
+而工具和技术只是放大了原本就在创造的人的效率杠杆，
+并不会激发一个没有创作欲望的人的创作冲动
+
+
+书本上啥都有，怎么就不见你上清华呢
+只是都在那里 我怎么没有成为pipeline专家呢？
