@@ -201,3 +201,185 @@ https://cloud.google.com/trace/docs/trace-context?hl=zh-cn
 
 
 在Nginx中，日志级别分为debug、info、notice、warn、error、crit、alert、emerg八个级别。要在info级别获取特定的debug或notice信息，你可以通过以下方式：1. 使用条件日志配置，根据特定变量或请求特征来启用debug日志 2. 使用error_log指令的if条件判断，针对特定请求启用更详细的日志级别 3. 在access_log中使用自定义log_format，将需要的debug信息通过变量方式记录 4. 使用Nginx的debug_connection指令，针对特定IP启用调试日志。这样可以在保持整体info日志级别的同时，获取到所需的特定debug信息。
+
+在 GCP 上配置了 **mTLS** 后，你可以通过以下几个渠道来获取日志中与 mTLS、Cloud Armor、证书相关的详细信息，通常会涉及到：
+
+- **HTTPS Load Balancer 的访问日志**
+    
+- **Cloud Armor 的审计日志**
+    
+- **Google Cloud Certificate Manager 的日志**
+    
+- **Cloud Logging 的过滤器**
+    
+
+  
+
+以下是你可以在 GCP 中使用的几个建议方式，帮助你提取相关的日志信息。
+
+---
+
+### **✅ 1.** 
+
+### **Cloud Armor 命中日志**
+
+  
+
+Cloud Armor 的拦截或允许动作会出现在 Load Balancer 的访问日志中，主要字段包括：
+
+- securityPolicy
+    
+- securityPolicyRuleInfo
+    
+- jsonPayload.enforcedSecurityPolicy
+    
+- jsonPayload.enforcedSecurityPolicyOutcome
+    
+
+  
+
+#### **示例过滤器（匹配被某个 Cloud Armor 策略命中的请求）**
+
+```
+resource.type="http_load_balancer"
+jsonPayload.enforcedSecurityPolicy:*
+```
+
+#### **过滤特定策略或规则编号：**
+
+```
+resource.type="http_load_balancer"
+jsonPayload.enforcedSecurityPolicy.name="your-cloud-armor-policy-name"
+jsonPayload.enforcedSecurityPolicyOutcome="DENY"
+```
+
+---
+
+### **✅ 2.** 
+
+### **mTLS 证书信息日志（叶子证书字段）**
+
+  
+
+若启用 **mTLS** 并配置了 **Google Certificate Manager TrustConfig**，你可以在 Cloud Logging 中访问 forwardedClientCert.* 字段，获取下列数据：
+
+- forwardedClientCert.certInfo：包含 **证书的 Base64 DER**
+    
+- forwardedClientCert.subject：证书的 Subject DN
+    
+- forwardedClientCert.issuer：证书的 Issuer DN
+    
+- forwardedClientCert.certFingerprint：指纹（SHA-256）
+    
+- forwardedClientCert.subjectAlternativeName：SAN 字段
+    
+- forwardedClientCert.certNotAfter / certNotBefore：有效期
+    
+
+  
+
+#### **示例日志过滤器（提取证书信息）**
+
+```
+resource.type="http_load_balancer"
+jsonPayload.forwardedClientCert.certInfo:*
+```
+
+#### **示例日志过滤器（匹配某个证书指纹）**
+
+```
+resource.type="http_load_balancer"
+jsonPayload.forwardedClientCert.certFingerprint="AB:CD:EF:..."
+```
+
+---
+
+### **✅ 3.** 
+
+### **完整例子：同时匹配 mTLS 证书 + Cloud Armor 命中**
+
+```
+resource.type="http_load_balancer"
+jsonPayload.forwardedClientCert.certInfo:*
+jsonPayload.enforcedSecurityPolicy:*
+```
+
+---
+
+### **✅ 4.** 
+
+### **字段解析举例（日志字段结构）**
+
+```
+{
+  "forwardedClientCert": {
+    "certInfo": "MIIC...",
+    "subject": "CN=myclient,O=myorg",
+    "issuer": "CN=myca,O=myorg",
+    "certFingerprint": "AB:CD:EF:...",
+    "certNotBefore": "2025-01-01T00:00:00Z",
+    "certNotAfter": "2026-01-01T00:00:00Z",
+    "subjectAlternativeName": ["DNS:myclient.example.com"]
+  },
+  "enforcedSecurityPolicy": {
+    "name": "my-cloud-armor-policy",
+    "ruleInfo": {
+      "priority": 1000,
+      "action": "deny(403)",
+      "ruleMatch": {
+        ...
+      }
+    },
+    "outcome": "DENY"
+  }
+}
+```
+
+---
+
+### **✅ 5.** 
+
+### **如何开启并查看这些日志**
+
+1. **确保 Load Balancer 日志已开启**
+    
+    - 转到 Load Balancer > Backend service > Logging > 启用 logging。
+        
+    
+2. **打开 Cloud Logging**
+    
+    - 使用 Logs Explorer（在 Cloud Console 中）
+        
+    
+3. **设置过滤器并保存为视图**
+    
+    - 可使用 Logs View 保存为监控或 Looker Dashboard。
+        
+    
+
+---
+
+### **✅ 6.** 
+
+### **建议输出结构（叶子证书视图）**
+
+|**client_cn**|**issuer_cn**|**fingerprint**|**not_before**|**not_after**|**policy_name**|**policy_outcome**|
+|---|---|---|---|---|---|---|
+|myclient|myca|AB:CD:EF:…|2025-01-01T00:00Z|2026-01-01T00:00Z|my-cloud-armor-policy|DENY|
+
+---
+
+如需进一步分析这些证书，比如解析 Base64 编码的 certInfo 字段获取完整内容，也可以通过 Cloud Function 或脚本导出并使用 openssl 工具解析 DER 格式证书：
+
+```
+echo "MIIC..." | base64 -d > client-cert.der
+openssl x509 -in client-cert.der -inform DER -text -noout
+```
+
+---
+
+如需进一步自动化提取、展示、报警（比如证书即将过期或命中特定策略），可以考虑配合 **Log-based Metrics + Alerting** 或 **BigQuery Export + Looker Studio**。
+
+  
+
+是否需要我提供一个 Log-based Metric 示例或 BigQuery 表结构模板？
