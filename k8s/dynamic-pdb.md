@@ -36,23 +36,23 @@ spec:
 在 Helm 的 values.yaml 文件中，定义 HPA 和 PDB 相关的配置项，确保可以灵活覆盖。例如：
 
 hpa:
-
+```yaml
 enabled: true
 
 minReplicas: 2  # 默认最小副本数
 
 maxReplicas: 10
-
+```
 pdb:
-
+```yaml
 enabled: true  # 默认启用 PDB
 
 minAvailable: 1  # PDB 最小可用 Pod 数
-
+```
 步骤 2：编写 PDB 模板
 
 在 Helm 的模板目录（通常是 templates/）中，创建一个 PDB 模板文件（例如 templates/pdb.yaml），并使用条件逻辑根据 minReplicas 值决定是否渲染 PDB：
-
+```yaml
 {{- if and .Values.pdb.enabled (gt .Values.hpa.minReplicas 1) }}
 
 apiVersion: policy/v1
@@ -74,7 +74,7 @@ matchLabels:
 app: api-service
 
 {{- end }}
-
+```
 - 逻辑说明：
 
 - {{- if and .Values.pdb.enabled (gt .Values.hpa.minReplicas 1) }}：仅当 pdb.enabled=true 且 hpa.minReplicas > 1 时生成 PDB 资源。
@@ -87,9 +87,11 @@ app: api-service
 
 - 覆盖 values.yaml： 创建一个用户特定的 values.yaml 文件（例如 custom-values.yaml）：  
      hpa:
+```yaml
 - enabled: true
 - minReplicas: 1  # 特殊用户设置为 1
 - maxReplicas: 10
+```
 -
 - pdb:
 - enabled: true  # 即使启用 PDB，模板逻辑会因为 minReplicas=1 而跳过 PDB 生成
@@ -127,7 +129,7 @@ app: api-service
 5. 示例完整 Helm Chart
 
 假设你的 Helm Chart 结构如下：
-
+```bash
 my-chart/
 
 ├── templates/
@@ -141,7 +143,7 @@ my-chart/
 ├── Chart.yaml
 
 ├── values.yaml
-
+```
 - templates/pdb.yaml（如上所述）。
 - values.yaml（如上所述）。
 - templates/hpa.yaml（示例，确保与 PDB 配合）：  
