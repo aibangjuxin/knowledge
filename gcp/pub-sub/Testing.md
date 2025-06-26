@@ -17,9 +17,102 @@ sequenceDiagram
     end
 ```
 
-现在访问的 flow 大概如下 部署一个服务在 GKE 里面 比如我们称之为 schedule service 他是一个 Java 开发的应用程序 他会接受不同的 team 一个 team 可能有不 tong 的 API 发送过来的用户请求 schedule service 会将对应 team 的请求发送到这个 team 对应的 pub sub 我们针对每个 team 创建了自己对应的 pub sub 然后这个消息队列会将对应的请求发送到用户最终运行的 backend service
 
-我们现在的业务处理逻辑有一个问题 比如 team A 下面 不同的 API 发送过来的请求都要让同一个 pub 来处理 比如说这个题目 team A API1 和 team A API 2
+你描述的业务流程是：
+
+- 多个 Cloud Scheduler Job（代表不同 API）发送请求
+    
+- Schedule Service 接收请求后根据 team → 发送到指定 team 的 Pub/Sub Topic
+    
+- 每个 Topic 对应一组 Backend Service（每个 API 对应一个）
+    
+
+  
+
+下面是基于你描述的 **完整 mermaid flow**，已加上 team/topic/API 逻辑、Pub/Sub dispatch、多个 Backend Service，并保留 Basic Auth 信息：
+
+---
+
+```mermaid
+sequenceDiagram
+    participant S as Cloud Scheduler<br/>(多个 Scheduler Job)
+    participant G as GKE Deployment<br/>(Schedule Service)
+    participant T as Pub/Sub Topic<br/>per Team (e.g. team-a-topic)
+    participant B1 as Backend Service A1
+    participant B2 as Backend Service A2
+
+    Note over S,G: 每个 Scheduler Job 属于某个 team & API
+
+    S->>+G: 1. Trigger HTTP Request<br/>包含 team / API 信息<br/>Authorization: Basic Base64
+
+    rect rgb(240, 240, 240)
+        Note over G: Schedule Service 内部逻辑<br/>Java 应用
+        G->>+T: 2. 根据 team 推送消息到对应 Pub/Sub Topic
+    end
+
+    T->>+G: 3. Pub/Sub 消息送回 Schedule Service 消费（GKE）
+    
+    rect rgb(240, 240, 240)
+        Note over G: Schedule Service 消费消息并处理<br/>按 API 路由不同 Backend
+        G->>+B1: 4. 转发给 Backend A1<br/>Authorization: Basic Base64
+        B1-->>-G: 5. 返回响应
+        
+        G->>+B2: 6. 转发给 Backend A2<br/>Authorization: Basic Base64
+        B2-->>-G: 7. 返回响应
+    end
+```
+
+---
+
+## **✅ 说明要点**
+
+|**步骤**|**说明**|
+|---|---|
+|Step 1|Scheduler Job 发起请求到 GKE 的 Schedule Service，附带 team + API 信息，使用 Basic Auth|
+|Step 2|Schedule Service 根据 team 推送消息到指定 Pub/Sub Topic（如 team-a-topic）|
+|Step 3|自己消费 Topic（同一个 Pod 订阅自己发送的消息）|
+|Step 4~7|按 API 决定转发给哪个 Backend Service（API1 ➜ B1，API2 ➜ B2）|
+
+---
+
+## **🛠️ 建议优化**
+
+- 若一个 Team 有多个 API，可考虑按 API 拆分不同 Subscription 或 Topic，以避免串行消费影响其他任务；
+    
+- 每条消息建议包含：
+    
+    - team
+        
+    - api
+        
+    - request_url
+        
+    - retry_id（用于幂等）
+        
+    - auth 或内部 token
+        
+    
+- Backend 若部署在 GKE，可通过内部 DNS 如 http://api1.default.svc.jiqun.local 来访问
+    
+
+---
+
+是否还需要我帮你加：
+
+- Retry 行为（如 3 次 Retry 间隔）
+    
+- Pub/Sub 消息失败 DLQ（Dead Letter Queue）流程？
+    
+- Timeout 处理流程？
+    
+
+
+
+现在访问的 flow 大概如下 
+部署一个服务在 GKE 里面 比如我们称之为 schedule service GKE Deployment (Schedule Service)他是一个 Java 开发的应用程序
+他会接受不同的 team 一个 team 可能有不同的 cloud Schedule job 发送过来的任务请求 schedule service 会将对应 team 的请求发送到这个 team 对应的 pub sub 我们针对每个 team 创建了自己对应的 pub sub 然后这个消息队列会将对应的请求发送到用户最终运行的 backend service 当然同一个Team的不同的任务请求对应后面不同的Backend Service
+
+我们现在的业务处理逻辑有一个问题 比如 team A 下面 不同的 API [也可以说是不同的cloud schedule job ]发送过来的请求都要让同一个 pub 来处理 比如说这个题目 team A API1 和 team A API 2
 
 如果 API1 的请求没有返回 那么他就会一直等待 而不会处理 team A API 2 对应的请求
 

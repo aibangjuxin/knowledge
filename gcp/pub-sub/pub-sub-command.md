@@ -13,9 +13,7 @@ gcloud pubsub subscriptions describe your-sub-name
     
 - 也不会展示消费延迟、未 Ack 消息数等 **运行时指标**
 
-
-- ![DLP](./dlq.md)
-
+DLQ规则附带到原始的订阅 然后可以设置对应的规则
 ```bash
 # 为每个用户创建专用的DLQ Topic
 gcloud pubsub topics create schedule-dlq-user-a
@@ -29,6 +27,11 @@ gcloud pubsub subscriptions create schedule-service-user-a \
   --ack-deadline=60s \
   --message-filter='attributes.user_id="user-a"'
 ```
+
+
+- ![DLP](./dlq.md)
+
+
 
 
 
