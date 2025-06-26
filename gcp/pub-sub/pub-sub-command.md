@@ -14,8 +14,26 @@ gcloud pubsub subscriptions describe your-sub-name
 - 也不会展示消费延迟、未 Ack 消息数等 **运行时指标**
 
 
+- ![DLP](./dlq.md)
 
-你可以使用 gcloud scheduler jobs create pubsub 命令来创建调度任务，将消息发布到你指定的 Pub/Sub 主题（例如 aibang-ppd-uk-job-topic）。下面是详细的创建步骤和示例命令。
+```bash
+# 为每个用户创建专用的DLQ Topic
+gcloud pubsub topics create schedule-dlq-user-a
+gcloud pubsub topics create schedule-dlq-user-b
+
+# 创建带DLQ的订阅
+gcloud pubsub subscriptions create schedule-service-user-a \
+  --topic=schedule-topic \
+  --dead-letter-topic=schedule-dlq-user-a \
+  --max-delivery-attempts=3 \
+  --ack-deadline=60s \
+  --message-filter='attributes.user_id="user-a"'
+```
+
+
+
+
+你可以使用 gcloud scheduler jobs create pubsub 命令来创建调度任务，将消息发布到你指定的 Pub/Sub 主题（例如 aibang-lex-eg-job-topic）。下面是详细的创建步骤和示例命令。
 
 ---
 
@@ -26,11 +44,11 @@ gcloud pubsub subscriptions describe your-sub-name
 ### **🔧 示例命令**
 
 ```
-gcloud scheduler jobs create pubsub job-ppd-uk-test-001 \
+gcloud scheduler jobs create pubsub job-lex-eg-test-001 \
   --schedule="*/1 * * * *" \
   --time-zone="Asia/Shanghai" \
-  --topic="aibang-ppd-uk-job-topic" \
-  --message-body='{"job":"ppd-uk","type":"test"}' \
+  --topic="aibang-lex-eg-job-topic" \
+  --message-body='{"job":"lex-eg","type":"test"}' \
   --description="PPD UK test job" \
   --project="your-gcp-project-id" \
   --location="your-region"  # 如 asia-east1
@@ -42,10 +60,10 @@ gcloud scheduler jobs create pubsub job-ppd-uk-test-001 \
 
 |**参数**|**含义**|
 |---|---|
-|job-ppd-uk-test-001|Scheduler Job 名称，需全局唯一|
+|job-lex-eg-test-001|Scheduler Job 名称，需全局唯一|
 |--schedule="*/1 * * * *"|Cron 表达式，表示每分钟执行一次|
 |--time-zone="Asia/Shanghai"|指定时区，便于本地时间对齐|
-|--topic="aibang-ppd-uk-job-topic"|你要发送消息的 Pub/Sub Topic 名称|
+|--topic="aibang-lex-eg-job-topic"|你要发送消息的 Pub/Sub Topic 名称|
 |--message-body='{}'|消息体，可为 JSON 字符串，传入你要调度的信息|
 |--project|指定 GCP 项目 ID|
 |--location|Scheduler Job 所在区域（建议和 Pub/Sub、GKE 服务相同区域）|
@@ -62,12 +80,12 @@ gcloud scheduler jobs create pubsub job-ppd-uk-test-001 \
 #!/bin/bash
 
 PROJECT_ID="your-gcp-project-id"
-TOPIC="aibang-ppd-uk-job-topic"
+TOPIC="aibang-lex-eg-job-topic"
 REGION="asia-east1"
 
 for i in $(seq -w 1 100); do
-  JOB_NAME="job-ppd-uk-load-${i}"
-  MESSAGE="{\"job\":\"ppd-uk-${i}\", \"type\":\"load-test\"}"
+  JOB_NAME="job-lex-eg-load-${i}"
+  MESSAGE="{\"job\":\"lex-eg-${i}\", \"type\":\"load-test\"}"
 
   gcloud scheduler jobs create pubsub $JOB_NAME \
     --schedule="*/1 * * * *" \
@@ -95,7 +113,7 @@ done
 你可以为它授予 Pub/Sub Publisher 权限：
 
 ```
-gcloud pubsub topics add-iam-policy-binding aibang-ppd-uk-job-topic \
+gcloud pubsub topics add-iam-policy-binding aibang-lex-eg-job-topic \
   --member="serviceAccount:[PROJECT_NUMBER]@gcp-sa-cloudscheduler.iam.gserviceaccount.com" \
   --role="roles/pubsub.publisher"
 ```
@@ -116,7 +134,7 @@ gcloud pubsub topics add-iam-policy-binding aibang-ppd-uk-job-topic \
 ```mermaid
 flowchart TD
   subgraph "压测结构"
-    Scheduler1[Scheduler Job 1] --> Pub[aibang-ppd-uk-job-topic]
+    Scheduler1[Scheduler Job 1] --> Pub[aibang-lex-eg-job-topic]
     Scheduler2[Scheduler Job 2] --> Pub
     Scheduler3[Scheduler Job 3] --> Pub
     Pub --> Sub1[Sub-job-1]
@@ -160,7 +178,7 @@ flowchart TD
 ```
 for i in $(seq -w 1 100); do
   gcloud pubsub subscriptions create sub-job-${i} \
-    --topic=aibang-ppd-uk-job-topic \
+    --topic=aibang-lex-eg-job-topic \
     --ack-deadline=60 \
     --message-retention-duration=600s \
     --project=your-project-id
@@ -273,7 +291,7 @@ done
 
 ```
 {
-  "url": "http://backend-service.default.svc.cluster.local/health",
+  "url": "http://backend-service.default.svc.jiqun.local/health",
   "method": "GET",
   "team": "team-a",
   "api": "health-check"
@@ -289,8 +307,8 @@ done
 
 PROJECT_ID="your-gcp-project-id"
 REGION="asia-east1"
-TOPIC="aibang-ppd-uk-job-topic"
-URL="http://backend-service.default.svc.cluster.local/health"
+TOPIC="aibang-lex-eg-job-topic"
+URL="http://backend-service.default.svc.jiqun.local/health"
 
 for i in $(seq -w 1 100); do
   JOB_NAME="job-health-check-${i}"
@@ -354,7 +372,7 @@ kubectl expose deployment health-api --port=80 --target-port=80 --name=health-ap
 然后 Schedule Service 的 URL 就是：
 
 ```
-http://health-api.default.svc.cluster.local/
+http://health-api.default.svc.jiqun.local/
 ```
 
 或者你在容器里跑个返回 200 OK 的简单 Spring Boot 或 Flask /health 接口。
