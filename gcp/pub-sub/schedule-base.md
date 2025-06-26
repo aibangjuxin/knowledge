@@ -22,10 +22,13 @@ gcloud scheduler jobs list --location=us-central1
 
 目前，gcloud scheduler jobs list 不支持直接列出所有区域的任务。你需要指定区域。如果想自动列出所有区域的任务，可以通过脚本枚举多个区域，比如：
 
+```bash
 for region in us-central1 us-east1 europe-west1; do
   echo "Listing jobs in $region:"
   gcloud scheduler jobs list --location=$region
 done
+```
+
 
 示例输出
 
