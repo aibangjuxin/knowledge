@@ -25,8 +25,71 @@
 (a) 整合上述分析，形成一份从监控指标入手，到代码逻辑、再到架构设计的完整排查步骤。
 (b) 查找关于 Pub/Sub 订阅者流控制（Flow Control）的配置，如 `maxOutstandingMessages` 和 `maxOutstandingBytes`，并解释如何通过调整这些参数来防止客户端被突发流量压垮，从而稳定处理速率。
 
+当然可以。根据你最近的问题内容，你的 Pub/Sub 使用场景大致包括：
 
+- 由 **Cloud Scheduler** 触发某个 **Pub/Sub Topic**
+    
+- 消息被推送到一个 **GKE Deployment**（我们可以叫它 Scheduler Service）
+    
+- 该 Deployment 处理完消息后，调用某个 **Backend API**
+    
+- 你还提到每秒 ack_message_count、send_message_count、单线程消费，以及通过多 Pod 并发处理来减少积压
+    
+- 你也分析了 delivery metrics，例如 oldest_unacked_message_age 等
+    
 
+  
+
+描述整个 Pub/Sub 调度和处理流程：Push
+
+```mermaid
+sequenceDiagram
+    participant CS as Cloud Scheduler
+    participant PS as Pub/Sub Topic
+    participant SS as GKE Pod<br/>(Scheduler Service)
+    participant API as Backend API Service
+
+    Note over CS,PS: 定时任务触发消息
+    CS->>+PS: Publish message<br/>(调度指令)
+
+    Note over PS,SS: Pub/Sub 推送消息（Push 模式）
+    PS->>+SS: POST JSON message<br/>+ headers（包括 retry info）
+
+    Note right of SS: 单线程处理<br/>或通过多 Pod 并发处理
+    alt Success
+        SS->>+API: Call backend endpoint<br/>处理任务
+        API-->>-SS: Response
+        SS-->>PS: ack()
+    else Failure or timeout
+        SS-->>PS: nack() or timeout
+        Note right of PS: 进入 retry<br/>根据 retry policy 和<br/>ack_deadline 控制
+    end
+```
+pull 
+---
+```mermaid
+sequenceDiagram
+    participant CS as Cloud Scheduler
+    participant PS as Pub/Sub Topic
+    participant SS as GKE Pod<br/>(Scheduler Service)
+    participant API as Backend API Service
+
+    Note over CS,PS: 定时触发任务
+    CS->>+PS: Publish message
+
+    Note over SS,PS: Pod 主动 PULL 消息（轮询）
+    loop Pull 循环（每个 Pod）
+        SS->>+PS: pull()
+        PS-->>-SS: message batch + ackId
+        alt 成功处理
+            SS->>+API: Call backend API
+            API-->>-SS: Response
+            SS->>PS: acknowledge(ackId)
+        else 失败或超时
+            SS-->>PS: 不调用 ack（自动重新投递）
+        end
+    end
+```
 # 针对GCP Pub/Sub消息积压的全栈式诊断与优化架构报告
 
 ## 第1节：当前架构与性能瓶颈分析
