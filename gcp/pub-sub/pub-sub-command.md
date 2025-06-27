@@ -1,5 +1,6 @@
 下面是对你提到的 3 个 GCP 命令（Pub/Sub Topics、Subscriptions、Cloud Scheduler Jobs）及其相互关系的简洁说明，并附带流程图帮助理解：
 
+
 ---
 
 ## **🔹 概念说明**
@@ -84,14 +85,14 @@ topic: projects/my-gcp-project/topics/my-topic
 
 ## **🧠 字段解释（逐行）**
 
-| **字段**                     | **示例值**                                            | **说明**                                                                                                 |
-| ---------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| **ackDeadlineSeconds**       | 10                                                    | 订阅者在这段时间（秒）内确认消息，否则消息将重新投递。默认是 10 秒。最大 600 秒。                        |
-| **expirationPolicy.ttl**     | 2678400s                                              | 如果订阅在这段时间内没有被使用（即无连接或无活动），则会自动删除。单位是秒（此处为 31 天）。             |
-| **messageRetentionDuration** | 604800s                                               | Topic 中的消息会被保留的时长，即使已经被消费（7 天 = 604800 秒）。这可用于“迟到的订阅者”接收历史消息。   |
-| **name**                     | projects/my-gcp-project/subscriptions/my-subscription | 完整的订阅资源名称，包括项目 ID 和订阅名。                                                               |
+| **字段**                       | **示例值**                                               | **说明**                                                                   |
+| ---------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------ |
+| **ackDeadlineSeconds**       | 10                                                    | 订阅者在这段时间（秒）内确认消息，否则消息将重新投递。默认是 10 秒。最大 600 秒。                            |
+| **expirationPolicy.ttl**     | 2678400s                                              | 如果订阅在这段时间内没有被使用（即无连接或无活动），则会自动删除。单位是秒（此处为 31 天）。                         |
+| **messageRetentionDuration** | 604800s                                               | Topic 中的消息会被保留的时长，即使已经被消费（7 天 = 604800 秒）。这可用于“迟到的订阅者”接收历史消息。            |
+| **name**                     | projects/my-gcp-project/subscriptions/my-subscription | 完整的订阅资源名称，包括项目 ID 和订阅名。                                                  |
 | **pushConfig.pushEndpoint**  | https://my-service.example.com/push-endpoint          | 如果是 Push 模式订阅，Pub/Sub 会将消息 **以 HTTP POST 的形式推送到此 URL**。如果是 Pull 模式则此项为空。 |
-| **topic**                    | projects/my-gcp-project/topics/my-topic               | 当前订阅绑定的 Topic，也就是它接收消息的来源。                                                           |
+| **topic**                    | projects/my-gcp-project/topics/my-topic               | 当前订阅绑定的 Topic，也就是它接收消息的来源。                                               |
 
 ---
 
