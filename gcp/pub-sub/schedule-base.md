@@ -42,7 +42,6 @@ NAME	LOCATION	SCHEDULE	TARGET_TYPE	STATE
 daily-report	us-central1	0 9 * * *	HTTP	ENABLED
 cleanup-task	us-central1	30 3 * * 5	Pub/Sub	ENABLED
 
-感谢您的指正！如果有其他问题，欢迎继续交流！
 
 
 gcloud scheduler jobs describe $scheduler_name --location=us-central1
