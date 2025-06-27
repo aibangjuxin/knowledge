@@ -54,14 +54,14 @@ flowchart TD
 
 使用 **Cloud Monitoring (Stackdriver)** 或 **Grafana/Prometheus** 对比以下指标：
 
-| **指标名**                                                    | **说明**                                |
-| ------------------------------------------------------------- | --------------------------------------- |
-| subscription/num_undelivered_messages                         | Topic 中未被投递的消息数                |
+| **指标名**                                                       | **说明**                 |
+| ------------------------------------------------------------- | ---------------------- |
+| subscription/num_undelivered_messages                         | Topic 中未被投递的消息数        |
 | subscription/num_unacked_messages                             | 已投递但未 ack 的消息数（你现在关注的） |
-| subscription/ack_message_count                                | 成功 ack 的总数                         |
-| subscription/pull_ack_latency                                 | 消费到 ack 的耗时分布                   |
-| subscription/expired_ack_deadlines_count                      | 未 ack 超时导致重新投递的次数           |
-| pubsub.googleapis.com/subscription/oldest_unacked_message_age | 最老未 ack 消息等待时间                 |
+| subscription/ack_message_count                                | 成功 ack 的总数             |
+| subscription/pull_ack_latency                                 | 消费到 ack 的耗时分布          |
+| subscription/expired_ack_deadlines_count                      | 未 ack 超时导致重新投递的次数      |
+| pubsub.googleapis.com/subscription/oldest_unacked_message_age | 最老未 ack 消息等待时间         |
 
 👉 重点看：
 
