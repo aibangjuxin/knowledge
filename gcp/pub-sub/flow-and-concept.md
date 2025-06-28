@@ -199,15 +199,62 @@ Note over Pod1,Pod2:
                 - 当消息处理失败时，Pub/Sub 会根据指数退避算法（指数退避算法）重新路由消息，直到达到最大重试次数（maxDeliveryAttempts）
             - [maxBackoffDuration](./pub-sub-max-delivery-attempts.md#2-maxbackoffdurationcloud-scheduler)
                 - []
-        - [Subscriptions](./pub-sub-subscription.md)
-    - DLQ
+        - [Subscriptions](./pub-sub-subscriptions.md)
+	        - ackDeadlineSeconds
+  	        - 个人理解因为ackDeadlineSeconds等于是一个总开关一样,后面的时间处理都不应该超过这个时间
+  	        - 确保在 PULL 模式下，所有处理都在 ackDeadlineSeconds 限制内完成，以避免消息堆积
+    	        - [方案1: 客户端控制超时 (推荐)](./pub-sub-subscriptions.md#方案1-客户端控制超时-推荐)
+    	        - [方案2: 快速失败 + 智能重试](./pub-sub-subscriptions.md#方案2-快速失败--智能重试)
+    	        - [方案3. 快速失败的 HTTP 配置](./pub-sub-subscriptions.md#方案3-快速失败的-http-配置)
+	        ```bash
+            ackDeadlineSeconds: 600s (10分钟)
+            Kong 超时: 6分钟 × 3次重试 = 18分钟
+            重试间隔: 0s + 10s + 20s = 30s  
+            总处理时间: ≈ 18分30秒 >> 600s ❌
+            ```
+	        - the ackDeadlineSeconds flow
+	        - the flow next
+```mermaid
+	sequenceDiagram
+    participant PS as Pub/Sub Server
+    participant SS as Schedule Service
+    participant Kong as Kong Gateway
+    participant BS as Backend Service
+    
+    Note over PS,BS: ackDeadlineSeconds 计时开始 ⏰
+    PS->>SS: 消息可供拉取 (available)
+    SS->>PS: Pull Request
+    PS->>SS: 返回消息 (delivery)
+    
+    Note over SS: 消息处理开始
+    SS->>SS: 解析消息
+    SS->>Kong: HTTP请求 (Retry 1)
+    Kong->>BS: 转发请求
+    BS-->>Kong: 响应超时/失败
+    Kong-->>SS: 超时响应
+    
+    SS->>Kong: HTTP请求 (Retry 2) 
+    Kong->>BS: 转发请求
+    BS-->>Kong: 响应超时/失败
+    Kong-->>SS: 超时响应
+    
+    SS->>Kong: HTTP请求 (Retry 3)
+    Kong->>BS: 转发请求
+    BS-->>Kong: 成功响应
+    Kong-->>SS: 成功响应
+    
+    SS->>PS: ACK 确认
+    Note over PS,BS: ackDeadlineSeconds 计时结束 ⏹️
+```
+
+- DLQ
         - [DLQ](./dlq.md)
             - 当消息处理失败时，Pub/Sub 会将消息重新路由到 DLQ
             - 如果原来的 subscription 没有配置 DLQ，那么需要 update subscription，添加 DLQ
             - pub-sub ==> maxDeliveryAttempts
                 - 用于控制消息进入死信队列 DLQ 的时机
                 - [pub-sub-max-delivery-attempts](./pub-sub-max-delivery-attempts.md)
-    -
+
 
 - monitor
 
