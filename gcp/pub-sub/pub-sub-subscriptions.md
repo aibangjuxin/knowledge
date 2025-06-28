@@ -217,8 +217,6 @@ public class PubSubMetrics {
 
 ## 你的理解完全正确！这个时间窗口覆盖了从消息可供拉取到 ACK 确认的整个生命周期。
 
-
-
 ## PULL 模式下的 gcloud 命令输出
 
 ```bash
@@ -250,50 +248,50 @@ flowControlSettings:
 sequenceDiagram
     participant PS as Pub/Sub Server
     participant SS as Schedule Service (PULL)
-    participant Kong as Kong Gateway  
+    participant Kong as Kong Gateway
     participant BS as Backend Service
-    
+
     SS->>PS: Pull Request (主动拉取)
     Note over PS,BS: ackDeadlineSeconds = 600s 计时开始 ⏰
     PS->>SS: 返回消息批次
-    
+
     Note over SS: 开始处理消息
     SS->>SS: 解析消息
     SS->>Kong: HTTP请求 (第1次)
     Kong->>BS: 转发
-    
+
     alt Backend Service 响应慢
         BS-->>Kong: 6分钟后超时
         Kong-->>SS: 超时响应
-        
+
         Note over SS: 等待 0s
-        SS->>Kong: HTTP请求 (第2次)  
+        SS->>Kong: HTTP请求 (第2次)
         Kong->>BS: 转发
         BS-->>Kong: 6分钟后超时
         Kong-->>SS: 超时响应
-        
+
         Note over PS: ⚠️ 如果总时间 > 600s
         Note over PS: 消息将被重新投递!
-        
+
         Note over SS: 等待 10s
         SS->>Kong: HTTP请求 (第3次)
         Kong->>BS: 转发
         BS-->>Kong: 成功响应
         Kong-->>SS: 成功响应
     end
-    
+
     SS->>PS: ACK 确认
     Note over PS,BS: ackDeadlineSeconds 计时结束 ⏹️
 ```
 
 ## PULL 模式的关键特性
 
-|特性|PULL 模式|影响|
-|---|---|---|
-|**消息拉取**|Schedule Service 主动 Pull|可控制拉取频率和批量大小|
-|**并发控制**|客户端控制 `maxOutstandingMessages`|可设置未ACK消息的上限|
-|**超时计算**|从 Pull 成功返回开始计时|**不包括** Pull Request 的网络时间|
-|**重新投递**|600s 后消息重新可被拉取|可能被同一实例或其他实例拉取|
+| 特性         | PULL 模式                           | 影响                               |
+| ------------ | ----------------------------------- | ---------------------------------- |
+| **消息拉取** | Schedule Service 主动 Pull          | 可控制拉取频率和批量大小           |
+| **并发控制** | 客户端控制 `maxOutstandingMessages` | 可设置未 ACK 消息的上限            |
+| **超时计算** | 从 Pull 成功返回开始计时            | **不包括** Pull Request 的网络时间 |
+| **重新投递** | 600s 后消息重新可被拉取             | 可能被同一实例或其他实例拉取       |
 
 ## 当前配置问题分析
 
@@ -302,20 +300,20 @@ sequenceDiagram
 ```
 ackDeadlineSeconds: 600s (10分钟)
 Kong 超时: 6分钟 × 3次重试 = 18分钟
-重试间隔: 0s + 10s + 20s = 30s  
+重试间隔: 0s + 10s + 20s = 30s
 总处理时间: ≈ 18分30秒 >> 600s ❌
 ```
 
 ## PULL 模式优化方案
 
-### 方案1: 客户端控制超时 (推荐)
+### 方案 1: 客户端控制超时 (推荐)
 
 ```java
 @Component
 public class PubSubPullService {
-    
+
     private final Subscriber subscriber;
-    
+
     @PostConstruct
     public void startPulling() {
         MessageReceiver receiver = (message, consumer) -> {
@@ -328,7 +326,7 @@ public class PubSubPullService {
                     consumer.nack(); // 失败时NACK，让消息重新可拉取
                 }
             });
-            
+
             // 580s 超时控制，留20s缓冲
             try {
                 processingFuture.get(580, TimeUnit.SECONDS);
@@ -337,7 +335,7 @@ public class PubSubPullService {
                 consumer.nack();
             }
         };
-        
+
         subscriber = Subscriber.newBuilder(subscriptionName, receiver)
             .setParallelPullCount(4)                    // 4个并行拉取线程
             .setMaxAckExtensionPeriod(Duration.ofSeconds(600))  // 匹配 ackDeadlineSeconds
@@ -346,51 +344,51 @@ public class PubSubPullService {
                 .setMaxOutstandingRequestBytes(50L * 1024L * 1024L) // 50MB
                 .build())
             .build();
-            
+
         subscriber.startAsync().awaitRunning();
     }
 }
 ```
 
-### 方案2: 快速失败 + 智能重试
+### 方案 2: 快速失败 + 智能重试
 
 ```java
 @Service
 public class MessageProcessingService {
-    
+
     @Retryable(value = {Exception.class}, maxAttempts = 4)
     @Timeout(value = 580, unit = ChronoUnit.SECONDS) // 总超时580s
     public void processMessage(PubsubMessage message) {
-        
+
         // 单次请求快速失败
         RestTemplate fastFailRestTemplate = createFastFailRestTemplate();
-        
+
         try {
             String response = fastFailRestTemplate.postForObject(
-                backendUrl, 
-                buildRequest(message), 
+                backendUrl,
+                buildRequest(message),
                 String.class
             );
-            
+
             log.info("Message processed successfully: {}", response);
-            
+
         } catch (Exception e) {
             log.warn("Attempt failed, will retry: {}", e.getMessage());
             throw e; // 触发重试
         }
     }
-    
+
     private RestTemplate createFastFailRestTemplate() {
-        HttpComponentsClientHttpRequestFactory factory = 
+        HttpComponentsClientHttpRequestFactory factory =
             new HttpComponentsClientHttpRequestFactory();
-        
+
         // 快速失败配置
         factory.setConnectTimeout(3000);    // 3s 连接超时
         factory.setReadTimeout(90000);      // 90s 读取超时 (而不是6分钟)
-        
+
         return new RestTemplate(factory);
     }
-    
+
     @Backoff(delay = 5000, multiplier = 1.5, maxDelay = 60000)
     public void processMessage(PubsubMessage message) {
         // 重试逻辑
@@ -398,7 +396,7 @@ public class MessageProcessingService {
 }
 ```
 
-### 方案3: 修改 ackDeadlineSeconds (如果可能)
+### 方案 3: 修改 ackDeadlineSeconds (如果可能)
 
 ```bash
 # 检查是否可以修改 ackDeadlineSeconds
@@ -406,7 +404,7 @@ gcloud pubsub subscriptions update SUBSCRIPTION_NAME \
     --ack-deadline=600
 
 # 注意：GCP Pub/Sub 的最大值限制
-# 标准订阅: 最大 600s (10分钟)  
+# 标准订阅: 最大 600s (10分钟)
 # 有序订阅: 最大 600s (10分钟)
 ```
 
@@ -436,14 +434,14 @@ spring:
         subscriber:
           parallel-pull-count: 4
           max-ack-extension-period: 600s
-          pull-timeout: 30s                    # PULL 请求超时
+          pull-timeout: 30s # PULL 请求超时
           flow-control:
-            max-outstanding-element-count: 100  # 未ACK消息数限制
-            max-outstanding-request-bytes: 52428800  # 50MB
-          
-# 消息处理超时配置            
+            max-outstanding-element-count: 100 # 未ACK消息数限制
+            max-outstanding-request-bytes: 52428800 # 50MB
+
+# 消息处理超时配置
 message-processing:
-  timeout: 580s                # 小于 ackDeadlineSeconds
+  timeout: 580s # 小于 ackDeadlineSeconds
   retry:
     max-attempts: 4
     backoff:
@@ -457,30 +455,30 @@ message-processing:
 ```java
 @Configuration
 public class HttpClientConfig {
-    
+
     @Bean
     @Primary
     public RestTemplate quickFailRestTemplate() {
-        PoolingHttpClientConnectionManager connectionManager = 
+        PoolingHttpClientConnectionManager connectionManager =
             new PoolingHttpClientConnectionManager();
         connectionManager.setMaxTotal(50);
         connectionManager.setDefaultMaxPerRoute(10);
-        
+
         RequestConfig requestConfig = RequestConfig.custom()
             .setConnectTimeout(3000)           // 3s 连接
             .setSocketTimeout(120000)          // 2分钟读取 (不是6分钟)
             .setConnectionRequestTimeout(1000) // 1s 获取连接
             .build();
-            
+
         CloseableHttpClient httpClient = HttpClients.custom()
             .setConnectionManager(connectionManager)
             .setDefaultRequestConfig(requestConfig)
             .setRetryHandler(new DefaultHttpRequestRetryHandler(0, false)) // 禁用HTTP层重试
             .build();
-            
-        HttpComponentsClientHttpRequestFactory factory = 
+
+        HttpComponentsClientHttpRequestFactory factory =
             new HttpComponentsClientHttpRequestFactory(httpClient);
-            
+
         return new RestTemplate(factory);
     }
 }
@@ -488,14 +486,14 @@ public class HttpClientConfig {
 
 ## 推荐时间配置
 
-|组件|超时配置|说明|
-|---|---|---|
-|**ackDeadlineSeconds**|600s|Pub/Sub 最大限制|
-|**HTTP ConnectTimeout**|3s|快速发现网络问题|
-|**HTTP ReadTimeout**|120s|单次请求2分钟上限|
-|**应用层重试次数**|4次|在580s内完成|
-|**重试间隔**|3s, 4.5s, 6.75s, 10s|指数退避|
-|**总处理超时**|580s|留20s缓冲给ACK|
+| 组件                    | 超时配置             | 说明                |
+| ----------------------- | -------------------- | ------------------- |
+| **ackDeadlineSeconds**  | 600s                 | Pub/Sub 最大限制    |
+| **HTTP ConnectTimeout** | 3s                   | 快速发现网络问题    |
+| **HTTP ReadTimeout**    | 120s                 | 单次请求 2 分钟上限 |
+| **应用层重试次数**      | 4 次                 | 在 580s 内完成      |
+| **重试间隔**            | 3s, 4.5s, 6.75s, 10s | 指数退避            |
+| **总处理超时**          | 580s                 | 留 20s 缓冲给 ACK   |
 
 这样配置可以确保在 PULL 模式下，所有处理都在 `ackDeadlineSeconds` 限制内完成。
 
@@ -546,8 +544,8 @@ public class HttpClientConfig {
 2. 你的服务（HTTP Server）接收 POST 请求；
 3. 如果你的服务返回 **2xx 响应（如 200 OK、204 No Content）**：
 
-    - ✅ Pub/Sub 认为消息“已确认”（acknowledged）；
-    - ❌ 否则（4xx, 5xx, 超时、断开连接等），Pub/Sub 会将消息重新投递，直到 ack 成功或超出保留时间。
+   - ✅ Pub/Sub 认为消息“已确认”（acknowledged）；
+   - ❌ 否则（4xx, 5xx, 超时、断开连接等），Pub/Sub 会将消息重新投递，直到 ack 成功或超出保留时间。
 
 ---
 
@@ -602,9 +600,9 @@ sequenceDiagram
 ## **🧪 实践建议**
 
 - **Push 模式**下，确保 pushEndpoint 的 HTTP 服务：
-    - 响应足够快；
-    - 保证 2xx 状态码返回；
-    - 使用 **X-Goog-Channel-Token** 等 header 验证安全性；
+  - 响应足够快；
+  - 保证 2xx 状态码返回；
+  - 使用 **X-Goog-Channel-Token** 等 header 验证安全性；
 - 如果处理逻辑复杂，考虑 **Pull 模式**，更可控。
 
 ---
@@ -612,3 +610,61 @@ sequenceDiagram
 是否需要我帮你展示如何配置一个 pushEndpoint 接收 Pub/Sub 消息？或者你在使用的是哪种类型订阅（Pull 还是 Push）我可以继续针对性说明。
 
 > **ackDeadlineSeconds 实际就是你整个 E2E 链路中，从 Pub/Sub 发送消息 到 你（后端服务）确认消息处理完毕 之间允许的最大时间窗口**。
+
+ackDeadlineSeconds 在 Google Cloud Pub/Sub 中确实是一个非常关键的“总开关”或“计时器”，尤其是在 PULL 模式下。它定义了 Pub/Sub
+服务在将消息发送给订阅者后，等待订阅者确认（ACK）该消息的最长时间。
+
+ackDeadlineSeconds 的核心作用
+
+ackDeadlineSeconds 的核心作用是：
+
+1.  消息可见性控制： 当 Pub/Sub 将一条消息发送给订阅者后，这条消息在 ackDeadlineSeconds
+    期间内对其他订阅者（或同一订阅者的其他实例）是不可见的。这确保了消息的独占处理。
+2.  消息重投递机制： 如果订阅者未能在 ackDeadlineSeconds 内确认消息，Pub/Sub
+    会认为该消息未被成功处理，并将其重新投递给订阅者（可能是同一个订阅者实例，也可能是其他实例）。这保证了消息的至少一次（at-least-once）投递语义。
+3.  防止消息堆积： 适当配置 ackDeadlineSeconds
+    对于防止消息堆积至关重要。如果处理时间超过这个期限，消息会被反复重投递，导致订阅中未确认消息的数量增加，甚至可能导致消息处理的无限循环。
+
+在 PULL 模式下的具体影响
+
+在 PULL 模式下，订阅者主动向 Pub/Sub 服务请求消息。一旦消息被拉取并发送给订阅者，ackDeadlineSeconds 的计时就开始了。
+
+- 理想情况： 订阅者在 ackDeadlineSeconds 内完成消息处理，并发送 ACK 请求。Pub/Sub 收到 ACK 后，将消息从订阅中移除。
+- 非理想情况（消息堆积原因）：
+  - 处理时间过长： 订阅者处理消息的逻辑耗时超过了 ackDeadlineSeconds。
+  - ACK 请求失败： 订阅者处理完消息，但由于网络问题或其他原因未能及时发送 ACK 请求。
+  - 订阅者崩溃： 订阅者在处理消息期间崩溃，未能发送 ACK。
+
+在上述非理想情况下，消息会在 ackDeadlineSeconds 到期后被重新投递，从而导致 unacked_messages_by_region 指标的增加。
+
+流程图：PULL 模式下 ackDeadlineSeconds 的影响
+
+```mermaid
+    graph TD;
+         A[订阅者发起Pull请求] --> B[Pub/Sub发送消息];
+         B --> C{ackDeadlineSeconds计时开始};
+         C --> D[订阅者接收消息];
+         D --> E[订阅者处理消息];
+    E -- 处理完成 --> F{在ackDeadlineSeconds内发送ACK?};
+    F -- 是 --> G[Pub/Sub收到ACK];
+    G --> H[消息从订阅中移除];
+
+   F -- 否 (超时/失败) --> I[ackDeadlineSeconds到期];
+   I --> J[消息重新变为可见/待投递];
+   J --> B;
+
+   subgraph 监控
+   I -- 导致 --> K[unacked_messages_by_region 增加];
+   end
+```
+总结
+
+
+  因此，你的理解是完全正确的。为了避免在 PULL 模式下消息堆积，确保你的订阅者应用程序能够在 `ackDeadlineSeconds` 
+  内完成消息的处理并发送确认信号。如果消息处理时间确实很长，你可以考虑：
+
+
+   * 延长 `ackDeadlineSeconds`： 在订阅配置中增加这个值，但要注意不要设置过长，以免消息长时间不被确认。
+   * 使用 `ModifyAckDeadline`： 在处理消息期间，订阅者可以周期性地调用 ModifyAckDeadline 来延长特定消息的确认截止时间，为复杂或耗时的处理争取更多时间。
+   * 优化消息处理逻辑： 提高订阅者的处理效率。
+   * 增加订阅者实例： 提高并发处理能力。
