@@ -196,3 +196,14 @@ AI's Ubiquitous Presence
 
 书本上啥都有，怎么就不见你上清华呢
 只是都在那里 我怎么没有成为pipeline专家呢？
+
+
+# Gemini Cli 
+- ![install-gemini.png](./install-gemini.png)
+- 
+```bash
+npm install -g @google/gemini-cli
+gemini
+```
+- ![gemin-push.png](./gemini-push.png)
+
