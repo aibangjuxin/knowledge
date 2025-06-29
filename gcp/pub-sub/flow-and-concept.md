@@ -1,3 +1,21 @@
+   1. 任务触发：Cloud Scheduler 按预定计划，向指定的 Pub/Sub Topic 发布一条消息。
+   2. 消息路由：Pub/Sub Topic 接收到消息后，立即将其路由到所有关联的 Subscription。
+   3. 消息消费 (StreamingPull)：
+       * GKE 中的每个 Pod 都作为一个独立的订阅者客户端，与 Subscription 建立一个持久的 gRPC StreamingPull 连接。
+       * Pub/Sub 通过这些长连接实时地将消息流式传输给可用的 Pod。
+   4. 任务处理：
+       * Pod 收到消息后，调用后端的 Backend API 来执行实际的业务逻辑。
+   5. 结果反馈 (ACK/NACK)：
+       * 成功路径：如果 Backend API 在预设时间内成功返回，Pod 会向 Pub/Sub 发送一个 ACK（确认）信号，该消息被视为处理完毕，将从订阅中永久删除。
+       * 失败路径：如果 Backend API 返回错误或处理超时，Pod 不会发送 ACK。
+   6. 自动重试：
+       * 对于未被 ACK 的消息，一旦其 ackDeadlineSeconds 到期，Pub/Sub 会认为该消息处理失败，并将其重新投递给一个可用的消费者（可能是同一个 Pod 或其他
+         Pod）。
+   7. 死信队列 (DLQ)：
+       * 如果在多次重试（由 maxDeliveryAttempts 参数定义）后，某条消息仍然无法被成功处理，Pub/Sub 会停止重试，并将其发送到预先配置好的 Dead Letter Queue 
+         (DLQ) 中。这可以防止“毒消息”无限循环，阻塞整个系统。
+   8. 并发扩展：
+       * 当消息量增大时，只需增加 GKE 中 Pod 的副本数。每个新的 Pod 都会建立自己的 StreamingPull 连接，从而线性地提升整个系统的消息处理能力。
 - the streaming pull
 
 ```mermaid
