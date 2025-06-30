@@ -1,5 +1,7 @@
 gcloud pubsub subscriptions describe
 
+https://cloud.google.com/pubsub/docs/concurrency-control?hl=zh-cn#java
+
 # ackDeadlineSecends
 
 比如这个配置
