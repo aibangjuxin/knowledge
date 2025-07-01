@@ -297,6 +297,40 @@ sequenceDiagram
         end
     end
 ```
+- fix this one 
+```mermaid
+sequenceDiagram
+    participant CS as Cloud Scheduler
+    participant PS as Pub/Sub Topic<br/>(含 StreamingPull 服务)
+    participant Pod1 as GKE Pod #1<br/>(Scheduler Client)
+    participant Pod2 as GKE Pod #2<br/>(Scheduler Client)
+    participant API as Backend API
+
+    Note over CS,PS: 定时触发任务
+    CS->>+PS: Publish message
+
+    Note over Pod1,PS: 每个 Pod 与 Pub/Sub 建立 gRPC StreamingPull
+
+    opt Pod #1 StreamingPull 流
+        Pod1->>+PS: 建立 gRPC StreamingPull
+        loop 持续处理消息
+            PS-->>Pod1: message + ackId
+            Pod1->>PS: acknowledge(ackId)
+            Pod1->>+API: 调用后端 API（异步处理）
+            API-->>-Pod1: 返回响应
+        end
+    end
+
+    opt Pod #2 StreamingPull 流
+        Pod2->>+PS: 建立 gRPC StreamingPull
+        loop 持续处理消息
+            PS-->>Pod2: message + ackId
+            Pod2->>PS: acknowledge(ackId)
+            Pod2->>+API: 调用后端 API（异步处理）
+            API-->>-Pod2: 返回响应
+        end
+    end
+```
 
 Note over Pod1,Pod2:
     - 每个 Pod 是独立的 Subscriber Client
@@ -366,7 +400,39 @@ Note over Pod1,Pod2:
     SS->>PS: ACK 确认
     Note over PS,BS: ackDeadlineSeconds 计时结束 ⏹️
 ```
+- fix 
+```mermaid
+sequenceDiagram
+    participant PS as Pub/Sub Server
+    participant SS as Schedule Service<br/>(GKE Pod)
+    participant Kong as Kong Gateway
+    participant BS as Backend Service
 
+    Note over PS: ackDeadlineSeconds 计时开始 ⏰
+    PS->>SS: 消息可供拉取 (available)
+    SS->>PS: Pull Request
+    PS->>SS: 返回消息 (delivery)
+
+    Note over SS: 接收消息即刻 ACK
+    SS->>PS: ACK 确认 ✅
+    Note over PS: ackDeadlineSeconds 计时结束 ⏹️
+
+    SS->>SS: 解析消息
+    SS->>Kong: HTTP请求 (Retry 1)
+    Kong->>BS: 转发请求
+    BS-->>Kong: 响应超时/失败
+    Kong-->>SS: 超时响应
+
+    SS->>Kong: HTTP请求 (Retry 2)
+    Kong->>BS: 转发请求
+    BS-->>Kong: 响应超时/失败
+    Kong-->>SS: 超时响应
+
+    SS->>Kong: HTTP请求 (Retry 3)
+    Kong->>BS: 转发请求
+    BS-->>Kong: 成功响应
+    Kong-->>SS: 成功响应
+```
 - DLQ
         - [DLQ](./dlq.md)
             - 当消息处理失败时，Pub/Sub 会将消息重新路由到 DLQ
