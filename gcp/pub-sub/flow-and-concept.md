@@ -125,6 +125,30 @@ sequenceDiagram
         end
     end
 ```
+fix this one 
+
+```mermaid
+sequenceDiagram
+    participant CS as Cloud Scheduler
+    participant PS as Pub/Sub Topic<br/>(Server端也负责 StreamingPull)
+    participant SS as GKE Pod<br/>(Scheduler Service)
+    participant API as Backend API
+
+    Note over CS,PS: 定时任务触发
+    CS->>+PS: Publish message
+
+    Note over SS,PS: GKE Pod 使用 gRPC StreamingPull 拉取消息
+
+    opt GKE Pod 与 Pub/Sub 建立 StreamingPull（长连接）
+        SS->>+PS: 建立 gRPC StreamingPull 连接
+        loop 消息持续流式传输
+            PS-->>SS: stream message<br/>+ ackId
+            SS->>PS: acknowledge(ackId)
+            SS->>+API: 调用后端 API（异步处理）
+            API-->>-SS: Response
+        end
+    end
+```
 
 ```mermaid
 sequenceDiagram
@@ -169,6 +193,55 @@ sequenceDiagram
 
     Note over Pod1,Pod2: ⬆️ 扩容多个 Pod 即增加并发 StreamingPull 能力
 ```
+- fix this one 
+```mermaid
+sequenceDiagram
+    participant CS as Cloud Scheduler
+    participant PS as Pub/Sub Topic<br/>(含 StreamingPull 服务)
+    participant Pod1 as GKE Pod #1<br/>(Scheduler Client)
+    participant Pod2 as GKE Pod #2<br/>(Scheduler Client)
+    participant API as Backend API
+
+    Note over CS,PS: 定时触发任务
+    CS->>+PS: Publish message
+
+    Note over Pod1,PS: 每个 Pod 与 Pub/Sub 建立 gRPC StreamingPull
+
+    opt Pod #1 StreamingPull 流
+        Pod1->>+PS: 建立 gRPC StreamingPull
+        loop 持续处理消息
+            PS-->>Pod1: message + ackId
+            Pod1->>PS: acknowledge(ackId)
+            Pod1->>+API: 调用后端 API（异步处理）
+            API-->>-Pod1: 返回响应
+        end
+    end
+
+    opt Pod #2 StreamingPull 流
+        Pod2->>+PS: 建立 gRPC StreamingPull
+        loop 持续处理消息
+            PS-->>Pod2: message + ackId
+            Pod2->>PS: acknowledge(ackId)
+            Pod2->>+API: 调用后端 API（异步处理）
+            API-->>-Pod2: 返回响应
+        end
+    end
+
+    Note over Pod1,Pod2: ⬆️ 扩容多个 Pod 即增加并发 StreamingPull 能力
+```
+
+以下是你提供的时序图的修复版本，已将 ack 与后端 API 调用解耦，符合你目前的实际逻辑 —— GKE 中的多个 Pod 一旦拉取到消息就立即 ack，不等待后端处理完成
+✅ 修复关键点：
+
+修复内容	说明
+ack 提前	ack 操作在收到消息后立即执行
+后端调用独立	调用后端 API 不再决定是否 ack，逻辑上解耦
+多 Pod 拉取并发能力	每个 Pod 都有独立 StreamingPull 连接并独立 ack
+
+
+⸻
+
+这个图现在准确反映了 Pub/Sub StreamingPull 的客户端 ack 模型，并且支持横向扩容多个 Pod 并发拉取和独立处理。如果你下一步想对 “失败重试”、“DLQ”、“重放消息” 建模，也可以继续扩展这张图。需要的话可以告诉我场景，我来画。
 
 - About 扩容多个 Pod 即增加并发 StreamingPull 能力
 
