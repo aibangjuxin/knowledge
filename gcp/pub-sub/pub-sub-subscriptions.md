@@ -4,6 +4,81 @@ https://cloud.google.com/pubsub/docs/concurrency-control?hl=zh-cn#java
 
 # ackDeadlineSecends
 
+是的，你的理解 基本正确，但需要更精确一点。下面我来给你详细解释下 ackDeadlineSeconds 的意义、客户端 ack 的时机，以及它和后端服务之间的关系：
+
+⸻
+
+✅ ackDeadlineSeconds 的真实含义
+
+这是 Pub/Sub 服务端为某条消息设定的“期望客户端处理完成并 ack 的最大时间”，从消息被投递（Push 模式）或被拉取（Pull 模式）开始计时。
+
+默认值为 10 秒，最大可以配置到 600 秒（10 分钟），客户端可以通过 lease extension 自动延长这个时间。
+
+⸻
+
+🔄 Pull 模式下的 ack 生命周期
+
+以你使用的 Java Subscriber 客户端为例（拉模式）：
+
+subscriber.startAsync();
+
+一条消息的处理流程如下：
+
+Pub/Sub 发送消息 -> 客户端收到 -> 调用 MessageReceiver.receiveMessage(msg, ackHandler)
+
+此时你有两个选择：
+	•	ackHandler.ack() ✅ 表示这条消息已经被成功处理（不再重投）
+	•	ackHandler.nack() ❌ 表示处理失败，Pub/Sub 会在 ackDeadline 过期后重新投递消息
+
+⸻
+
+❗️关键点澄清
+
+问题	说明
+拉取到消息后立即 ack，可以吗？	✅ 是的。你可以在一拉取就 ack（哪怕还没发给后端服务），Pub/Sub 就认为这条消息已完成，不会再重试。
+ack 与后端服务处理是否强绑定？	❌ 没有绑定。Pub/Sub 不知道你消息内部的业务逻辑处理情况，只认你是否 ack() 了这条消息。
+如果你 pull 到后出错没 ack 呢？	⏳ Pub/Sub 会在 ackDeadline 到期后重试投递该消息，直到 ack 或达到 maxDeliveryAttempts（Dead Letter）
+
+
+⸻
+
+🧪 示例：错误 ack 导致消息丢失（风险提醒）
+
+MessageReceiver receiver =
+    (PubsubMessage message, AckReplyConsumer consumer) -> {
+        consumer.ack();  // 你还没处理就 ack 了
+
+        // 异步调用后端服务
+        callBackendService(message.getData());
+    };
+
+这种写法是危险的，因为如果 callBackendService() 调用失败或超时，消息也不会重投 —— 因为你已经 ack 了。
+
+⸻
+
+✅ 正确实践建议
+
+MessageReceiver receiver =
+    (PubsubMessage message, AckReplyConsumer consumer) -> {
+        try {
+            callBackendService(message.getData());
+            consumer.ack();  // 确认处理成功再 ack
+        } catch (Exception e) {
+            consumer.nack(); // 通知 Pub/Sub 重投
+        }
+    };
+
+
+⸻
+
+📌 总结一句话
+
+你 ack 消息的时机是关键：一旦 ack，Pub/Sub 就认为这条消息生命周期结束。至于你是否真的处理完、是否调用了后端服务，Pub/Sub 不会也无法感知。
+
+⸻
+
+是否需要我画一个流图来展示 ack 和后端请求之间的关系（并不耦合）？
+
 好的，下面是一个展示 Java Pub/Sub 客户端 ack 消息与后端调用之间的解耦关系 的 Mermaid 流程图，重点说明：
 	•	ack() 结束 Pub/Sub 投递生命周期
 	•	后端调用与 Pub/Sub 无感知
