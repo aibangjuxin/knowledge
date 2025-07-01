@@ -4,6 +4,49 @@ https://cloud.google.com/pubsub/docs/concurrency-control?hl=zh-cn#java
 
 # ackDeadlineSecends
 
+好的，下面是一个展示 Java Pub/Sub 客户端 ack 消息与后端调用之间的解耦关系 的 Mermaid 流程图，重点说明：
+	•	ack() 结束 Pub/Sub 投递生命周期
+	•	后端调用与 Pub/Sub 无感知
+	•	错误 ack 会导致消息丢失
+
+⸻
+
+```mermaid
+flowchart TD
+    subgraph Pub/Sub
+        A[投递消息] --> B[Java Client 拉取消息]
+    end
+
+    B --> C[调用 receiveMessagemsg, ackHandler]
+
+    subgraph Java Client
+        C --> D{是否立即 ack}
+
+        D -- 是 --> E[ackHandler.ack]
+        E --> F[Pub/Sub 标记消息完成<br>不会重试]
+        E --> G[异步调用后端服务]:::gray
+
+        D -- 否 --> H[调用后端服务]
+        H --> I{调用成功？}
+
+        I -- 是 --> J[ackHandler.ack] --> F
+        I -- 否 --> K[ackHandler.nack] --> L[Pub/Sub 重试消息]
+    end
+
+    classDef gray fill=#e8e8e8,color=#888
+```
+
+⸻
+
+🧠 图示说明
+	•	你可以在 处理前就 ack，Pub/Sub 就“认为你成功了”，哪怕后面失败了也不会再投递。
+	•	推荐模式是：先处理 → 成功后再 ack，失败则 nack。
+	•	ackDeadlineSeconds 是客户端自动延长的（在后台完成），你不需要手动管除非你写的是底层 API。
+
+⸻
+
+如果你未来想做更复杂的场景（比如部分 ack、幂等重试、dead-letter queue），也可以继续扩展这套模型。是否需要我也补上 DLQ 场景？
+
 比如这个配置
 ackDeadlineSeconds 详解
 时间范围: 从 Pub/Sub 向客户端发送消息开始，到客户端发送 ACK 确认为止的时间窗口
