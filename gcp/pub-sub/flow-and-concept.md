@@ -65,6 +65,35 @@ sequenceDiagram
     end
 ```
 
+fix this one 
+```mermaid
+sequenceDiagram
+    %% 上层业务流程
+    participant CS as Cloud Scheduler
+    participant PS as Pub/Sub Topic
+    participant SS as GKE Pod<br/>(Scheduler Service)
+    participant API as Backend API
+
+    Note over CS,PS: 定时任务触发
+    CS->>+PS: Publish message
+
+    Note over SS,PS: GKE Pod 使用 gRPC StreamingPull 拉取消息
+
+    %% 内部 StreamingPull 流程作为子图展开
+    rect rgb(240, 240, 255)
+        participant SS as GKE Pod<br/>(Subscriber Client)
+        participant GRPC as Pub/Sub Server<br/>(StreamingPull)
+
+        SS->>+GRPC: 建立 gRPC StreamingPull 连接
+        loop 持续消息流
+            GRPC-->>SS: stream message<br/>+ ackId
+            SS->>GRPC: acknowledge(ackId)
+            SS->>+API: 调用后端 API（异步或独立处理）
+            API-->>-SS: Response
+        end
+    end
+```
+
 - merged
     - core concept
     - 开启并发 [StreamingPull](./pub-sub-monitor-parameter.md#streamingpull)其实单独扩展 Pod 的数量也就是扩展了并发能力
