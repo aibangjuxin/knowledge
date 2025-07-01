@@ -75,11 +75,8 @@ CPU 没有做太多事，只是线程【被占用】处于 阻塞状态（waitin
 使用 Spring Cloud GCP 原生支持配置项：
 
 ```yaml
-
 env:
-
   - name: SPRING_CLOUD_GCP_PUBSUB_SUBSCRIBER_EXECUTOR_THREADS
-
     value: "10"
 ```
 
@@ -138,21 +135,12 @@ retry #3: 360s（成功或失败）
 使用超时控制机制（如 HttpClient 设置），缩短重试周期 ➝ 所有 retry 控制在 60s 内完成
 
 ```Java
-
 HttpClient client = HttpClient.newBuilder()
-
     .connectTimeout(Duration.ofSeconds(5))
-
     .build();
-
-
-
 HttpRequest request = HttpRequest.newBuilder()
-
     .timeout(Duration.ofSeconds(10))  // 单次请求最大 10s
-
     ...
-
 ```
 
 ✅ 新策略设计
@@ -176,45 +164,20 @@ HttpRequest request = HttpRequest.newBuilder()
 ```mermaid
 
 flowchart TD
-
     PubSub[Pub/Sub Topic] -->|StreamingPull| Queue[消息队列]
-
-
-
     subgraph Pod [GKE Pod]
-
         direction TB
-
         Queue -->|1| Thread1[线程1 ➝ message1 ➝ HTTP请求 ➝ 超时控制]
-
         Queue -->|2| Thread2[线程2 ➝ message2 ➝ HTTP请求 ➝ 超时控制]
-
         Queue -->|...| ThreadN[线程N ➝ messageN ➝ HTTP请求 ➝ 超时控制]
-
     end
-
-
-
     note right of Pod
-
         executor-threads 提高 ➝ 支持更多并发请求\n
-
         每个线程任务在 60s 内完成 ➝ 快速释放资源
-
     end note
-    ```
-
-
-
-
-
-
-
-
+```
 
 🧠 总结对比表
-
-
 
 |   |   |   |   |
 |---|---|---|---|
@@ -225,17 +188,7 @@ flowchart TD
 |并发能力|易 backlog|可应对瞬时 50+ 消息|🟢 稳定可靠|
 
 
-
-
-
-
-
-
-
 ✅ 落地建议
-
-
-
 
 
 1. 修改 Deployment 配置，增加线程池设置环境变量（executor-threads=10）
