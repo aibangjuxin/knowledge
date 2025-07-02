@@ -4,6 +4,7 @@
       - [Overview](#overview)
       - [Delivery Latency Health Score 各项指标](#delivery-latency-health-score-各项指标)
       - [pull](#pull)
+      - [StreamingPull](#streamingpull)
 - [unacked\_messages\_by\_region](#unacked_messages_by_region)
   - [**🔍 指标：**](#-指标)
   - [**unacked\_messages\_by\_region**](#unacked_messages_by_region-1)
@@ -15,7 +16,7 @@
     - [**✅** ](#-1)
     - [**建议优化方向**](#建议优化方向)
     - [**📌 补充图示（可选）**](#-补充图示可选)
-  - [StreamingPull](#streamingpull)
+  - [StreamingPull](#streamingpull-1)
     - [**✅** ](#-2)
     - [**扩展 Scheduler Pod 的数量 == 增加 StreamingPull 并发能力**](#扩展-scheduler-pod-的数量--增加-streamingpull-并发能力)
     - [**📌 原因如下：**](#-原因如下)
@@ -36,6 +37,10 @@
   - [**✅ 最佳实践建议**](#-最佳实践建议)
   - [**✅ 最后总结（是否堆积 = 投递速率 vs 消费能力）**](#-最后总结是否堆积--投递速率-vs-消费能力)
     - [**📌 补充说明**](#-补充说明)
+  - [**✅** ](#-3)
+  - [**Pub/Sub 消费指标演化 + 告警响应 + Pod 扩容自动修复流程**](#pubsub-消费指标演化--告警响应--pod-扩容自动修复流程)
+    - [**🔍 流程解读：**](#-流程解读)
+    - [**✅ 推荐设置的 Cloud Monitoring 告警项**](#-推荐设置的-cloud-monitoring-告警项)
 
 # **Pub/Sub 消费性能相关核心指标** 
 ---
@@ -192,8 +197,11 @@ publish_to_ack_delta = -3s（代表距离现在 ack 还差 1 秒）
 | Pull ack requests          | 次       | 0.0233     | 成功的 ack 请求计数，表示成功确认的消息数量         | 请求频繁失败可能导致消息未被确认     | 检查网络连接与处理逻辑，确保请求成功 |
 | StreamingPull response     | 次/秒    | 0.0233     | 成功的 StreamingPull 响应计数，表示接收到的响应数量 | 响应延迟或失败可能导致消费者处理缓慢 | 优化处理逻辑，确保及时处理响应       |
 | Open StreamingPull streams | 次       | 2          | 当前打开的 StreamingPull 流计数                     | 数量过多可能导致系统资源紧张         | 限制并发流数，确保性能               |
+#### StreamingPull
 Number of open StreamingPull streams. If many streams are suspended, this could be a sign of throughput being limited due to quota limits or flow control from too many outstanding messages.
 打开的StreamingPull流的数量。如果许多流被挂起，这可能是由于配额限制或太多未完成消息的流控制导致吞吐量受限的迹象。
+
+
 
 ```mermaid
 sequenceDiagram
