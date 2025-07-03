@@ -351,3 +351,179 @@ jcmd <pid> Thread.print | grep -c "java.lang.Thread.State"
 - 主要消耗在线程栈(占 70%+)
 - 临时对象消耗波动较大，需要重点优化
 - 建议通过对象池化、合理的线程池配置来控制内存消耗
+
+## Linux 系统下 java -XX:+PrintFlagsFinal -version 典型输出
+
+### 完整输出示例
+
+```bash
+$ java -XX:+PrintFlagsFinal -version
+
+[Global flags]
+     intx ActiveProcessorCount                      = -1                                  {product}
+     bool UseCompressedOops                         = true                                {lp64_product}
+     bool UseG1GC                                   = false                               {product}
+     bool UseParallelGC                             = true                                {product}
+     bool UseSerialGC                               = false                               {product}
+     bool UseConcMarkSweepGC                        = false                               {product}
+     bool UseZGC                                    = false                               {product}
+     bool UseShenandoahGC                           = false                               {product}
+    uintx InitialHeapSize                           = 134217728                           {product}
+    uintx MaxHeapSize                               = 2147483648                          {product}
+    uintx NewSize                                   = 44739242                            {product}
+    uintx OldSize                                   = 89478485                            {product}
+     intx ThreadStackSize                           = 1024                                {pd product}
+    uintx CompressedClassSpaceSize                  = 1073741824                          {product}
+    uintx MetaspaceSize                             = 21807104                            {product}
+    uintx MaxMetaspaceSize                          = 18446744073709547520                {product}
+     bool PrintGC                                   = false                               {product}
+     bool PrintGCDetails                            = false                               {product}
+     bool PrintGCTimeStamps                         = false                               {product}
+     bool HeapDumpOnOutOfMemoryError               = false                               {manageable}
+    ccstr HeapDumpPath                              =                                     {manageable}
+     bool UseCompressedClassPointers               = true                                {lp64_product}
+     intx ConcGCThreads                             = 0                                   {product}
+     intx ParallelGCThreads                         = 8                                   {product}
+     bool UseBiasedLocking                          = true                                {product}
+     intx JavaPriority1_To_OSPriority               = -1                                  {product}
+     intx JavaPriority10_To_OSPriority              = -1                                  {product}
+    uintx CMSInitiatingOccupancyFraction            = 92                                  {product}
+     bool CMSClassUnloadingEnabled                  = true                                {product}
+     intx Tier1CompileThreshold                     = 2000                                {product}
+     intx Tier2CompileThreshold                     = 1500                                {product}
+     intx Tier3CompileThreshold                     = 2000                                {product}
+     intx Tier4CompileThreshold                     = 15000                               {product}
+     bool TieredCompilation                         = true                                {product}
+     intx MaxInlineSize                             = 35                                  {product}
+     intx FreqInlineSize                            = 325                                 {product}
+    uintx StringTableSize                           = 60013                               {product}
+     intx AutoBoxCacheMax                           = 128                                 {C2 product}
+     bool AggressiveOpts                            = false                               {product}
+     bool UseStringDeduplication                    = false                               {product}
+     bool CompactStrings                            = true                                {product}
+     bool UseG1GC                                   = false                               {product}
+    uintx G1HeapRegionSize                          = 0                                   {product}
+     intx G1MixedGCCountTarget                      = 8                                   {product}
+     intx G1RefProcDrainInterval                    = 1000                                {product}
+    uintx MaxGCPauseMillis                          = 200                                 {product}
+     bool PrintStringDeduplicationStatistics       = false                               {product}
+     bool UseCountedLoopSafepoints                  = false                               {C2 product}
+     bool UseLoopPredicate                          = true                                {C2 product}
+     bool UseTypeProfile                            = true                                {product}
+     bool UseAES                                    = false                               {product}
+     bool UseSHA                                    = false                               {product}
+     bool UseCRC32Intrinsics                        = false                               {product}
+     bool UseVectorizedMismatchIntrinsic            = false                               {C2 product}
+
+openjdk version "11.0.19" 2023-04-18
+OpenJDK Runtime Environment (build 11.0.19+7-post-Ubuntu-0ubuntu1~20.04.1)
+OpenJDK 64-Bit Server VM (build 11.0.19+7-post-Ubuntu-0ubuntu1~20.04.1, mixed mode, sharing)
+```
+
+## 关键参数详解
+
+### 内存相关参数
+
+| 参数名           | 示例值               | 单位  | 说明                      |
+| ---------------- | -------------------- | ----- | ------------------------- |
+| InitialHeapSize  | 134217728            | bytes | 初始堆大小 (~128MB)       |
+| MaxHeapSize      | 2147483648           | bytes | 最大堆大小 (~2GB)         |
+| NewSize          | 44739242             | bytes | 新生代初始大小 (~42MB)    |
+| OldSize          | 89478485             | bytes | 老年代初始大小 (~85MB)    |
+| ThreadStackSize  | 1024                 | KB    | 线程栈大小 (1MB)          |
+| MetaspaceSize    | 21807104             | bytes | 元空间初始大小 (~20MB)    |
+| MaxMetaspaceSize | 18446744073709547520 | bytes | 元空间最大大小 (几乎无限) |
+
+### GC 相关参数
+
+| 参数名             | 示例值 | 说明                   |
+| ------------------ | ------ | ---------------------- |
+| UseG1GC            | false  | 是否使用 G1 垃圾收集器 |
+| UseParallelGC      | true   | 是否使用并行 GC (默认) |
+| UseSerialGC        | false  | 是否使用串行 GC        |
+| UseConcMarkSweepGC | false  | 是否使用 CMS 收集器    |
+| UseZGC             | false  | 是否使用 ZGC           |
+| ParallelGCThreads  | 8      | 并行 GC 线程数         |
+| MaxGCPauseMillis   | 200    | G1GC 最大停顿时间目标  |
+
+### 编译优化参数
+
+| 参数名                | 示例值 | 说明                 |
+| --------------------- | ------ | -------------------- |
+| TieredCompilation     | true   | 启用分层编译         |
+| Tier1CompileThreshold | 2000   | C1 编译阈值          |
+| Tier4CompileThreshold | 15000  | C2 编译阈值          |
+| MaxInlineSize         | 35     | 最大内联字节码大小   |
+| FreqInlineSize        | 325    | 频繁调用方法内联大小 |
+
+### 标志类型说明
+
+```bash
+# 标志类型含义
+{product}           # 产品标志,所有构建都可用
+{pd product}        # 平台依赖的产品标志
+{manageable}        # 可在运行时通过JMX管理
+{C2 product}        # 仅C2编译器相关
+{lp64_product}      # 64位平台特定
+{develop}           # 开发版本标志
+{diagnostic}        # 诊断标志
+{experimental}      # 实验性标志
+```
+
+### 常用查询命令
+
+```bash
+# 查看内存相关参数
+java -XX:+PrintFlagsFinal -version | grep -i heap
+
+# 查看GC相关参数
+java -XX:+PrintFlagsFinal -version | grep -i gc
+
+# 查看编译相关参数
+java -XX:+PrintFlagsFinal -version | grep -i compile
+
+# 查看线程相关参数
+java -XX:+PrintFlagsFinal -version | grep -i thread
+
+# 查看特定参数
+java -XX:+PrintFlagsFinal -version | grep ThreadStackSize
+java -XX:+PrintFlagsFinal -version | grep MaxHeapSize
+```
+
+### 参数值换算
+
+```bash
+# 内存大小换算
+InitialHeapSize = 134217728 bytes = 128MB
+MaxHeapSize = 2147483648 bytes = 2048MB = 2GB
+ThreadStackSize = 1024 KB = 1MB
+MetaspaceSize = 21807104 bytes ≈ 20.8MB
+```
+
+### 系统相关参数分析流程
+
+```mermaid
+flowchart TD
+    A[执行PrintFlagsFinal] --> B[解析输出参数]
+    B --> C{参数类型}
+    C -->|内存相关| D[分析堆栈配置]
+    C -->|GC相关| E[分析垃圾收集器]
+    C -->|编译相关| F[分析JIT编译器]
+    C -->|其他| G[分析其他配置]
+    D --> H[内存调优建议]
+    E --> I[GC调优建议]
+    F --> J[编译调优建议]
+    G --> K[其他调优建议]
+    H --> L[生成调优方案]
+    I --> L
+    J --> L
+    K --> L
+```
+
+**关键点总结：**
+
+- 该输出显示了 JVM 所有可配置参数的当前值
+- `{product}` 标志表示生产环境可用参数
+- 大多数内存相关参数以字节为单位
+- `ThreadStackSize` 以 KB 为单位
+- 可通过 `-XX:参数名=值` 来修改这些参数
