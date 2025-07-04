@@ -1,19 +1,22 @@
 
-## ✅ 核心问题：后端 API 延迟导致 Unacked 消息增加
+---
+## ✅ 核心架构：收到消息立即 ACK（At-Most-Once Delivery）
 
-您的理解是完全正确的。当 Pub/Sub 消费者（例如您的 `ScheduleService`）的处理逻辑依赖于调用外部服务（如 Backend API）时，**该外部服务的响应延迟是导致 `unacked_messages_by_region` 数量增加的一个非常典型且常见的原因**。
+根据您的确认，您的系统采用的是一种“**收到即确认**”（Acknowledge on Receipt）的模式。这意味着 `ScheduleService` 在从 Pub/Sub 拉取到消息后，会**立即调用 `consumer.ack()`**，然后再去执行后续的业务逻辑（如调用 Backend API）。
 
-### **工作流程与瓶颈分析**
+这种模式从根本上改变了系统的行为和可靠性保证，它实现了“**最多一次投递**”（At-Most-Once Delivery）的语义。
 
-1.  **消息被拉取**：`ScheduleService` 的消费线程从 Pub/Sub 成功拉取一条消息。此时，`ackDeadline`（例如您设置的 600 秒）开始倒计时。
-2.  **调用 Backend API**：消费线程开始执行业务逻辑，向您的 Backend API 发起一个 HTTP 请求，并等待响应。
-3.  **API 响应慢**：如果 Backend API 因为自身负载高、数据库慢、或其他原因，未能在短时间内返回结果，那么 `ScheduleService` 的消费线程就会一直处于**阻塞等待**状态。
-4.  **无法及时 Ack**：因为线程在等待 API 响应，所以无法执行 `consumer.ack()`。
-5.  **Unacked 状态持续**：在这整个等待期间，该消息对于 Pub/Sub 系统来说，一直处于“已投递但未确认”（Unacked）的状态。
-6.  **线程池耗尽**：如果大量消息涌入，而每条消息的处理都需要等待缓慢的 API，那么 `ScheduleService` 的所有消费线程（`executorThreadCount`）将很快被全部占用和阻塞。
-7.  **Unacked 数量飙升**：一旦线程池耗尽，新的消息即使被拉取下来也无法被处理，`unacked_messages_by_region` 指标就会持续增长，直到 `ackDeadline` 超时，消息被重新投递，形成恶性循环。
+### **工作流程与影响**
 
-### **图示：API 延迟如何导致 Unacked 增加**
+1.  **消息被拉取并立即 ACK**：`ScheduleService` 的消费线程从 Pub/Sub 成功拉取一条消息，并**立刻**向 Pub/Sub 发送 `ack` 信号。
+2.  **Pub/Sub 删除消息**：Pub/Sub 收到 `ack` 后，认为该消息已被成功处理，并将其从订阅中永久删除。**此后，Pub/Sub 不会再重新投递该消息**。
+3.  **调用 Backend API**：`ScheduleService` 开始执行后续业务逻辑，调用 Backend API。
+4.  **后续处理失败的风险**：
+    *   如果 Backend API 调用**失败**。
+    *   如果在调用 API 期间 `ScheduleService` **崩溃**。
+    *   **结果**：**消息会永久丢失**。因为消息已经被 `ack`，Pub/Sub 不会重试。您必须依赖自定义的日志、监控和手动干预来处理这些失败的业务操作。
+
+### **图示：收到即 ACK 的流程**
 
 ```mermaid
 sequenceDiagram
@@ -22,24 +25,34 @@ sequenceDiagram
     participant API as Backend API
 
     PubSub->>+Sub: 1. Deliver Message
-    Note over Sub,API: ackDeadline (600s) starts
-    Sub->>+API: 2. Call Backend API
-    Note over Sub,API: API is slow, thread is blocked...
-    loop Until API responds or times out
-        Note right of Sub: Thread is waiting, cannot ack()
-    end
-    API-->>-Sub: 3. (Eventually) Respond
-    Sub->>-PubSub: 4. ack() Message
-    Note over PubSub: If step 2+3 > 600s, message is redelivered. <br/> During this time, it's an unacked message.
+    Sub->>-PubSub: 2. **Acknowledge Immediately**
+    Note right of PubSub: Message is now deleted. <br/> It will NOT be redelivered.
+    Sub->>+API: 3. Call Backend API
+    Note over Sub,API: What happens if this call fails? <br/> The message is already gone.
+    API-->>-Sub: 4. API Response (Success or Failure)
 ```
 
-因此，在排查 `unacked_messages_by_region` 增长问题时，**监控和优化下游依赖（如 Backend API）的性能**与优化消费者自身同样重要。
+### **为什么 `unacked_messages_by_region` 仍然可能增加？**
+
+在“收到即 ACK”的架构下，`unacked_messages_by_region` **理论上应该始终非常低，接近于 0**。因为消息在被处理之前就已经被 `ack` 了。
+
+如果这个指标仍然增长，原因将不再是“业务逻辑处理慢”，而是**消费者本身无法及时从 Pub/Sub 拉取并 `ack` 消息**。这通常指向更底层的问题：
+
+| **可能的原因**                               | **说明**                                                                                                                               |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **1. 消费者线程池/流控配置不当**             | `FlowControlSettings` 中的 `maxOutstandingElementCount` 设置得过低，或者 `executorThreadCount` 不足，导致客户端无法跟上消息流入的速度。 |
+| **2. 客户端与 Pub/Sub 网络问题**             | GKE Pod 与 `pubsub.googleapis.com` 之间的网络延迟、丢包或不稳定，导致 `StreamingPull` 连接效率低下。                                     |
+| **3. 消费者 Pod 资源不足**                   | Pod 的 CPU 或内存达到瓶颈，导致 Java 进程（包括 Pub/Sub 客户端库）运行缓慢，无法及时处理传入的流式数据和发送 `ack`。               |
+| **4. Pub/Sub 客户端库内部问题**              | 极少数情况下，可能是客户端库本身的 Bug 或配置问题。                                                                                    |
+
+**总结**：在您的架构中，`unacked_messages_by_region` 的增长**不再是业务处理延迟的信号**，而是**消费客户端本身吞吐能力不足的直接体现**。排查方向应从“为什么我的 Backend API 慢”转变为“**为什么我的 ScheduleService 连收消息和发 `ack` 都变��了**”。
 
 ---
 
-| **字段**                 | **示例值** | **说明**                                        |
-| ---------------------- | ------- | --------------------------------------------- |
-| **ackDeadlineSeconds** | 10      | 订阅者在这段时间（秒）内确认消息，否则消息将重新投递。默认是 10 秒。最大 600 秒。 |
+| **字段**                 | **示例值** | **说明**                                                                    |
+| ---------------------- | ---------- | --------------------------------------------------------------------------- |
+| **ackDeadlineSeconds** | 600        | 在您的“收到即 ACK”架构中，此设置**几乎不起作用**，因为 `ack` 总是在处理前完成。 |
+
 
 我们设置为 600S
 unacked 总数是否一直增长（线程/处理太慢）
