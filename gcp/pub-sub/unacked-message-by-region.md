@@ -1,3 +1,42 @@
+
+## ✅ 核心问题：后端 API 延迟导致 Unacked 消息增加
+
+您的理解是完全正确的。当 Pub/Sub 消费者（例如您的 `ScheduleService`）的处理逻辑依赖于调用外部服务（如 Backend API）时，**该外部服务的响应延迟是导致 `unacked_messages_by_region` 数量增加的一个非常典型且常见的原因**。
+
+### **工作流程与瓶颈分析**
+
+1.  **消息被拉取**：`ScheduleService` 的消费线程从 Pub/Sub 成功拉取一条消息。此时，`ackDeadline`（例如您设置的 600 秒）开始倒计时。
+2.  **调用 Backend API**：消费线程开始执行业务逻辑，向您的 Backend API 发起一个 HTTP 请求，并等待响应。
+3.  **API 响应慢**：如果 Backend API 因为自身负载高、数据库慢、或其他原因，未能在短时间内返回结果，那么 `ScheduleService` 的消费线程就会一直处于**阻塞等待**状态。
+4.  **无法及时 Ack**：因为线程在等待 API 响应，所以无法执行 `consumer.ack()`。
+5.  **Unacked 状态持续**：在这整个等待期间，该消息对于 Pub/Sub 系统来说，一直处于“已投递但未确认”（Unacked）的状态。
+6.  **线程池耗尽**：如果大量消息涌入，而每条消息的处理都需要等待缓慢的 API，那么 `ScheduleService` 的所有消费线程（`executorThreadCount`）将很快被全部占用和阻塞。
+7.  **Unacked 数量飙升**：一旦线程池耗尽，新的消息即使被拉取下来也无法被处理，`unacked_messages_by_region` 指标就会持续增长，直到 `ackDeadline` 超时，消息被重新投递，形成恶性循环。
+
+### **图示：API 延迟如何导致 Unacked 增加**
+
+```mermaid
+sequenceDiagram
+    participant Sub as ScheduleService (Consumer)
+    participant PubSub as Google Pub/Sub
+    participant API as Backend API
+
+    PubSub->>+Sub: 1. Deliver Message
+    Note over Sub,API: ackDeadline (600s) starts
+    Sub->>+API: 2. Call Backend API
+    Note over Sub,API: API is slow, thread is blocked...
+    loop Until API responds or times out
+        Note right of Sub: Thread is waiting, cannot ack()
+    end
+    API-->>-Sub: 3. (Eventually) Respond
+    Sub->>-PubSub: 4. ack() Message
+    Note over PubSub: If step 2+3 > 600s, message is redelivered. <br/> During this time, it's an unacked message.
+```
+
+因此，在排查 `unacked_messages_by_region` 增长问题时，**监控和优化下游依赖（如 Backend API）的性能**与优化消费者自身同样重要。
+
+---
+
 | **字段**                 | **示例值** | **说明**                                        |
 | ---------------------- | ------- | --------------------------------------------- |
 | **ackDeadlineSeconds** | 10      | 订阅者在这段时间（秒）内确认消息，否则消息将重新投递。默认是 10 秒。最大 600 秒。 |

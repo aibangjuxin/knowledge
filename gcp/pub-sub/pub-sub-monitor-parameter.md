@@ -71,8 +71,8 @@
 ---
 在 Google Cloud Pub/Sub 中，监控中出现的两个重要指标：
 
-- Publish to Ack Delta
-- Pull to Ack Delta
+- Publish to Ack Delta ==> Delta of published message to acked messages grouped by minute
+- Pull to Ack Delta ==> Delta of send messages to acked messages grouped by minute
 
 这两个指标反映的是 消息生命周期内的延迟情况，并且以「相对当前时间为基准」来呈现，因此你会看到「以 0 为基线的正负值」，这不是 bug，而是这两个 metric 本身的特点。
 
@@ -192,11 +192,11 @@ publish_to_ack_delta = -3s（代表距离现在 ack 还差 1 秒）
 #### pull
 - ![sub-pull-model](./sub-pull-model.png)
 
-| **Metric 名称**            | **单位** | **示例值** | **指标说明**                                        | **典型问题或异常含义**               | **优化建议**                         |
-| -------------------------- | -------- | ---------- | --------------------------------------------------- | ------------------------------------ | ------------------------------------ |
-| Pull ack requests          | 次       | 0.0233     | 成功的 ack 请求计数，表示成功确认的消息数量         | 请求频繁失败可能导致消息未被确认     | 检查网络连接与处理逻辑，确保请求成功 |
-| StreamingPull response     | 次/秒    | 0.0233     | 成功的 StreamingPull 响应计数，表示接收到的响应数量 | 响应延迟或失败可能导致消费者处理缓慢 | 优化处理逻辑，确保及时处理响应       |
-| Open StreamingPull streams | 次       | 2          | 当前打开的 StreamingPull 流计数                     | 数量过多可能导致系统资源紧张         | 限制并发流数，确保性能               |
+| **Metric 名称**              | **单位** | **示例值** | **指标说明**                          | **典型问题或异常含义**      | **优化建议**           |
+| -------------------------- | ------ | ------- | --------------------------------- | ------------------ | ------------------ |
+| Pull ack requests          | 次/秒    | 0.0233  | 成功的 ack 请求速率，表示成功确认的消息数量          | 请求速率过低可能导致消息积压   | 检查网络连接与处理逻辑，确保请求成功 |
+| StreamingPull response     | 次/秒    | 0.0233  | 成功的 StreamingPull 响应计数，表示接收到的响应数量 | 响应延迟或失败可能导致消费者处理缓慢 | 优化处理逻辑，确保及时处理响应    |
+| Open StreamingPull streams | 次      | 2       | 当前打开的 StreamingPull 流计数           | 数量过多可能导致系统资源紧张     | 限制并发流数，确保性能        |
 #### StreamingPull
 Number of open StreamingPull streams. If many streams are suspended, this could be a sign of throughput being limited due to quota limits or flow control from too many outstanding messages.
 打开的StreamingPull流的数量。如果许多流被挂起，这可能是由于配额限制或太多未完成消息的流控制导致吞吐量受限的迹象。
