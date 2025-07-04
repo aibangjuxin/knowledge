@@ -1,103 +1,56 @@
-Excellent question. This is a critical point in designing a reliable Pub/Sub consumer, and your intuition is correct—the timing of the `ack()` call is fundamental.
+This document clarifies the critical difference between two acknowledgment strategies in Pub/Sub, based on your confirmed architecture.
 
-To be clear and direct:
+### ✅ Your Architecture: Acknowledge on Receipt (At-Most-Once Delivery)
 
-> **You should ALWAYS acknowledge the message (`consumer.ack()`) *AFTER* your Backend API call has successfully completed.**
+You have confirmed that your system uses an **"Acknowledge on Receipt"** model. This is a valid, but less common, pattern that prioritizes throughput over guaranteed delivery.
 
-Let's break down why this is the standard and correct practice.
+**Flow:**
+1.  Your `ScheduleService` receives a message.
+2.  It **immediately** calls `consumer.ack()`. Pub/Sub now considers the message successfully processed and deletes it.
+3.  It then calls the Backend API.
+4.  If the Backend API call fails, **the message is lost forever.**
+
+**Code Example (Your Confirmed Pattern):**
+```java
+MessageReceiver receiver = (message, consumer) -> {
+    // Acknowledge immediately upon receipt.
+    consumer.ack();
+    log.info("Acked message {} immediately.", message.getMessageId());
+
+    try {
+        // Proceed with business logic after acknowledging.
+        callBackendAPI(message.getData().toStringUtf8());
+    } catch (Exception e) {
+        // The message is already gone.
+        // Rely on application-level logging/monitoring to handle this failure.
+        log.error("API call failed for message {}, but it was already acked and is now lost.", message.getMessageId(), e);
+    }
+};
+```
 
 ---
 
-### ✅ The Golden Rule: Acknowledge After Successful Processing
+### The Standard Pattern: Acknowledge After Processing (At-Least-Once Delivery)
 
-The `ack()` call is a signal to Pub/Sub that says:
-
-> *"I have successfully and completely finished all the work associated with this message. You can now permanently delete it from the subscription."*
-
-If you acknowledge the message *before* calling the Backend API, you are essentially lying to Pub/Sub. You are claiming the work is done when the most critical part hasn't even started.
-
----
-
-### Scenario 1: Ack **AFTER** API Call (The Correct Way)
-
-This pattern ensures **at-least-once** delivery, which is the standard guarantee for reliable systems.
+For context, it's important to understand the more common and reliable pattern, which ensures no messages are lost if processing fails.
 
 **Flow:**
 1.  Your `ScheduleService` receives a message.
 2.  It calls the Backend API.
-3.  The Backend API processes the request and returns a success response.
-4.  Your service then calls `consumer.ack()`.
+3.  The Backend API returns a success response.
+4.  **Only then** does the service call `consumer.ack()`.
 
-**Code Example (Correct Pattern):**
-```java
-MessageReceiver receiver = (message, consumer) -> {
-    try {
-        // Step 1: Call the critical business logic (the Backend API)
-        HttpResponse backendResponse = callBackendAPI(message.getData().toStringUtf8());
-
-        // Step 2: Check if the API call was successful
-        if (backendResponse.isSuccessful()) {
-            // Step 3: ONLY if successful, acknowledge the message.
-            consumer.ack(); // Tell Pub/Sub the work is truly done.
-            log.info("Successfully processed and acked message id: " + message.getMessageId());
-        } else {
-            // The API call failed, so we should not ack.
-            // Nack tells Pub/Sub to redeliver the message sooner.
-            consumer.nack();
-            log.error("Backend API failed for message id: " + message.getMessageId());
-        }
-
-    } catch (Exception e) {
-        // Any other exception (e.g., network timeout to the API)
-        // Nack the message so it can be retried.
-        consumer.nack();
-        log.error("Exception processing message id: " + message.getMessageId(), e);
-    }
-};
-```
-
-**Failure Handling:**
-*   **If the Backend API call fails:** The `ack()` is never called. The message remains unacknowledged, and after the `ackDeadline` expires, Pub/Sub will redeliver it for another attempt. **No message is lost.**
-*   **If your service crashes after the API call but before the `ack()`:** The `ack()` is never sent. Pub/Sub will redeliver the message. This is why your **Backend API must be idempotent** (i.e., processing the same request multiple times has the same result as processing it once).
+If the API call fails or the service crashes, the `ack()` is never sent, and Pub/Sub will redeliver the message. This guarantees the work is completed **at least once**.
 
 ---
 
-### Scenario 2: Ack **BEFORE** API Call (The Anti-Pattern / Risky Way)
+### Summary Table: Your Ack Position vs. Standard
 
-This pattern creates a "fire-and-forget" system with a high risk of data loss.
+| Ack Position | Your Model: **BEFORE** API Call | Standard Model: **AFTER** API Call |
+| :--- | :--- | :--- |
+| **Reliability** | **Lower** | **Higher** |
+| **Guarantee** | At-Most-Once | At-Least-Once |
+| **Use Case** | High throughput where individual message loss is acceptable. | Standard for all reliable business-critical processing. |
+| **Failure Impact** | **Message is lost forever.** | Message is retried until successful. |
 
-**Flow:**
-1.  Your `ScheduleService` receives a message.
-2.  It immediately calls `consumer.ack()`. Pub/Sub now considers the message successfully processed and deletes it.
-3.  It then calls the Backend API.
-4.  **The Backend API call fails.**
-
-**Result: The message is lost forever.** Pub/Sub will not redeliver it because you already acknowledged it. The critical work was never completed.
-
-**Code Example (Incorrect/Risky Pattern):**
-```java
-MessageReceiver receiver = (message, consumer) -> {
-    // DANGEROUS: Acknowledging the message before the work is done.
-    consumer.ack();
-    log.warn("Acked message {} before processing!", message.getMessageId());
-
-    try {
-        callBackendAPI(message.getData().toStringUtf8());
-        // WHAT HAPPENS IF THIS CALL FAILS? The message is already gone.
-    } catch (Exception e) {
-        // You can log the error, but you can't get the message back.
-        log.error("API call failed, but message {} was already acked and is now lost.", message.getMessageId(), e);
-    }
-};
-```
-
----
-
-### Summary Table: Ack Position
-
-| Ack Position | Reliability | Guarantee | Use Case | Consequence of Failure |
-| :--- | :--- | :--- | :--- | :--- |
-| **AFTER API Call** | **High (Correct)** | At-Least-Once | Standard for all reliable processing. | Message is retried. **(Safe)** |
-| **BEFORE API Call** | **Low (Incorrect)** | At-Most-Once | Very rare; only if message loss is acceptable. | Message is lost forever. **(Dangerous)** |
-
-**Conclusion:** The position of the `ack()` call is not just a matter of placement; it defines the reliability guarantee of your entire message processing system. For any process where the successful completion of the Backend API call is important, you must place the `ack()` call after you have confirmed that success.
+**Conclusion:** Your system is intentionally designed for high throughput with the trade-off of potential data loss on processing failure. All documentation has been updated to reflect this "Acknowledge on Receipt" model.

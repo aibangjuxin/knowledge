@@ -71,8 +71,8 @@ Below is the **completed core monitoring metrics table for GCP Pub/Sub consumers
 ---
 In Google Cloud Pub/Sub, two important monitoring metrics are:
 
-- Publish to Ack Delta
-- Pull to Ack Delta
+- Publish to Ack Delta ==> The time difference from message publication to immediate ACK.
+- Pull to Ack Delta ==> The time difference from when a message is pulled to its immediate ACK.
 
 These metrics reflect latency within the message lifecycle and are presented relative to the current time. Therefore, you will see positive and negative values based on a zero baseline. This is not a bug but a feature of these metrics.
 
@@ -113,31 +113,34 @@ In this case:
 
 **3. Practical Uses of These Metrics**
 
-✅ **1. Troubleshooting Subscriber Lag**
-- A large `publish_to_ack_delta` (e.g., > 60s) → Indicates significant delay in subscriber processing.
-- Normal business operations should see this value in a negative range, like -3s to -10s, meaning messages are acked within a few seconds of publishing.
+✅ **1. Verifying the Efficiency of the "Acknowledge on Receipt" Model**
 
-✅ **2. Troubleshooting Slow Processing After Subscriber Pull**
-- An increasing `pull_to_ack_delta` → Indicates that your consumer's processing time after pulling the message is increasing, possibly due to retries, slow business logic, or a blocked thread pool.
+-   In this model, `publish_to_ack_delta` and `pull_to_ack_delta` should theoretically be **very small and stable** (e.g., in the millisecond range).
+-   If these values **increase**, it indicates that the **consumer client (ScheduleService) is experiencing a bottleneck in the message reception and acknowledgment phase itself**, such as network latency or insufficient client resources, rather than slow business logic processing.
+
+✅ **2. Monitoring Client Health**
+
+-   A sustained increase in `pull_to_ack_delta` directly points to a health problem with the consumer Pod itself, not the Backend API it calls.
 
 **4. Combined Analysis with Message Backlog**
 
-If you observe:
-- `unacked_message_count` is continuously increasing.
-- `publish_to_ack_delta` is trending upwards (becoming positive, indicating longer backlog time).
-- `pull_to_ack_delta` is also increasing.
+In your "Acknowledge on Receipt" architecture:
 
-This indicates that your consumer's capacity is insufficient, or some messages cannot be acked in time. You need to:
-- Increase pods or thread pools (to improve concurrent consumption).
-- Check for long-blocking logic in your code.
-- Investigate if there are exceptions or retry mechanisms before the ack.
+-   If `unacked_message_count` continuously increases.
+-   And `publish_to_ack_delta` or `pull_to_ack_delta` trends upwards.
+
+The only reason is that **your consumer client (ScheduleService) cannot keep up**; it is unable to pull messages from Pub/Sub and send the ACK in a timely manner. This is completely unrelated to the subsequent Backend API call. You need to investigate:
+
+-   Are the client's `FlowControlSettings` too conservative?
+-   Is the `executorThreadCount` insufficient?
+-   Have the Pod's CPU/memory resources reached their limit?
 
 **5. Summary**
 
-| Metric | Description | Monitoring Chart Behavior | Interpretation |
-|---|---|---|---|
-| publish_to_ack_delta | Latency from publish to ack. | Negative for past events, positive for future estimates. | A continuous increase may indicate consumption delay or backlog. |
-| pull_to_ack_delta | Processing latency from client pull to ack. | Commonly negative. | A continuous increase may indicate thread pool exhaustion or slow business logic. |
+| Metric                 | Description                                                         | Monitoring Chart Behavior                                     | Interpretation                                                                 |
+| ---------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `publish_to_ack_delta` | Latency from publish to **immediate ack**.                          | Should be a very small and stable negative value.             | An increase indicates a bottleneck in the client's reception or ACK pathway.   |
+| `pull_to_ack_delta`    | Latency from client pull to **immediate ack**.                      | Should be a very small and stable negative value.             | An increase indicates the consumer Pod itself has resource or network issues preventing it from quickly completing the "receive-acknowledge" action. |
 
 If you have screenshots of Cloud Monitoring charts or abnormal value fluctuations, feel free to share them for a joint analysis.
 

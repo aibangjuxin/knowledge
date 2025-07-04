@@ -3,19 +3,18 @@
    3. 消息消费 (StreamingPull)：
        * GKE 中的每个 Pod 都作为一个独立的订阅者客户端，与 Subscription 建立一个持久的 gRPC StreamingPull 连接。
        * Pub/Sub 通过这些长连接实时地将消息流式传输给可用的 Pod。
-   4. 任务处理：
-       * Pod 收到消息后，调用后端的 Backend API 来执行实际的业务逻辑。
-   5. 结果反馈 (ACK/NACK)：
-       * 成功路径：如果 Backend API 在预设时间内成功返回，Pod 会向 Pub/Sub 发送一个 ACK（确认）信号，该消息被视为处理完毕，将从订阅中永久删除。
-       * 失败路径：如果 Backend API 返回错误或处理超时，Pod 不会发送 ACK。
-   6. 自动重试：
-       * 对于未被 ACK 的消息，一旦其 ackDeadlineSeconds 到期，Pub/Sub 会认为该消息处理失败，并将其重新投递给一个可用的消费者（可能是同一个 Pod 或其他
-         Pod）。
-   7. 死信队列 (DLQ)：
-       * 如果在多次重试（由 maxDeliveryAttempts 参数定义）后，某条消息仍然无法被成功处理，Pub/Sub 会停止重试，并将其发送到预先配置好的 Dead Letter Queue 
-         (DLQ) 中。这可以防止“毒消息”无限循环，阻塞整个系统。
-   8. 并发扩展：
-       * 当消息量增大时，只需增加 GKE 中 Pod 的副本数。每个新的 Pod 都会建立自己的 StreamingPull 连接，从而线性地提升整个系统的消息处理能力。
+   4. 消息消费与确认 (StreamingPull & Acknowledge on Receipt)：
+       * GKE 中的每个 Pod 作为一个独立的订阅者客户端，与 Subscription 建立一个持久的 gRPC StreamingPull 连接。
+       * Pub/Sub 通过这些长连接实时地将消息流式传输给可用的 Pod。
+       * Pod 收到消息后，**立即向 Pub/Sub 发送 ACK (确认) 信号**。Pub/Sub 随即删除该消息，**不会再进行重试**。
+   5. 任务处理 (At-Most-Once)：
+       * 在消息确认后，Pod 调用后端的 Backend API 来执行实际的业务逻辑。
+       * **此模式为“最多一次”投递**。如果 Backend API 调用失败或 Pod 崩溃，**消息将会丢失**，因为 Pub/Sub 已将其删除。所有后续处理的可靠性需由应用层自行保证。
+   6. 自动重试与死信队列 (DLQ) 的变化：
+       * 由于消息被立即 ACK，Pub/Sub 的**自动重试机制（基于 ackDeadline）和死信队列（基于 maxDeliveryAttempts）将不会被触发**。因为从 Pub/Sub 的角度看，所有消息都是“成功”处理的。
+       * 任何需要重试的逻辑都必须在 `ScheduleService` 内部实现。
+   7. 并发扩展：
+       * 当消息量增大时，只需增加 GKE 中 Pod 的副本数。每个新的 Pod 都会建立自己的 StreamingPull 连接，从而线性地提升整个系统的消息**接收和确认**能力。
 - the streaming pull
 
 ```mermaid
@@ -26,8 +25,10 @@ sequenceDiagram
     SS->>+PS: Establish gRPC StreamingPull()
     loop 持续消息流
         PS-->>SS: Deliver messages (streaming)
-        SS->>PS: ack / modifyAckDeadline
-        Note right of SS: 本地缓存处理，按需 ack
+        Note right of SS: 收到消息后立即 ack
+        SS->>PS: acknowledge(ackId)
+        SS->>+API: 调用后端 API
+        API-->>-SS: Response
     end
 ```
 
@@ -54,13 +55,11 @@ sequenceDiagram
         SS->>+GRPC: 建立 gRPC StreamingPull 连接
         loop 持续消息流
             GRPC-->>SS: stream message<br/>+ ackId
-            alt 成功处理
-                SS->>+API: 调用后端 API
-                API-->>-SS: Response
-                SS->>GRPC: acknowledge(ackId)
-            else 失败或超时
-                SS-->>GRPC: 未 ack（ackDeadline 触发重投递）
-            end
+            SS->>GRPC: **acknowledge(ackId) Immediately**
+            Note right of SS: 业务逻辑在 ACK 后执行
+            SS->>+API: Call Backend API
+            API-->>-SS: Response
+            Note right of SS: API 失败不影响 Pub/Sub <br/> (消息已删除)
         end
     end
 ```
@@ -89,8 +88,8 @@ sequenceDiagram
         loop 持续消息流
             GRPC-->>SS: stream message<br/>+ ackId
             SS->>GRPC: acknowledge(ackId)
-            SS->>+API: 调用后端 API（同步处理<br/>阻塞当前线程）
-            API-->>-SS: Response（收到后释放线程）
+            SS->>+API: 调用后端 API（异步或独立处理）
+            API-->>-SS: Response
         end
     end
 ```
@@ -144,13 +143,9 @@ sequenceDiagram
         SS->>+PS: 建立 gRPC StreamingPull 连接
         loop 消息持续流式传输
             PS-->>SS: stream message<br/>+ ackId
-            alt 成功处理
-                SS->>+API: 调用后端 API
-                API-->>-SS: Response
-                SS->>PS: acknowledge(ackId)
-            else 失败或超时
-                SS-->>PS: 不 ack ➝ 等待 ackDeadline 超时
-            end
+            SS->>PS: acknowledge(ackId)
+            SS->>+API: 调用后端 API（异步处理）
+            API-->>-SS: Response
         end
     end
 ```
@@ -196,13 +191,9 @@ sequenceDiagram
         Pod1->>+PS: 建立 gRPC StreamingPull
         loop 持续处理消息
             PS-->>Pod1: message + ackId
-            alt 成功处理
-                Pod1->>+API: 调用后端 API
-                API-->>-Pod1: 返回响应
-                Pod1->>PS: acknowledge(ackId)
-            else 失败 / 未 ack
-                Pod1-->>PS: ackDeadline 到期前未 ack
-            end
+            Pod1->>PS: acknowledge(ackId)
+            Pod1->>+API: 调用后端 API（异步处理）
+            API-->>-Pod1: 返回响应
         end
     end
 
@@ -302,13 +293,9 @@ sequenceDiagram
         Pod1->>+PS: 建立 gRPC StreamingPull
         loop 持续处理消息
             PS-->>Pod1: message + ackId
-            alt 成功处理
-                Pod1->>+API: 调用后端 API
-                API-->>-Pod1: 返回响应
-                Pod1->>PS: acknowledge(ackId)
-            else 失败 / 未 ack
-                Pod1-->>PS: ackDeadline 到期前未 ack
-            end
+            Pod1->>PS: acknowledge(ackId)
+            Pod1->>+API: 调用后端 API（异步处理）
+            API-->>-Pod1: 返回响应
         end
     end
 
@@ -404,12 +391,15 @@ Note over Pod1,Pod2:
     participant Kong as Kong Gateway
     participant BS as Backend Service
     
-    Note over PS,BS: ackDeadlineSeconds 计时开始 ⏰
+    Note over PS,BS: ackDeadlineSeconds 在此架构中几乎无效
     PS->>SS: 消息可供拉取 (available)
     SS->>PS: Pull Request
     PS->>SS: 返回消息 (delivery)
     
-    Note over SS: 消息处理开始
+    Note over SS: 接收消息即刻 ACK
+    SS->>PS: ACK 确认 ✅
+    
+    Note over SS: 后续业务逻辑
     SS->>SS: 解析消息
     SS->>Kong: HTTP请求 (Retry 1)
     Kong->>BS: 转发请求
@@ -425,9 +415,6 @@ Note over Pod1,Pod2:
     Kong->>BS: 转发请求
     BS-->>Kong: 成功响应
     Kong-->>SS: 成功响应
-    
-    SS->>PS: ACK 确认
-    Note over PS,BS: ackDeadlineSeconds 计时结束 ⏹️
 ```
 - fix 
 ```mermaid

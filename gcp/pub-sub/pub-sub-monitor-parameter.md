@@ -71,8 +71,8 @@
 ---
 在 Google Cloud Pub/Sub 中，监控中出现的两个重要指标：
 
-- Publish to Ack Delta ==> Delta of published message to acked messages grouped by minute
-- Pull to Ack Delta ==> Delta of send messages to acked messages grouped by minute
+- Publish to Ack Delta ==> 从消息发布到被立即 ACK 的时间差
+- Pull to Ack Delta ==> 从消息被拉取到被立即 ACK 的时间差
 
 这两个指标反映的是 消息生命周期内的延迟情况，并且以「相对当前时间为基准」来呈现，因此你会看到「以 0 为基线的正负值」，这不是 bug，而是这两个 metric 本身的特点。
 
@@ -120,36 +120,34 @@ publish_to_ack_delta = -3s（代表距离现在 ack 还差 1 秒）
 
 三、这两个指标的实际用途
 
-✅ 1. 排查订阅者处理延迟（Subscriber Lag）
+✅ **1. 验证“收到即 ACK”模型的效率**
 
-- publish_to_ack_delta 越大（比如 > 60s） → 表示订阅者处理消息存在明显延迟
-- 正常的业务应该这个值是集中在某个负值段，比如 -3s ~ -10s 表示发布后几秒就 ack
+-   `publish_to_ack_delta` 和 `pull_to_ack_delta` 在此模型下，**理论值应非常小且稳定**（例如，毫秒级）。
+-   如果这些值**增大**，说明**消费者客户端（ScheduleService）在接收和确认消息的环节就出现了瓶颈**，例如网络延迟、客户端资源不足等，而不是业务逻辑处理慢。
 
-✅ 2. 排查 Subscriber pull 后处理变慢
+✅ **2. 监控客户端健康状况**
 
-- pull_to_ack_delta 增大 → 表示你的 consumer 拉取到消息后处理时间变长，比如重试次数多、业务慢、线程池堵塞等
+-   `pull_to_ack_delta` 持续增大，直接指向消费者 Pod 的健康问题，而不是其调用的 Backend API。
 
 四、和消息堆积结合分析
 
-如果你发现：
+在您的“收到即 ACK”架构中：
 
-- unacked_message_count 持续增加
-- publish_to_ack_delta 趋势往右上（变正，表示堆积时间拉长）
-- pull_to_ack_delta 也在增加
+-   `unacked_message_count` 持续增加
+-   `publish_to_ack_delta` 或 `pull_to_ack_delta` 趋势增大
 
-则说明你的消费端能力不足、或者某些消息无法及时 ack，需要：
+则唯一的原因是**您的消费客户端（ScheduleService）处理不过来了**，无法及时地从 Pub/Sub 拉取消息并发送 ACK。这与后续的 Backend API 调用完全无关。需要排查：
 
-- 增加 pod 或线程池（提高并发消费）
-- 检查代码中是否有长时间阻塞的逻辑
-- 是否 ack 前存在异常、重试机制等
+-   客户端的 `FlowControlSettings` 是否过于保守？
+-   `executorThreadCount` 是否不足？
+-   Pod 的 CPU/内存资源是否已达瓶颈？
 
 五、总结
 
-|                      |                                     |                                |                                        |
-| -------------------- | ----------------------------------- | ------------------------------ | -------------------------------------- |
-| 指标                 | 描述                                | 监控图形态                     | 解读建议                               |
-| publish_to_ack_delta | 从发布到被 ack 的延迟               | 负值为过去发生，正值为未来估算 | 持续增大可能有消费延迟或堆积           |
-| pull_to_ack_delta    | 从客户端 pull 到 ack 的处理时间延迟 | 负值常见                       | 持续增大可能表示线程池耗尽、业务处理慢 |
+| 指标                 | 描述                                                         | 监控图形态                                     | 解读建议                                                                 |
+| -------------------- | ------------------------------------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------ |
+| `publish_to_ack_delta` | 从发布到被**立即 ack** 的延迟                                | 应为非常小且稳定的负值                         | 增大表明客户端接收或 ACK 链路存在瓶颈。                                  |
+| `pull_to_ack_delta`    | 从客户端 pull 到**立即 ack** 的延迟                          | 应为非常小且稳定的负值                         | 增大表明消费者 Pod 本身存在资源或网络问题，无法快速完成“接收-确认”这个动作。 |
 
 如果你有 Cloud Monitoring 图像或值波动异常的截图，也可以贴给我一起分析具体指标异常趋势。
 
