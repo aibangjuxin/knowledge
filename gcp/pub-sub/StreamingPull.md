@@ -109,7 +109,7 @@ graph TD
 | **指标名**                 | **含义**                                                                 |
 | -------------------------- | ------------------------------------------------------------------------ |
 | open_streaming_pulls       | 当前打开的 Streaming Pull 连接数，应与 parallel-pull-count \* Pod 数一致 |
-| num_undelivered_messages   | 堆���消息数                                                               |
+| num_undelivered_messages   | 堆 ��� 消息数                                                            |
 | oldest_unacked_message_age | 最久未 ack 消息的年龄，健康应维持在几十秒以内                            |
 | expired_ack_deadlines      | 被重新投递的消息数量，若频繁说明 ack 不及时                              |
 
@@ -138,11 +138,106 @@ subscriber = Subscriber.newBuilder(subscriptionName, (message, consumer) -> {
 | ------------------- | ------------------------------------------------ |
 | executor-threads    | ≥ 100（适合 IO 密集）                            |
 | parallel-pull-count | 2~4（可与 CPU 核数等同）                         |
-| ack 策略            | **���到即 ack** 可继续使用，但需防异常丢 ack      |
+| ack 策略            | **��� 到即 ack** 可继续使用，但需防异常丢 ack    |
 | ack-deadline        | 建议设置为 30~60s                                |
 | 指标监控            | open_streaming_pulls、oldest_unacked_message_age |
+|                     |                                                  |
+
+你观察到：
+
+- 配置 parallel-pull-count=4，**2 个 Pod 实际 StreamingPull 会话数远大于 8（达到 20）**；
+- **默认不配置**时，**2 个 Pod 稳定在约 4 个会话**；
+
+这是个很好的问题，下面我来从 **Spring GCP Pub/Sub 实现逻辑 + 底层客户端行为** 解释这个现象。
 
 ---
+
+# **✅ 1.** 
+
+# **parallel-pull-count**
+
+#  **是建议值，不是硬限制**
+
+在 spring-cloud-gcp-pubsub 中，parallel-pull-count 的本质是传给 Google 的原生客户端库（Subscriber.Builder.setParallelPullCount）的参数，**它控制的是创建多少个 StreamingPull 线程（Sessions）**，但客户端库**可能根据负载或内部重试机制自动增加连接**。
+
+也就是说：
+
+> ⚠️ 你设的是 “至少 x 个连接”，但并不是硬性上限。
+
+---
+
+# **✅ 2. 超过设定值的原因（为什么你看到的是 20 个）**
+
+| **原因分类**                    | **详细解释**                                                                                                     |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **异常自动重建机制**            | 如果某些 StreamingPull 连接出错，Google 客户端会尝试自动重建连接，短时间内旧连接未完全关闭，导致连接数临时增多。 |
+| **健康探测 + 重连**             | 原生 Pub/Sub 客户端会为“健康监控”目的临时打开额外连接，提升吞吐。                                                |
+| **负载自适应策略**（少见）      | 在早期客户端版本中，确实存在“预拉取加速”机制，即主动开启额外连接来拉更多数据，尤其在有 backlog 时                |
+| **线程泄露或多实例 Subscriber** | 如果你在一个 Pod 中初始化了多个 Subscriber（如配置类加载多次），也会导致远超 parallel-pull-count 的会话数        |
+
+---
+
+# **✅ 3. 默认值为多少？**
+
+不配置时（即未显式设置 spring.cloud.gcp.pubsub.subscriber.parallel-pull-count）：
+
+- Spring 默认只会设置为 **1**；
+- 也就是每个 Subscriber（每个 Pod）只有一个 StreamingPull 会话；
+- 实际观察到的 2 个 Pod → 4 个连接，说明 Google 客户端内部会按需打开连接（如 health check/auto reconnect）；
+
+---
+
+# **✅ 4. 建议你进一步确认的点：**
+
+### **✅ 查看每个 Pod 的实际连接数**
+
+可通过以下方式确认：
+
+```
+kubectl exec [POD_NAME] -- lsof -i | grep pubsub
+```
+
+或在 Java 应用中启用 Debug 日志，确认 StreamingPull 的创建：
+
+```
+logging.level.com.google.cloud.pubsub=DEBUG
+```
+
+### **✅ 检查代码是否多次初始化** 
+
+### **Subscriber**
+
+确认是否你的 @Bean 配置或某个 service 中不小心反复 new 出了多个 Subscriber。
+
+---
+
+# **✅ 5. 最佳实践建议**
+
+| **项目**            | **建议值或做法**                                               |
+| ------------------- | -------------------------------------------------------------- |
+| executor-threads    | IO 密集场景可设置 50~200                                       |
+| parallel-pull-count | 设置为 CPU 核心数 × 12，如 24                                  |
+| Subscriber 实例     | 每个订阅一个实例，确保不重复初始化                             |
+| 日志监控            | 打开 Subscriber 的 Debug 日志，观察实际 StreamingPull 建立情况 |
+
+---
+
+# **✅ 小结**
+
+```
+- `parallel-pull-count=4` ≠ 硬性最大连接数，而是“目标数量”，可能超出；
+- 多出的 StreamingPull 会话可能来自：
+  - 自动重连（错误恢复）
+  - 内部健康检查
+  - 多次初始化 Subscriber 实例
+- 默认值为 1，每个 Pod 一个连接；
+- 如你看到稳定连接数量远超预期（如 20），可检查：
+  - 应用是否重复初始化 Subscriber
+  - 是否异常重连未及时回收连接
+```
+
+---
+
 # Gemini 的分析与优化建议
 
 您好！根据您提供的信息，您已经正确地识别出 `unacked-message-by-region` 是关键问题，并且您的“收到即确认”模式和高线程数配置是合理的。然而，瓶颈往往隐藏在系统的其他环节。以下是我的分析和优化建议。
@@ -154,14 +249,14 @@ subscriber = Subscriber.newBuilder(subscriptionName, (message, consumer) -> {
 1.  **拉取阶段**：应用通过 `StreamingPull` 连接从 Google Pub/Sub 服务获取消息。
 2.  **处理阶段**：应用内的线程（`executor-threads`）从拉取到的消息队列中取出消息，执行业务逻辑（包括 `ack()`）。
 
-您设置的 `executor-threads: 100` 优化了**处理阶段**，确保有足够的“工人”来处理任务。但如果**拉取阶段**只有一个“入口”（即一个 `StreamingPull` 连接），消息进入应用的速度就会���限，导致大量消息停留在 Pub/Sub 服务端，从而使 `unacked-message-by-region` 指标居高不下。
+您设置的 `executor-threads: 100` 优化了**处理阶段**，确保有足够的“工人”来处理任务。但如果**拉取阶段**只有一个“入口”（即一个 `StreamingPull` 连接），消息进入应用的速度就会 ��� 限，导致大量消息停留在 Pub/Sub 服务端，从而使 `unacked-message-by-region` 指标居高不下。
 
 ## `parallel-pull-count`：打开更多消息入口
 
 `spring.cloud.gcp.pubsub.subscriber.parallel-pull-count` 参数正是解决**拉取阶段**瓶颈的关键。
 
-*   **作用**：它定义了**每个 Pod（或应用实例）** 创建多少个并行的 `StreamingPull` 长连接来从 Pub/Sub 拉取消息。
-*   **效果**：将其从默认值 `1` 调高，相当于为您的应用打开了多个并行的消息“入口”。这使得您的应用可以更积极、更快速地从订阅中抽取消息，然后分发给庞大的 `executor-threads` 线程池进行处理。
+- **作用**：它定义了**每个 Pod（或应用实例）** 创建多少个并行的 `StreamingPull` 长连接来从 Pub/Sub 拉取消息。
+- **效果**：将其从默认值 `1` 调高，相当于为您的应用打开了多个并行的消息“入口”。这使得您的应用可以更积极、更快速地从订阅中抽取消息，然后分发给庞大的 `executor-threads` 线程池进行处理。
 
 ### 如何设置合理的 `parallel-pull-count` 值？
 
@@ -169,12 +264,12 @@ subscriber = Subscriber.newBuilder(subscriptionName, (message, consumer) -> {
 
 1.  **从 CPU 核心数开始**：一个好的起始值是您为 Pod 分配的 CPU 核心数。例如，如果您的 Pod 有 `2` 个 vCPU，可以设置 `parallel-pull-count: 2`。这是因为每个 `StreamingPull` 连接本身会消耗一定的 CPU 资源来管理 gRPC 流。
 2.  **根据业务类型调整**：
-    *   对于像您这样的 **IO 密集型** 业务，线程大部分时间在等待外部资源（如 API 响应），CPU 消耗不高。因此，您可以尝试设置得比 CPU 核心数**略高**，例如 `3` 或 `4`，并观察性能。
-    *   对于 **CPU 密集型** 业务，建议将此值保持为 CPU 核心数，避免过多的上下文切换开销。
+    - 对于像您这样的 **IO 密集型** 业务，线程大部分时间在等待外部资源（如 API 响应），CPU 消耗不高。因此，您可以尝试设置得比 CPU 核心数**略高**，例如 `3` 或 `4`，并观察性能。
+    - 对于 **CPU 密集型** 业务，建议将此值保持为 CPU 核心数，避免过多的上下文切换开销。
 3.  **监控和迭代**：最佳值需要通过实验找到。调整后，请密切关注以下指标：
-    *   **`subscription/oldest_unacked_message_age`**：这是最重要的指标。优化后，它的值应该显著下降并保持在一个较低的稳定水平。
-    *   **`subscription/open_streaming_pulls`**：该指标的总数应等于 `(parallel-pull-count) * (Pod 数量)`。
-    *   **Pod 的 CPU 和内存利用率**：确保新的配置没有给您的应用带来过度的资源压力。
+    - **`subscription/oldest_unacked_message_age`**：这是最重要的指标。优化后，它的值应该显著下降并保持在一个较低的稳定水平。
+    - **`subscription/open_streaming_pulls`**：该指标的总数应等于 `(parallel-pull-count) * (Pod 数量)`。
+    - **Pod 的 CPU 和内存利用率**：确保新的配置没有给您的应用带来过度的资源压力。
 
 ### 推荐配置示例
 
@@ -215,7 +310,7 @@ graph TD
             T_Etc[Worker Thread ...]
             T100[Worker Thread 100]
         end
-        
+
         PubSub[Google Pub/Sub Service] --> SP1
         PubSub --> SP2
         PubSub --> SP_Etc
