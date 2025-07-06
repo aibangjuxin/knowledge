@@ -6,7 +6,7 @@ https://cloud.google.com/pubsub/docs/concurrency-control?hl=zh-cn#java
 
 是的，你的理解 基本正确，但需要更精确一点。下面我来给你详细解释下 ackDeadlineSeconds 的意义、客户端 ack 的时机，以及它和后端服务之间的关系：
 
-⸻
+---
 
 ✅ ackDeadlineSeconds 的真实含义
 
@@ -14,13 +14,15 @@ https://cloud.google.com/pubsub/docs/concurrency-control?hl=zh-cn#java
 
 默认值为 10 秒，最大可以配置到 600 秒（10 分钟），客户端可以通过 lease extension 自动延长这个时间。
 
-⸻
+---
 
 🔄 Pull 模式下的 ack 生命周期
 
 以你使用的 Java Subscriber 客户端为例（拉模式）：
 
+```java
 subscriber.startAsync();
+```
 
 一条消息的处理流程如下：
 
@@ -30,20 +32,22 @@ Pub/Sub 发送消息 -> 客户端收到 -> 调用 MessageReceiver.receiveMessage
 	•	ackHandler.ack() ✅ 表示这条消息已经被成功处理（不再重投）
 	•	ackHandler.nack() ❌ 表示处理失败，Pub/Sub 会在 ackDeadline 过期后重新投递消息
 
-⸻
+---
 
 ❗️关键点澄清
 
-问题	说明
-拉取到消息后立即 ack，可以吗？	✅ 是的。你可以在一拉取就 ack（哪怕还没发给后端服务），Pub/Sub 就认为这条消息已完成，不会再重试。
-ack 与后端服务处理是否强绑定？	❌ 没有绑定。Pub/Sub 不知道你消息内部的业务逻辑处理情况，只认你是否 ack() 了这条消息。
-如果你 pull 到后出错没 ack 呢？	⏳ Pub/Sub 会在 ackDeadline 到期后重试投递该消息，直到 ack 或达到 maxDeliveryAttempts（Dead Letter）
+| 问题 | 说明 |
+| --- | --- |
+| 拉取到消息后立即 ack，可以吗？ | ✅ 是的。你可以在一拉取就 ack（哪怕还没发给后端服务），Pub/Sub 就认为这条消息已完成，不会再重试。 |
+| ack 与后端服务处理是否强绑定？ | ❌ 没有绑定。Pub/Sub 不知道你消息内部的业务逻辑处理情况，只认你是否 ack() 了这条消息。 |
+| 如果你 pull 到后出错没 ack 呢？ | ⏳ Pub/Sub 会在 ackDeadline 到期后重试投递该消息，直到 ack 或达到 maxDeliveryAttempts（Dead Letter） |
 
 
-⸻
+---
 
 🧪 示例：错误 ack 导致消息丢失（风险提醒）
 
+```java
 MessageReceiver receiver =
     (PubsubMessage message, AckReplyConsumer consumer) -> {
         consumer.ack();  // 你还没处理就 ack 了
@@ -51,13 +55,15 @@ MessageReceiver receiver =
         // 异步调用后端服务
         callBackendService(message.getData());
     };
+```
 
 这种写法是危险的，因为如果 callBackendService() 调用失败或超时，消息也不会重投 —— 因为你已经 ack 了。
 
-⸻
+---
 
 ✅ 正确实践建议
 
+```java
 MessageReceiver receiver =
     (PubsubMessage message, AckReplyConsumer consumer) -> {
         try {
@@ -67,15 +73,15 @@ MessageReceiver receiver =
             consumer.nack(); // 通知 Pub/Sub 重投
         }
     };
+```
 
-
-⸻
+---
 
 📌 总结一句话
 
 你 ack 消息的时机是关键：一旦 ack，Pub/Sub 就认为这条消息生命周期结束。至于你是否真的处理完、是否调用了后端服务，Pub/Sub 不会也无法感知。
 
-⸻
+---
 
 是否需要我画一个流图来展示 ack 和后端请求之间的关系（并不耦合）？
 
@@ -84,7 +90,7 @@ MessageReceiver receiver =
 	•	后端调用与 Pub/Sub 无感知
 	•	错误 ack 会导致消息丢失
 
-⸻
+---
 
 ```mermaid
 flowchart TD
@@ -108,17 +114,17 @@ flowchart TD
         I -- 否 --> K[ackHandler.nack] --> L[Pub/Sub 重试消息]
     end
 
-    classDef gray fill=#e8e8e8,color=#888
+    classDef gray fill:#e8e8e8,color:#888
 ```
 
-⸻
+---
 
 🧠 图示说明
 	•	你可以在 处理前就 ack，Pub/Sub 就“认为你成功了”，哪怕后面失败了也不会再投递。
 	•	推荐模式是：先处理 → 成功后再 ack，失败则 nack。
 	•	ackDeadlineSeconds 是客户端自动延长的（在后台完成），你不需要手动管除非你写的是底层 API。
 
-⸻
+---
 
 如果你未来想做更复杂的场景（比如部分 ack、幂等重试、dead-letter queue），也可以继续扩展这套模型。是否需要我也补上 DLQ 场景？
 
@@ -197,221 +203,15 @@ sequenceDiagram
 
 ## 时间窗口包含的所有环节
 
-| 环节             | 耗时估算   | 说明                                   |
-| ---------------- | ---------- | -------------------------------------- |
-| **Pull 延迟**    | 50-200ms   | Schedule Service 发起 Pull 到接收消息  |
-| **消息解析**     | 10-50ms    | 解析消息体，构建 HTTP 请求             |
-| **重试循环**     | 0-1080s    | 3 次重试 × (Kong 超时 6min + 间隔时间) |
-| **网络往返**     | 50-500ms   | 到 Kong 的网络延迟                     |
-| **Kong 处理**    | 10-100ms   | 路由、插件处理时间                     |
-| **Backend 处理** | 100ms-5min | 实际业务逻辑处理时间                   |
-| **ACK 确认**     | 50-200ms   | 发送 ACK 到 Pub/Sub                    |
-
-## 当前问题分析
-
-根据你的配置：
-
-- Kong 超时：6 分钟
-- 重试 3 次：间隔 0s, 10s, 20s
-- 总重试时间：**最坏情况 ≈ 18 分钟 + 30 秒**
-
-```
-最坏情况计算：
-第1次: 6分钟 + 0秒延迟
-第2次: 6分钟 + 10秒延迟
-第3次: 6分钟 + 20秒延迟
-总计: 18分30秒 + 其他处理时间
-```
-
-## 推荐的 ackDeadlineSeconds 配置
-
-```yaml
-# 保守配置 (推荐)
-ackDeadlineSeconds: 1800  # 30分钟
-
-# 激进配置 (如果你想强制快速处理)
-ackDeadlineSeconds: 1200  # 20分钟
-
-# 计算依据
-# 重试总时间(18.5min) + 业务处理时间(5min) + 缓冲时间(6.5min) = 30min
-```
-
-## 优化建议
-
-### 1. 缩短单次超时时间
-
-```java
-// HTTP Client 配置优化
-@Bean
-public RestTemplate restTemplate() {
-    HttpComponentsClientHttpRequestFactory factory =
-        new HttpComponentsClientHttpRequestFactory();
-
-    // 缩短单次请求超时
-    factory.setConnectTimeout(5000);     // 连接超时 5s
-    factory.setReadTimeout(180000);      // 读取超时 3min (而非依赖Kong的6min)
-
-    return new RestTemplate(factory);
-}
-```
-
-### 2. 智能重试策略
-
-```java
-@Bean
-public RetryTemplate retryTemplate() {
-    RetryTemplate retryTemplate = new RetryTemplate();
-
-    // 指数退避，总重试时间控制在10分钟内
-    ExponentialBackOffPolicy backOffPolicy = new ExponentialBackOffPolicy();
-    backOffPolicy.setInitialInterval(2000);      // 2s
-    backOffPolicy.setMultiplier(2.0);
-    backOffPolicy.setMaxInterval(60000);         // 最大1分钟
-
-    // 时间限制重试策略
-    TimeoutRetryPolicy retryPolicy = new TimeoutRetryPolicy();
-    retryPolicy.setTimeout(600000);  // 10分钟总重试时间
-
-    retryTemplate.setBackOffPolicy(backOffPolicy);
-    retryTemplate.setRetryPolicy(retryPolicy);
-
-    return retryTemplate;
-}
-```
-
-### 3. 并发处理避免阻塞
-
-```java
-@Component
-public class MessageProcessor {
-
-    @Async("messageProcessingExecutor")
-    public CompletableFuture<Void> processMessage(PubsubMessage message) {
-        try {
-            // 异步处理消息，避免阻塞其他消息
-            String result = retryTemplate.execute(context -> {
-                return callBackendService(message);
-            });
-
-            // 处理成功，立即ACK
-            message.ack();
-
-        } catch (Exception e) {
-            // 处理失败，NACK让消息重新投递
-            message.nack();
-        }
-
-        return CompletableFuture.completedFuture(null);
-    }
-}
-```
-
-### 4. 监控 ackDeadlineSeconds 使用情况
-
-```java
-// 自定义指标监控
-@Component
-public class PubSubMetrics {
-
-    private final MeterRegistry meterRegistry;
-    private final Timer.Sample processTimer;
-
-    public void startProcessing() {
-        processTimer = Timer.start(meterRegistry);
-    }
-
-    public void endProcessing(boolean success) {
-        processTimer.stop(Timer.builder("pubsub.message.process.duration")
-            .tag("success", String.valueOf(success))
-            .register(meterRegistry));
-    }
-}
-```
-
-## 关键点总结
-
-1. **ackDeadlineSeconds = 你的 E2E 处理时间上限**
-2. **超过这个时间，消息会被重新投递给其他消费者实例**
-3. **重复投递可能导致重复处理，需要业务幂等性保证**
-4. **建议设置为最坏情况的 1.5-2 倍作为安全缓冲**
-
-## 你的理解完全正确！这个时间窗口覆盖了从消息可供拉取到 ACK 确认的整个生命周期。
-
-## PULL 模式下的 gcloud 命令输出
-
-```bash
-# 查看 PULL 模式订阅配置
-gcloud pubsub subscriptions describe SUBSCRIPTION_NAME
-
-# PULL 模式输出示例
-ackDeadlineSeconds: 600
-enableMessageOrdering: false
-expirationPolicy: {}
-messageRetentionDuration: 604800s
-name: projects/PROJECT_ID/subscriptions/SUBSCRIPTION_NAME
-# 注意：PULL 模式没有 pushConfig 字段，或者 pushConfig 为空
-pushConfig: {}
-retainAckedMessages: false
-topic: projects/PROJECT_ID/topics/TOPIC_NAME
-
-# 额外的 PULL 模式相关配置
-flowControlSettings:
-  maxOutstandingMessages: 1000
-  maxOutstandingBytes: 104857600
-```
-
-## PULL 模式下 ackDeadlineSeconds 的精确含义
-
-在 **PULL 模式**下，`ackDeadlineSeconds: 600` 的计时方式：
-
-```mermaid
-sequenceDiagram
-    participant PS as Pub/Sub Server
-    participant SS as Schedule Service (PULL)
-    participant Kong as Kong Gateway
-    participant BS as Backend Service
-
-    SS->>PS: Pull Request (主动拉取)
-    Note over PS,BS: ackDeadlineSeconds = 600s 计时开始 ⏰
-    PS->>SS: 返回消息批次
-
-    Note over SS: 开始处理消息
-    SS->>SS: 解析消息
-    SS->>Kong: HTTP请求 (第1次)
-    Kong->>BS: 转发
-
-    alt Backend Service 响应慢
-        BS-->>Kong: 6分钟后超时
-        Kong-->>SS: 超时响应
-
-        Note over SS: 等待 0s
-        SS->>Kong: HTTP请求 (第2次)
-        Kong->>BS: 转发
-        BS-->>Kong: 6分钟后超时
-        Kong-->>SS: 超时响应
-
-        Note over PS: ⚠️ 如果总时间 > 600s
-        Note over PS: 消息将被重新投递!
-
-        Note over SS: 等待 10s
-        SS->>Kong: HTTP请求 (第3次)
-        Kong->>BS: 转发
-        BS-->>Kong: 成功响应
-        Kong-->>SS: 成功响应
-    end
-
-    SS->>PS: ACK 确认
-    Note over PS,BS: ackDeadlineSeconds 计时结束 ⏹️
-```
-
-## PULL 模式的关键特性
-
-| 特性         | PULL 模式                           | 影响                               |
-| ------------ | ----------------------------------- | ---------------------------------- |
-| **消息拉取** | Schedule Service 主动 Pull          | 可控制拉取频率和批量大小           |
-| **并发控制** | 客户端控制 `maxOutstandingMessages` | 可设置未 ACK 消息的上限            |
-| **超时计算** | 从 Pull 成功返回开始计时            | **不包括** Pull Request 的网络时间 |
-| **重新投递** | 600s 后消息重新可被拉取             | 可能被同一实例或其他实例拉取       |
+| 环节 | 耗时估算 | 说明 |
+| --- | --- | --- |
+| **Pull 延迟** | 50-200ms | Schedule Service 发起 Pull 到接收消息 |
+| **消息解析** | 10-50ms | 解析消息体，构建 HTTP 请求 |
+| **重试循环** | 0-1080s | 3 次重试 × (Kong 超时 6min + 间隔时间) |
+| **网络往返** | 50-500ms | 到 Kong 的网络延迟 |
+| **Kong 处理** | 10-100ms | 路由、插件处理时间 |
+| **Backend 处理** | 100ms-5min | 实际业务逻辑处理时间 |
+| **ACK 确认** | 50-200ms | 发送 ACK 到 Pub/Sub |
 
 ## 当前配置问题分析
 
@@ -606,14 +406,14 @@ public class HttpClientConfig {
 
 ## 推荐时间配置
 
-| 组件                    | 超时配置             | 说明                |
-| ----------------------- | -------------------- | ------------------- |
-| **ackDeadlineSeconds**  | 600s                 | Pub/Sub 最大限制    |
-| **HTTP ConnectTimeout** | 3s                   | 快速发现网络问题    |
-| **HTTP ReadTimeout**    | 120s                 | 单次请求 2 分钟上限 |
-| **应用层重试次数**      | 4 次                 | 在 580s 内完成      |
-| **重试间隔**            | 3s, 4.5s, 6.75s, 10s | 指数退避            |
-| **总处理超时**          | 580s                 | 留 20s 缓冲给 ACK   |
+| 组件 | 超时配置 | 说明 |
+| --- | --- | --- |
+| **ackDeadlineSeconds** | 600s | Pub/Sub 最大限制 |
+| **HTTP ConnectTimeout** | 3s | 快速发现网络问题 |
+| **HTTP ReadTimeout** | 120s | 单次请求 2 分钟上限 |
+| **应用层重试次数** | 4 次 | 在 580s 内完成 |
+| **重试间隔** | 3s, 4.5s, 6.75s, 10s | 指数退避 |
+| **总处理超时** | 580s | 留 20s 缓冲给 ACK |
 
 这样配置可以确保在 PULL 模式下，所有处理都在 `ackDeadlineSeconds` 限制内完成。
 
@@ -640,10 +440,10 @@ public class HttpClientConfig {
 
 ## **⏱ 推荐策略：**
 
-| **场景**               | **建议设置**                                  |
-| ---------------------- | --------------------------------------------- |
-| 简单处理（几秒完成）   | ackDeadlineSeconds: 10~20                     |
-| 后台重处理、复杂任务   | ackDeadlineSeconds: 60~300                    |
+| **场景** | **建议设置** |
+| --- | --- |
+| 简单处理（几秒完成） | ackDeadlineSeconds: 10~20 |
+| 后台重处理、复杂任务 | ackDeadlineSeconds: 60~300 |
 | 异步处理（不等待结果） | 快速返回 200，异步处理，**无需延长 deadline** |
 
 ---
@@ -673,7 +473,7 @@ public class HttpClientConfig {
 
 ### **ackDeadlineSeconds**
 
-###  **控制的是：**
+### 	**控制的是：**
 
 > Pub/Sub 等待你的 HTTP 服务返回 2xx 响应的最长时间（从发送请求起计时），超时视为未 ack。
 
@@ -681,13 +481,13 @@ public class HttpClientConfig {
 
 ## **🔁 Pull 模式 vs Push 模式 ack 对比**
 
-| **行为**     | **Pull 模式**                        | **Push 模式**                            |
-| ------------ | ------------------------------------ | ---------------------------------------- |
-| 触发点       | 客户端调用 pull()                    | Pub/Sub 主动 POST 消息                   |
-| ack 方法     | 客户端手动调用 ack()                 | HTTP 服务返回 2xx                        |
+| **行为** | **Pull 模式** | **Push 模式** |
+| --- | --- | --- |
+| 触发点 | 客户端调用 pull() | Pub/Sub 主动 POST 消息 |
+| ack 方法 | 客户端手动调用 ack() | HTTP 服务返回 2xx |
 | ack 超时控制 | ackDeadlineSeconds：从 pull 返回算起 | ackDeadlineSeconds：从 POST 请求发送算起 |
-| 失败处理     | 超时/未 ack 会重新投递               | HTTP 错误/超时 会重新 POST               |
-| 幂等处理要求 | 需要（可能会重复 pull）              | 需要（可能会重复 POST）                  |
+| 失败处理 | 超时/未 ack 会重新投递 | HTTP 错误/超时 会重新 POST |
+| 幂等处理要求 | 需要（可能会重复 pull） | 需要（可能会重复 POST） |
 
 ---
 

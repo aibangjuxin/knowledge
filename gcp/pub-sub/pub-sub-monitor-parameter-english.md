@@ -137,10 +137,10 @@ The only reason is that **your consumer client (ScheduleService) cannot keep up*
 
 **5. Summary**
 
-| Metric                 | Description                                                         | Monitoring Chart Behavior                                     | Interpretation                                                                 |
-| ---------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `publish_to_ack_delta` | Latency from publish to **immediate ack**.                          | Should be a very small and stable negative value.             | An increase indicates a bottleneck in the client's reception or ACK pathway.   |
-| `pull_to_ack_delta`    | Latency from client pull to **immediate ack**.                      | Should be a very small and stable negative value.             | An increase indicates the consumer Pod itself has resource or network issues preventing it from quickly completing the "receive-acknowledge" action. |
+| Metric | Description | Monitoring Chart Behavior | Interpretation |
+| --- | --- | --- | --- |
+| `publish_to_ack_delta` | Latency from publish to **immediate ack**. | Should be a very small and stable negative value. | An increase indicates a bottleneck in the client's reception or ACK pathway. |
+| `pull_to_ack_delta` | Latency from client pull to **immediate ack**. | Should be a very small and stable negative value. | An increase indicates the consumer Pod itself has resource or network issues preventing it from quickly completing the "receive-acknowledge" action. |
 
 If you have screenshots of Cloud Monitoring charts or abnormal value fluctuations, feel free to share them for a joint analysis.
 

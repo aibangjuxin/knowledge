@@ -7,8 +7,6 @@
 
 ## **✅ GCP Pub/Sub 的两种订阅模式**
 
-  
-
 Google Cloud Pub/Sub 支持两种消息拉取方式（Subscriber 模式）：
 
 |**模式**|**说明**|**ScheduleService 使用方式**|
@@ -20,8 +18,6 @@ Google Cloud Pub/Sub 支持两种消息拉取方式（Subscriber 模式）：
 
 ## **✅ 你当前流程对应的方式**
 
-  
-
 你的 Flow 是：
 
 ```mermaid
@@ -30,15 +26,13 @@ sequenceDiagram
     PubSub->>ScheduleService: Deliver message
 ```
 
-这个**更像是 Push 模式**，但实际上你提到 ScheduleService 中有重试逻辑、调用 Kong，并最终 Ack 消息，**更符合 Pull 模式**（你控制处理过程）。
+这个**更像是 Push 模式**，但实际上你提到 ScheduleService 中有重试逻辑、调用 Kong，并最终 Ack 消息，**更符合 Pull 模式**（你控制处理��程）。
 
 ---
 
 ## **✅ 推荐使用：**
 
 ## **Pull Subscription + Streaming Pull**
-
-  
 
 ### **📌 优势**
 
@@ -53,11 +47,9 @@ sequenceDiagram
 
 ## **✅ ScheduleService 消费 Pub/Sub 消息的推荐方式**
 
-  
-
 ### **☑️ 使用 GCP Java Client SDK：**
 
-```java
+```xml
 <!-- Maven依赖 -->
 <dependency>
   <groupId>com.google.cloud</groupId>
@@ -68,7 +60,7 @@ sequenceDiagram
 
 ### **☑️ 核心消费代码（Streaming Pull）**
 
-```
+```java
 ProjectSubscriptionName subscriptionName =
     ProjectSubscriptionName.of("your-project-id", "your-subscription-id");
 
@@ -109,8 +101,6 @@ flowchart TD
 
 ## **✅ 控制消费行为**
 
-  
-
 你可以配置以下参数：
 
 |**参数**|**说明**|
@@ -132,11 +122,9 @@ FlowControlSettings flowControlSettings =
 
 ## **✅ Push 模式适用场景（可选了解）**
 
-  
-
 如果你不希望自己控制拉取和 ack，可以配置：
 
-```
+```bash
 gcloud pubsub subscriptions create my-sub \
   --topic=my-topic \
   --push-endpoint=https://schedule-service-url/tasks \
@@ -173,8 +161,6 @@ gcloud pubsub subscriptions create my-sub \
 
 这是一个非常核心且容易被忽略的问题。
 
-  
-
 当你的 **Schedule Service 主动去 pull Pub/Sub 消息** 时，**拉取频率、时间间隔、线程数等控制策略**是影响吞吐量和稳定性的关键。
 
 ---
@@ -185,19 +171,13 @@ gcloud pubsub subscriptions create my-sub \
 
 ## **（推荐）**
 
-  
-
-这是 Google Cloud Pub/Sub Java 客户端中 **默认且推荐** 的方式。你不需要手动轮询，SDK 会通过一个长连接 **持续监听** 消息的到来。它不是 cron 轮询，也不是你手动设置间隔，而是：
-
-  
+这是 Google Cloud Pub/Sub Java 客户端中 **默认且推荐** 的方式。你不需要手动轮询，SDK 会通过一个长连接 **持续监听** 消息的到���。它不是 cron 轮询，也不是你手动设置间隔，而是：
 
 > **一旦你启动 Subscriber，客户端会自动在后台维护一个 Streaming Pull 的长连接，并由内部线程池处理消息。**
 
 ---
 
 ## **✅ 控制拉取行为的关键参数**
-
-  
 
 你不控制「多久拉一次」，你控制以下维度：
 
@@ -214,7 +194,7 @@ gcloud pubsub subscriptions create my-sub \
 
 ## **✅ 示例：你如何控制拉取「频率」**
 
-```
+```java
 Subscriber subscriber = Subscriber.newBuilder(subscriptionName, receiver)
     .setFlowControlSettings(
         FlowControlSettings.newBuilder()
@@ -243,11 +223,7 @@ Subscriber subscriber = Subscriber.newBuilder(subscriptionName, receiver)
 
 ## **✅ 监控和核对拉取情况（建议使用指标）**
 
-  
-
 你可以通过以下方式确认实际拉取速率与频率：
-
-  
 
 ### **1. GCP Monitoring 的 Metrics（推荐）**
 
@@ -262,11 +238,9 @@ metric: pubsub.googleapis.com/subscription/pull_message_operation_count
 - response_code（ACK、NACK、DEADLINE_EXCEEDED）
     
 
-  
-
 ### **2. Java 应用自身指标（Micrometer + Prometheus）**
 
-```
+```yaml
 management:
   metrics:
     enable:
@@ -275,7 +249,7 @@ management:
 
 你可以手动打指标：
 
-```
+```java
 metrics.counter("pubsub.message.processed", "status", "success").increment();
 ```
 

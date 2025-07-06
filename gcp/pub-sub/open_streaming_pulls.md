@@ -28,12 +28,12 @@ https://docs.spring.io/spring-cloud/docs/Hoxton.SR11/reference/html/configprops.
 
 这个数值依赖于以下几个因素：
 
-| **因素**                                 | **说明**                                                                |
-| ---------------------------------------- | ----------------------------------------------------------------------- |
-| **Pod 实例数**                           | 每个 GKE Pod 中的 subscriber 都可能建立一个 StreamingPull 长连接        |
-| **线程数 / executor 配置**               | 同一个 Pod 中，如果你有多个线程或 subscriber client，每个也建立一个连接 |
-| **客户端使用的 SDK 版本**                | 比如 Java Pub/Sub client 是否使用 StreamingPull 模式（默认是）          |
-| **是否启用 Subscriber concurrency 设置** | 比如通过配置线程池或 executor 提升并发，也会增加连接数                  |
+| **因素** | **说明** |
+| --- | --- |
+| **Pod 实例数** | 每个 GKE Pod 中的 subscriber 都可能建立一个 StreamingPull 长连接 |
+| **线程数 / executor 配置** | 同一个 Pod 中，如果你有多���线程或 subscriber client，每个也建立一个连接 |
+| **客户端使用的 SDK 版本** | 比如 Java Pub/Sub client 是否使用 StreamingPull 模式（默认是） |
+| **是否启用 Subscriber concurrency 设置** | 比如通过配置线程池或 executor 提升并发，也会增加连接数 |
 
 ---
 
@@ -56,7 +56,7 @@ spring.cloud.gcp.pubsub.subscriber.executor-threads=4
 
 在 Java 配置中实际可能是：
 
-```
+```java
 Subscriber subscriber =
     Subscriber.newBuilder(subscriptionName, messageReceiver)
               .setExecutorProvider(
@@ -66,12 +66,12 @@ Subscriber subscriber =
 
 #### **那么 open_streaming_pulls 大概是多少？**
 
-| **情况**                              | **open_streaming_pulls 大概是多少**              |
-| ------------------------------------- | ------------------------------------------------ |
-| 1 个 Pod，单个线程                    | ≈ 1                                              |
-| 1 个 Pod，配置 4 线程                 | ≈ 1（仅一个 StreamingPull 连接，线程不等于连接） |
-| 4 个 Pod，每个 1 连接                 | ≈ 4                                              |
-| 4 个 Pod，每个手动创建多个 Subscriber | ≈ 4 ~ N                                          |
+| **情况** | **open_streaming_pulls 大概是多少** |
+| --- | --- |
+| 1 个 Pod，单个线程 | ≈ 1 |
+| 1 个 Pod，配置 4 线程 | ≈ 1（仅一�� StreamingPull 连接，线程不等于连接） |
+| 4 个 Pod，每个 1 连接 | ≈ 4 |
+| 4 个 Pod，每个手动创建多个 Subscriber | ≈ 4 ~ N |
 
 > ⚠️ 注意：**线程数 ≠ 连接数**。Pub/Sub Java client 默认是通过 **单个 StreamingPull 连接 + 多线程处理消息**。
 
@@ -85,22 +85,22 @@ Subscriber subscriber =
 2. **查看 Pod 内日志，或设置 client metrics 观察 StreamingPull 数**
 3. **优化连接数建议**：
 
-| **优化目标**           | **建议操作**                                  |
-| ---------------------- | --------------------------------------------- |
+| **优化目标** | **建议操作** |
+| --- | --- |
 | 提高并发但不增加连接数 | 增加 executor-threads，每个连接可并发处理消息 |
-| 增加连接数             | 增加 Pod 数量，或使用多个 Subscriber 实例     |
-| 限制连接数             | 通过配置连接池或控制 Subscriber 实例创建      |
+| 增加连接数 | 增加 Pod 数量，或使用多个 Subscriber 实例 |
+| 限制连接数 | 通过配置连接池或控制 Subscriber 实例创建 |
 
 ---
 
 ## **✅ 总结表格**
 
-| **指标名称**         | **描述**                                                                   |
-| -------------------- | -------------------------------------------------------------------------- |
-| open_streaming_pulls | 当前活跃的 gRPC StreamingPull 连接数                                       |
-| 决定因素             | Pod 数量、是否使用多个 Subscriber、是否使用 StreamingPull 模式等           |
-| 在 Java 中表现       | 每个 Subscriber 实例对应一个连接，线程数用于并发处理不增加连接数           |
-| 配置建议             | 使用线程池提升并发；增加 Pod 数量增加连接；避免一个 Pod 打多个连接除非必要 |
+| **指标名称** | **描述** |
+| --- | --- |
+| open_streaming_pulls | 当前活跃的 gRPC StreamingPull 连接数 |
+| 决定因素 | Pod 数量、是否使用多个 Subscriber、是否使用 StreamingPull 模式等 |
+| 在 Java 中表现 | 每个 Subscriber 实例对应一个连接，线程数用于并发处理不增加连接数 |
+| 配置建议 | 使用线程池提升并发；增加 Pod 数量增加连接；避免一��� Pod 打多个连接除非必要 |
 
 ---
 
@@ -116,7 +116,7 @@ Subscriber subscriber =
 
 ### 什么是“open_streaming_pulls”及其来源
 
-“open_streaming_pulls”是一个 GCP Pub/Sub 服务的监控指标，表示当前为某个订阅开启的流式拉取（StreamingPull）连接数量。这些连接是订阅者（如 GKE Pod 中的 Java Spring 应用）与 Pub/Sub 服务之间建立的 gRPC 长连接，用于实时接收消息。  
+“open_streaming_pulls”是一个 GCP Pub/Sub 服务的监控指标，表示当前为某个订阅开启的流式拉取（StreamingPull）连接数量。这些连接是订阅者（如 GKE Pod 中的 Java Spring 应用）与 Pub/Sub 服务之间建立的 gRPC 长连接，用于实时接收消息。
 研究表明，这个值不是用户直接设置的，而是由 Pub/Sub 服务根据订阅者的行为和配置动态计算的。它反映了订阅者当前正在使用的连接数量，以确保能够及时处理传入的消息。
 
 ### 在 Java Spring 应用中如何定义
@@ -137,7 +137,7 @@ Subscriber subscriber =
 
 #### 引言
 
-本文旨在详细解答 GCP 平台中“open_streaming_pulls”的功能、来源以及在 GKE Pod 运行的 Java Spring 应用中如何定义的问题。我们将从 Pub/Sub 服务的流式拉取机制入手，探讨其与客户端库的交互，并结合 Spring Cloud GCP 的配置方式，提供全面的分析。
+本文旨在详细解答 GCP 平台中“open_streaming_pulls”的功能、来源以及在 GKE Pod 运行的 Java Spring 应用中如何定义的问题。我们将从 Pub/Sub 服务的流式拉取机制入手，探讨其与客户端库���交互，并结合 Spring Cloud GCP 的配置方式，提供全面的分析。
 
 #### “open_streaming_pulls”的定义与功能
 
@@ -161,11 +161,11 @@ Subscriber subscriber =
 
 Spring Cloud GCP 提供了 Pub/Sub 的抽象层，允许用户通过属性文件配置流控设置。以下是常见的配置属性：
 
-| 配置属性                                                                                              | 描述                                            | 是否必需 | 默认值 |
-| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------- | ------ |
-| `spring.cloud.gcp.pubsub.subscription.[subscription-name].flow-control.max-outstanding-element-count` | 最大未处理消息数量，超过此值将触发流控          | 否       | 无限制 |
-| `spring.cloud.gcp.pubsub.subscription.[subscription-name].flow-control.max-outstanding-request-bytes` | 最大未处理请求的字节数，超过此值将触发流控      | 否       | 无限制 |
-| `spring.cloud.gcp.pubsub.subscription.[subscription-name].flow-control.limit-exceeded-behavior`       | 当流控限制被超过时的行为（例如“Block”表示阻塞） | 否       | Block  |
+| 配置属性 | 描述 | 是否必需 | 默认值 |
+| --- | --- | --- | --- |
+| `spring.cloud.gcp.pubsub.subscription.[subscription-name].flow-control.max-outstanding-element-count` | 最大未处理消息数量，超过此值将触发流控 | 否 | 无限制 |
+| `spring.cloud.gcp.pubsub.subscription.[subscription-name].flow-control.max-outstanding-request-bytes` | 最大未处理请求的字节数，超过此值将触发流控 | 否 | 无限制 |
+| `spring.cloud.gcp.pubsub.subscription.[subscription-name].flow-control.limit-exceeded-behavior` | 当流控限制被超过时的行为（例如“Block”表示阻塞） | 否 | Block |
 
 这些配置通常在`application.properties`或`application.yml`中设置，例如：
 
@@ -179,7 +179,7 @@ spring.cloud.gcp.pubsub.subscription.my-subscription.flow-control.limit-exceeded
 
 这些流控设置会影响 Pub/Sub 客户端库的拉取行为。例如，如果`max-outstanding-element-count`设置为 1000，客户端库会确保最多有 1000 条未处理的未确认消息。这可能会导致客户端库打开更多的流式拉取连接，以确保能够及时拉取和处理消息。然而，连接数量的具体管理是由客户端库内部逻辑决定的，用户无法直接设置“open_streaming_pulls”的值。
 
-根据 2023 年 9 月 20 日的博客文章，流式拉取连接的数量还受到消息吞吐量的影响：“每个流式拉取连接可以处理 10 MB/s，因此在调整流控设置时需要考虑消息吞吐量。”这意味着，较高的吞吐量需求可能会导致更多的连接被打开，从而增加“open_streaming_pulls”的值。
+根据 2023 年 9 月 20 日的博客文章，流式拉取连接的数量还受到消息吞吐量的影响：“每个流式拉取连接可以处理 10 MB/s，因此在调整流控设置时需要��虑消息吞吐量。”这意味着，较高的吞吐量需求可能会导致更多的连接被打开，从而增加“open_streaming_pulls”的值。
 
 #### 与 GKE Pod 的集成
 
@@ -196,4 +196,3 @@ spring.cloud.gcp.pubsub.subscription.my-subscription.flow-control.limit-exceeded
 - [Pub/Sub 文档 - 拉取订阅](https://cloud.google.com/pubsub/docs/pull)
 - [Pub/Sub 文档 - 流控](https://cloud.google.com/pubsub/docs/flow-control-messages)
 - [Spring Cloud GCP 文档 - Pub/Sub](https://googlecloudplatform.github.io/spring-cloud-gcp/reference/html/pubsub.html)
--

@@ -77,7 +77,7 @@ sequenceDiagram
 	(b) 分析当前的重试策略（RetryTemplate，间隔0s, 10s, 20s）与 `ackDeadlineSeconds` 及Kong超时之间的相互影响，并提出更优的方案，如带抖动的指数退避（Exponential Backoff with Jitter）。 
 (4) 审查后端服务（Backend Service）的自动伸缩能力： 
 	(a) 检查部署在GKE中的Backend Service的水平Pod自动伸缩（HPA）配置。 
-	(b) 评估其伸缩所依赖的指标（如CPU、内存或自定义指标）是否合理，以及阈值设置是否足够灵敏以应对来自Schedule Service的突发请求。 
+	(b) 评估其伸缩所依赖的指标（如CPU、内存或自定义指标）是���合理，以及阈值设置是否足够灵敏以应对来自Schedule Service的突发请求。 
 (5) 分析Kong网关的超时配置及其影响： 
 	(a) 详细说明Kong的6分钟超时如何与Schedule Service的三次重试（可能长达18分钟）相互作用，并解释这为何会阻塞后续消息的处理。 
 	(b) 提供针对处理长耗时任务的Kong超时配置（如 `connect_timeout`, `read_timeout`）的最佳实践。 
@@ -91,7 +91,7 @@ sequenceDiagram
 
 # 一份针对GCP调度系统的性能分析与优化策略报告
 
-## I. 执行摘要与系统概览
+## I. 执行摘要与系统概��
 
 ### A. 发现摘要
 
@@ -103,14 +103,12 @@ sequenceDiagram
 
 ### B. 系统数据流
 
-为了建立对系统架构的共识，以下流程图清晰地展示了单条调度消息从触发到最终确认的完整生命周期。
-
-代码段
+为了建立对系统架构的共识，以下流程图清���地展示了单条调度消息从触发到最终确认的完整生命周期。
 
 ```mermaid
 flowchart TD
     subgraph Task_Trigger
-        A -->|Step1 Trigger Job PubSub| B[Pub/Sub Topic: schedule-jobs]
+        A[Cloud Scheduler] -->|Step1 Trigger Job PubSub| B[Pub/Sub Topic: schedule-jobs]
     end
     subgraph Message_Queue_and_Delivery
         B -->|Step2 Persist and Forward Message| C{Pub/Sub Subscription: schedule-service-sub}
@@ -200,7 +198,7 @@ Pod因内存溢出（OOM）、未捕获的异常而崩溃，或者在能够确�
 
 ### A. 订阅者并发与并行度调优（客户端调优）
 
-**概念**：Pub/Sub客户端库能够在一个订阅者进程内部，利用线程池并发处理多条消息 17。
+**概念**：Pub/Sub客户端库能够在一个订阅者进程内部，利用线程池并发处理多条���息 17。
 
 **Java客户端配置**：
 
@@ -215,7 +213,7 @@ Pod因内存溢出（OOM）、未捕获的异常而崩溃，或者在能够确�
 
 因此，客户端的并发设置必须与Pod的资源请求和限制（`spec.containers.resources`）协同调整。对于CPU密集型工作，线程数应接近于分配的vCPU核心数。对于I/O密集型工作，线程数可以设置得更高，但必须密切监控内存使用情况，以防OOM Kill。
 
-### B. 实施订阅者流控（自我保护机制）
+### B. 实施订阅者流控（��我保护机制）
 
 **概念**：流控（Flow Control）可以防止单个订阅者客户端拉取超过其处理能力的消息量，从而避免因内存耗尽或负载过高而变得不稳定 3。它扮演着客户端缓冲区上限的角色。
 
@@ -252,9 +250,7 @@ Pod因内存溢出（OOM）、未捕获的异常而崩溃，或者在能够确�
 
 **HPA v2配置清单示例**：
 
-YAML
-
-```
+```yaml
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -296,7 +292,7 @@ spec:
 
 **优雅停机**：当GKE缩容时，它会向Pod发送一个`SIGTERM`信号。应用程序**必须**捕获此信号，并在被`SIGKILL`强制终止前（默认30秒）的这段时间内，完成对正在处理的消息的业务逻辑并调用`ack()`进行确认。若未能做到这一点，每次缩容事件都将导致消息被重新投递。
 
-**幂等性**：后端服务**必须**被设计成幂等的。这意味着多次接收到相同的请求与单次接收该请求所产生的效果是完全相同的 26。这是最终的安全保障。无论因何种故障导致消息被重投，一个幂等的消费者都能确保不会创建重复数据或执行重复操作。这在可靠的消息驱动系统中是不可或缺的。
+**幂等性**：后端服务**必须**被设计成幂等的。这意味着多次接收到相同的请求与单次接收该请求所产生的效果是完全相同的 26。这是最终的安全保障。无论因何种故障导致消息被重投，一个幂等的消费者都能确保不会创建重复数据或执行重复操作。这在可靠���消息驱动系统中是不可或缺的。
 
 ## IV. 统一的超时与重试策略，构筑系统韧性
 
@@ -332,7 +328,7 @@ spec:
 
 其原因是，执行消息转移操作的实体是**Pub/Sub服务本身**，而非用户的应用程序。因此，必须为Google管理的Pub/Sub服务账号（格式为`service-<project-number>@gcp-sa-pubsub.iam.gserviceaccount.com`）授予必要的权限：在DLT上需要`roles/pubsub.publisher`角色，在原始订阅上需要`roles/pubsub.subscriber`角色（以便确认它正在转移的消息）28。这是一个非常重要但容易被忽略的细节。
 
-**价值**：DLT可以防止“毒丸”消息无限期地阻塞队列。它为离线分析、手动重处理或丢弃无法修复的损坏消息提供了一套有效的机制。
+**价值**：DLT可以防止“毒丸”消息无限期地阻塞队��。它为离线分析、手动重处理或丢弃无法修复的损坏消息提供了一套有效的机制。
 
 ### C. 对齐全栈的超时设置
 
@@ -405,7 +401,7 @@ spec:
 
 1. **提高Kong的`read_timeout`**：立即将Kong Service/Route的`read_timeout`调整为一个大于后端P99处理时间的值（例如，5分钟），以阻止超时级联失败。
     
-2. **实施死信主题（DLT）**：配置一个DLT，并设置`max_delivery_attempts=5`，以捕获并隔离任何真正无法处理的消息。务必为Pub/Sub服务账号授予必要的IAM角色。
+2. **实施死信主题（DLT）**：配置一个DLT，并设置`max_delivery_attempts=5`，以捕获并隔离任何真正无法处理的消息。务必为Pub/Sub服务账号授予必要��IAM角色。
     
 3. **设置关键告警**：创建针对`oldest_unacked_message_age` > 15分钟以及DLT `num_undelivered_messages` > 0的告警。
     
@@ -430,13 +426,13 @@ spec:
 
 ### B. 表格：Pub/Sub订阅者客户端配置最佳实践（Java/Spring示例）
 
-下表为配置消费者服务的开发者提供了一份快速参考备忘单，总结了最具影响力的客户端设置。
+下表为配置消费者服务的开发者提供了一份快速参考备忘单，��结了最具影响力的客户端设置。
 
-| 参数 (Spring Property)                                                            | 推荐设置                                  | 目的                                                |
-| ------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------- |
-| `spring.cloud.gcp.pubsub.subscriber.parallel-pull-count`                        | 1 (默认) 或 2                            | 并行gRPC流的数量。仅在单个流的网络带宽被证实为瓶颈时才增加。 9                |
-| `spring.cloud.gcp.pubsub.subscriber.executor-threads`                           | (I/O密集型: 每CPU 8-16), (CPU密集型: CPU核心数) | **性能关键。** 用于消息处理的线程池大小。必须与Pod的CPU资源相平衡。           |
-| `spring.cloud.gcp.pubsub.subscriber.max-ack-extension-period`                   | 900 (15 分钟)                           | 客户端延长租约的最长时间。这是有效的处理超时。 9                         |
-| `spring.cloud.gcp.pubsub.subscriber.flow-control.max-outstanding-element-count` | 1000                                  | 防止Pod被消息**数量**压垮。 9                               |
-| `spring.cloud.gcp.pubsub.subscriber.flow-control.max-outstanding-request-bytes` | 104,857,600 (100 MiB)                 | 防止Pod被消息**大小**压垮。 9                               |
-| `spring.cloud.gcp.pubsub.subscription.<sub-name>.retry.total-timeout-seconds`   | 不适用 (使用订阅策略)                          | 客户端gRPC调用重试。不要与消息重投混淆。应使用订阅上的服务器端指数退避策略来处理消息重投。 9 |
+| 参数 (Spring Property) | 推荐设置 | 目的 |
+| --- | --- | --- |
+| `spring.cloud.gcp.pubsub.subscriber.parallel-pull-count` | 1 (默认) 或 2 | 并行gRPC流的数量。仅在单个流的网络带宽被证实为瓶颈时才增加。 9 |
+| `spring.cloud.gcp.pubsub.subscriber.executor-threads` | (I/O密集型: 每CPU 8-16), (CPU密集型: CPU核心数) | **性能关键。** 用于消息处理的线程池大小。必须与Pod的CPU资源相平衡。 |
+| `spring.cloud.gcp.pubsub.subscriber.max-ack-extension-period` | 900 (15 分钟) | 客户端延长租约的最长时间。这是有效的处理超时。 9 |
+| `spring.cloud.gcp.pubsub.subscriber.flow-control.max-outstanding-element-count` | 1000 | 防止Pod被消息**数量**压垮。 9 |
+| `spring.cloud.gcp.pubsub.subscriber.flow-control.max-outstanding-request-bytes` | 104,857,600 (100 MiB) | 防止Pod被消息**大小**压垮。 9 |
+| `spring.cloud.gcp.pubsub.subscription.<sub-name>.retry.total-timeout-seconds` | 不适用 (使用订阅策略) | 客户端gRPC调用重试。不要与消息重投混淆。应使用订阅上的服务器端指数退避策略来处理消息重投。 9 |

@@ -42,7 +42,7 @@
         - GKE 集群资源不足（CPU/内存限制）。
     - **解决方法**：
         - 检查 Cloud Monitoring 中的 `num_undelivered_messages` 指标，确认堆积规模。
-        - 优化 Java 应用的处理逻辑，例如减少 I/O 操作或使用异步处理。
+        - 优化 Java ���用的处理逻辑，例如减少 I/O 操作或使用异步处理。
         - 增加 GKE 集群的 Pod 副本或调整 `setParallelPullCount` 参数以提高并发处理能力。
 
 2. **订阅者故障**：
@@ -66,7 +66,7 @@
 
 - **监控命令**：
     - 在 Cloud Monitoring 中，使用以下 MQL 查询查看 `Publish to Ack Delta`：
-        ```
+        ```mql
         fetch pubsub_subscription
         | metric 'pubsub.googleapis.com/subscription/publish_to_ack_latency'
         | filter (resource.subscription_id == 'YOUR_SUBSCRIPTION_ID')
@@ -94,7 +94,7 @@
 - **测量内容**：这个指标聚焦于订阅者从 Pub/Sub 系统拉取消息到确认消息的延迟，排除了消息发布到 Pub/Sub 系统的部分。
 - **涉及的阶段**：
     1. 订阅者通过 Streaming Pull 拉取消息（`receive` 阶段）。
-    2. 订阅者处理消息（例如 Java 应用的业务逻辑）。
+    2. 订阅者处���消息（例如 Java 应用的业务逻辑）。
     3. 订阅者调用 `ack()` 确认消息。
 - **与 Publish to Ack Delta 的区别**：
     - `Publish to Ack Delta` 涵盖从生产者发布到确认的整个流程，包括 Pub/Sub 系统的内部处理。
@@ -140,12 +140,12 @@
                 .build();
             ```
         - 配置死信主题以捕获处理失败的消息：
-            ```
+            ```bash
             gcloud pubsub subscriptions update SUBSCRIPTION_ID --dead-letter-topic=DEAD_LETTER_TOPIC_NAME --max-delivery-attempts=5
             ```
 
 3. **Streaming Pull 配置问题**：
-    - 如果 Streaming Pull 的配置不当（例如拉取频率过低或并发线程不足），可能导致延迟增加。
+    - 如果 Streaming Pull 的配置不当（例如拉取频率过低或并���线程不足），可能导致延迟增加。
     - **解决方法**：
         - 调整 Java 客户端的流量控制参数（如 `setMaxOutstandingElementCount` 和 `setMaxOutstandingRequestBytes`）。
         - 检查网络延迟或 gRPC 连接问题，确保 GKE 集群与 Pub/Sub 服务之间的网络稳定。
@@ -154,7 +154,7 @@
 
 - **监控命令**：
     - 在 Cloud Monitoring 中，使用以下 MQL 查询查看 `Pull to Ack Delta`：
-        ```
+        ```mql
         fetch pubsub_subscription
         | metric 'pubsub.googleapis.com/subscription/pull_to_ack_latency'
         | filter (resource.subscription_id == 'YOUR_SUBSCRIPTION_ID')
@@ -172,7 +172,7 @@
 
 1. **比较 Publish to Ack 和 Pull to Ack**：
 
-    - 如果 `Publish to Ack Delta` 高而 `Pull to Ack Delta` 正常，说明问题可能出在 Pub/Sub 系统或生产者到订阅者之间的分发阶段。
+    - 如果 `Publish to Ack Delta` 高而 `Pull to Ack Delta` 正常，说明问题可能出在 Pub/Sub 系统或生产者��订阅者之间的分发阶段。
         - 检查 Pub/Sub 主题的发布速率（`pubsub.googleapis.com/topic/send_message_operations`）。
         - 确认是否有网络延迟或 Pub/Sub 系统内部瓶颈。
     - 如果 `Pull to Ack Delta` 高，说明订阅者（Java 应用）处理消息缓慢，需重点优化客户端逻辑或资源配置。
@@ -180,7 +180,7 @@
 2. **结合其他指标**：
 
     - **未确认消息数量**（`num_undelivered_messages`）：
-        ```
+        ```mql
         fetch pubsub_subscription
         | metric 'pubsub.googleapis.com/subscription/num_undelivered_messages'
         | filter (resource.subscription_id == 'YOUR_SUBSCRIPTION_ID')
@@ -188,7 +188,7 @@
         ```
         - 如果未确认消息数量持续增加，结合高 `Publish to Ack Delta` 或 `Pull to Ack Delta`，说明存在堆积问题。
     - **死信消息数量**（`dead_letter_message_count`）：
-        ```
+        ```mql
         fetch pubsub_subscription
         | metric 'pubsub.googleapis.com/subscription/dead_letter_message_count'
         | filter (resource.subscription_id == 'YOUR_SUBSCRIPTION_ID')
@@ -209,11 +209,11 @@
     - **解决方法**：
         - 增加 GKE 集群的 Pod 副本或节点数。
         - 配置死信主题以隔离失败消息：
-            ```
+            ```bash
             gcloud pubsub subscriptions update SUBSCRIPTION_ID --dead-letter-topic=DEAD_LETTER_TOPIC_NAME --max-delivery-attempts=5
             ```
         - 如果问题持续，考虑使用 `gcloud pubsub subscriptions seek` 清理堆积消息（谨慎操作）：
-            ```
+            ```bash
             gcloud pubsub subscriptions seek SUBSCRIPTION_ID --time=2025-07-04T12:00:00Z
             ```
 
@@ -223,7 +223,7 @@
 
 1. **设置监控告警**：
 
-    - 在 Cloud Monitoring 中为以下指标设置告警：
+    - 在 Cloud Monitoring 中为以下���标设置告警：
         - `Publish to Ack Delta` > 一定阈值（例如 60 秒）。
         - `Pull to Ack Delta` > 一定阈值（例如 30 秒）。
         - `num_undelivered_messages` > 一定数量（例如 1000 条）。
@@ -256,7 +256,7 @@
 
 ### 结论
 
-- **`Publish to Ack Delta`**：反映整个消息生命周期的延迟，适合检测生产者到订阅者的整体性能问题。
+- **`Publish to Ack Delta`**：反映整个消息���命周期的延迟，适合检测生产者到订阅者的整体性能问题。
 - **`Pull to Ack Delta`**：聚焦订阅者侧的处理效率，适合定位 Java 应用或 GKE 环境的瓶颈。
 - **分析方法**：
     - 结合 `num_undelivered_messages` 和 `dead_letter_message_count` 指标，判断堆积或处理失败的根本原因。

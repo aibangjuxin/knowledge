@@ -28,24 +28,24 @@ sequenceDiagram
 
 - About monitor
 
-| Metric Name                        | Unit    | Sample Value | Metric Description                                                                              | Typical Issues or Abnormal Meanings                                                                                                                    | Optimization Suggestions                                                                                                                                 |
-| :--------------------------------- | :------ | :------- | :------------------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------ | :--------------------------------------------------------------------------------------------------------------------------------------- |
-| Oldest unacked message age         | s       | 0        | The age of the oldest unacknowledged message in the subscription.                                      | A high value indicates that subscribers are failing to process and acknowledge messages in a timely manner, which can lead to message backlogs and processing delays. | Check subscriber application performance, error logs, and resource availability. Consider increasing the number of subscriber instances or improving processing concurrency. Check if the subscription's Ack deadline is set reasonably. |
-| Unacked messages by region         | (Count) | 0        | The number of unacknowledged messages, aggregated by region.                                                          | A high number of unacknowledged messages in a specific region may indicate that the subscribers in that region have insufficient processing capacity or are experiencing issues. | Focus on the region with the backlog, and investigate and optimize the subscribers in that area.                                                                                   |
-| **Delivery metrics**               |         |          | **A collection of metrics related to message delivery, including the following three sub-metrics:**                                        |                                                                                                                                       |                                                                                                                                          |
-| - Ack message count                | /s      | 0.058/s  | The number of messages acknowledged by subscribers per second.                                                          | If this value is much lower than "Sent message count," it means messages are being sent but not acknowledged by subscribers, possibly due to slow processing or acknowledgment failures. | Check if the subscriber's message acknowledgment logic is correct and efficient. Ensure acknowledgments are sent promptly after successful processing. Investigate subscriber errors. |
-| - Publish message count            | /s      | 0.058/s  | The number of messages published to the Topic per second.                                                         | This value represents the throughput of the message publisher. If it's lower than expected, the publisher's publishing speed may be limited. | Check the publisher application's logic and performance. Confirm that network connections and permissions are normal.                                                                             |
-| - Sent message count               | /s      | 0.058/s  | The number of messages sent from the Topic to subscribers per second.                                                 | This value represents the throughput of Pub/Sub successfully sending messages to subscribers. If this value is much lower than "Publish message count," there may be connection or configuration issues between Pub/Sub and the subscribers. | Check if the subscription is configured correctly and if subscribers are running and able to receive messages. Ensure the Pub/Sub service account has permission to send messages to the subscription endpoint (for Push subscriptions). |
-| Ack message count by delivery type | /s      | 0.0467/s | The number of acknowledged messages, broken down by delivery type (e.g., Pull, Push). The screenshot shows the acknowledgment count for the Pull method. | A low acknowledgment count for a specific delivery type indicates that subscribers using that method are having issues with processing or acknowledgment. | For Pull subscriptions, check the pulling and acknowledgment logic. For Push subscriptions, check the availability and processing capacity of the Push endpoint. |
-| Publish to ack delta               | s       | 0        | The average time interval from when a message is published until it is _first_ acknowledged by a subscriber.                                    | A high value indicates high end-to-end latency for the entire message lifecycle (publish, transport, subscriber processing, acknowledgment). | Analyze other metrics (Unacked age, Ack count vs. Sent count, Pull/Push to ack delta) to pinpoint where the delay is occurring (publishing, transport, or subscriber processing). |
-| Pull to ack delta                  | s       | 0        | The average time interval from when a message is pulled by a Pull subscriber until it is acknowledged by that subscriber.                              | A high value specifically points to a delay on the Pull subscriber's side, meaning messages are pulled but not processed and acknowledged in a timely manner. | Focus on optimizing the Pull subscriber's message processing logic to increase speed and concurrency. Ensure acknowledgments are sent immediately after processing is complete. |
-| Billable bytes by region           | B       | N/A      | The number of billable bytes, aggregated by region (includes data volume for both publishing and subscribing).                                    | An abnormal increase in billable bytes may indicate an unexpected increase in data volume, such as erroneously republishing or subscribing to a large number of messages. | Monitor data volume growth trends and investigate if the application has logic errors causing duplicate publishing or consumption. Evaluate whether message bodies need to be compressed. |
+| Metric Name | Unit | Sample Value | Metric Description | Typical Issues or Abnormal Meanings | Optimization Suggestions |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Oldest unacked message age | s | 0 | The age of the oldest unacknowledged message in the subscription. | A high value indicates that subscribers are failing to process and acknowledge messages in a timely manner, which can lead to message backlogs and processing delays. | Check subscriber application performance, error logs, and resource availability. Consider increasing the number of subscriber instances or improving processing concurrency. Check if the subscription's Ack deadline is set reasonably. |
+| Unacked messages by region | (Count) | 0 | The number of unacknowledged messages, aggregated by region. | A high number of unacknowledged messages in a specific region may indicate that the subscribers in that region have insufficient processing capacity or are experiencing issues. | Focus on the region with the backlog, and investigate and optimize the subscribers in that area. |
+| **Delivery metrics** | | | **A collection of metrics related to message delivery, including the following three sub-metrics:** | | |
+| - Ack message count | /s | 0.058/s | The number of messages acknowledged by subscribers per second. | If this value is much lower than "Sent message count," it means messages are being sent but not acknowledged by subscribers, possibly due to slow processing or acknowledgment failures. | Check if the subscriber's message acknowledgment logic is correct and efficient. Ensure acknowledgments are sent promptly after successful processing. Investigate subscriber errors. |
+| - Publish message count | /s | 0.058/s | The number of messages published to the Topic per second. | This value represents the throughput of the message publisher. If it's lower than expected, the publisher's publishing speed may be limited. | Check the publisher application's logic and performance. Confirm that network connections and permissions are normal. |
+| - Sent message count | /s | 0.058/s | The number of messages sent from the Topic to subscribers per second. | This value represents the throughput of Pub/Sub successfully sending messages to subscribers. If this value is much lower than "Publish message count," there may be connection or configuration issues between Pub/Sub and the subscribers. | Check if the subscription is configured correctly and if subscribers are running and able to receive messages. Ensure the Pub/Sub service account has permission to send messages to the subscription endpoint (for Push subscriptions). |
+| Ack message count by delivery type | /s | 0.0467/s | The number of acknowledged messages, broken down by delivery type (e.g., Pull, Push). The screenshot shows the acknowledgment count for the Pull method. | A low acknowledgment count for a specific delivery type indicates that subscribers using that method are having issues with processing or acknowledgment. | For Pull subscriptions, check the pulling and acknowledgment logic. For Push subscriptions, check the availability and processing capacity of the Push endpoint. |
+| Publish to ack delta | s | 0 | The average time interval from when a message is published until it is _first_ acknowledged by a subscriber. | A high value indicates high end-to-end latency for the entire message lifecycle (publish, transport, subscriber processing, acknowledgment). | Analyze other metrics (Unacked age, Ack count vs. Sent count, Pull/Push to ack delta) to pinpoint where the delay is occurring (publishing, transport, or subscriber processing). |
+| Pull to ack delta | s | 0 | The average time interval from when a message is pulled by a Pull subscriber until it is acknowledged by that subscriber. | A high value specifically points to a delay on the Pull subscriber's side, meaning messages are pulled but not processed and acknowledged in a timely manner. | Focus on optimizing the Pull subscriber's message processing logic to increase speed and concurrency. Ensure acknowledgments are sent immediately after processing is complete. |
+| Billable bytes by region | B | N/A | The number of billable bytes, aggregated by region (includes data volume for both publishing and subscribing). | An abnormal increase in billable bytes may indicate an unexpected increase in data volume, such as erroneously republishing or subscribing to a large number of messages. | Monitor data volume growth trends and investigate if the application has logic errors causing duplicate publishing or consumption. Evaluate whether message bodies need to be compressed. |
 
-|                      |                                                                                      |
-| -------------------- | ------------------------------------------------------------------------------------ |
-| Metric Name          | Meaning (Non-literal)                                                                |
+| | |
+| --- | --- |
+| Metric Name | Meaning (Non-literal) |
 | Publish to Ack Delta | The time difference from when a message is published to a Pub/Sub Topic to when it is acknowledged (acked) by a client. |
-| Pull to Ack Delta    | The time difference from when a message is pulled by a client to when it is acknowledged (acked) by the client. |
+| Pull to Ack Delta | The time difference from when a message is pulled by a client to when it is acknowledged (acked) by the client. |
 
 - about Test value
     - ![test-value](./testing-value.md)
@@ -122,7 +122,9 @@ env:
 
 This is equivalent to:
 
+```
 spring.cloud.gcp.pubsub.subscriber.executor-threads=10
+```
 
 ✅ Effect Comparison Diagram
 
@@ -147,12 +149,12 @@ flowchart TD
 
 More threads ➝ Increased concurrent HTTP requests ➝ Higher CPU usage ➝ HPA triggers scaling ➝ Increased overall throughput
 
-|              |                         |
-| ------------ | ----------------------- |
-| Configuration Item | Sample Value            |
-| HPA Config   | minPods: 3, maxPods: 10 |
-| CPU trigger  | target: 80%             |
-| Container Resources | 1 CPU / 1Gi RAM         |
+| | |
+| --- | --- |
+| Configuration Item | Sample Value |
+| HPA Config | minPods: 3, maxPods: 10 |
+| CPU trigger | target: 80% |
+| Container Resources | 1 CPU / 1Gi RAM |
 
 2️⃣ Optimize Backend API Call Logic (Compressing Time)
 
@@ -185,13 +187,13 @@ HttpRequest request = HttpRequest.newBuilder()
 
 ✅ New Strategy Design
 
-|          |          |                    |
-| -------- | -------- | ------------------ |
-| Retry #  | Timeout  | Cumulative Time Window |
-| 1st      | 10s      | 0s ~ 10s           |
-| 2nd      | 20s      | 10s ~ 30s          |
-| 3rd      | 30s      | 30s ~ 60s          |
-| Total    |          | ✅ Completed within 60s max |
+| | | |
+| --- | --- | --- |
+| Retry # | Timeout | Cumulative Time Window |
+| 1st | 10s | 0s ~ 10s |
+| 2nd | 20s | 10s ~ 30s |
+| 3rd | 30s | 30s ~ 60s |
+| Total | | ✅ Completed within 60s max |
 
 ✅ Effects
 
@@ -219,13 +221,13 @@ flowchart TD
 
 🧠 Summary Comparison Table
 
-|                 |                     |                     |                         |
-| --------------- | ------------------- | ------------------- | ----------------------- |
-| Dimension       | Before Optimization | After Optimization  | Effect                  |
-| Threads per Pod | Default 4           | Increased to 10     | Increased concurrent processing capability per Pod |
-| Request Block Time | Up to 18 minutes    | Limited to 1 minute | Frees up thread resources quickly |
+| | | | |
+| --- | --- | --- | --- |
+| Dimension | Before Optimization | After Optimization | Effect |
+| Threads per Pod | Default 4 | Increased to 10 | Increased concurrent processing capability per Pod |
+| Request Block Time | Up to 18 minutes | Limited to 1 minute | Frees up thread resources quickly |
 | GKE HPA Sensitivity | Low CPU usage ➝ Slow scaling | Higher CPU usage ➝ Triggers automatically | Supports peak concurrency |
-| Concurrency Capability | Prone to backlogs   | Can handle 50+ instantaneous messages | 🟢 Stable and reliable |
+| Concurrency Capability | Prone to backlogs | Can handle 50+ instantaneous messages | 🟢 Stable and reliable |
 
 ✅ Implementation Suggestions
 
@@ -247,14 +249,14 @@ To improve the capability of the Java Subscriber client in GKE to handle instant
 
 🧠 Background and Current State
 
-|                  |                                           |
-| ---------------- | ----------------------------------------- |
-| Project          | Current Configuration                     |
-| GKE Pod          | Default 1 vCPU / 1Gi per Pod              |
-| HPA              | Enabled, supports dynamic Pod scaling (5 ~ 10) |
+| | |
+| --- | --- |
+| Project | Current Configuration |
+| GKE Pod | Default 1 vCPU / 1Gi per Pod |
+| HPA | Enabled, supports dynamic Pod scaling (5 ~ 10) |
 | executor-threads | Default 4 threads per Pod (synchronous blocking IO) |
 | Pub/Sub Messages | Potentially 50+ concurrent messages on the hour |
-| backend service  | Unstable response (10s ~ 60s), IO-intensive operation |
+| backend service | Unstable response (10s ~ 60s), IO-intensive operation |
 
 ✅ Implementation Plan Summary
 
@@ -264,27 +266,29 @@ Dynamically configure `executor-threads` via Deployment environment variables
 
 No code changes needed, inject Spring Boot configuration directly via `env`:
 
+```yaml
 env:
-
 - name: SPRING_CLOUD_GCP_PUBSUB_SUBSCRIBER_EXECUTOR_THREADS
-
-value: "10"
+  value: "10"
+```
 
 Spring Boot will automatically map this to:
 
+```
 spring.cloud.gcp.pubsub.subscriber.executor-threads=10
+```
 
 🧩 2.
 
 Understand Overall Processing Capability (Total Threads = Pod Count × Threads per Pod)
 
-|                |                  |                          |
-| -------------- | ---------------- | ------------------------ |
-| Scenario       | Calculation      | Total Threads (Concurrent Processing Capability) |
-| Initial        | 2 Pods × 4 threads | 8                        |
-| After Scaling  | 4 Pods × 4 threads | 16                       |
-| Optimized (Recommended) | 5 Pods × 10 threads | 50 ✅                    |
-| At Full Load   | 10 Pods × 10 threads | 100 🔝                   |
+| | | |
+| --- | --- | --- |
+| Scenario | Calculation | Total Threads (Concurrent Processing Capability) |
+| Initial | 2 Pods × 4 threads | 8 |
+| After Scaling | 4 Pods × 4 threads | 16 |
+| Optimized (Recommended) | 5 Pods × 10 threads | 50 ✅ |
+| At Full Load | 10 Pods × 10 threads | 100 🔝 |
 
 🧩 3.
 
@@ -298,11 +302,11 @@ Decoupling Message Pulling and Executor Threads
 
 Risk Control: Why is this plan smooth?
 
-|                  |                                   |                                    |
-| ---------------- | --------------------------------- | ---------------------------------- |
-| Dimension        | Control Strategy                  | Explanation                        |
-| CPU Usage        | HPA auto-scaling                  | More threads ➝ Higher CPU ➝ Auto-scales Pods |
-| Memory Usage     | Not recommended `executor > 16` (for 1Gi) | Avoid OOM (thread pool stack + message buffer) |
+| | | |
+| --- | --- | --- |
+| Dimension | Control Strategy | Explanation |
+| CPU Usage | HPA auto-scaling | More threads ➝ Higher CPU ➝ Auto-scales Pods |
+| Memory Usage | Not recommended `executor > 16` (for 1Gi) | Avoid OOM (thread pool stack + message buffer) |
 | Request Blocking | Add HTTP timeout limit (e.g., 20s) | Prevent threads from blocking indefinitely |
 | Pub/Sub Message Pre-fetching | Configure `maxOutstandingMessages` | Prevent too many unprocessed messages from accumulating |
 | Slow Backend Service | IO-intensive ➝ Better suited for high thread count | CPU won't spike, but threads will be suspended |
@@ -312,13 +316,13 @@ Risk Control: Why is this plan smooth?
 
 Optional Enhancements (Future Optimization Directions)
 
-|                                           |                                  |
-| ----------------------------------------- | -------------------------------- |
-| Optimization Direction                    | Explanation                      |
+| | |
+| --- | --- |
+| Optimization Direction | Explanation |
 | Use WebClient + Reactor for asynchronous backend calls | Improve thread utilization (non-blocking IO) |
 | Separate slow/fast interfaces into different Subscriptions | Set different thread counts or Pod scales based on SLAs |
-| Configure DLQ (Dead-Letter Queue)         | Avoid infinite retries for failed requests |
-| Set message TTL                           | Automatically clean up messages that time out |
+| Configure DLQ (Dead-Letter Queue) | Avoid infinite retries for failed requests |
+| Set message TTL | Automatically clean up messages that time out |
 
 ✅ Summary
 
@@ -343,9 +347,9 @@ Message TTL is the maximum amount of time a message can "live" in a Pub/Sub Topi
 
 ✅ Why is it necessary to set Message TTL?
 
-|                     |                                                  |
-| ------------------- | ------------------------------------------------ |
-| Reason              | Explanation                                      |
+| | |
+| --- | --- |
+| Reason | Explanation |
 | 🔁 Prevent infinite retries | Some messages may always fail to process due to logic flaws or backend unavailability. |
 | 🧠 Reduce resource waste | Retrying failures consumes subscriber threads, CPU, and network resources. |
 | 🧹 Clean up stale data | Avoid the accumulation of useless historical messages (e.g., in a test topic). |
@@ -353,10 +357,10 @@ Message TTL is the maximum amount of time a message can "live" in a Pub/Sub Topi
 
 ✅ Pub/Sub TTL Setting Location
 
-|                      |                                                        |
-| -------------------- | ------------------------------------------------------ |
-| Component            | TTL Setting Location                                   |
-| ✅ Topic Level       | How long a message can be retained after publishing (regardless of subscription). |
+| | |
+| --- | --- |
+| Component | TTL Setting Location |
+| ✅ Topic Level | How long a message can be retained after publishing (regardless of subscription). |
 | ❌ Subscription Level | TTL cannot be set, but you can set `ackDeadline` (for a single processing attempt). |
 
 ✅ How to Set (TTL is a Topic-level attribute)
@@ -367,15 +371,17 @@ gcloud
 
 to set (specify TTL at creation):
 
+```bash
 gcloud pubsub topics create my-topic \
-
 --message-retention-duration=600s  # TTL = 10 minutes
+```
 
 🔄 Updating TTL for an existing Topic:
 
+```bash
 gcloud pubsub topics update my-topic \
-
 --message-retention-duration=3600s  # TTL = 1 hour
+```
 
 ✅ The minimum TTL is 10 seconds, and the maximum is 7 days (default is 7 days).
 
@@ -417,23 +423,23 @@ end
 
 ✅ Precautions
 
-|                              |                                                        |
-| ---------------------------- | ------------------------------------------------------ |
-| Item                         | Note                                                   |
-| TTL ≠ ackDeadline            | `ackDeadline` is the "timeout for a single processing attempt," while TTL is the "total lifespan of the message." |
-| Cannot be configured on a Subscription | TTL must be set on the Topic.                  |
-| Timeout does not go to DLQ   | The trigger for DLQ is "ack failure count exceeded." A TTL timeout does not trigger the DLQ. |
+| | |
+| --- | --- |
+| Item | Note |
+| TTL ≠ ackDeadline | `ackDeadline` is the "timeout for a single processing attempt," while TTL is the "total lifespan of the message." |
+| Cannot be configured on a Subscription | TTL must be set on the Topic. |
+| Timeout does not go to DLQ | The trigger for DLQ is "ack failure count exceeded." A TTL timeout does not trigger the DLQ. |
 | Suitable for "expired and useless" messages | Such as scheduled task notifications, real-time metrics, CI/CD triggers, etc. |
 
 🎯 Practical Suggestions (for your situation)
 
-|                         |                              |
-| ----------------------- | ---------------------------- |
-| Type                    | Recommended TTL Setting      |
-| Scheduled messages calling backend APIs | 600s (i.e., 10 minutes)      |
-| Real-time notification events | 60~180s                      |
+| | |
+| --- | --- |
+| Type | Recommended TTL Setting |
+| Scheduled messages calling backend APIs | 600s (i.e., 10 minutes) |
+| Real-time notification events | 60~180s |
 | Messages that must be eventually processed | Long TTL (default 7d) + Configure DLQ |
-| Temporary test Topics   | 300s, to avoid leaving stale data |
+| Temporary test Topics | 300s, to avoid leaving stale data |
 
 ✅ Summary in one sentence
 

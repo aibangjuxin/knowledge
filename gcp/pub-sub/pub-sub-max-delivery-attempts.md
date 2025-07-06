@@ -323,4 +323,4 @@ gcloud pubsub subscriptions ack my-subscription \
     3. **监控积压消息**：通过 Google Cloud Monitoring 监控订阅的积压消息数量（`subscription/num_undelivered_messages`），及时发现投递失败问题。
     4. **日志与告警**：在订阅者代码中记录处理失败的详细日志，并配置告警以便及时响应。
 
-如果您有具体的场景（例如订阅者代码或 Pub/Sub 配置），或者希望进一步探讨如何处理投递失败的消息，请分享更多细节，我会提供更具针对性的建议！
+如果您有具体的场景（例如订阅者代码或 Pub/Sub 配置），或者希望进一步探讨如何处理投递失败的消息，请分享更多细节，我会提供更具针对性的建议!

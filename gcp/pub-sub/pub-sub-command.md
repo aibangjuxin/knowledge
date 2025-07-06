@@ -67,11 +67,11 @@
 
 ## **🔹 概念说明**
 
-| **名称**                 | **命令**                         | **说明**                                                                             | Mark                                                                                                                                                                                 |
-| ------------------------ | -------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Pub/Sub Topic**        | gcloud pubsub topics list        | Topic 是消息的“主题”，用于接收消息发布。生产者向 Topic 发送消息。                    |                                                                                                                                                                                      |
-| **Pub/Sub Subscription** | gcloud pubsub subscriptions list | Subscription 是“订阅者”的配置。它绑定到某个 Topic，决定消息如何被拉取/推送到消费者。 | 如果默认没有 DLQ 那么 messageRetentionDuration 7 天<br>ackDeadlineSeconds<br>实际就是你整个 E2E 链路中，从 Pub/Sub 发送消息 到 你（后端服务）确认消息处理完毕 之间允许的最大时间窗口 |
-| **Cloud Scheduler Job**  | gcloud scheduler jobs list       | 定时触发任务，可以配置为定时向某个 Pub/Sub Topic 发布消息。                          |                                                                                                                                                                                      |
+| **名称** | **命令** | **说明** | **Mark** |
+| --- | --- | --- | --- |
+| **Pub/Sub Topic** | gcloud pubsub topics list | Topic 是消息的“主题”，用于接收消息发布。生产者向 Topic 发送消息。 | | 
+| **Pub/Sub Subscription** | gcloud pubsub subscriptions list | Subscription 是“订阅者”的配置。它绑定到某个 Topic，决定消息如何被拉取/推送到消费者。 | 如果默认没有 DLQ 那么 messageRetentionDuration 7 天<br>ackDeadlineSeconds<br>实际就是你整个 E2E 链路中，从 Pub/Sub 发送消息 到 你（后端服务）确认消息处理完毕 之间允许的最大时间窗口 | 
+| **Cloud Scheduler Job** | gcloud scheduler jobs list | 定时触发任务，可以配置为定时向某个 Pub/Sub Topic 发布消息。 | | 
 
 ---
 
@@ -90,7 +90,7 @@
 比如你有一个每日自动清理数据库的任务，可以这么配置：
 
 1. 创建一个 daily-cleanup 的 **Pub/Sub Topic**；
-2. 创建一个订阅 cleanup-service-sub，连接到 Topic；
+2. 创建一个订阅 cleanup-service-sub��连接到 Topic；
 3. 创建一个 Cloud Scheduler Job，**每天触发一次消息发送到 Topic**；
 4. GKE 或 Cloud Run 的服务通过 Subscription 接收到消息并执行任务。
 
@@ -141,32 +141,32 @@ gcloud scheduler jobs 的频率设置是通过 --schedule 参数指定的，**�
 
 ## **📌 示例 Cron 表达式**
 
-| **Cron 表达式** | **含义**                   |
-| --------------- | -------------------------- |
-| \* \* \* \* \*  | 每分钟执行一次             |
-| 0 \* \* \* \*   | 每小时的第 0 分钟执行一次  |
-| 0 9 \* \* \*    | 每天上午 9 点执行          |
-| 0 22 \* \* 1-5  | 每周一到周五晚上 10 点执行 |
-| 15 10 15 \* \*  | 每月 15 日上午 10:15 执行  |
-| 0 0 _/2 _ \*    | 每两天执行一次（UTC 零点） |
+| **Cron 表达式** | **含义** |
+| --- | --- |
+| * * * * * | 每分钟执行一次 |
+| 0 * * * * | 每小时的第 0 分钟执行一次 |
+| 0 9 * * * | 每天上午 9 点执行 |
+| 0 22 * * 1-5 | 每周一到周五晚上 10 点执行 |
+| 15 10 15 * * | 每月 15 日上午 10:15 执行 |
+| 0 0 _/2 _ * | 每两天执行一次（UTC 零点） |
 
 ---
 
 ## **⚠️ 限制和注意事项**
 
-| **限制类型** | **说明**                                 |
-| ------------ | ---------------------------------------- |
-| 最小间隔     | **1 分钟**（无法小于 1 分钟）            |
-| 最大间隔     | 理论上无限，只要符合 cron 语法           |
-| 时间区       | **UTC**，如需用本地时间需自行换算        |
-| 格式限制     | 不支持 @hourly / @daily / @reboot 等简写 |
-| 高级表达式   | 支持 \*/N, 1-5, 1,3,5 等标准 Cron 范式   |
+| **限制类型** | **说明** |
+| --- | --- |
+| 最小间隔 | **1 分钟**（无法小于 1 分钟） |
+| 最大间隔 | 理论上无限，只要符合 cron 语法 |
+| 时间区 | **UTC**，如需用本地时间需自行换算 |
+| 格式限制 | 不支持 @hourly / @daily / @reboot 等简写 |
+| 高级表达式 | 支持 */N, 1-5, 1,3,5 等标准 Cron 范式 |
 
 ---
 
 ## **🧪 示例命令：每小时运行一次作业**
 
-```
+```bash
 gcloud scheduler jobs create pubsub my-job \
   --schedule "0 * * * *" \
   --topic=my-topic \
@@ -196,8 +196,8 @@ gcloud scheduler jobs create pubsub my-job \
 - * * * *    → 每分钟执行一次（最频繁）
 ```
 
-- 即使你写成类似 _/30 _ \* \* \*（每 30 分钟）是合法的，
-- 但像 \* \* \* \* \* \*（带秒字段）或尝试秒级间隔都是 **不支持的**，会报错：
+- 即使你写成类似 _/30 _ * * *（每 30 分钟）是合法的，
+- 但像 * * * * * *（带秒字段）或尝试秒级间隔都是 **不支持的**，会报错：
 
 ```
 ERROR: (gcloud.scheduler.jobs.create) INVALID_ARGUMENT: Schedule has more than 5 fields
@@ -207,11 +207,11 @@ ERROR: (gcloud.scheduler.jobs.create) INVALID_ARGUMENT: Schedule has more than 5
 
 ### **🚫 不支持的场景**
 
-| **类型**   | **举例**          | **说明**                                    |
-| ---------- | ----------------- | ------------------------------------------- |
-| 秒级调度   | 每 10 秒执行      | ❌ 不支持                                   |
-| 亚分钟调度 | 每 45 秒执行      | ❌ 不支持                                   |
-| 秒字段     | \* \* \* \* \* \* | ❌ 无效，Cloud Scheduler 只接受 5 字段 Cron |
+| **类型** | **举例** | **说明** |
+| --- | --- | --- |
+| 秒级调度 | 每 10 秒执行 | ❌ 不支持 |
+| 亚分钟调度 | 每 45 秒执行 | ❌ 不支持 |
+| 秒字段 | * * * * * * | ❌ 无效，Cloud Scheduler 只接受 5 字段 Cron |
 
 ---
 
@@ -219,21 +219,21 @@ ERROR: (gcloud.scheduler.jobs.create) INVALID_ARGUMENT: Schedule has more than 5
 
 如果你确实需要 “**秒级**” 或 “**高频调用**”：
 
-| **替代方案**                                       | **说明**                                                             |
-| -------------------------------------------------- | -------------------------------------------------------------------- |
-| 🛠 使用自建 GKE + CronJob 或 Cloud Run + Timer Loop | 你可以在容器中自己实现精细的 loop timer                              |
-| 🔄 使用 Cloud Tasks + 自我调用队列                 | 通过任务回调方式实现 sub-minute 级别的调用链（需要精细控制队列速率） |
-| 🔔 由外部系统驱动（例如外部消息队列/定时器）       | 如果你有自建平台，可从外部发起更高频调用                             |
+| **替代方案** | **说明** |
+| --- | --- |
+| 🛠 使用自建 GKE + CronJob 或 Cloud Run + Timer Loop | 你可以在容器中自己实现精细的 loop timer |
+| 🔄 使用 Cloud Tasks + 自我调用队列 | 通过任务回调方式实现 sub-minute 级别的调用链（需要精细控制队列速率） |
+| 🔔 由外部系统驱动（例如外部消息队列/定时器） | 如果你有自建平台，可从外部发起更高频调用 |
 
 ---
 
 ### **✅ 总结**
 
-| **特性**  | **Cloud Scheduler 支持？**    |
-| --------- | ----------------------------- |
-| 秒级调度  | ❌ 不支持                     |
-| 最小间隔  | ✅ 每分钟一次                 |
-| 时区支持  | ✅ 通过 --time-zone 设置      |
+| **特性** | **Cloud Scheduler 支持？** |
+| --- | --- |
+| 秒级调度 | ❌ 不支持 |
+| 最小间隔 | ✅ 每分钟一次 |
+| 时区支持 | ✅ 通过 --time-zone 设置 |
 | Cron 格式 | ✅ 标准 5 字段（分钟 ~ 星期） |
 
 ---
@@ -248,7 +248,7 @@ ERROR: (gcloud.scheduler.jobs.create) INVALID_ARGUMENT: Schedule has more than 5
 
 ## **🔧 示例命令**
 
-```
+```bash
 gcloud pubsub subscriptions describe my-subscription
 ```
 
@@ -271,14 +271,14 @@ topic: projects/my-gcp-project/topics/my-topic
 
 ## **🧠 字段解释（逐行）**
 
-| **字段**                     | **示例值**                                            | **说明**                                                                                                 |
-| ---------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| **ackDeadlineSeconds**       | 10                                                    | 订阅者在这段时间（秒）内确认消息，否则消息将重新投递。默认是 10 秒。最大 600 秒。                        |
-| **expirationPolicy.ttl**     | 2678400s                                              | 如果订阅在这段时间内没有被使用（即无连接或无活动），则会自动删除。单位是秒（此处为 31 天）。             |
-| **messageRetentionDuration** | 604800s                                               | Topic 中的消息会被保留的时长，即使已经被消费（7 天 = 604800 秒）。这可用于“迟到的订阅者”接收历史消息。   |
-| **name**                     | projects/my-gcp-project/subscriptions/my-subscription | 完整的订阅资源名称，包括项目 ID 和订阅名。                                                               |
-| **pushConfig.pushEndpoint**  | https://my-service.example.com/push-endpoint          | 如果是 Push 模式订阅，Pub/Sub 会将消息 **以 HTTP POST 的形式推送到此 URL**。如果是 Pull 模式则此项为空。 |
-| **topic**                    | projects/my-gcp-project/topics/my-topic               | 当前订阅绑定的 Topic，也就是它接收消息的来源。                                                           |
+| **字段** | **示例值** | **说明** |
+| --- | --- | --- |
+| **ackDeadlineSeconds** | 10 | 订阅者在这段时间（秒）内确认消息，否则消息将重新投递。默认是 10 秒。最大 600 秒。 |
+| **expirationPolicy.ttl** | 2678400s | 如果订阅在这段时间内没有被使用（即无连接或无活动），则会自动删除。单位是秒（此处为 31 天）。 |
+| **messageRetentionDuration** | 604800s | Topic 中的消息会被保留的时长，即使已经被消费（7 天 = 604800 秒）。这可用于“迟到的订阅者”接收历史消息。 |
+| **name** | projects/my-gcp-project/subscriptions/my-subscription | 完整的订阅资源名称，包括项目 ID 和订阅名。 |
+| **pushConfig.pushEndpoint** | https://my-service.example.com/push-endpoint | 如果是 Push 模式订阅，Pub/Sub 会将消息 **以 HTTP POST 的形式推送到此 URL**。如果是 Pull 模式则此项为空。 |
+| **topic** | projects/my-gcp-project/topics/my-topic | 当前订阅绑定的 Topic，也就是它接收消息的来源。 |
 
 ---
 
@@ -290,19 +290,25 @@ topic: projects/my-gcp-project/topics/my-topic
 
 ---
 
-如需我帮你解释某个真实输出，可以贴上你的结果我来解析。
+��需我帮你解释某个真实输出，可以贴上你的结果我来解析。
 
 如需示例命令或 YAML 配置，也可以继续提问。
 
 列出特定区域（Location）的任务
 
+```bash
 gcloud scheduler jobs list --location=<location>
+```
 
 例如，查看 us-central1 区域的任务：
 
+```bash
 gcloud scheduler jobs list --location=us-central1
+```
 
+```bash
 gcloud pubsub subscriptions describe your-sub-name
+```
 虽然能看到 Subscription 的配置（如 topic、ack deadline），但：
 
 - **不会展示消息堆积量（backlog）**
@@ -316,7 +322,7 @@ gcloud pubsub topics create schedule-dlq-user-a
 gcloud pubsub topics create schedule-dlq-user-b
 
 # 创建带DLQ的订阅
-create schedule-service-user-a \
+gcloud pubsub subscriptions create schedule-service-user-a \
   --topic=schedule-topic \
   --dead-letter-topic=schedule-dlq-user-a \
   --max-delivery-attempts=3 \
@@ -326,7 +332,7 @@ create schedule-service-user-a \
 
 - ![DLP](./dlq.md)
 
-你可以使用 gcloud scheduler jobs create pubsub 命令来创建调度任务，将消息发布到你指定的 Pub/Sub 主题（例如 aibang-lex-eg-job-topic）。下面是详细的创建步骤和示例命令。
+你可以使用 gcloud scheduler jobs create pubsub 命令来创建调度任务，将消息发布到你指定的 Pub/Sub 主题（例如 aibang-lex-eg-job-topic）。下面是详细的创建步骤���示例命令。
 
 ---
 
@@ -334,7 +340,7 @@ create schedule-service-user-a \
 
 ### **🔧 示例命令**
 
-```
+```bash
 gcloud scheduler jobs create pubsub job-lex-eg-test-001 \
   --schedule="*/1 * * * *" \
   --time-zone="Asia/Shanghai" \
@@ -349,15 +355,15 @@ gcloud scheduler jobs create pubsub job-lex-eg-test-001 \
 
 ## **✅ 参数说明**
 
-| **参数**                          | **含义**                                                   |
-| --------------------------------- | ---------------------------------------------------------- |
-| job-lex-eg-test-001               | Scheduler Job 名称，需全局唯一                             |
-| --schedule="_/1 _ \* \* \*"       | Cron 表达式，表示每分钟执行一次                            |
-| --time-zone="Asia/Shanghai"       | 指定时区，便于本地时间对齐                                 |
-| --topic="aibang-lex-eg-job-topic" | 你要发送消息的 Pub/Sub Topic 名称                          |
-| --message-body='{}'               | 消息体，可为 JSON 字符串，传入你要调度的信息               |
-| --project                         | 指定 GCP 项目 ID                                           |
-| --location                        | Scheduler Job 所在区域（建议和 Pub/Sub、GKE 服务相同区域） |
+| **参数** | **含义** |
+| --- | --- |
+| job-lex-eg-test-001 | Scheduler Job 名称，需全局唯一 |
+| --schedule="_/1 _ * * *" | Cron 表达式，表示每分钟执行一次 |
+| --time-zone="Asia/Shanghai" | 指定时区，便于本地时间对齐 |
+| --topic="aibang-lex-eg-job-topic" | 你要发送消息的 Pub/Sub Topic 名称 |
+| --message-body='{}' | 消息体，可为 JSON 字符串，传入你要调度的信息 |
+| --project | 指定 GCP 项目 ID |
+| --location | Scheduler Job 所在区域（建议和 Pub/Sub、GKE 服务相同区域） |
 
 ---
 
@@ -365,7 +371,7 @@ gcloud scheduler jobs create pubsub job-lex-eg-test-001 \
 
 你可以用下面的 shell 脚本批量生成多个 job：
 
-```
+```bash
 #!/bin/bash
 
 PROJECT_ID="your-gcp-project-id"
@@ -399,7 +405,7 @@ done
 
 你可以为它授予 Pub/Sub Publisher 权限：
 
-```
+```bash
 gcloud pubsub topics add-iam-policy-binding aibang-lex-eg-job-topic \
   --member="serviceAccount:[PROJECT_NUMBER]@gcp-sa-cloudscheduler.iam.gserviceaccount.com" \
   --role="roles/pubsub.publisher"
@@ -452,7 +458,7 @@ flowchart TD
 
 #### **Step A: 创建多个 Subscription（独立名字）**
 
-```
+```bash
 for i in $(seq -w 1 100); do
   gcloud pubsub subscriptions create sub-job-${i} \
     --topic=aibang-lex-eg-job-topic \
@@ -474,26 +480,26 @@ done
 
 你不需要 JMeter 直接调用 Backend API，而是间接通过 Cloud Scheduler 发送 Pub/Sub 消息来压测：
 
-| **工具**                            | **目标**                                                               |
-| ----------------------------------- | ---------------------------------------------------------------------- |
-| gcloud scheduler jobs create pubsub | 模拟用户任务调度，批量触发消息                                         |
-| GCP Pub/Sub                         | 同一个 Topic + 多个 Subscription 实现 fan-out 并发处理                 |
-| Schedule Service (GKE)              | 实际消费并调用 Backend API（评估处理与重试能力）                       |
-| Backend API                         | 被压测目标，通过 GKE HPA 自动扩容                                      |
-| JMeter（可选）                      | 模拟外部高频 Job 创建或监控 Backend 响应性能（如你还想模拟 HTTP 请求） |
+| **工具** | **目标** |
+| --- | --- |
+| gcloud scheduler jobs create pubsub | 模拟用户任务调度，批量触发消息 |
+| GCP Pub/Sub | 同一个 Topic + 多个 Subscription 实现 fan-out 并发处理 |
+| Schedule Service (GKE) | 实际消费并调用 Backend API（评估处理与重试能力） |
+| Backend API | 被压测目标，通过 GKE HPA 自动扩容 |
+| JMeter（可选） | 模拟外部高频 Job 创建或监控 Backend 响应性能（如你还想模拟 HTTP 请求） |
 
 ---
 
 ## **✅ 建议监控指标**
 
-| **层级**         | **指标**                       | **说明**                   |
-| ---------------- | ------------------------------ | -------------------------- |
-| Pub/Sub          | num_undelivered_messages       | 检查是否存在消息 backlog   |
-| Pub/Sub          | ack_latency                    | 消息消费延迟               |
-| Scheduler        | job execution count            | 是否定时稳定触发           |
-| Schedule Service | CPU / memory / request latency | 是否存在处理瓶颈           |
-| Backend API      | 响应时间 / HPA Pod 数          | 是否扩容及时，是否请求撑爆 |
-| Kong             | 超时 / 5xx                     | 转发失败或响应过慢         |
+| **层级** | **指标** | **说明** |
+| --- | --- | --- |
+| Pub/Sub | num_undelivered_messages | 检查是否存在消息 backlog |
+| Pub/Sub | ack_latency | 消息消费延迟 |
+| Scheduler | job execution count | 是否定时稳定触发 |
+| Schedule Service | CPU / memory / request latency | 是否存在处理瓶颈 |
+| Backend API | 响应时间 / HPA Pod 数 | 是否扩容及时，是否请求撑爆 |
+| Kong | 超时 / 5xx | 转发失败或响应过慢 |
 
 ---
 
@@ -528,7 +534,7 @@ done
 
 **完全取决于你的 Schedule Service 如何解析 Pub/Sub 的 message。**
 
-如果你的 Schedule Service 是 Java 写的，通常会对 PubsubMessage.getData() 进行 Base64 解码，再反序列化成某种结构（比如 JSON 对象）——那么你就应该构造这个格式的消息。
+如果你的 Schedule Service 是 Java 写的，通常会对 PubsubMessage.getData() 进行 Base64 解码，再反序列��成某种结构（比如 JSON 对象）——那么你就应该构造这个格式的消息。
 
 ### **🔧 假设 Schedule Service 只需要一个 URL 参数（访问 Backend 的** 
 
@@ -538,7 +544,7 @@ done
 
 你可以这样构造 message body（JSON 格式）：
 
-```
+```json
 {
   "url": "http://backend-service.default.svc.jiqun.local/health",
   "method": "GET",
@@ -551,7 +557,7 @@ done
 
 ## **✅ Shell 脚本：批量创建 100 个 Job**
 
-```
+```bash
 #!/bin/bash
 
 PROJECT_ID="your-gcp-project-id"
@@ -580,7 +586,7 @@ done
 
 > 如果你本地没有安装 jq，你也可以用简单的 bash 字符串拼接：
 
-```
+```bash
 MESSAGE_BODY="{\"url\":\"$URL\",\"method\":\"GET\",\"team\":\"team-a\",\"api\":\"health-check-$i\"}"
 ```
 
@@ -590,7 +596,7 @@ MESSAGE_BODY="{\"url\":\"$URL\",\"method\":\"GET\",\"team\":\"team-a\",\"api\":\
 
 假设你的 Schedule Service 逻辑是这样（简化）：
 
-```
+```java
 String raw = new String(pubsubMessage.getData().toByteArray(), StandardCharsets.UTF_8);
 JsonObject json = new Gson().fromJson(raw, JsonObject.class);
 String url = json.get("url").getAsString();
@@ -609,7 +615,7 @@ String method = json.get("method").getAsString();
 
 如果你只是为了让 Schedule Service 发请求，可以先部署一个最简单的 /health 服务，比如：
 
-```
+```bash
 kubectl create deployment health-api --image=nginx
 kubectl expose deployment health-api --port=80 --target-port=80 --name=health-api
 ```
@@ -626,12 +632,12 @@ http://health-api.default.svc.jiqun.local/
 
 ## **✅ 推荐你监控这些内容 during test：**
 
-| **组件**         | **关注点**            | **指标建议**                                         |
-| ---------------- | --------------------- | ---------------------------------------------------- |
-| Pub/Sub          | 堆积是否增加          | num_undelivered_messages, oldest_unacked_message_age |
-| Schedule Service | 是否有消费堵塞 / 重试 | Pod CPU、日志、是否有 timeout、ack 速率              |
-| Backend Service  | 响应是否撑爆 HPA      | 请求 QPS、响应时间、错误率、Pod 数量变化             |
-| 总链路           | 是否稳定              | Stackdriver Trace + Logging（可选）                  |
+| **组件** | **关注点** | **指标建议** |
+| --- | --- | --- |
+| Pub/Sub | 堆积是否增加 | num_undelivered_messages, oldest_unacked_message_age |
+| Schedule Service | 是否有消费堵塞 / 重试 | Pod CPU、日志、是否有 timeout、ack 速率 |
+| Backend Service | 响应是否撑爆 HPA | 请求 QPS、响应时间、错误率、Pod 数量变化 |
+| 总链路 | 是否稳定 | Stackdriver Trace + Logging（可选） |
 
 ---
 
@@ -667,9 +673,9 @@ projects/my-gcp-project/topics/alerts
 
 ### **🔍 字段解释**
 
-| **字段名** | **示例值**                                 | **说明**                                        |
-| ---------- | ------------------------------------------ | ----------------------------------------------- |
-| NAME       | projects/my-gcp-project/topics/user-signup | 每个 Topic 的全限定名称（Fully-qualified name） |
+| **字段名** | **示例值** | **说明** |
+| --- | --- | --- |
+| NAME | projects/my-gcp-project/topics/user-signup | 每个 Topic 的全限定名称（Fully-qualified name） |
 
 ---
 
@@ -683,12 +689,12 @@ projects/my-gcp-project/topics/user-signup
 
 该字段结构可以拆解为：
 
-| **部分**       | **含义**                             |
-| -------------- | ------------------------------------ |
-| projects/      | 固定前缀                             |
-| my-gcp-project | GCP 项目 ID（Project ID）            |
-| /topics/       | 表示这是 Pub/Sub 中的 Topic 类型资源 |
-| user-signup    | Topic 名称，由用户定义，用于发布消息 |
+| **部分** | **含义** |
+| --- | --- |
+| projects/ | 固定前缀 |
+| my-gcp-project | GCP 项目 ID（Project ID） |
+| /topics/ | 表示这是 Pub/Sub 中的 Topic 类型资源 |
+| user-signup | Topic 名称，由用户定义，用于发布消息 |
 
 ---
 
@@ -698,7 +704,7 @@ projects/my-gcp-project/topics/user-signup
 - 每个 Topic 都是 Pub/Sub 中的一个消息通道，Producer 可以向该 Topic 发送消息，Subscriber 订阅 Topic 接收消息。
 - 若使用 --filter 参数可指定过滤条件，例如按前缀过滤 topic 名称：
 
-```
+```bash
 gcloud pubsub topics list --filter="name:payment"
 ```
 
@@ -708,13 +714,13 @@ gcloud pubsub topics list --filter="name:payment"
 
 你也可以使用如下命令查看详细结构：
 
-```
+```bash
 gcloud pubsub topics list --format=json
 ```
 
 示例输出：
 
-```
+```json
 [
   {
     "name": "projects/my-gcp-project/topics/user-signup",
@@ -725,16 +731,16 @@ gcloud pubsub topics list --format=json
 
 字段说明：
 
-| **字段名** | **含义**                                    |
-| ---------- | ------------------------------------------- |
-| name       | Topic 全名                                  |
+| **字段名** | **含义** |
+| --- | --- |
+| name | Topic 全名 |
 | kmsKeyName | 如果开启了加密，表示所使用的 Cloud KMS 密钥 |
 
 ---
 
 如果你希望查看某个 Topic 的详细信息，可以使用：
 
-```
+```bash
 gcloud pubsub topics describe projects/my-gcp-project/topics/user-signup
 ```
 
@@ -746,7 +752,7 @@ gcloud pubsub topics describe projects/my-gcp-project/topics/user-signup
 
 ### **✅ 命令示例**
 
-```
+```bash
 gcloud pubsub topics describe projects/my-gcp-project/topics/user-signup
 ```
 
@@ -754,7 +760,7 @@ gcloud pubsub topics describe projects/my-gcp-project/topics/user-signup
 
 ### **📄 输出示例（YAML 格式）**
 
-```bash
+```yaml
 name: projects/my-gcp-project/topics/user-signup
 kmsKeyName: projects/my-gcp-project/locations/global/keyRings/my-kr/cryptoKeys/my-key
 labels:
@@ -774,15 +780,15 @@ satisfiesPzs: true
 
 ### **🔍 字段解释**
 
-| **字段**                                       | **示例值**                                       | **说明**                                                                   |
-| ---------------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------- |
-| name                                           | projects/my-gcp-project/topics/user-signup       | Topic 的全限定资源名称                                                     |
-| kmsKeyName                                     | projects/.../cryptoKeys/my-key                   | 如果启用了 **客户管理的加密密钥（CMEK）**，这里会显示所用的 Cloud KMS 密钥 |
-| labels                                         | environment: prodteam: growth                    | 自定义标签（key-value），用于资源管理和过滤                                |
-| messageStoragePolicy.allowedPersistenceRegions | ["asia-east1", "us-central1"]                    | 指定 **允许消息存储** 的 GCP 区域，默认允许所有区域                        |
-| schemaSettings.encoding                        | JSON                                             | 消息使用的编码方式（可为 JSON 或 BINARY）                                  |
-| schemaSettings.schema                          | projects/my-gcp-project/schemas/UserSignupSchema | 与此 Topic 绑定的 **Schema 定义名称**（用于结构验证）                      |
-| satisfiesPzs                                   | true                                             | 是否符合 Google 的 **“受限区域”策略（PZS）** 要求（通常用于合规）          |
+| **字段** | **示例值** | **说明** |
+| --- | --- | --- |
+| name | projects/my-gcp-project/topics/user-signup | Topic 的全限定资源名称 |
+| kmsKeyName | projects/.../cryptoKeys/my-key | 如果启用了 **客户管理的加密密钥（CMEK）**，这里会显示所用的 Cloud KMS 密钥 |
+| labels | environment: prodteam: growth | 自定义标签（key-value），用于资源管理和过滤 |
+| messageStoragePolicy.allowedPersistenceRegions | ["asia-east1", "us-central1"] | 指定 **允许消息存储** 的 GCP 区域，默认允许所有区域 |
+| schemaSettings.encoding | JSON | 消息使用的编码方式（可为 JSON 或 BINARY） |
+| schemaSettings.schema | projects/my-gcp-project/schemas/UserSignupSchema | 与此 Topic 绑定的 **Schema 定义名称**（用于结构验证） |
+| satisfiesPzs | true | 是否符合 Google 的 **“受限区域”策略（PZS）** 要求（通常用于合规） |
 
 ---
 
@@ -798,7 +804,7 @@ satisfiesPzs: true
 
 如需查看 Schema 详细内容，可运行：
 
-```
+```bash
 gcloud pubsub schemas describe UserSignupSchema
 ```
 
@@ -814,7 +820,7 @@ gcloud pubsub schemas describe UserSignupSchema
 
 ## **messageStoragePolicy**
 
-```
+```yaml
 messageStoragePolicy:
   allowedPersistenceRegions:
     - asia-east1
@@ -823,21 +829,21 @@ messageStoragePolicy:
 
 ### **📌 含义：**
 
-该字段控制 **Pub/Sub 消息实际物理数据的存储区域（region）**。Google Pub/Sub 是一个全球服务，默认情况下 Google 可能会将消息存储在任何区域。你可以通过此字段限制 **允许消息存储的区域** 来满足数据驻留（Data Residency）或合规性要求。
+该字段控制 **Pub/Sub 消息实际物理数据的存储区域（region）**。Google Pub/Sub 是一个全球服���，默认情况下 Google 可能会将消息存储在任何区域。你可以通过此字段限制 **允许消息存储的区域** 来满足数据驻留（Data Residency）或合规性要求。
 
 ---
 
 ### **🔐 安全场景应用（Tier 0 要求）：**
 
-| **需求类型**           | **应用说明**                                                                                      |
-| ---------------------- | ------------------------------------------------------------------------------------------------- |
-| **数据驻留要求**       | 某些国家或客户（如金融、医疗）要求数据不能离开指定地区（例如仅存储在 asia-east1 或 europe-west4） |
-| **合规性政策**         | 如 GDPR、FISC、APRA、HDS 要求指定地区存储数据                                                     |
-| **政府客户或行业隔离** | 对于 Tier 0，往往限制只使用日本地区（如 asia-northeast1），避免数据跨境                           |
+| **需求类型** | **应用说明** |
+| --- | --- |
+| **数据驻留要求** | 某些国家或客户（如金融、医疗）要求数据不能离开指定地区（例如仅存储在 asia-east1 或 europe-west4） |
+| **合规性政策** | 如 GDPR、FISC、APRA、HDS 要求指定地区存储数据 |
+| **政府客户或行业隔离** | 对于 Tier 0，往往限制只使用日本地区（如 asia-northeast1），避免数据跨境 |
 
 你可以在创建 topic 时指定：
 
-```
+```bash
 gcloud pubsub topics create user-signup \
   --message-storage-policy-allowed-regions=asia-northeast1,us-central1
 ```
@@ -865,11 +871,11 @@ satisfiesPzs: true
 
 ### **🔐 安全场景应用（Tier 0 要求）：**
 
-| **应用场景**                  | **解释**                                                                                                             |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| **VPC Service Controls 合规** | 如果你的服务需要运行在受控边界内（Service Perimeter），此字段必须为 true，否则数据可能会被访问穿透 perimeter         |
-| **防止数据越权访问**          | VPC SC 可以防止来自项目外部的服务访问内部数据（例如 GCF、Cloud Run、BigQuery 不在 perimeter 内时无法访问该 Pub/Sub） |
-| **强制安全隔离**              | 在金融/政务类场景中，需要确保所有服务都满足 PZS，保障 tenant 间和系统边界内外的数据不会混淆或泄露                    |
+| **应用场景** | **解释** |
+| --- | --- |
+| **VPC Service Controls 合规** | 如果你的服务需要运行在受控边界内（Service Perimeter），此字段必须为 true，否则数据可能会被访问穿透 perimeter |
+| **防止数据越权访问** | VPC SC 可以防止来自项目外部的服务访问内部数据（例如 GCF、Cloud Run、BigQuery 不在 perimeter 内时无法访问该 Pub/Sub） |
+| **强制安全隔离** | 在金融/政务类场景中，需要确保所有服务都满足 PZS，保障 tenant 间和系统边界内外的数据不会混淆或泄露 |
 
 如果 satisfiesPzs: false，则说明该资源（比如 topic）不满足 perimeter 安全性要求，建议不要纳入 Tier 0 服务范围。
 
@@ -879,13 +885,13 @@ satisfiesPzs: true
 
 查看项目是否启用了 VPC Service Controls：
 
-```
+```bash
 gcloud access-context-manager perimeters list --policy=YOUR_ORG_POLICY_ID
 ```
 
 查看 Pub/Sub topic 是否支持 PZS：
 
-```
+```bash
 gcloud pubsub topics describe projects/xxx/topics/yyy
 ```
 
@@ -895,12 +901,12 @@ gcloud pubsub topics describe projects/xxx/topics/yyy
 
 ## **✅ 总结建议（针对 Tier 0）**
 
-| **安全措施** | **操作建议**                                                             |
-| ------------ | ------------------------------------------------------------------------ |
+| **安全措施** | **操作建议** |
+| --- | --- |
 | 限制存储区域 | 使用 --message-storage-policy-allowed-regions 限定只在合规区域持久化消息 |
-| VPC SC 合规  | 检查 satisfiesPzs: true，确保资源在 Perimeter 内                         |
-| 加密控制     | 搭配使用 kmsKeyName，启用 **Customer-Managed Encryption Key（CMEK）**    |
-| IAM 限权     | 配合 Pub/Sub Admin, Publisher, Subscriber 等角色进行最小权限控制         |
+| VPC SC 合规 | 检查 satisfiesPzs: true，确保资源在 Perimeter 内 |
+| 加密控制 | 搭配使用 kmsKeyName，启用 **Customer-Managed Encryption Key（CMEK）** |
+| IAM 限权 | 配合 Pub/Sub Admin, Publisher, Subscriber 等角色进行最小权限控制 |
 
 ---
 

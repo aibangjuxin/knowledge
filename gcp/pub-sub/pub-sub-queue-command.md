@@ -18,11 +18,12 @@
 
 ---
 
-## **❌ 为什么** 
+## **❌ 为什么**
 
 ## **gcloud**
 
-##  **命令不适用：**
+## 
+**命令不适用：**
 
 gcloud pubsub subscriptions pull 是针对 **Pull 模式的订阅者**，它：
 
@@ -37,7 +38,7 @@ gcloud pubsub subscriptions pull 是针对 **Pull 模式的订阅者**，它：
 
 ## **✅ 正确做法（以 Java 为例）：**
 
-```
+```java
 subscriber = Subscriber.newBuilder(subscriptionName, (message, consumer) -> {
     try {
         // 处理消息
@@ -58,12 +59,12 @@ subscriber.startAsync().awaitRunning();
 
 ## **🔄 补充：**
 
-| **操作**                                | **Pull 模式支持** | **Streaming Pull 支持** |
-| --------------------------------------- | ----------------- | ----------------------- |
-| gcloud pubsub subscriptions pull        | ✅ 是             | ❌ 否                   |
-| gcloud pubsub subscriptions ack         | ✅ 是（需 ackId） | ❌ 否                   |
-| 客户端 ack/nack 方法（Java、Python 等） | ✅ 是             | ✅ 是                   |
-| Metrics (ack_count 等) 监控支持         | ✅ 是             | ✅ 是                   |
+| **操作** | **Pull 模式支持** | **Streaming Pull 支持** |
+| --- | --- | --- |
+| gcloud pubsub subscriptions pull | ✅ 是 | ❌ 否 |
+| gcloud pubsub subscriptions ack | ✅ 是（需 ackId） | ❌ 否 |
+| 客户端 ack/nack 方法（Java、Python 等） | ✅ 是 | ✅ 是 |
+| Metrics (ack_count 等) 监控支持 | ✅ 是 | ✅ 是 |
 
 ---
 
@@ -153,8 +154,8 @@ subscriber.startAsync().awaitRunning();
 3. **错误处理**：
     - 如果消息处理失败，建议通过 `consumer.nack()` 将消息重新排队，或结合死信主题（dead-letter topic）处理无法处理的消息。
     - 示例设置死信主题（通过 `gcloud` 配置）：
-        ```
-        gcloud pubsub subscriptions create SUBSCRIPTION_ID --topic=TOPIC_ID --dead-letter-topic=DEAD_LETTER_TOPIC_NAME --max-delivery-attempts=5
+        ```bash
+gcloud pubsub subscriptions create SUBSCRIPTION_ID --topic=TOPIC_ID --dead-letter-topic=DEAD_LETTER_TOPIC_NAME --max-delivery-attempts=5
         ```
 
 ### 什么时候使用 `gcloud` 命令？
@@ -164,30 +165,30 @@ subscriber.startAsync().awaitRunning();
 1. **查看堆积消息数量**：
 
     - 使用 Cloud Monitoring 检查未确认消息数量：
-        ```
-        fetch pubsub_subscription
-        | metric 'pubsub.googleapis.com/subscription/num_undelivered_messages'
-        | filter (resource.subscription_id == 'YOUR_SUBSCRIPTION_ID')
-        | group_by 1m, [value_num_undelivered_messages_sum: sum(value.num_undelivered_messages)]
+        ```mql
+fetch pubsub_subscription
+| metric 'pubsub.googleapis.com/subscription/num_undelivered_messages'
+| filter (resource.subscription_id == 'YOUR_SUBSCRIPTION_ID')
+| group_by 1m, [value_num_undelivered_messages_sum: sum(value.num_undelivered_messages)]
         ```
     - 这可以帮助判断 Streaming Pull 是否因处理延迟导致消息堆积。
 
 2. **重放或清除消息（Seek）**：
 
     - 如果需要批量清除未确认消息，可以使用 `seek` 命令将订阅时间戳设置为未来时间：
-        ```
-        gcloud pubsub subscriptions seek SUBSCRIPTION_ID --time=2025-07-04T12:00:00Z
+        ```bash
+gcloud pubsub subscriptions seek SUBSCRIPTION_ID --time=2025-07-04T12:00:00Z
         ```
     - 注意：此操作会将所有未确认消息标记为已确认，需谨慎使用。
 
 3. **调整订阅配置**：
     - 修改重试策略：
-        ```
-        gcloud pubsub subscriptions update SUBSCRIPTION_ID --min-retry-delay=10s --max-retry-delay=600s
+        ```bash
+gcloud pubsub subscriptions update SUBSCRIPTION_ID --min-retry-delay=10s --max-retry-delay=600s
         ```
     - 配置死信主题：
-        ```
-        gcloud pubsub subscriptions update SUBSCRIPTION_ID --dead-letter-topic=DEAD_LETTER_TOPIC_NAME --max-delivery-attempts=5
+        ```bash
+gcloud pubsub subscriptions update SUBSCRIPTION_ID --dead-letter-topic=DEAD_LETTER_TOPIC_NAME --max-delivery-attempts=5
         ```
 
 ### 总结
@@ -240,7 +241,7 @@ subscriber.startAsync().awaitRunning();
     - 命令: `gcloud pubsub subscriptions describe SUBSCRIPTION_ID`。
 - **创建 Subscription:**
     - 命令: `gcloud pubsub subscriptions create SUBSCRIPTION_ID --topic=TOPIC_ID` 1。
-    - 背景: 针对您的使用场景（Streaming Pull），主要创建的是拉取型订阅。创建时的关键标志包括 `--ack-deadline` 以及后续将详述的死信策略相关标志 16。
+    - 背景: 针对您的使用场景（Streaming Pull），主要创建的是拉取型订阅。创建时的关键标志包括 `--ack-deadline` 以及后续将详述的死信策略相\u0000关标志 16。
 - **更新 Subscription:** 修改现有订阅的属性，例如调整确认截止时间或更新死信策略。
     - 命令: `gcloud pubsub subscriptions update SUBSCRIPTION_ID --ack-deadline=30` 17。
 - **删除 Subscription:**
@@ -257,23 +258,23 @@ subscriber.startAsync().awaitRunning();
 
 下表汇总了最常用的 `gcloud pubsub` 命令，以便快速查阅。
 
-| 资源         | 操作     | `gcloud` 命令示例                                                                 |
-| ------------ | -------- | --------------------------------------------------------------------------------- |
-| Topic        | 列出     | `gcloud pubsub topics list`                                                       |
-| Topic        | 描述     | `gcloud pubsub topics describe my-topic`                                          |
-| Topic        | 创建     | `gcloud pubsub topics create my-topic`                                            |
-| Topic        | 删除     | `gcloud pubsub topics delete my-topic`                                            |
-| Topic        | 发布消息 | `gcloud pubsub topics publish my-topic --message "Hello"`                         |
-| Subscription | 列出     | `gcloud pubsub subscriptions list`                                                |
-| Subscription | 描述     | `gcloud pubsub subscriptions describe my-subscription`                            |
-| Subscription | 创建     | `gcloud pubsub subscriptions create my-subscription --topic=my-topic`             |
-| Subscription | 删除     | `gcloud pubsub subscriptions delete my-subscription`                              |
-| Subscription | 拉取消息 | `gcloud pubsub subscriptions pull my-subscription --limit=10`                     |
-| Subscription | 确认消息 | `gcloud pubsub subscriptions ack my-subscription --ack-ids="ack_id_1,ack_id_2"`   |
+| 资源 | 操作 | `gcloud` 命令示例 |
+| --- | --- | --- |
+| Topic | 列出 | `gcloud pubsub topics list` |
+| Topic | 描述 | `gcloud pubsub topics describe my-topic` |
+| Topic | 创建 | `gcloud pubsub topics create my-topic` |
+| Topic | 删除 | `gcloud pubsub topics delete my-topic` |
+| Topic | 发布消息 | `gcloud pubsub topics publish my-topic --message "Hello"` |
+| Subscription | 列出 | `gcloud pubsub subscriptions list` |
+| Subscription | 描述 | `gcloud pubsub subscriptions describe my-subscription` |
+| Subscription | 创建 | `gcloud pubsub subscriptions create my-subscription --topic=my-topic` |
+| Subscription | 删除 | `gcloud pubsub subscriptions delete my-subscription` |
+| Subscription | 拉取消息 | `gcloud pubsub subscriptions pull my-subscription --limit=10` |
+| Subscription | 确认消息 | `gcloud pubsub subscriptions ack my-subscription --ack-ids="ack_id_1,ack_id_2"` |
 | Subscription | 重置积压 | `gcloud pubsub subscriptions seek my-subscription --time=...` 或 `--snapshot=...` |
-| Snapshot     | 列出     | `gcloud pubsub snapshots list`                                                    |
-| Snapshot     | 创建     | `gcloud pubsub snapshots create my-snapshot --subscription=my-subscription`       |
-| Snapshot     | 删除     | `gcloud pubsub snapshots delete my-snapshot`                                      |
+| Snapshot | 列出 | `gcloud pubsub snapshots list` |
+| Snapshot | 创建 | `gcloud pubsub snapshots create my-snapshot --subscription=my-subscription` |
+| Snapshot | 删除 | `gcloud pubsub snapshots delete my-snapshot` |
 
 ## 第二部分：诊断消息积压：量化积压状况
 
@@ -290,21 +291,14 @@ subscriber.startAsync().awaitRunning();
 
 - **通过 Cloud Console:** 在 Pub/Sub 订阅的详情页面，有一个“指标”标签页，其中提供了针对上述关键指标的预构建图表，可以进行快速的目视检查 30。
 - **通过 Metrics Explorer 和 MQL:** 对于更深入的分析，可以使用 Metrics Explorer 构建自定义图表，或使用监控查询语言 (MQL) 进行精确查询 21。
-    - **示例 MQL 查询 (获取特定订阅的未投递消息数):**
-        代码段
-        ```
-        fetch pubsub_subscription
-
-        ```
-
+    - **示例 MQL 查询 (获取特定订阅的未投递消\u0000息数):**
+        ```mql
+fetch pubsub_subscription
 | metric 'pubsub.googleapis.com/subscription/num_undelivered_messages'
-
 | filter (resource.subscription_id == 'your-subscription-id')
-
 | group_by 1m, [value_num_undelivered_messages_mean: mean(value.num_undelivered_messages)]
-
 | every 1m
-
+        ```
 26
 
 ### 解读积压模式的因果链
@@ -333,13 +327,13 @@ subscriber.startAsync().awaitRunning();
 
 ### 关键 Pub/Sub 监控指标
 
-| 指标名称             | MQL 标识符                                                         | 描述                                             | 运维洞察                                                                                       |
-| -------------------- | ------------------------------------------------------------------ | ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| 未确认消息数         | `pubsub.googleapis.com/subscription/num_undelivered_messages`      | 订阅中未被确认的消息总数。                       | **积压规模**：反映消费者是否能跟上发布速率。持续增长表示处理能力不足。                         |
-| 最老未确认消息年龄   | `pubsub.googleapis.com/subscription/oldest_unacked_message_age`    | 订阅中最老一条未确认消息的年龄（秒）。           | **积压健康度**：反映消息处理的停滞情况。持续增长是严重警报，可能存在“毒丸”消息或处理完全阻塞。 |
-| 推送请求计数         | `pubsub.googleapis.com/subscription/push_request_count`            | （适用于 Push 订阅）按响应码分组的推送尝试次数。 | **推送端点健康度**：高错误码率（如 5xx）直接导致消息积压。                                     |
-| 投递延迟健康分       | `pubsub.googleapis.com/subscription/delivery_latency_health_score` | 一个综合分数，衡量订阅的投递延迟健康状况。       | **延迟根因分析**：帮助识别导致投递延迟增加的因素 30。                                          |
-| 确认截止日期过期计数 | `pubsub.googleapis.com/subscription/expired_ack_deadlines_count`   | 消息因超出确认截止时间而过期的次数。             | **处理超时**：该值非零表示消费者处理消息过慢，或客户端流控设置不当，导致消息被重复投递。       |
+| 指标名称 | MQL 标识符 | 描述 | 运维洞察 |
+| --- | --- | --- | --- |
+| 未确认消息数 | `pubsub.googleapis.com/subscription/num_undelivered_messages` | 订阅中未被确认的消息总数。 | **积压规模**：反映消费者是否能跟上发布速率。持续增长表示处理能力不足。 |
+| 最老未确认消息年龄 | `pubsub.googleapis.com/subscription/oldest_unacked_message_age` | 订阅中最老一条未确认消息的年龄（秒）。 | **积压健康度**：反映消息处理的停滞情况。持续增长是严重警报，可能存在“毒丸”消息或处理完全阻塞。 |
+| 推送请求计数 | `pubsub.googleapis.com/subscription/push_request_count` | （适用于 Push 订阅）按响应码分组的推送尝试次数。 | **推送端点健康度**：高错误码率（如 5xx）直接导致消息积压。 |
+| 投递延迟健康分 | `pubsub.googleapis.com/subscription/delivery_latency_health_score` | 一个综合分数，衡量订阅的投递延迟健康状况。 | **延迟根因分析**：帮助识别导致投递延迟增加的因素 30。 |
+| 确认截止日期过期计数 | `pubsub.googleapis.com/subscription/expired_ack_deadlines_count` | 消息因超出确认截止时间而过期的次数。 | **处理超时**：该值非零表示消费者处理消息过慢，或客户端流控设置不当，导致消息被重复投递。 |
 
 ## 第三部分：窥探队列内部：手动消息检查
 
@@ -363,20 +357,28 @@ subscriber.startAsync().awaitRunning();
 - **分步操作流程:**
     1. 识别问题订阅的主题:
 
-        gcloud pubsub subscriptions describe PRIMARY_SUB_ID --format="value(topic)"
+        ```bash
+gcloud pubsub subscriptions describe PRIMARY_SUB_ID --format="value(topic)"
+        ```
 
     2. 为该主题创建一个临时的“间谍”订阅:
 
-        gcloud pubsub subscriptions create spy-subscription --topic=TOPIC_ID 36
+        ```bash
+gcloud pubsub subscriptions create spy-subscription --topic=TOPIC_ID 36
+        ```
 
     3. 发布一条测试消息，或等待一条有问题的消息被发布。
     4. 从间谍订阅中安全地拉取消息进行检查:
 
-        gcloud pubsub subscriptions pull spy-subscription --limit=1
+        ```bash
+gcloud pubsub subscriptions pull spy-subscription --limit=1
+        ```
 
     5. 调试完成后，删除间谍订阅，以避免不必要的资源消耗和消息积压:
 
-        gcloud pubsub subscriptions delete spy-subscription
+        ```bash
+gcloud pubsub subscriptions delete spy-subscription
+        ```
 
 ### 精确控制：手动确认消息
 
@@ -415,14 +417,14 @@ subscriber.startAsync().awaitRunning();
 
 ### 积压清理方法对比 (`seek` vs. `delete/recreate`)
 
-| 特性             | 方法一: `seek --time`                                        | 方法二: `delete` & `recreate`                                                                          |
-| ---------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| **命令**         | `gcloud pubsub subscriptions seek my-sub --time=...`         | gcloud pubsub subscriptions delete my-sub<br><br>gcloud pubsub subscriptions create my-sub --topic=... |
-| **对积压的影响** | 将指定时间前的所有消息标记为已确认，从队列中移除。           | 永久删除整个订阅，包括所有积压消息。                                                                   |
-| **消息丢失风险** | 低。仅影响该订阅内的消息状态，不影响主题。                   | **高**。在删除和重建期间发布的消息会丢失。                                                             |
-| **服务中断**     | 无。操作是就地的，消费者连接不受影响。                       | 有。存在短暂的订阅不可用窗口。                                                                         |
-| **风险等级**     | **低**                                                       | **高**                                                                                                 |
-| **理想应用场景** | **推荐的常规方法**。快速、安全地清除积压，同时保留订阅配置。 | 紧急情况下的最后手段，当 `seek` 不可用或需要彻底重置时，且能接受短暂中断和消息丢失风险。               |
+| 特性 | 方法一: `seek --time` | 方法二: `delete` & `recreate` |
+| --- | --- | --- |
+| **命令** | `gcloud pubsub subscriptions seek my-sub --time=...` | gcloud pubsub subscriptions delete my-sub<br><br>gcloud pubsub subscriptions create my-sub --topic=... |
+| **对积压的影响** | 将指定时间前的所有消息标记为已确认，从队列中移除。 | 永久删除整个订阅，包括所有积压消息。 |
+| **消息丢失风险** | 低。仅影响该订阅内的消息状态，不影响主题。 | **高**。在删除和重建期间发布的消息会丢失。 |
+| **服务中断** | 无。操作是就地的，消费者连接不受影响。 | 有。存在短暂的订阅不可用窗口。 |
+| **风险等级** | **低** | **高** |
+| **\u0000理想应用场景** | **推荐的常规方法**。快速、安全地清除积压，同时保留订阅配置。 | 紧急情况下的最后手段，当 `seek` 不可用或需要彻底重置时，且能接受短暂中断和消息丢失风险。 |
 
 ## 第五部分：高级弹性模式：死信队列与快照
 
@@ -440,7 +442,9 @@ subscriber.startAsync().awaitRunning();
 - 一个容易被忽略的 IAM 要求:
     一个常见的陷阱是，配置了死信策略后发现它并未生效。其根本原因在于，执行“将消息转发到死信主题”这个动作的实体，并非您应用程序的服务账号，而是一个由 Google 托管的、特殊的 Pub/Sub 服务代理（Service Agent）。其格式为 service-{project-number}@gcp-sa-pubsub.iam.gserviceaccount.com。这个服务代理必须拥有对死信主题的 pubsub.publisher 权限，以及对源订阅的 pubsub.subscriber 权限，才能正常工作 43。虽然通过 Cloud Console 操作时，这些权限可能被自动授予，但在使用 CLI 或基础设施即代码（IaC）工具时，这通常是一个需要手动完成的关键步骤。
     - 授予必要权限的命令:
-        gcloud pubsub topics add-iam-policy-binding my-dead-letter-topic --member="serviceAccount:service-PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com" --role="roles/pubsub.publisher" 43
+        ```bash
+gcloud pubsub topics add-iam-policy-binding my-dead-letter-topic --member="serviceAccount:service-PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com" --role="roles/pubsub.publisher" 43
+        ```
 
 ### 使用快照 (Snapshot) 进行状态管理与消息重放
 
@@ -457,7 +461,7 @@ subscriber.startAsync().awaitRunning();
 
 ## 第六部分：全栈故障排查：GKE 上的 Pub/Sub 消费者
 
-本节将打通 Pub/Sub 与 Kubernetes 之间的壁垒，提供一个全面的故障排查指南，专门针对您在 GKE 上运行 Java 应用的特定环境。
+本节将打通 Pub/Sub 与 Kubernetes 之间的壁垒，提供一个全面的故障排查指南，专\u0000门针对您在 GKE 上运行 Java 应用的特定环境。
 
 ### 全栈故障的级联效应
 
@@ -488,7 +492,7 @@ GKE 中的 `CrashLoopBackOff` 状态并非孤立的 K8s 问题，它只是一个
 
 ### 性能杀手：GKE 的 CPU 与内存节流
 
-- **概念:** 即使 Pod 没有崩溃，其性能也可能严重下降，从而导致消息积压。这通常是由资源限制引起的。当一个容器使用的 CPU 超出其 `limit` 时，它将被**节流**（即性能被强制降低）。当一个容器使用的内存超出其 `limit` 时，它将被**杀死** (OOMKilled)，从而导致 `CrashLoopBackOff` 56。
+- **概念:** 即使 Pod 没有崩溃，其性能也可能严重下降，从而导致消息积压。这通常是由资源限制引起的。当一个容\u0000器使用的 CPU 超出其 `limit` 时，它将被**节流**（即性能被强制降低）。当一个容器使用的内存超出其 `limit` 时，它将被**杀死** (OOMKilled)，从而导致 `CrashLoopBackOff` 56。
 - CPU 节流：无声但致命
     Kubernetes 不会为 CPU 节流生成一个明确的“事件”。您的应用程序只是变得越来越慢，这可能极难调试。您可能会观察到 oldest_unacked_message_age 持续增高，但在应用日志中却找不到任何明显的错误 57。
 - **诊断:** 在 Cloud Monitoring 中检查容器的 CPU 节流指标：`kubernetes.io/container/cpu/throttle_time`。如果该指标持续增长，说明您的 Pod 正遭受 CPU 饥饿。
@@ -496,7 +500,7 @@ GKE 中的 `CrashLoopBackOff` 状态并非孤立的 K8s 问题，它只是一个
     1. **合理设置 Requests:** 确保 Pod 规格中 `resources.requests` 的 CPU 和内存值准确反映了其正常运行所需。
     2. **谨慎使用 CPU Limits:** 许多专家现在建议**不设置 CPU limits**，仅设置 CPU requests。这可以防止节流，允许 Pod 在节点有空闲资源时“突发”使用，同时仍然保证其所请求的资源量 60。
     3. **设置 Memory Limits = Memory Requests:** 这是最佳实践，它为您的 Pod 提供了 Guaranteed 的 QoS 等级，使其行为更可预测 60。
-    4. 使用垂直 Pod 自动扩缩器 (VPA) 的 `Off` (推荐) 模式，来获取关于合理资源请求/限制的建议 61。
+    4. 使用垂直 Pod 自动扩缩器 (VPA) 的 `Off` (推荐) 模式，来获取关于合理资源请\u0000求/限制的建议 61。
 
 ### 优化高吞吐量 Java Streaming Pull 客户端
 
@@ -508,11 +512,10 @@ GKE 中的 `CrashLoopBackOff` 状态并非孤立的 K8s 问题，它只是一个
 - **多线程最佳实践：配置自定义 `ExecutorProvider`**
     - **概念:** Java 客户端使用 `ExecutorProvider` 来获取一个线程池，用于执行用户提供的消息接收回调函数 (`MessageReceiver`) 65。
     - **默认行为:** 默认情况下，客户端会为每个并行拉取流创建一个包含 5 个线程的新线程池 66。例如，如果您设置了
-        `setParallelPullCount(4)`，那么您将获得 4×5=20 个线程用于消息处理。
+        `setParallelPullCount(4)`，那么您将获得 4×5=20 个线程\u0000用于消息处理。
     - **为何自定义:** 如果您的消息处理是 I/O 密集型的（例如，调用数据库），您可能需要远多于默认值的线程数来达到高并发。如果处理是 CPU 密集型的，您可能希望将线程数限制为可用核心数。提供一个自定义的 `ExecutorProvider` 可以让您精确控制线程模型，以匹配您的工作负载特性。
     - **示例代码片段 (概念性):**
-        Java
-        ```
+        ```java
         // 提供一个自定义的执行器服务来处理消息
         ExecutorProvider executorProvider =
             InstantiatingExecutorProvider.newBuilder().setExecutorThreadCount(16).build();
@@ -529,7 +532,7 @@ GKE 中的 `CrashLoopBackOff` 状态并非孤立的 K8s 问题，它只是一个
 
 ## 结论
 
-成功管理 GCP Pub/Sub 消息队列，尤其是在 GKE 这种复杂的环境中，要求运维人员具备跨越消息中间件、Kubernetes 和应用程序本身的全栈诊断能力。
+成功管理 GCP Pub/Sub 消息队列，尤其是在 GKE 这种复杂的环境中，要求运维人员具备跨越消息中间件、Kubernetes 和应用程序本身的全栈诊断能\u0000力。
 
 1. **基础操作是基石:** 熟练使用 `gcloud pubsub` 命令进行日常的增删改查是高效运维的起点。
 2. **监控是诊断的核心:** 消息积压的核心诊断依赖于对 `num_undelivered_messages` 和 `oldest_unacked_message_age` 这两个关键指标的持续监控和正确解读。建立基于这些指标的告警是实现主动运维的关键。
@@ -537,7 +540,7 @@ GKE 中的 `CrashLoopBackOff` 状态并非孤立的 K8s 问题，它只是一个
 4. **弹性设计优于事后补救:** 主动配置死信队列 (DLQ) 和利用快照 (Snapshot) 进行状态管理，是构建健壮、可恢复系统的标志。理解 DLQ 的 IAM 需求和快照的过期策略是成功实施这些模式的前提。
 5. **问题根源往往在消费者端:** 在 GKE 环境中，Pub/Sub 的消息积压通常是消费者 Pod 问题的**结果**，而非**原因**。排查方向应首先聚焦于 GKE Pod 的日志、资源限制（CPU/内存节流）和应用层面的性能瓶颈。精细化配置 Java 客户端的流控和线程池 (`ExecutorProvider`) 对最大化吞吐量至关重要。
 
-通过结合使用本报告中提供的命令行工具、监控策略和架构模式，团队可以有效地诊断和解决 Pub/Sub 消息积压问题，确保消息处理管道的稳定性和可靠性。
+通过结合使用本报告中提供的命令行工具、监控策略和架构模式，团队可以有效地诊\u0000断和解决 Pub/Sub 消息积压问题，确保消息处理管道的稳定性和可靠性。
 
 # ChatGPT
 
@@ -553,11 +556,11 @@ gcloud pubsub subscriptions describe [SUBSCRIPTION_NAME] --project=[PROJECT_ID]
 
 #### 输出关注字段说明：
 
-| 字段名                     | 说明                                |
-| -------------------------- | ----------------------------------- |
-| `backlogBytes`             | 当前未 ack 消息的总字节数（近似值） |
-| `backlogMessages`          | 当前堆积的未 ack 消息数量（近似值） |
-| `messageRetentionDuration` | 消息最大保留时间（默认 7 天）       |
+| 字段名 | 说明 |
+| --- | --- |
+| `backlogBytes` | 当前未 ack 消息的总字节数（近似值） |
+| `backlogMessages` | 当前堆积的未 ack 消息数量（近似值） |
+| `messageRetentionDuration` | 消息最大保留时间（默认 7 天） |
 
 ---
 
@@ -565,12 +568,12 @@ gcloud pubsub subscriptions describe [SUBSCRIPTION_NAME] --project=[PROJECT_ID]
 
 - 指标名称：
 
-| 指标名称                                        | 含义                        |
-| ----------------------------------------------- | --------------------------- |
-| `subscription/num_undelivered_messages`         | 堆积的消息数量（backlog）   |
-| `subscription/oldest_unacked_message_age`       | 最旧未 ack 消息的时间（秒） |
-| `subscription/pull_ack_message_operation_count` | 成功 ack 的数量             |
-| `subscription/pull_request_count`               | 客户端发起的 pull 请求次数  |
+| 指标名称 | 含义 |
+| --- | --- |
+| `subscription/num_undelivered_messages` | 堆积的消息数量（backlog） |
+| `subscription/oldest_unacked_message_age` | 最旧未 ack 消息的时间（秒） |
+| `subscription/pull_ack_message_operation_count` | 成功 ack 的数量 |
+| `subscription/pull_request_count` | 客户端发起的 pull 请求次数 |
 
 ---
 
@@ -640,11 +643,11 @@ gcloud pubsub subscriptions create [NEW_SUB] \
 
 ## 📌 五、Streaming Pull 相关指标（适用于 GKE）
 
-| 指标名称                | 说明                          |
-| ----------------------- | ----------------------------- |
-| `open_streaming_pulls`  | 当前活跃 StreamingPull 连接数 |
-| `ack_message_count`     | 成功确认的消息数量            |
-| `expired_ack_deadlines` | 超时未 ack 导致的重投次数     |
+| 指标名称 | 说明 |
+| --- | --- |
+| `open_streaming_pulls` | 当前活跃 StreamingPull 连接数 |
+| `ack_message_count` | 成功确认的消息数量 |
+| `expired_ack_deadlines` | 超时未 ack 导致的重投次数 |
 
 ---
 
@@ -672,12 +675,12 @@ gcloud pubsub subscriptions create [SUBSCRIPTION_NAME] --topic=[TOPIC_NAME]
 
 ## 📌 七、最佳实践建议
 
-| 建议项                           | 说明                                  |
-| -------------------------------- | ------------------------------------- |
+| 建议项 | 说明 |
+| --- | --- |
 | 配置足够多的 Streaming Pull 线程 | `executor-threads` 足够大避免 backlog |
-| 监控 oldest_unacked_message_age  | 该指标升高说明消费不及时              |
-| 定期拉取 + ack 清理无用消息      | 可用脚本或定时任务实现“消费模拟”      |
-| 配置 dead letter topic           | 保留失败记录，防止无限重投            |
+| 监控 oldest_unacked_message_age | 该指标升高说明消费不及时 |
+| 定期拉取 + ack 清理无用消息 | 可用脚本或定时任务实现“消费模拟” |
+| 配置 dead letter topic | 保留失败记录，防止无限重投 |
 
 ---
 
@@ -696,7 +699,7 @@ gcloud pubsub topics list
 # 查看所有 Subscription
 gcloud pubsub subscriptions list
 
-# 查看特定 Topic 的详细信息
+# \u0000看特定 Topic 的详细信息
 gcloud pubsub topics describe TOPIC_NAME
 
 # 查看特定 Subscription 的详细信息
@@ -935,12 +938,12 @@ done
 
 ### 配置参数建议表
 
-| 参数                     | 推荐值 | 说明                 |
-| ------------------------ | ------ | -------------------- |
-| ackDeadlineSeconds       | 60-600 | 根据消息处理时间调整 |
-| messageRetentionDuration | 7d     | 消息保留时间         |
-| maxDeliveryAttempts      | 5-10   | 最大重试次数         |
-| enableMessageOrdering    | true   | 如需保序则启用       |
+| 参数 | 推荐值 | 说明 |
+| --- | --- |
+| ackDeadlineSeconds | 60-600 | 根据消息处理时间调整 |
+| messageRetentionDuration | 7d | 消息保留时间 |
+| maxDeliveryAttempts | 5-10 | 最大重试次数 |
+| enableMessageOrdering | true | 如需保序则启用 |
 
 ### 性能优化建议
 
@@ -967,22 +970,22 @@ done
 
 - 打开 Google Cloud Console > Monitoring > Metrics Explorer。
 - 输入查询：
-    ```
-    fetch pubsub_subscription
-    | metric 'pubsub.googleapis.com/subscription/num_undelivered_messages'
-    | filter (resource.subscription_id == 'YOUR_SUBSCRIPTION_ID')
-    | group_by 1m, [value_num_undelivered_messages_sum: sum(value.num_undelivered_messages)]
+    ```mql
+fetch pubsub_subscription
+| metric 'pubsub.googleapis.com/subscription/num_undelivered_messages'
+| filter (resource.subscription_id == 'YOUR_SUBSCRIPTION_ID')
+| group_by 1m, [value_num_undelivered_messages_sum: sum(value.num_undelivered_messages)]
     ```
     替换 `YOUR_SUBSCRIPTION_ID` 为实际订阅 ID。
 
 如果配置了死信主题（dead-letter topic），还可以监控被转发到死信主题的消息数量：
 
 - 使用 MQL 查询：
-    ```
-    fetch pubsub_subscription
-    | metric 'pubsub.googleapis.com/subscription/dead_letter_message_count'
-    | filter (resource.subscription_id == 'YOUR_SUBSCRIPTION_ID')
-    | group_by 1m, [value_dead_letter_message_count_sum: sum(value.dead_letter_message_count)]
+    ```mql
+fetch pubsub_subscription
+| metric 'pubsub.googleapis.com/subscription/dead_letter_message_count'
+| filter (resource.subscription_id == 'YOUR_SUBSCRIPTION_ID')
+| group_by 1m, [value_dead_letter_message_count_sum: sum(value.dead_letter_message_count)]
     ```
 
 ### 手动清理消息
@@ -990,33 +993,33 @@ done
 要手动清理消息，可以使用 `seek` 命令将订阅的时间戳设置为未来时间，从而标记所有当前消息为已确认：
 
 - 命令示例：
-    ```
-    gcloud pubsub subscriptions seek SUBSCRIPTION_ID --time=2025-07-04T00:00:00Z
+    ```bash
+gcloud pubsub subscriptions seek SUBSCRIPTION_ID --time=2025-07-04T00:00:00Z
     ```
     注意：此操作不可逆，需在非生产环境中测试。
 
 另外，可以通过调整消息保留设置来间接管理堆积：
 
 - 创建主题时设置消息保留：
-    ```
-    gcloud pubsub topics create TOPIC_ID --message-retention-duration=7d
+    ```bash
+gcloud pubsub topics create TOPIC_ID --message-retention-duration=7d
     ```
 - 更新订阅的已确认消息保留：
-    ```
-    gcloud pubsub subscriptions update SUBSCRIPTION_ID --retain-acked-messages --message-retention-duration=5d
+    ```bash
+gcloud pubsub subscriptions update SUBSCRIPTION_ID --retain-acked-messages --message-retention-duration=5d
     ```
 
 ### 其他管理选项
 
-如果消息堆积因处理失败导致，可以配置重试策略或死信主题：
+\u0000果消息堆积因处理失败导致，可以配置重试策略或死信主题：
 
 - 创建带重试策略的订阅：
-    ```
-    gcloud pubsub subscriptions create SUBSCRIPTION_ID --topic=TOPIC_ID --min-retry-delay=10s --max-retry-delay=600s
+    ```bash
+gcloud pubsub subscriptions create SUBSCRIPTION_ID --topic=TOPIC_ID --min-retry-delay=10s --max-retry-delay=600s
     ```
 - 设置死信主题：
-    ```
-    gcloud pubsub subscriptions create SUBSCRIPTION_ID --topic=TOPIC_ID --dead-letter-topic=DEAD_LETTER_TOPIC_NAME --max-delivery-attempts=5
+    ```bash
+gcloud pubsub subscriptions create SUBSCRIPTION_ID --topic=TOPIC_ID --dead-letter-topic=DEAD_LETTER_TOPIC_NAME --max-delivery-attempts=5
     ```
     需为服务账户授予权限，具体命令见下文。
 
@@ -1034,7 +1037,7 @@ GCP Pub/Sub 是一种消息传递服务，支持异步消息传输，适用于�
 
 #### 查看消息堆积的详细方法
 
-由于 Pub/Sub 没有直接的 CLI 命令显示订阅中的消息数量，建议通过 Cloud Monitoring 监控相关指标：
+由于 Pub/Sub 没有直接的 CLI 命令显示订阅中的消息数量，建\u0000议通过 Cloud Monitoring 监控相关指标：
 
 1. **未交付消息数量**
 
@@ -1042,11 +1045,11 @@ GCP Pub/Sub 是一种消息传递服务，支持异步消息传输，适用于�
     - **操作步骤**：
         - 打开 Google Cloud Console > Monitoring > Metrics Explorer。
         - 输入以下 MQL 查询：
-            ```
-            fetch pubsub_subscription
-            | metric 'pubsub.googleapis.com/subscription/num_undelivered_messages'
-            | filter (resource.subscription_id == 'YOUR_SUBSCRIPTION_ID')
-            | group_by 1m, [value_num_undelivered_messages_sum: sum(value.num_undelivered_messages)]
+            ```mql
+fetch pubsub_subscription
+| metric 'pubsub.googleapis.com/subscription/num_undelivered_messages'
+| filter (resource.subscription_id == 'YOUR_SUBSCRIPTION_ID')
+| group_by 1m, [value_num_undelivered_messages_sum: sum(value.num_undelivered_messages)]
             ```
         - 替换 `YOUR_SUBSCRIPTION_ID` 为实际订阅 ID。
     - **用途**：帮助识别消息堆积的规模，特别适用于 Streaming Pull 场景，确保多线程应用未因同步问题导致消息未确认。
@@ -1055,11 +1058,11 @@ GCP Pub/Sub 是一种消息传递服务，支持异步消息传输，适用于�
 
     - 如果配置了死信主题（dead-letter topic），可以使用 `subscription/dead_letter_message_count` 指标监控因处理失败而被转发到死信主题的消息数量。
     - **MQL 查询示例**：
-        ```
-        fetch pubsub_subscription
-        | metric 'pubsub.googleapis.com/subscription/dead_letter_message_count'
-        | filter (resource.subscription_id == 'YOUR_SUBSCRIPTION_ID')
-        | group_by 1m, [value_dead_letter_message_count_sum: sum(value.dead_letter_message_count)]
+        ```mql
+fetch pubsub_subscription
+| metric 'pubsub.googleapis.com/subscription/dead_letter_message_count'
+| filter (resource.subscription_id == 'YOUR_SUBSCRIPTION_ID')
+| group_by 1m, [value_dead_letter_message_count_sum: sum(value.dead_letter_message_count)]
         ```
     - **用途**：帮助分析处理失败的模式，特别是在多线程环境下可能出现的竞争条件导致的消息处理失败。
 
@@ -1068,8 +1071,8 @@ GCP Pub/Sub 是一种消息传递服务，支持异步消息传输，适用于�
     - 可以通过创建订阅的快照来检查特定时间点的消息状态。
     - **命令**：
         - 创建快照：
-            ```
-            gcloud pubsub snapshots create SNAPSHOT_ID --subscription=SUBSCRIPTION_ID
+            ```bash
+gcloud pubsub snapshots create SNAPSHOT_ID --subscription=SUBSCRIPTION_ID
             ```
         - 快照的生命周期为 7 天减去最老未确认消息的年龄，最短 1 小时。
     - **注意**：快照本身不直接显示消息内容，通常需要通过 Pub/Sub API 或客户端库（如 Java 客户端）进一步处理，适合您的 Java 应用场景。
@@ -1077,12 +1080,12 @@ GCP Pub/Sub 是一种消息传递服务，支持异步消息传输，适用于�
 4. **基本订阅和主题信息**
     - 使用以下命令列出订阅和主题，确认配置：
         - 列出订阅：
-            ```
-            gcloud pubsub subscriptions list
+            ```bash
+gcloud pubsub subscriptions list
             ```
         - 列出主题：
-            ```
-            gcloud pubsub topics list
+            ```bash
+gcloud pubsub topics list
             ```
     - 这些命令不显示消息数量，但可用于验证订阅和主题的配置是否正确。
 
@@ -1094,8 +1097,8 @@ GCP Pub/Sub 是一种消息传递服务，支持异步消息传输，适用于�
 
     - 通过将订阅的时间戳设置为未来时间，可以标记所有当前消息为已确认，从而“清除”它们。
     - **命令**：
-        ```
-        gcloud pubsub subscriptions seek SUBSCRIPTION_ID --time=2025-07-04T00:00:00Z
+        ```bash
+gcloud pubsub subscriptions seek SUBSCRIPTION_ID --time=2025-07-04T00:00:00Z
         ```
         - 替换 `SUBSCRIPTION_ID` 为实际订阅 ID，`2025-07-04T00:00:00Z` 为未来时间（当前时间为 2025 年 7 月 3 日 23:38 JST，建议选择稍后时间）。
     - **注意**：
@@ -1107,68 +1110,68 @@ GCP Pub/Sub 是一种消息传递服务，支持异步消息传输，适用于�
     - 通过配置消息保留时间，可以控制消息的保留周期，间接管理堆积。
     - **主题消息保留**：
         - 创建主题时设置：
-            ```
-            gcloud pubsub topics create TOPIC_ID --message-retention-duration=7d
+            ```bash
+gcloud pubsub topics create TOPIC_ID --message-retention-duration=7d
             ```
             - 最大保留时间为 31 天，费用计入主题所属项目。
         - 更新主题保留时间：
-            ```
-            gcloud pubsub topics update TOPIC_ID --message-retention-duration=1d
+            ```bash
+gcloud pubsub topics update TOPIC_ID --message-retention-duration=1d
             ```
             - 清除保留设置：
-                ```
-                gcloud pubsub topics update TOPIC_ID --clear-message-retention-duration
+                ```bash
+gcloud pubsub topics update TOPIC_ID --clear-message-retention-duration
                 ```
     - **订阅已确认消息保留**：
         - 创建订阅时设置：
-            ```
-            gcloud pubsub subscriptions create SUBSCRIPTION_ID --retain-acked-messages --message-retention-duration=5d
+            ```bash
+gcloud pubsub subscriptions create SUBSCRIPTION_ID --retain-acked-messages --message-retention-duration=5d
             ```
             - 默认保留 7 天，最大 31 天，费用计入订阅所属项目。
         - 更新订阅保留时间：
-            ```
-            gcloud pubsub subscriptions update SUBSCRIPTION_ID --message-retention-duration=1d
+            ```bash
+gcloud pubsub subscriptions update SUBSCRIPTION_ID --message-retention-duration=1d
             ```
             - 禁用已确认消息保留：
-                ```
-                gcloud pubsub subscriptions update SUBSCRIPTION_ID --no-retain-acked-messages
+                ```bash
+gcloud pubsub subscriptions update SUBSCRIPTION_ID --no-retain-acked-messages
                 ```
 
 3. **处理失败消息：重试策略和死信主题**
     - 如果消息堆积因处理失败导致，可以通过配置重试策略或死信主题来管理。
     - **重试策略（Exponential Backoff）**：
         - 创建带重试策略的订阅：
-            ```
-            gcloud pubsub subscriptions create SUBSCRIPTION_ID --topic=TOPIC_ID --min-retry-delay=10s --max-retry-delay=600s
+            ```bash
+gcloud pubsub subscriptions create SUBSCRIPTION_ID --topic=TOPIC_ID --min-retry-delay=10s --max-retry-delay=600s
             ```
             - 最小重试延迟：0-600 秒，默认 10 秒。
             - 最大重试延迟：0-600 秒，默认 600 秒。
             - 适用于因短暂故障导致的处理失败，特别在多线程环境下可能出现的竞争条件。
     - **死信主题**：
         - 创建带死信主题的订阅：
-            ```
-            gcloud pubsub subscriptions create SUBSCRIPTION_ID --topic=TOPIC_ID --dead-letter-topic=DEAD_LETTER_TOPIC_NAME --max-delivery-attempts=5
+            ```bash
+gcloud pubsub subscriptions create SUBSCRIPTION_ID --topic=TOPIC_ID --dead-letter-topic=DEAD_LETTER_TOPIC_NAME --max-delivery-attempts=5
             ```
             - 最大交付尝试次数：5-100，默认 5。
         - 更新现有订阅的死信主题：
-            ```
-            gcloud pubsub subscriptions update SUBSCRIPTION_ID --dead-letter-topic=DEAD_LETTER_TOPIC_NAME --max-delivery-attempts=5
+            ```bash
+gcloud pubsub subscriptions update SUBSCRIPTION_ID --dead-letter-topic=DEAD_LETTER_TOPIC_NAME --max-delivery-attempts=5
             ```
         - 移除死信策略：
-            ```
-            gcloud pubsub subscriptions update SUBSCRIPTION_ID --clear-dead-letter-policy
+            ```bash
+gcloud pubsub subscriptions update SUBSCRIPTION_ID --clear-dead-letter-policy
             ```
         - **权限配置**：
             - Pub/Sub 使用服务账户 `service-project-number@gcp-sa-pubsub.iam.gserviceaccount.com`。
             - 为死信主题授予发布者角色：
-                ```
-                PUBSUB_SERVICE_ACCOUNT="service-project-number@gcp-sa-pubsub.iam.gserviceaccount.com"
-                gcloud pubsub topics add-iam-policy-binding DEAD_LETTER_TOPIC_NAME --member="serviceAccount:$PUBSUB_SERVICE_ACCOUNT" --role="roles/pubsub.publisher"
+                ```bash
+PUBSUB_SERVICE_ACCOUNT="service-project-number@gcp-sa-pubsub.iam.gserviceaccount.com"
+gcloud pubsub topics add-iam-policy-binding DEAD_LETTER_TOPIC_NAME --member="serviceAccount:$PUBSUB_SERVICE_ACCOUNT" --role="roles/pubsub.publisher"
                 ```
             - 为原始订阅授予订阅者角色：
-                ```
-                PUBSUB_SERVICE_ACCOUNT="service-project-number@gcp-sa-pubsub.iam.gserviceaccount.com"
-                gcloud pubsub subscriptions add-iam-policy-binding SUBSCRIPTION_ID --member="serviceAccount:$PUBSUB_SERVICE_ACCOUNT" --role="roles/pubsub.subscriber"
+                ```bash
+PUBSUB_SERVICE_ACCOUNT="service-project-number@gcp-sa-pubsub.iam.gserviceaccount.com"
+gcloud pubsub subscriptions add-iam-policy-binding SUBSCRIPTION_ID --member="serviceAccount:$PUBSUB_SERVICE_ACCOUNT" --role="roles/pubsub.subscriber"
                 ```
 
 #### 针对 GKE + Java + Streaming Pull + 多线程的特别建议
@@ -1182,15 +1185,15 @@ GCP Pub/Sub 是一种消息传递服务，支持异步消息传输，适用于�
 
 以下是关键命令的汇总，便于参考：
 
-| **操作**                    | **命令**                                                                                                                         |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 查看未交付消息数量          | 使用 Cloud Monitoring，MQL 查询 `subscription/num_undelivered_messages`                                                          |
-| 创建快照                    | `gcloud pubsub snapshots create SNAPSHOT_ID --subscription=SUBSCRIPTION_ID`                                                      |
-| 清除消息（Seek 到未来时间） | `gcloud pubsub subscriptions seek SUBSCRIPTION_ID --time=2025-07-04T00:00:00Z`                                                   |
-| 配置主题消息保留            | `gcloud pubsub topics create/update TOPIC_ID --message-retention-duration=7d`                                                    |
-| 配置订阅已确认消息保留      | `gcloud pubsub subscriptions create/update SUBSCRIPTION_ID --retain-acked-messages --message-retention-duration=5d`              |
-| 设置重试策略                | `gcloud pubsub subscriptions create SUBSCRIPTION_ID --min-retry-delay=10s --max-retry-delay=600s`                                |
-| 设置死信主题                | `gcloud pubsub subscriptions create/update SUBSCRIPTION_ID --dead-letter-topic=DEAD_LETTER_TOPIC_NAME --max-delivery-attempts=5` |
+| **操作** | **命令** |
+| --- | --- |
+| 查看未交付消息数量 | 使用 Cloud Monitoring，MQL 查询 `subscription/num_undelivered_messages` |
+| 创建快照 | `gcloud pubsub snapshots create SNAPSHOT_ID --subscription=SUBSCRIPTION_ID` |
+| 清除消\u0000息（Seek 到未来时间） | `gcloud pubsub subscriptions seek SUBSCRIPTION_ID --time=2025-07-04T00:00:00Z` |
+| 配置主题消息保留 | `gcloud pubsub topics create/update TOPIC_ID --message-retention-duration=7d` |
+| 配置订阅已确认消息保留 | `gcloud pubsub subscriptions create/update SUBSCRIPTION_ID --retain-acked-messages --message-retention-duration=5d` |
+| 设置重试策略 | `gcloud pubsub subscriptions create SUBSCRIPTION_ID --min-retry-delay=10s --max-retry-delay=600s` |
+| 设置死信主题 | `gcloud pubsub subscriptions create/update SUBSCRIPTION_ID --dead-letter-topic=DEAD_LETTER_TOPIC_NAME --max-delivery-attempts=5` |
 
 #### 结论与建议
 
