@@ -52,7 +52,7 @@ EvaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 2})
 request.path.starts_with("/safe-endpoint")
 
 结合 WAF rule exclusion：
-
+```bash
 {
 
 "expression": "request.path.starts_with('/api/report')",
@@ -66,7 +66,7 @@ request.path.starts_with("/safe-endpoint")
 }
 
 }
-
+```
 可以排除特定路径中的 body、header 或 query param 检测。
 
 ✅ 方法三：调整拦截模式为观察（preview）
@@ -168,6 +168,7 @@ Google Cloud Armor 的预配置 WAF 规则并非单一的实体，而是基于�
 
 Part 2: 系统性故障排除工作流：从警报到分析
 本节提供了一个可重复的、分阶段的方法来调查 WAF 的拦截事件。它旨在引导用户从被动的应急响应状态，转向结构化的、法医式的分析过程。
+
 2.1 阶段一 - 黄金法则：始终从预览模式开始
 预览模式（Preview Mode）是 Cloud Armor 提供的一个强大的非侵入性数据收集工具，也是部署任何新规则或修改规则时最重要的最佳实践 。
 在预览模式下，规则的 action（例如 deny）不会被实际执行，但其潜在的结果会被详细记录到日志中 。这允许管理员在不影响生产流量的情况下，评估规则变更可能带来的影响 。
@@ -175,24 +176,28 @@ Part 2: 系统性故障排除工作流：从警报到分析
 - 启用预览模式:
 
     - 使用 gcloud CLI 创建规则时，添加--preview 标志：
+        ```bash
         gcloud compute security-policies rules create 1000 \
          --security-policy [POLICY_NAME] \
          --expression "evaluatePreconfiguredWaf('sqli-v33-stable')" \
          --action deny-403 \
          --preview
+	```
 
 - 监控预览结果: - 在 Cloud Logging 中，可以使用特定的过滤器来查找被预览模式“标记”的请求。这是一个至关重要的、可直接操作的技巧，能帮助你精确识别出哪些合法请求可能会被新规则拦截：
-    resource.type="http_load_balancer"
+```bash
+resource.type="http_load_balancer"
     jsonPayload.previewSecurityPolicy.outcome="DENY"
+```
 
-    2.2 阶段二 - Cloud Logging 中的取证分析：定位“谁”和“什么”
+2.2 阶段二 - Cloud Logging 中的取证分析：定位“谁”和“什么”
     故障排除的过程是一个不断缩小范围、提高精度的漏斗模型。它始于一个宽泛的 403 错误，然后逐步聚焦到具体的策略、规则、签名，最终精确定位到请求中触发问题的那个字符串。这种结构化的方法可以避免在压力下浪费时间进行无序的猜测。
 
 - 定位日志: 一个常见的混淆点是，Cloud Armor 的日志并非一个独立的产品，而是嵌入在与其关联的负载均衡器日志中的 。因此，正确的查询起点是使用过滤器 resource.type="http_load_balancer"。
 - 启用详细日志: 对于有效的 WAF 调优，标准日志记录通常是不够的。必须启用详细日志（Verbose Logging），因为它会在日志中增加关于匹配字段的关键信息（matchedField...），这对于诊断至关重要 。
 
     - 使用以下命令为安全策略启用详细日志：
-        gcloud compute security-policies update [POLICY_NAME] --log-level=VERBOSE
+        `gcloud compute security-policies update [POLICY_NAME] --log-level=VERBOSE`
 
 - WAF 分析的关键日志字段: 为了帮助用户在复杂的 JSON 日志中快速找到所需信息，下表整合了多个来源的关键字段说明，它直接回答了诊断过程中“如何找到...”的问题 。
 
@@ -208,7 +213,8 @@ Part 2: 系统性故障排除工作流：从警报到分析
     | matchedFieldName (详细日志)                 | 如果匹配发生在键值对中，此字段保存键的名称（例如，Cookie 名或查询参数名）。        | 将调查范围缩小到特定字段，例如 session_id Cookie 或 user_comment 表单字段 。                                                                           |
     | matchedFieldValue (详细日志)                | 触发签名的实际数据的片段（最多 16 字节）。                                         | 确凿的证据。它向你展示了 WAF 标记为恶意的确切字符串（例如，' or 1=1--）。                                                                              |
 
-    2.3 阶段三 - 精确定位触发器：利用详细日志
+
+2.3 阶段三 - 精确定位触发器：利用详细日志
     通过一个实际的演练，可以展示如何结合 matchedFieldType、matchedFieldName 和 matchedFieldValue 来构建事件的全貌 。
     例如，一个日志条目显示：
 
@@ -218,47 +224,57 @@ Part 2: 系统性故障排除工作流：从警报到分析
     这组信息清晰地告诉分析师：WAF 拦截的原因是请求中名为 redirect_url 的查询参数的值包含了 WAF 认为可疑的内容。
     关键限制: 需要明确指出，即使启用了详细日志，Cloud Armor 也不会记录完整的请求体（POST body）。这是一个已知的限制。matchedFieldValue 提供的片段通常足以进行诊断，但无法提供完整的上下文。
     将预览模式和详细日志结合使用，可以为 DevSecOps 流程创建一个强大的反馈循环。开发人员提交代码后，CI/CD 流水线可以运行自动化测试。安全团队可以监控这些测试流量产生的 previewSecurityPolicy 日志。如果一个新功能导致了“预览拒绝”日志的激增，这个问题就可以在它进入生产环境并引发真实故障之前被捕获和解决。这使得 WAF 调优从一个部署后的被动任务，转变为一个部署前的主动协作过程。
-    Part 3: 分诊：区分误报与真实威胁
+
+Part 3: 分诊：区分误报与真实威胁
     在收集了“什么”被拦截的数据之后，本节将指导用户如何解读这些数据，回答“为什么”被拦截的问题。一个 WAF 拦截事件在经过分诊之前，不应被视为“安全事件”，它仅仅是一个“待处理的安全信号”。分诊过程需要丰富的应用知识，是区分真实攻击（被成功阻止）和误报（运营问题）的关键步骤。WAF 本身无法做出这种区分，只有具备上下文背景的人类分析师才能完成。
-    3.1 分析师的分诊清单：是恶意还是误解？
+
+3.1 分析师的分诊清单：是恶意还是误解？
     以下是一系列关键问题，旨在基于第二部分收集到的取证数据，指导分析师做出判断：
 - 上下文为王: matchedFieldValue 中的内容在当前应用的业务逻辑下是否合理？例如，一个数据库管理工具提交 SQL 查询是正常的；但在一个用户名字段中出现相同的查询则极不正常 。
 - 应用行为: 应用后端在处理这部分输入时，是否进行了恰当的清理、验证或参数化？例如，如果后端对所有数据库查询都使用了参数化查询，那么即使用户输入了' or 1=1，它也只会被当作无害的字符串处理，此时 WAF 的警报就是一次误报 。
 - 来源可信度: 请求的来源是什么？它是一个内部的健康检查、一个受信任的合作伙伴 API、一个已知的安全扫描器，还是一个来自高风险地区的未知 IP？。
 - 行为模式: 这是一次孤立事件，还是同一来源 IP 在日志中表现出持续性探测模式的一部分？
-    3.2 案例深度剖析：真实世界中的 sqli-v33-stable
+3.2 案例深度剖析：真实世界中的 sqli-v33-stable
     通过对比两个场景，可以更直观地理解分诊过程。
 - 场景 A (真实威胁): 一个请求访问/search?q=' OR 1=1;--，触发了 owasp-crs-v030301-id942130-sqli（SQL 重言式攻击）签名。日志显示 matchedFieldValue 是' OR 1=1;--。这是一个典型的、明确无误的 SQL 注入尝试。正确的响应是：无需任何操作，WAF 正在按预期工作。
+
 - 场景 B (典型误报): 一个 POST 请求发送到 API 端点/api/v1/update_document，其 JSON 请求体为{"content": "The new policy states that 'data:text/plain' is a valid URI scheme."}。这个请求可能会因为 data:这个模式而触发 XSS 或 SQLi 规则（例如在[span_130](start_span)[span_130](end_span)中看到的 owasp-crs-v030301-id941170-xss）。分析师了解该应用的功能是文档编辑，因此判断这是合法的用户输入内容。这是一个需要进行 WAF 调优的典型误报。
+
 - 场景 C (复杂误报): 用户提交一个包含数组字段的表单，例如 city=New York&city=Los Angeles。WAF 可能会错误地将``字符解释为特殊操作符，从而触发拦截 。这突显了 WAF 在处理非标准但合法的 HTTP 编码时可能遇到的挑战。
     由合法应用功能引发的误报普遍存在，这揭示了通用安全规则与定制化应用之间的根本差距。这表明 WAF 调优并非一次性的设置任务，而是一个持续不断的过程，旨在协调应用不断演进的功能与 WAF 相对静态的规则集。随着新功能的增加，新的潜在误报点也会随之产生，这就要求一个持续的“预览、测试、调优”循环。
-    Part 4: WAF 调优工具箱：全方位的修复技术
+
+Part 4: WAF 调优工具箱：全方位的修复技术
     这是本指南的核心“如何修复”部分，它提供了一系列从简单到复杂的解决方案，并明确了每种方案的适用场景。这些调优方法构成了一个最佳实践的层级结构。从业者应始终优先选择能够解决问题的、最精细化的方法。理想的决策流程是：我能用字段排除解决吗？如果不能，我能通过排除单个签名来解决吗？只有当整个规则集都存在问题时，才应考虑降低敏感度。
-    4.1 方法一：大刀阔斧 - 调整敏感度
+
+4.1 方法一：大刀阔斧 - 调整敏感度
 - 适用场景: 当整个规则集对于某个特定应用来说过于“嘈杂”，并且你愿意为了运营稳定性而接受稍低的安全级别时。适用于非关键应用或在初始部署阶段 。
 - 实现方式: 更新规则的表达式，将其敏感度级别调低，例如：evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1}) 。
 - 优点: 实现简单、快速。
 - 缺点: 这是一个“钝器”，会降低整个规则集的保护能力。
-    4.2 方法二：手术刀 - 排除特定签名（选择性退出）
+
+4.2 方法二：手术刀 - 排除特定签名（选择性退出）
 - 适用场景: 这是最理想的解决方案，适用于已从日志中识别出一两个特定的签名（preconfiguredExprIds）持续导致误报，但规则集的其余部分仍然很有价值的情况 。
 - 实现方式: 更新规则的表达式，包含一个要禁用的 ID 列表。例如，要从 xss-stable 规则中排除 ID owasp-crs-v030001-id941180-xss：
     evaluatePreconfiguredWaf('xss-stable', ['owasp-crs-v030001-id941180-xss'])
 
 - 优点: 针对性强；在不显著影响整体安全性的前提下移除了“害群之马”。
 - 缺点: 需要从日志中精确识别出有问题的签名 ID。
-    4.3 方法三：激光笔 - 排除请求字段
+
+4.3 方法三：激光笔 - 排除请求字段
 - 适用场景: 这是最强大、最精确的方法。当一个特定字段（例如，会话 Cookie、User-Agent 头或某个查询参数）中的合法值导致误报时使用。这使得 WAF 可以继续检查请求的其余部分 。
 - 实现方式: 使用 gcloud compute security-policies rules add-preconfig-waf-exclusion 命令。
 - 示例: 停止对名为 user_session_data 的 Cookie 进行 sqli-v33-stable 规则检查：
+```bash
     gcloud compute security-policies rules add-preconfig-waf-exclusion \
      --security-policy [POLICY_NAME] \
      --target-rule-set="sqli-v33-stable" \
      --request-cookie-to-exclude="op=EQUALS,val=user_session_data"
-
+```
 - 可以排除请求头、Cookie、查询参数和 URI。排除范围可以针对整个规则集，也可以只针对特定的签名 ID 。
 - 优点: 极其精细；以最小的安全影响解决误报问题。
 - 缺点: 命令结构更复杂。需要注意，URI 排除不支持对查询字符串部分的排除，只考虑路径部分 。
-    4.4 方法四：自定义逻辑 - 使用 CEL 实现高级例外
+
+4.4 方法四：自定义逻辑 - 使用 CEL 实现高级例外
 - 适用场景: 当内置的排除机制不足以满足需求时。例如，需要将整个请求路径从 WAF 检查中排除。这对于处理复杂或非标准格式数据的 API 端点来说是一个常见需求 。
 - 实现方式: 使用&&!将 evaluatePreconfiguredWaf()表达式与另一个 CEL（通用表达式语言）表达式组合起来。
 - 示例: 对除/api/v1/special_endpoint 之外的所有请求应用 SQLi 规则：
@@ -268,21 +284,25 @@ Part 2: 系统性故障排除工作流：从警报到分析
 - 缺点: 需要了解 CEL。可能会使规则变得复杂，难以审计。
     WAF 调优方法论对比
     下表综合了四种不同的调优方法，帮助用户快速比较并为特定问题选择合适的工具。它将用户从了解“有什么工具”提升到理解“何时以及为何使用”的层面。
+
     | 调优方法        | 精细度       | 理想用例                                                 | 优点                                 | 缺点                                         | 示例表达式/命令片段                                                                       |
     | --------------- | ------------ | -------------------------------------------------------- | ------------------------------------ | -------------------------------------------- | ----------------------------------------------------------------------------------------- |
     | 调整敏感度      | 低（粗放）   | 整个规则集对低风险应用过于激进。                         | 简单、快速。                         | 降低整个规则集的所有签名的保护能力 。        | evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1})                           |
     | 排除签名        | 中（精准）   | 某个特定签名在应用各处反复引发误报。                     | 针对性强，移除问题签名。             | 需要从日志中精确识别签名 ID 。               | evaluatePreconfiguredWaf('sqli-v33-stable', ['owasp-crs-v030301-id942350-sqli'])          |
     | 排除请求字段    | 高（精确）   | 特定已知字段（如 Cookie 或查询参数）中的合法值导致误报。 | 极其精确，保留对请求其余部分的检查。 | 命令结构更复杂；不能与 allow 动作一起使用 。 | ... add-preconfig-waf-exclusion... --request-cookie-to-exclude="op=EQUALS,val=session_id" |
     | 自定义例外(CEL) | 极高（灵活） | 需要排除整个 URL 路径或应用内置排除不支持的复杂逻辑。    | 灵活性最大。                         | 需要 CEL 知识；可能使规则难以审计 。         | evaluatePreconfiguredWaf('sqli-v33-stable') &&!request.path.matches('/api/special/')      |
-    4.6 实现指南：代码示例
+
+4.6 实现指南：代码示例
     以下是针对上述每种调优方法的 gcloud CLI 和 Terraform 示例，确保用户可以立即应用所学知识。
     方法 1: 调整敏感度
 - gcloud CLI:
-    gcloud compute security-policies rules update 1000 \
+```bash
+gcloud compute security-policies rules update 1000 \
      --security-policy [POLICY_NAME] \
      --expression "evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1})"
-
+```
 - Terraform:
+```terrafrom
     resource "google_compute_security_policy" "policy" {
     #...
     rule {
@@ -296,15 +316,17 @@ Part 2: 系统性故障排除工作流：从警报到分析
     description = "SQLi protection at sensitivity level 1"
     }
     }
-
+```
 方法 2: 排除特定签名
 
 - gcloud CLI:
+```bash
     gcloud compute security-policies rules update 1000 \
      --security-policy [POLICY_NAME] \
      --expression "evaluatePreconfiguredWaf('sqli-v33-stable', ['owasp-crs-v030301-id942350-sqli', 'owasp-crs-v030301-id942360-sqli'])"
-
+```
 - Terraform:
+```terrafrom
     resource "google_compute_security_policy" "policy" {
     #...
     rule {
@@ -317,19 +339,20 @@ Part 2: 系统性故障排除工作流：从警报到分析
     }
     }
     }
-
+```
 方法 3: 排除请求字段
 
 - gcloud CLI:
 
     # This command adds an exclusion to an existing rule at priority 1000
-
+```bash
     gcloud compute security-policies rules add-preconfig-waf-exclusion 1000 \
      --security-policy [POLICY_NAME] \
      --target-rule-set "sqli-v33-stable" \
      --request-query-param-to-exclude "op=EQUALS,val=user_generated_content"
-
+```
 - Terraform:
+```terrafrom
     resource "google_compute_security_policy" "policy" {
     #...
     rule {
@@ -353,15 +376,17 @@ Part 2: 系统性故障排除工作流：从警报到分析
     }
     }
     }
-
+```
 方法 4: 自定义例外 (CEL)
 
 - gcloud CLI:
+```bash
     gcloud compute security-policies rules update 1000 \
      --security-policy [POLICY_NAME] \
      --expression "evaluatePreconfiguredWaf('sqli-v33-stable') &&!request.path.matches('/api/v1/allow_special_chars/.\*')"
-
+```
 - Terraform:
+```terraform
     resource "google_compute_security_policy" "policy" {
     #...
     rule {
@@ -374,8 +399,9 @@ Part 2: 系统性故障排除工作流：从警报到分析
     }
     }
     }
-
+```
 这些高级调优功能的存在，特别是字段排除和 CEL，表明 Google 认识到 WAF 不能是一个“黑盒”。在现代 API 驱动的世界中，有效的 WAF 管理需要深入的、可编程的控制。这也意味着 WAF 管理员的角色正在从一个“规则启用者”演变为一个“安全策略即代码的开发者”，他们必须精通日志记录、分析和像 CEL 这样的表达式语言。
+
 Part 5: 主动策略与架构最佳实践
 本节将讨论从被动修复提升到长期的、战略性的预防层面。成熟的安全组织不应将 WAF 视为一道简单的外围墙，而应将其视为深度防御体系中的一个信号提供者。目标不是让 WAF 拦截 100%的攻击，而是让应用本身具备安全性，并将 WAF 用作额外的保护层和更重要的预警系统。
 5.1 面向云和安全管理员：WAF 策略的生命周期管理
@@ -385,7 +411,8 @@ Part 5: 主动策略与架构最佳实践
 - CI/CD 集成: 使用 Terraform 或 gcloud 脚本将 WAF 策略变更纳入 CI/CD 流水线，以实现版本控制、同行评审和自动化测试。
 - 监控与警报: 在 Cloud Monitoring 中设置基于日志的警报，以便在拦截请求率过高或出现新的预览模式拒绝时收到通知，这可能表明配置错误或新的攻击 。
 - 利用自适应保护: 启用自适应保护（Adaptive Protection）以获取由机器学习驱动的新规则建议，尤其适用于 DDoS 和容量型攻击 。
-    5.2 面向应用开发者：通过安全设计减少 WAF 摩擦
+
+5.2 面向应用开发者：通过安全设计减少 WAF 摩擦
     应用安全与 WAF 的有效性之间存在一种共生关系。一个编写良好、安全性高的应用（使用参数化查询、输入验证等）本身就不太可能产生看起来像攻击的流量，从而导致更少的误报。反之，一个编写不佳的应用会迫使 WAF 采取更激进的策略，导致更多的误报和运营摩擦。
     以下是开发者可以在源头预防误报的最佳实践：
 - 严格的输入验证: 这是最有效的措施。如果应用在服务器端验证了 user_id 字段必须为整数，那么它包含可能被误认为 SQLi 载荷的字符串的可能性就小得多 。
