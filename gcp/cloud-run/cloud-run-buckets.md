@@ -1,205 +1,32 @@
-# GCP Cloud Run Job: GitHub 文件变更同步至 GCS
+# Cloud Run访问Cloud Storage Buckets
 
-## 🎯 目标场景
+Cloud Run服务默认情况下无法直接访问Cloud Storage Buckets,需要为Cloud Run服务关联一个具有相应权限的Service Account.
 
-- GitHub 上维护的 `nginx.conf` 文件发生变更时  
-- 自动触发一个 Cloud Run Job  
-- Cloud Run Job 拉取文件并同步到 GCS，如：
+## 操作步骤
 
-```
-gs://aibang-my-env/my-nginx/nginx.conf
-```
+1. 创建一个Service Account
+   ```bash
+   gcloud iam service-accounts create ${sa_name} --display-name="${sa_name}"
+   ```
 
----
+2. 为Service Account授予访问Bucket的权限
+   ```bash
+   gsutil iam ch serviceAccount:${sa_name}@${project_id}.iam.gserviceaccount.com:objectAdmin gs://${bucket_name}
+   ```
 
-## ✅ 架构流程图
+3. 部署Cloud Run服务时,指定Service Account
+   ```bash
+   gcloud run deploy ${service_name} --image=${image_name} --service-account=${sa_name}@${project_id}.iam.gserviceaccount.com
+   ```
 
-```mermaid
-flowchart TD
-    A[GitHub Repo - nginx.conf] --> B[GitHub Webhook/CI触发 Cloud Run Job]
-    B --> C[Cloud Run Job 启动]
-    C --> D[Clone 最新 nginx.conf]
-    D --> E[gsutil cp 到 GCS: gs://aibang-my-env/my-nginx/]
-```
+## 权限说明
 
----
+| 角色                          | 权限                                       |
+| ----------------------------- | ------------------------------------------ |
+| `roles/storage.objectViewer`  | 查看对象和其元数据,不包括ACL               |
+| `roles/storage.objectCreator` | 创建对象                                   |
+| `roles/storage.objectAdmin`   | 完全控制对象,包括读、写、删除和设置ACL |
 
-## ✅ Dockerfile
+## 总结
 
-```Dockerfile
-FROM google/cloud-sdk:alpine
-
-RUN apk add --no-cache git
-
-WORKDIR /app
-
-COPY sync.sh .
-
-ENTRYPOINT ["/app/sync.sh"]
-```
-
----
-
-## ✅ sync.sh 脚本
-
-```bash
-#!/bin/sh
-
-set -e
-
-REPO_URL="https://github.com/your-org/your-repo.git"
-BRANCH="main"
-TARGET_FILE="nginx.conf"
-DEST_PATH="gs://aibang-my-env/my-nginx/"
-
-git clone --depth=1 --branch $BRANCH $REPO_URL repo
-cd repo
-
-echo "Uploading $TARGET_FILE to $DEST_PATH"
-gsutil cp $TARGET_FILE $DEST_PATH
-
-echo "Done!"
-```
-
----
-
-## ✅ Cloud Run Job 创建命令
-
-```bash
-gcloud run jobs create nginx-sync-job \
-  --image=REGION-docker.pkg.dev/PROJECT_ID/REPO/nginx-sync-job \
-  --region=REGION \
-  --tasks=1 \
-  --max-retries=1 \
-  --timeout=300s \
-  --service-account=job-executor@PROJECT_ID.iam.gserviceaccount.com \
-  --set-env-vars="REPO_URL=https://github.com/your-org/your-repo.git,BRANCH=main"
-```
-
----
-
-## ✅ 三种实现方式
-
-### ✅ 方式 1：使用 Cloud Build 自动构建 + 部署
-
-```yaml
-# cloudbuild.yaml
-steps:
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'REGION-docker.pkg.dev/PROJECT_ID/REPO/nginx-sync-job', '.']
-
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'REGION-docker.pkg.dev/PROJECT_ID/REPO/nginx-sync-job']
-
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: bash
-    args:
-      - -c
-      - |
-        gcloud run jobs update nginx-sync-job \
-          --image=REGION-docker.pkg.dev/PROJECT_ID/REPO/nginx-sync-job \
-          --region=REGION \
-          --set-env-vars=REPO_URL=https://github.com/your-org/your-repo.git,BRANCH=main \
-          --service-account=job-executor@PROJECT_ID.iam.gserviceaccount.com || \
-        gcloud run jobs create nginx-sync-job \
-          --image=REGION-docker.pkg.dev/PROJECT_ID/REPO/nginx-sync-job \
-          --region=REGION \
-          --tasks=1 \
-          --max-retries=1 \
-          --timeout=300s \
-          --set-env-vars=REPO_URL=https://github.com/your-org/your-repo.git,BRANCH=main \
-          --service-account=job-executor@PROJECT_ID.iam.gserviceaccount.com
-
-images:
-  - REGION-docker.pkg.dev/PROJECT_ID/REPO/nginx-sync-job
-```
-
----
-
-### ✅ 方式 2：GitHub Actions 自动触发执行
-
-```yaml
-# .github/workflows/trigger-job.yml
-name: Trigger Cloud Run Job
-
-on:
-  push:
-    paths:
-      - "nginx.conf"
-
-jobs:
-  trigger:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Trigger Cloud Run Job Execution
-      env:
-        GCP_REGION: asia-northeast1
-        GCP_PROJECT: your-project-id
-        JOB_NAME: nginx-sync-job
-        OAUTH_TOKEN: ${{ secrets.GCP_OAUTH_TOKEN }}
-      run: |
-        curl -X POST \
-          -H "Authorization: Bearer $OAUTH_TOKEN" \
-          -H "Content-Type: application/json" \
-          https://$GCP_REGION-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$GCP_PROJECT/jobs/$JOB_NAME:run
-```
-
----
-
-### ✅ 方式 3：Shell 脚本部署 + 执行（适用于 GitLab CI、本地测试）
-
-```bash
-#!/bin/bash
-set -e
-
-IMAGE="REGION-docker.pkg.dev/PROJECT_ID/REPO/nginx-sync-job"
-REGION="asia-northeast1"
-JOB_NAME="nginx-sync-job"
-
-echo "[1/3] Building image..."
-gcloud builds submit --tag $IMAGE .
-
-echo "[2/3] Creating or updating Cloud Run Job..."
-gcloud run jobs describe $JOB_NAME --region $REGION >/dev/null 2>&1 && EXISTS=1 || EXISTS=0
-
-if [[ $EXISTS -eq 1 ]]; then
-  gcloud run jobs update $JOB_NAME \
-    --image=$IMAGE \
-    --region=$REGION \
-    --set-env-vars=REPO_URL=https://github.com/your-org/your-repo.git,BRANCH=main \
-    --service-account=job-executor@PROJECT_ID.iam.gserviceaccount.com
-else
-  gcloud run jobs create $JOB_NAME \
-    --image=$IMAGE \
-    --region=$REGION \
-    --tasks=1 \
-    --max-retries=1 \
-    --timeout=300s \
-    --set-env-vars=REPO_URL=https://github.com/your-org/your-repo.git,BRANCH=main \
-    --service-account=job-executor@PROJECT_ID.iam.gserviceaccount.com
-fi
-
-echo "[3/3] Triggering execution..."
-gcloud run jobs execute $JOB_NAME --region $REGION
-```
-
----
-
-## ✅ 权限配置（Storage 写入权限）
-
-```bash
-gcloud projects add-iam-policy-binding PROJECT_ID \
-  --member="serviceAccount:job-executor@PROJECT_ID.iam.gserviceaccount.com" \
-  --role="roles/storage.objectAdmin"
-```
-
----
-
-## ✅ 推荐组合使用
-
-| 操作                   | 推荐方式                        |
-|------------------------|---------------------------------|
-| 镜像构建               | Cloud Build / GitHub Action     |
-| Job 部署 & 触发        | gcloud shell 脚本 or GitHub Hook|
-| 执行计划调度（定时）   | Cloud Scheduler                 |
-| 文件同步逻辑           | Bash + git + gsutil             |
+通过为Cloud Run服务关联具有相应权限的Service Account,可以安全地访问Cloud Storage Buckets.
