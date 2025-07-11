@@ -42,15 +42,13 @@
 
     - 可以使用 `gcloud` 命令行工具或 Google Cloud Console 进行部署。
     - 示例命令：
-
-```bash
+        ```bash
 gcloud run deploy [SERVICE_NAME] --image [GAR_IMAGE_PATH] --region [REGION]
-```
-
-其中 `[SERVICE_NAME]` 是服务名称，`[GAR_IMAGE_PATH]` 是 GAR 中的镜像路径（例如 `gcr.io/[PROJECT_ID]/[IMAGE_NAME]:[TAG]`），`[REGION]` 是部署区域。
-- 部署时需要确保有以下权限：
-- `Artifact Registry Reader` 角色 (`roles/artifactregistry.reader`)，以读取 GAR 中的镜像。
-- `Cloud Run Developer` 角色 (`roles/run.developer`)，以部署服务。
+        ```
+        其中 `[SERVICE_NAME]` 是服务名称，`[GAR_IMAGE_PATH]` 是 GAR 中的镜像路径（例如 `gcr.io/[PROJECT_ID]/[IMAGE_NAME]:[TAG]`），`[REGION]` 是部署区域。
+    - 部署时需要确保有以下权限：
+        - `Artifact Registry Reader` 角色 (`roles/artifactregistry.reader`)，以读取 GAR 中的镜像。
+        - `Cloud Run Developer` 角色 (`roles/run.developer`)，以部署服务。
 
 - **背景信息：**
     根据 2025 年 7 月 7 日的官方文档，Cloud Run 与 GAR 的集成允许直接指定存储在 GAR 中的容器镜像，无需额外的拉取或构建步骤。这确保了部署流程的高效性和一致性。
@@ -74,7 +72,6 @@ gcloud run deploy [SERVICE_NAME] --image [GAR_IMAGE_PATH] --region [REGION]
     - 示例：如果服务需要每天运行一次，可以设置 cron 表达式为 `0 0 * * *`。
 
 - **基础设施变更：**
-
     - 用户提到希望服务能进行“Infra changes”（基础设施变更），这可能包括部署新资源或更新配置。
     - 实现方式可以是：
         - 在容器中集成 GCP API 或 SDK（如 `gcloud` 命令行工具或客户端库），并赋予适当的 IAM 权限。
@@ -92,9 +89,8 @@ gcloud run deploy [SERVICE_NAME] --image [GAR_IMAGE_PATH] --region [REGION]
         - 将 100% 流量导向新修订版，实现完全替换。
         - 分割流量（如 90% 旧版，10% 新版），实现灰度发布或 A/B 测试。
     - 命令示例：
-
         ```bash
-        gcloud run services update-traffic [SERVICE_NAME] --to-revision=[REVISION_NAME]=100
+gcloud run services update-traffic [SERVICE_NAME] --to-revision=[REVISION_NAME]=100
         ```
 
 - **暴露服务：**
@@ -125,7 +121,6 @@ gcloud run deploy [SERVICE_NAME] --image [GAR_IMAGE_PATH] --region [REGION]
         - 如果连接时间超过超时，客户端需要处理重连（例如使用 reconnecting-websocket 库）。
 
 - **灵活性和安全性：**
-
     - 用户提到这种设计更灵活，代理镜像和操作 bash 解耦，新的工具版本发布只需发布到 Nexus Prod。
     - 安全性方面，由于 Cloud Run 作业在 onboarding 过程中创建，并授予 CP 仅启动特定作业的权限，降低了安全风险。
     - 此外，小型镜像集便于 CVE 管理，减少漏洞暴露。
@@ -143,7 +138,6 @@ gcloud run deploy [SERVICE_NAME] --image [GAR_IMAGE_PATH] --region [REGION]
     - 可以设置实例数和并发限制，优化资源使用。
 
 - **权限与安全：**
-
     - 确保服务账户有适当的 IAM 角色，例如 `Cloud Run Admin`（如果需要管理服务）或特定资源权限（如存储桶访问）。
     - 对于基础设施变更，确保容器有执行相关操作的权限，避免权限过宽导致安全风险。
 
@@ -222,28 +216,25 @@ Google Cloud 将代码的运行方式主要分为三种资源类型：服务（S
 
 - 部署为服务（Service）
     使用 gcloud run deploy 命令默认会创建一个 Cloud Run 服务。这个服务会获得一个公开的 URL，并开始监听 HTTP 请求。
-
     ```bash
-    # 此命令会将您的代理部署为一个 HTTP 服务
-    gcloud run deploy your-agent-service \
-    --image="LOCATION-docker.pkg.dev/PROJECT_ID/REPO_NAME/YOUR_IMAGE:TAG" \
-    --region=us-central1 \
-    --platform=managed \
-    --allow-unauthenticated # 为了演示方便，允许未经身份验证的调用
+# 此命令会将您的代理部署为一个 HTTP 服务
+gcloud run deploy your-agent-service \
+  --image="LOCATION-docker.pkg.dev/PROJECT_ID/REPO_NAME/YOUR_IMAGE:TAG" \
+  --region=us-central1 \
+  --platform=managed \
+  --allow-unauthenticated # 为了演示方便，允许未经身份验证的调用
     ```
-执行成功后，您会得到一个 URL，可以通过浏览器或 `curl` 访问它 4。
-
+    执行成功后，您会得到一个 URL，可以通过浏览器或 `curl` 访问它 4。
 - 创建为作业（Job）
     对于您执行发布和基础设施变更的任务，正确的做法是使用 gcloud run jobs create 命令。这不会立即运行任何东西，而是创建一个可供后续执行的作业模板 16。
-
     ```bash
-    # 此命令会创建一个作业模板，用于后续的任务执行
-    gcloud run jobs create your-agent-job \
-    --image="LOCATION-docker.pkg.dev/PROJECT_ID/REPO_NAME/YOUR_IMAGE:TAG" \
-    --region=us-central1 \
-    --platform=managed
+# 此命令会创建一个作业模板，用于后续的任务执行
+gcloud run jobs create your-agent-job \
+  --image="LOCATION-docker.pkg.dev/PROJECT_ID/REPO_NAME/YOUR_IMAGE:TAG" \
+  --region=us-central1 \
+  --platform=managed
     ```
-这个作业模板是后续所有自动化流程的核心。
+    这个作业模板是后续所有自动化流程的核心。
 
 ### 表 1：Cloud Run 服务 vs. 作业 - 为您的工作负载模式做出决策
 
@@ -360,28 +351,25 @@ exec "$@"
 
 - 模式一：通过参数（--args）直接传递命令
     这种方式简单直接，适合执行简单的、自包含的命令。
-
     ```bash
-    # 示例：执行一个从 Nexus 下载并运行的脚本
-    gcloud run jobs execute your-agent-job \
-    --args="bash,-c,curl -sSL https://nexus.example.com/releases/1.2.3/deploy.sh | bash" \
-    --region=us-central1 \
-    --wait # 等待作业执行完成
+# 示例：执行一个从 Nexus 下载并运行的脚本
+gcloud run jobs execute your-agent-job \
+  --args="bash,-c,curl -sSL https://nexus.example.com/releases/1.2.3/deploy.sh | bash" \
+  --region=us-central1 \
+  --wait # 等待作业执行完成
     ```
-在这个例子中，`--args` 覆盖了 `Dockerfile` 中的 `CMD`，`entrypoint.sh` 脚本最终会执行 `bash -c "..."` 这个完整的命令。
-
+    在这个例子中，`--args` 覆盖了 `Dockerfile` 中的 `CMD`，`entrypoint.sh` 脚本最终会执行 `bash -c "..."` 这个完整的命令。
 - 模式二：通过环境变量（--update-env-vars）传递结构化参数
     对于更复杂的场景，将参数硬编码到命令行中会变得笨拙且容易出错。一个更清晰、更结构化的方法是使用环境变量来传递元数据，让代理内部的逻辑来处理这些元数据。这与您“代理镜像和操作 bash 解耦”的设计理念高度一致 12。
-
     ```bash
-    # 示例：通过环境变量传递发布信息
-    gcloud run jobs execute your-agent-job \
-    --update-env-vars="RELEASE_VERSION=1.2.3,TARGET_ENV=production,NEXUS_REPO=my-app-releases" \
-    --args="/app/agent,run-release" \
-    --region=us-central1 \
-    --wait
+# 示例：通过环境变量传递发布信息
+gcloud run jobs execute your-agent-job \
+  --update-env-vars="RELEASE_VERSION=1.2.3,TARGET_ENV=production,NEXUS_REPO=my-app-releases" \
+  --args="/app/agent,run-release" \
+  --region=us-central1 \
+  --wait
     ```
-在这种模式下，您的代理 `/app/agent` 的 `run-release` 命令会负责读取 `RELEASE_VERSION` 等环境变量，然后据此构建正确的 Nexus URL，下载对应的构件并执行。这种方式极大地增强了灵活性和可维护性。
+    在这种模式下，您的代理 `/app/agent` 的 `run-release` 命令会负责读取 `RELEASE_VERSION` 等环境变量，然后据此构建正确的 Nexus URL，下载对应的构件并执行。这种方式极大地增强了灵活性和可维护性。
 
 ### 2.3 高级作业特性：通过并行化提升效率
 
@@ -460,9 +448,7 @@ Cloud Scheduler 是一个全代管的企业级 cron 作业调度器 8。您可�
 要将 Cloud Scheduler 与您的 Cloud Run 作业集成，需要遵循以下步骤 8：
 
 1. **获取作业的调用 URI**：每个 Cloud Run 作业都有一个可以通过 API 调用的特殊端点。可以使用 `gcloud run jobs describe JOB_NAME --format="value(uri)"` 来获取。
-
 2. **创建专用的服务账号**：为 Scheduler 创建一个专用的服务账号，并仅授予它调用目标作业的权限，即 `roles/run.invoker` 角色。
-
 3. **创建调度器作业**：使用 `gcloud scheduler jobs create http` 命令创建调度器作业。关键配置如下：
 
     - `--schedule`：设置 cron 表达式。
@@ -477,19 +463,17 @@ Cloud Scheduler 是一个全代管的企业级 cron 作业调度器 8。您可�
 **事件驱动的发布流程：**
 
 1. **触发**：开发者将代码推送到 Git 仓库的特定分支（例如 `release` 分支）。
-
 2. **CI/CD 流水线启动**：一个 Cloud Build 触发器被激活，开始执行构建和测试应用程序的 CI 流水线。
-
 3. **控制平面（CP）决策**：在流水线的最后阶段，一个脚本（作为 CP）被执行。它会构建一个描述发布任务的 JSON 消息，例如：
 
-```json
+    ```json
 {
-	"release_version": "1.2.4",
-	"target_env": "staging",
-	"artifact_path": "gs://my-artifacts/my-app-1.2.4.zip",
-	"deployment_script": "deploy_staging.sh"
-}
-```
+      "release_version": "1.2.4",
+      "target_env": "staging",
+      "artifact_path": "gs://my-artifacts/my-app-1.2.4.zip",
+      "deployment_script": "deploy_staging.sh"
+    }
+    ```
 
 4. **发布事件**：CP 将此 JSON 消息发布到名为 `release-requests` 的 Pub/Sub 主题。
 5. **Eventarc 触发**：一个监听 `release-requests` 主题的 Eventarc 触发器捕获到该消息，并调用 `your-agent-job` 作业。Pub/Sub 消息的内容会被作为 POST 请求的正文传递给作业。
@@ -498,14 +482,13 @@ Cloud Scheduler 是一个全代管的企业级 cron 作业调度器 8。您可�
 **计划性的维护流程：**
 
 1. **调度器触发**：Cloud Scheduler 按照预设的 cron 表达式（例如，每晚）被激活。
-
 2. **作业调用**：调度器向 `your-agent-job` 的调用端点发送一个带有 OIDC 令牌的 POST 请求。请求的正文可以预先在调度器作业中定义好，例如：
 
-```json
+    ```json
 {
-	"task": "cleanup_stale_resources"
-}
-```
+      "task": "cleanup_stale_resources"
+    }
+    ```
 
 3. **代理执行**：`your-agent-job` 启动，解析请求正文，并执行清理任务。
 
@@ -532,44 +515,38 @@ Cloud Scheduler 是一个全代管的企业级 cron 作业调度器 8。您可�
 1. **调用者服务账号（Invoker SA）**：
 
     - **使用者**：这个 SA 被您的控制平面（如 Cloud Build 流水线）或 Cloud Scheduler 作业所使用。
-
     - **权限**：它的权限被严格限制在**仅能调用特定的 Cloud Run 作业**。所需的 IAM 角色是 `roles/run.invoker`，更精确的角色是 `roles/run.jobs.run`。重要的是，这个角色应该被授予在**单个 Cloud Run 作业资源**上，而不是在整个项目上 36。
-
     - **命令示例**：
+      ```bash
+        # 创建调用者 SA
+        gcloud iam service-accounts create invoker-sa --display-name="Release Trigger Invoker"
 
-        ```bash
-          # 创建调用者 SA
-          gcloud iam service-accounts create invoker-sa --display-name="Release Trigger Invoker"
-
-          # 将调用者 SA 绑定到特定的作业上，并授予调用权限
-          gcloud run jobs add-iam-policy-binding your-agent-job \
-            --member="serviceAccount:invoker-sa@PROJECT_ID.iam.gserviceaccount.com" \
-            --role="roles/run.invoker" \
-            --region=us-central1
-        ```
+        # 将调用者 SA 绑定到特定的作业上，并授予调用权限
+        gcloud run jobs add-iam-policy-binding your-agent-job \
+          --member="serviceAccount:invoker-sa@PROJECT_ID.iam.gserviceaccount.com" \
+          --role="roles/run.invoker" \
+          --region=us-central1
+      ```
 
 2. **作业运行时服务账号（Runtime SA）**：
 
     - **使用者**：这是 Cloud Run 作业在**运行时所扮演的身份**。
-
     - **权限**：这个 SA 拥有执行实际任务所需的所有权限。例如，`roles/storage.objectAdmin`（用于读写 GCS/Nexus 构件）、`roles/cloudsql.client`（用于执行数据库迁移）、或与 Terraform 相关的权限（如 `roles/compute.admin`）。这正是安全最佳实践中提到的“为每个服务使用具有最小权限的专用服务账号” 39。
-
     - **命令示例**：
+      ```bash
+        # 创建运行时 SA
+        gcloud iam service-accounts create runtime-sa --display-name="Infra Change Agent Runtime"
 
-        ```bash
-          # 创建运行时 SA
-          gcloud iam service-accounts create runtime-sa --display-name="Infra Change Agent Runtime"
+        # 授予运行时 SA 修改 GCS 存储桶的权限
+        gcloud projects add-iam-policy-binding PROJECT_ID \
+          --member="serviceAccount:runtime-sa@PROJECT_ID.iam.gserviceaccount.com" \
+          --role="roles/storage.admin"
 
-          # 授予运行时 SA 修改 GCS 存储桶的权限
-          gcloud projects add-iam-policy-binding PROJECT_ID \
-            --member="serviceAccount:runtime-sa@PROJECT_ID.iam.gserviceaccount.com" \
-            --role="roles/storage.admin"
-
-          # 在创建或更新作业时，指定其运行时身份
-          gcloud run jobs update your-agent-job \
-            --service-account=runtime-sa@PROJECT_ID.iam.gserviceaccount.com \
-            --region=us-central1
-        ```
+        # 在创建或更新作业时，指定其运行时身份
+        gcloud run jobs update your-agent-job \
+          --service-account=runtime-sa@PROJECT_ID.iam.gserviceaccount.com \
+          --region=us-central1
+      ```
 
 #### 4.1.1 连接两者的桥梁：`iam.serviceAccountUser` 角色
 
@@ -616,9 +593,7 @@ VPC-SC 允许您在 Google Cloud 资源周围定义一个**虚拟的安全边界
 #### 4.3.2 实施步骤
 
 1. **创建服务边界**：将包含您的 Cloud Run 作业、以及它需要管理的所有资源（如 Cloud SQL 实例、GCS 存储桶、GKE 集群）的 GCP 项目，全部放入一个 VPC-SC 服务边界中 43。
-
 2. **限制边界内服务**：在边界策略中，将 `run.googleapis.com`, `sqladmin.googleapis.com` 等相关服务声明为“受限服务”。
-
 3. **配置网络出入口**：
 
     - **入口（Ingress）**：通过组织策略或 Cloud Run 服务的入口设置，将流量限制为“仅限内部流量” (`internal-only`)。这意味着只有来自您 VPC 网络内部的流量才能访问 Cloud Run 作业 40。
@@ -713,13 +688,12 @@ Cloud Run 作业的所有标准输出（`stdout`）和标准错误（`stderr`）
 
 - **通过 GCP Console**：导航到 Cloud Run -> 作业 -> 选择您的作业 -> 点击某次执行 -> 点击“日志”选项卡。
 - **通过 `gcloud` CLI**：
-
     ```bash
-    # 获取最新一次执行的名称
-    EXECUTION_NAME=$(gcloud run jobs executions list --job=your-agent-job --region=us-central1 --sort-by=~creationTimestamp --limit=1 --format='value(metadata.name)')
+# 获取最新一次执行的名称
+EXECUTION_NAME=$(gcloud run jobs executions list --job=your-agent-job --region=us-central1 --sort-by=~creationTimestamp --limit=1 --format='value(metadata.name)')
 
-    # 查看该次执行的日志
-    gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=your-agent-job AND resource.labels.execution_name=$EXECUTION_NAME" --project=PROJECT_ID
+# 查看该次执行的日志
+gcloud logging read "resource.type=cloud_run_job AND resource.labels.job_name=your-agent-job AND resource.labels.execution_name=$EXECUTION_NAME" --project=PROJECT_ID
     ```
 
 #### 5.2.2 精准查询失败的发布
@@ -753,7 +727,6 @@ Cloud Monitoring 自动为 Cloud Run 作业采集了一系列指标。其中，�
 **创建步骤：**
 
 1. **导航到 Monitoring**：在 GCP Console 中，进入 "Monitoring" -> "Alerting"。
-
 2. **创建策略（Create Policy）**：
 
     - **选择指标（Select a metric）**：
@@ -798,19 +771,12 @@ Cloud Monitoring 自动为 Cloud Run 作业采集了一系列指标。其中，�
 **架构流程图示：**
 
 1. **代码提交 (Code Commit)**：开发者将代码推送到 Git 仓库。
-
 2. **CI 触发 (CI Trigger)**：Cloud Build 捕获到 Git 推送事件，启动应用构建流水线。
-
 3. **应用构建与测试 (App Build & Test)**：Cloud Build 构建应用容器镜像，运行单元测试和集成测试，并将构件推送到 Artifact Registry (GAR)。
-
 4. **发布事件生成 (Publish Event)**：CI 流水线的最后一步，作为**控制平面 (Control Plane)**，生成一个包含发布元数据（如镜像摘要、目标环境）的 JSON 消息。
-
 5. **消息发布 (Message Publish)**：控制平面将此消息发布到一个专用的 Pub/Sub 主题（例如 `prod-release-topic`）。
-
 6. **事件路由 (Event Routing)**：一个监听该 Pub/Sub 主题的 **Eventarc 触发器**被激活。
-
 7. **作业调用 (Job Invocation)**：Eventarc 调用您的 **Cloud Run 作业 (部署代理)**，并将 Pub/Sub 消息作为参数传递。
-
 8. **安全执行 (Secure Execution)**：
 
     - 部署代理作业以其专用的**运行时服务账号**身份运行。
