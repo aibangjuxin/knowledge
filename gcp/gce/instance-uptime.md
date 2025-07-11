@@ -99,13 +99,13 @@ convert_time "$LAST_STOP_TIME" "最后停止时间"
 
 echo ""
 echo "## 原始时间戳"
-echo "```json"
-echo "{"
-echo "  \"creationTimestamp\": \"$CREATION_TIME\","
-echo "  \"lastStartTimestamp\": \"$LAST_START_TIME\","
-echo "  \"lastStopTimestamp\": \"$LAST_STOP_TIME\""
-echo "}"
-echo "```"
+cat << EOF
+{
+"creationTimestamp": "$CREATION_TIME",
+"lastStartTimestamp": "$LAST_START_TIME",
+"lastStopTimestamp": "$LAST_STOP_TIME"
+}
+EOF
 
 # 如果需要，显示完整的实例信息
 if [ "$3" == "--full" ]; then
