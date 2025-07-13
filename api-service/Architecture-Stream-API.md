@@ -1628,3 +1628,164 @@ gcloud run services replace config.yaml \
 - **维护操作**：`delete`
 
 选择 `replace` 命令是因为它能够完全按照 YAML 配置文件重新创建服务，确保配置的完整性和一致性。
+
+# Kimi
+
+## 快速简易的流式事件 API 部署方案（基于 Cloud Run）
+
+> 结论先行：对于“快速 + 简易”这两个关键词，直接把镜像从 GAR 部署到 **Cloud Run** 是当前 Google Cloud 上最省事的方案；GKE 更适合需要深度定制或长连接超时 > 30 min 的场景。下面给出完整落地步骤和决策依据。
+
+---
+
+### 1️⃣ Cloud Run vs GKE：流式协议支持对比
+
+| 维度                       | Cloud Run                                          | GKE                                 |
+| -------------------------- | -------------------------------------------------- | ----------------------------------- |
+| **长连接 & HTTP/2 Stream** | ✅ 原生支持 HTTP/2 和 SSE；**单个请求最长 60 min** | ✅ 无硬性超时，可自定义             |
+| **WebSocket**              | ✅ 支持，但同样受 60 min idle 限制                 | ✅ 完全可控                         |
+| **运维复杂度**             | 0 → 1 行命令即可部署                               | 需维护节点、升级、网络策略、HPA 等  |
+| **扩缩速度**               | 秒级到 0 或 N                                      | 节点级分钟级，Pod 级秒级            |
+| **成本**                   | 按请求+CPU/内存时长计费，可缩到 0                  | 节点 24×7 计费，最低配集群 ≈ $70/月 |
+
+> 如果你的流式连接通常在 60 min 以内，**Cloud Run 在易用性和成本上完胜** 。
+
+---
+
+### 2️⃣ 从 GAR 拉取镜像并部署到 Cloud Run（含最佳实践）
+
+```bash
+# 0. 环境变量
+export PROJECT_ID=my-gcp-project
+export REGION=us-central1
+export REPO=my-repo
+export IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO/stream-events:1.0"
+
+# 1. 部署
+gcloud run deploy stream-events \
+  --image "$IMAGE" \
+  --region "$REGION" \
+  --platform managed \
+  --allow-unauthenticated \
+  --max-instances 10 \
+  --concurrency 80 \          # 每个实例并发 80 条 SSE 连接
+  --timeout 3600s \           # 最长 60 min
+  --cpu 1 --memory 512Mi \
+  --set-env-vars="GO_ENV=production"
+```
+
+#### 关键配置说明
+
+- `--concurrency`：针对 SSE/WebSocket 建议 50–100，避免单容器过载。
+- `--timeout`：Cloud Run 上限 3600 s；若业务需更长 → 选择 GKE。
+- CPU/Memory：流式场景通常 I/O 密集，0.5–1 vCPU + 512 Mi 起步即可。
+
+---
+
+### 3️⃣ 暴露给外部访问的两种方式
+
+| 方式                                  | 步骤                                                                                                                                                                                                               | 适用场景             |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| **自动 URL**                          | 部署后 Cloud Run 自带 `https://stream-events-xyz.a.run.app`                                                                                                                                                        | 快速验证、内部测试   |
+| **自定义域名 + HTTPS（全球外部 LB）** | 1. 创建 [全球外部 Application Load Balancer](https://cloud.google.com/load-balancing/docs/https/ext-https-lb-simple)<br>2. 后端选择 `Serverless NEG` → 指向 Cloud Run 服务<br>3. 绑定域名、Google-Managed SSL 证书 | 生产环境，需品牌域名 |
+
+---
+
+### 4️⃣ 负载均衡器针对流式 API 的特殊配置
+
+- **超时时间**：LB 默认 30 s；在 **后端服务** 里改成 3600 s（Cloud Run 上限）。
+- **会话亲和性**：SSE/Websocket 通常不需要；如用 Sticky Session，开启 **客户端 IP Affinity**。
+- **健康检查**：若仅做 SSE，可复用根路径 `/healthz`，返回 200；检查间隔 ≥ 60 s 避免过早切断连接。
+
+---
+
+### 5️⃣ GKE 部署极简流程（对比用）
+
+```bash
+# 1. 创建集群
+gcloud container jiquns create-auto stream-jiqun \
+  --region=$REGION --project=$PROJECT_ID
+
+# 2. 部署
+kubectl apply -f k8s/
+```
+
+k8s/ 目录示例：
+
+```yaml
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stream-events
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: stream-events }
+  template:
+    metadata:
+      labels: { app: stream-events }
+    spec:
+      containers:
+      - name: app
+        image: $IMAGE
+        ports: [{containerPort: 8080}]
+        resources:
+          requests: {cpu: "200m", memory: "256Mi"}
+---
+# service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: stream-events-svc
+spec:
+  selector: { app: stream-events }
+  ports: [{port: 80, targetPort: 8080}]
+  type: ClusterIP
+---
+# ingress.yaml（GKE Ingress）
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: stream-events-ing
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: stream-ip
+spec:
+  rules:
+  - host: stream.example.com
+    http:
+      paths:
+      - path: /*
+        pathType: Prefix
+        backend:
+          service:
+            name: stream-events-svc
+            port: {number: 80}
+```
+
+> 需要额外申请静态 IP、DNS、证书，整体 > 10 min；Cloud Run 一条命令 < 2 min。
+
+---
+
+### 6️⃣ 推荐架构：从代码到可公开访问的 API（Cloud Run 路径）
+
+1. **代码**（支持 SSE/WS）
+2. **Dockerfile** → `docker build` → 推送 GAR
+3. `gcloud run deploy`（含并发、超时、CPU 参数）
+4. （可选）LB + 自定义域名
+5. **完成** 🎉
+
+---
+
+### 总结：何时选 Cloud Run / GKE
+
+| 条件                                 | 建议          |
+| ------------------------------------ | ------------- |
+| < 60 min 长连接、想最快上线          | **Cloud Run** |
+| 连接数大、需独占节点、自定义网络策略 | **GKE**       |
+| 无 DevOps 人手、按量付费             | **Cloud Run** |
+| 未来确定要跑 Kafka、StatefulSet      | **GKE**       |
+
+一句话：
+
+> 先上 Cloud Run 验证业务，一旦触发 Cloud Run 限制（超时、端口、节点级特性）再平滑迁到 GKE，两者甚至可以在同个 Global LB 后共存。
