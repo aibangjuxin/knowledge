@@ -1,3 +1,149 @@
+
+# NEG 
+以下是对 Google Cloud 中 **NEG（Network Endpoint Group）** 的详细介绍，特别是它在 GKE Gateway、Backend Service 等场景下的作用。
+
+---
+
+## **什么是 NEG（Network Endpoint Group）**
+
+  
+
+**NEG（Network Endpoint Group）** 是 Google Cloud 中的一种资源类型，用于表示一组网络终端（Endpoint），这些终端可以是 VM、容器、Cloud Run 服务，或者是 Internet 上的地址。NEG 提供了一种细粒度的方式将请求流量路由到特定的 backend 实体上。
+
+  
+
+NEG 的引入，主要是为了支持负载均衡器更精确地控制和识别后端服务实例的位置和类型。
+
+---
+
+## **NEG 的类型分类**
+
+|**NEG 类型**|**描述**|
+|---|---|
+|GCE VM NEG|将单个 VM 实例的网络接口作为 Endpoint|
+|GCE Zonal NEG|将 GCE VM 或实例组中的实例作为 Endpoint（L4负载均衡常用）|
+|GKE NEG（容器 NEG）|与 GKE 集群中的 Pod 直接绑定，允许负载均衡器直达 Pod|
+|Serverless NEG|表示 Cloud Run、App Engine、Cloud Functions 等 serverless 服务|
+|Internet NEG|代表 Internet 上的 FQDN/IP Endpoint，适用于 Hybrid Cloud|
+
+---
+
+## **GKE 中的 NEG（容器 NEG）**
+
+  
+
+当你使用 GKE 并启用 Gateway API（或 Ingress）时，必须启用容器级别的 NEG。这是因为 Google 的 HTTP(S) 负载均衡器（GLB）无法直接识别 Pod，需要借助 NEG 将 Load Balancer 与具体 Pod 建立映射。
+
+  
+
+### **开启 NEG 的方式（GKE）**
+
+```
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+```
+
+在 Gateway API 中你无需显式写 Annotation，但 Controller 会自动为你创建 NEG。
+
+---
+
+## **NEG 与 Backend Service 的关系**
+
+  
+
+**Backend Service** 是 GLB 中的核心资源之一，它决定了请求如何被转发到后端。而 **NEG 就是 Backend Service 的 backend target。**
+
+  
+
+### **示意图**
+
+```mermaid
+graph TD;
+    Client --> GLB[Google Load Balancer];
+    GLB --> BackendService;
+    BackendService --> NEG;
+    NEG --> Pod1;
+    NEG --> Pod2;
+```
+
+### **一个 Backend Service 可以绑定多个 NEG：**
+
+- 每个 NEG 位于不同的 zone / region（用于 Multi-Zone 部署）
+    
+- Backend Service 会基于负载策略（如 round robin、connection balancing）将流量分配到这些 NEG 上
+    
+
+---
+
+## **为什么在 GKE Gateway 中需要 NEG？**
+
+- GKE Gateway（或 Ingress）会动态生成一个 GLB
+    
+- GLB 不知道 Pod 的存在，需要 NEG 来作为桥梁
+    
+- NEG 中注册的 Endpoint 是具体的 Pod IP 和 port
+    
+- NEG 可以与 **健康检查** 配合，自动移除不健康的 Pod
+    
+
+---
+
+## **NEG 示例（通过** 
+
+## **gcloud**
+
+##  **查看）**
+
+```
+gcloud compute network-endpoint-groups list
+```
+
+```
+gcloud compute network-endpoint-groups describe my-neg \
+  --region=us-central1
+```
+
+输出会包含 Pod 或 VM 的 IP、端口等信息。
+
+---
+
+## **总结表格**
+
+|**资源类型**|**说明**|
+|---|---|
+|NEG（容器）|映射到 Pod 的 endpoint，支持 GLB 直接到 Pod|
+|Backend Service|将流量发送到 NEG 的路由规则配置实体|
+|GLB|通过 URL Map 和 Backend Service 将请求路由到 NEG|
+|GKE Gateway|自动生成并管理 NEG 和 Backend Service 资源|
+
+---
+
+### **补充：Serverless NEG 用于 Cloud Run 场景**
+
+  
+
+在 Cloud Run 中，你会看到如下结构：
+
+```mermaid
+graph TD;
+    Client --> GLB;
+    GLB --> BackendService;
+    BackendService --> ServerlessNEG;
+    ServerlessNEG --> CloudRun[Cloud Run 实例];
+```
+
+你可以在配置 Load Balancer 的 backend 时直接引用 Cloud Run 服务名，此时后台会自动创建 serverless NEG。
+
+---
+
+如你在规划多租户、统一域名入口、基于 path 分发到不同 Cloud Run/GKE 服务的架构时，NEG 是后端服务注册的关键资源。是否需要我进一步展示 GKE Gateway + NEG 的部署示例 YAML？
+
+
+# NEG GKE  
+
 使用网络端点组（Network Endpoint Group，NEG）实现容器原生负载均衡相较于直接使用GKE External Load Balancer有几个显著的优点：
 
 ### 优点
