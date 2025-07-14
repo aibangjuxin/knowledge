@@ -1789,3 +1789,135 @@ spec:
 一句话：
 
 > 先上 Cloud Run 验证业务，一旦触发 Cloud Run 限制（超时、端口、节点级特性）再平滑迁到 GKE，两者甚至可以在同个 Global LB 后共存。
+
+# Dia
+
+根据你的需求，下面是详细的对比分析和推荐架构方案，涵盖了 Cloud Run 与 GKE 在流式事件 API 场景下的适用性、部署流程、协议支持、负载均衡、外部访问、以及最佳实践。
+
+**1. Cloud Run vs GKE** **部署流式事件** **API** **的优缺点对比**
+
+|                                            |                                                                                                                                                        |                                                                                                                        |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| 维度                                       | Cloud Run                                                                                                                                              | GKE (Google Kubernetes Engine)                                                                                         |
+| **协议支持**                               | 支持 HTTP/1.1、HTTP/2（含流式响应）、SSE（服务器发送事件），2023 年起支持 HTTP/gRPC server streaming。WebSocket 支持有限（连接超时较短，适合短连接）。 | 完全支持 HTTP/1.1、HTTP/2、SSE、WebSocket、gRPC 等所有主流协议，连接超时和底层网络可自定义，适合长连接和复杂流式场景。 |
+| **部署速度**                               | 极快。无需集群管理，直接用 GAR 镜像一键部署，几分钟上线。                                                                                              | 需先创建集群、节点池，配置 Deployment/Service/Ingress，流程较繁琐，首次部署需 10 分钟以上。                            |
+| **运维复杂度**                             | 极低。无需关心底层 VM/节点，自动弹性伸缩、自动修复、自动升级。                                                                                         | 需自行管理集群、节点、网络、安全、升级、监控等，复杂度高。                                                             |
+| **并发\*\***/\***\*超时\*\***/\***\*资源** | 支持高并发，单实例并发可配置（默认 80），最大请求超时 15 分钟（可配置），CPU/内存可弹性分配。                                                          | 并发、超时、资源完全自定义，理论无限制。                                                                               |
+| **计费模式**                               | 按请求/实例用量计费，零流量零费用。                                                                                                                    | 按节点/资源计费，集群常驻有固定费用。                                                                                  |
+| **适用场景**                               | 无状态、事件驱动、API、流式响应（如 SSE/gRPC streaming），对长连接有一定限制。                                                                         | 复杂微服务、长连接、WebSocket、状态服务、定制化需求强的场景。                                                          |
+
+**结论**：如果你的流式事件 API 主要基于 HTTP/2 streaming 或 SSE，且对长连接时长要求不极端，Cloud Run 是最快捷、最省心的选择。如果需要原生 WebSocket、超长连接或极致自定义，GKE 更合适。[​⁠https://cloud.google.com/kubernetes-engine/docs/concepts/gke-and-cloud-run](https://cloud.google.com/kubernetes-engine/docs/concepts/gke-and-cloud-run)[​⁠https://cloud.google.com/blog/products/containers-kubernetes/when-to-use-google-kubernetes-engine-vs-cloud-run-for-containers](https://cloud.google.com/blog/products/containers-kubernetes/when-to-use-google-kubernetes-engine-vs-cloud-run-for-containers)[​⁠Google Cloud](https://cloud.google.com/blog/products/serverless/cloud-run-now-supports-http-grpc-server-streaming)
+
+**2.** **从** **GAR** **拉取镜像并部署到** **Cloud Run** **的详细步骤与最佳实践**
+
+**步骤**
+
+1. **构建并推送镜像到** **GAR**docker build -t REGION-docker.pkg.dev/PROJECT_ID/REPO/IMAGE:TAG .
+
+docker push REGION-docker.pkg.dev/PROJECT_ID/REPO/IMAGE:TAG
+
+1. **部署到** **Cloud Run**gcloud run deploy SERVICE_NAME \
+
+--image=REGION-docker.pkg.dev/PROJECT_ID/REPO/IMAGE:TAG \
+
+--platform=managed \
+
+--region=REGION \
+
+--allow-unauthenticated
+
+**关键配置与最佳实践**
+
+- **并发**：‎⁠--concurrency=80⁠（默认 80，流式 API 建议适当调低，避免单实例过载）
+- **超时**：‎⁠--timeout=900⁠（最大 900 秒=15 分钟，适合大部分流式场景）
+- **CPU\*\***分配\*\*：‎⁠--cpu=1⁠ ‎⁠--memory=512Mi⁠（根据流式负载调整）
+- **最小实例数**：‎⁠--min-instances=1⁠（避免冷启动，提升响应速度）
+- **协议**：如需 HTTP/2 streaming，需在服务端监听 HTTP/2，Cloud Run 自动支持
+- **SSE/gRPC streaming**：Cloud Run 已原生支持
+- **WebSocket**：Cloud Run 支持有限，连接超时较短（约 1 小时），不适合超长连接
+
+[​⁠Google Cloud](https://cloud.google.com/blog/products/serverless/cloud-run-now-supports-http-grpc-server-streaming)
+
+**3. Cloud Run** **暴露** **API** **的外部访问方式**
+
+- **自动生成的** **URL**：部署后自动分配 ‎⁠https://SERVICE-REGION.a.run.app⁠，可直接公网访问。
+- **自定义域名绑定**：
+
+1. 推荐用“全球外部应用负载均衡器”绑定自定义域名，支持 HTTPS、证书自动管理、路径路由、CDN、安全防护等。
+2. 也可用 Cloud Run 域名映射（预览版，生产建议用负载均衡器）。
+3. 绑定流程：在 Cloud Run 控制台或用 ‎⁠gcloud⁠ 绑定域名，按提示配置 DNS 记录，SSL 证书自动下发。
+
+- **SSL\*\***证书\*\*：自动签发和续期，无需手动管理。
+
+[​⁠Google Cloud](https://cloud.google.com/run/docs/mapping-custom-domains)[​⁠Google Cloud](https://cloud.google.com/run/docs/samples/cloudrun-custom-domain-mapping-run-service)
+
+**4.** **配置流式\*\***API\***\*的负载均衡器（如** **WebSocket/SSE\*\***）\*\*
+
+- **后端协议**：需选择支持 HTTP/2 或 H2C 的后端服务协议，SSE/HTTP/2 streaming 推荐用 HTTP/2。
+- **超时时间**：需将后端服务的“会话超时”设置为大于流式连接时长（默认 30 秒，建议调大如 600 秒或更高）。
+- **会话亲和性**：如需同一客户端持续连接同一后端，可开启“客户端 IP”亲和性。
+- **健康检查**：需配置健康检查路径，协议与后端协议一致（如 HTTP/2）。
+- **Cloud Run** **作为后端**：直接支持无服务器 NEG，配置简单。
+- **GKE** **作为后端**：用 NEG 或 Ingress 方式，支持所有协议和自定义端口。
+
+[​⁠Google Cloud](https://cloud.google.com/load-balancing/docs/https)
+
+**5. GKE** **部署流式事件** **API** **的简要流程**
+
+1. **创建** **GKE** **集群\*\***gcloud container jiquns create CLUSTER_NAME --region=REGION\*\*
+
+2. **编写** **Deployment** **和** **Service**
+
+- Deployment 指定 GAR 镜像
+- Service 类型为 LoadBalancer 或 NodePort
+
+3. **配置** **Ingress\*\***（可选）\*\*
+
+- 用于 HTTP/HTTPS 统一入口，支持自定义域名、证书、路径路由
+
+5. **暴露外部访问**
+
+- LoadBalancer Service 自动分配公网 IP
+- Ingress 可绑定自定义域名和证书
+
+7. **协议支持**
+
+- 完全支持 HTTP/2、SSE、WebSocket、gRPC 等
+
+**对比** **Cloud Run**：GKE 需手动管理集群、节点、网络、证书，部署和运维复杂度高，适合有自定义需求或大规模微服务场景。[​⁠Google Cloud](https://cloud.google.com/kubernetes-engine/docs/how-to/image-streaming)
+
+**6.** **推荐架构方案（以** **Cloud Run** **为核心）**
+
+**推荐架构**
+
+1. **镜像构建与推送**：本地或 CI/CD 构建镜像，推送到 GAR
+2. **Cloud Run** **部署**：用 GAR 镜像一键部署 Cloud Run 服务
+3. **协议支持**：服务端实现 HTTP/2 streaming 或 SSE，Cloud Run 自动支持
+4. **外部访问**：
+
+- 默认分配 HTTPS 公网 URL
+- 如需自定义域名，用全球外部应用负载均衡器绑定，自动管理 SSL
+
+6. **负载均衡与弹性**：Cloud Run 自动弹性伸缩，按需计费
+7. **安全与监控**：自动集成 Cloud Logging/Monitoring，支持 IAM 权限控制
+
+**完整路径**
+
+代码 → 构建镜像 → 推送 GAR → Cloud Run 部署 → 自动分配 URL/自定义域名 → 负载均衡/SSL → 对外提供流式 API
+
+**优势**
+
+- **极致简易**：无需集群/节点/网络/证书管理
+- **极速上线**：几分钟即可对外服务
+- **协议友好**：原生支持 HTTP/2 streaming/SSE
+- **弹性伸缩**：自动按流量扩缩，零流量零费用
+- **安全合规**：自动 HTTPS、IAM 权限、日志监控
+
+**总结**
+
+- **首选** **Cloud Run**：如果你的流式事件 API 基于 HTTP/2 streaming 或 SSE，且对长连接时长要求不极端，Cloud Run 是最快捷、最省心的选择。
+- **选用** **GKE**：如需原生 WebSocket、超长连接、极致自定义或复杂微服务架构，GKE 更合适，但部署和运维复杂度高。
+- **外部访问**：Cloud Run 支持自动 URL 和自定义域名绑定，SSL 自动管理，推荐用全球外部应用负载均衡器。
+- **负载均衡配置**：流式协议需关注后端超时、亲和性、健康检查等参数，Cloud Run 方案配置最简。
+
+如需具体命令或 Terraform 配置，可进一步提供。
