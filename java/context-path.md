@@ -5,7 +5,7 @@
 server-conf.properties
 
 中常见参数详解
-
+```bash
 server.port=443
 
 server.ssl.enabled=true
@@ -13,6 +13,7 @@ server.ssl.enabled=true
 server.servlet.context-path=/api
 
 spring.webflux.base-path=/v1
+```
 
 |                             |         |                                                                                   |
 | --------------------------- | ------- | --------------------------------------------------------------------------------- |
@@ -25,9 +26,9 @@ spring.webflux.base-path=/v1
 ⚠️ 注意：Spring Boot 2.1+ 支持 WebFlux 的 base-path，适用于响应式编程模型，类似于 context-path 的作用。
 
 🔐 SSL/TLS 配置相关参数（用于 HTTPS）
-
 启用 server.ssl.enabled=true 后，以下参数需要一并配置：
 
+```bash
 server.ssl.key-store=classpath:keystore.p12
 
 server.ssl.key-store-password=your-password
@@ -35,6 +36,7 @@ server.ssl.key-store-password=your-password
 server.ssl.key-store-type=PKCS12
 
 server.ssl.key-alias=your-cert-alias
+```
 
 |                                 |                |                                                                                     |
 | ------------------------------- | -------------- | ----------------------------------------------------------------------------------- |
@@ -53,7 +55,7 @@ server.ssl.key-alias=your-cert-alias
 配置文件结构
 
 # server-conf.properties
-
+```bash
 server.port=443
 
 server.ssl.enabled=true
@@ -67,51 +69,33 @@ server.ssl.key-store-type=PKCS12
 server.ssl.key-alias=app
 
 spring.webflux.base-path=/v1
-
+```
 如果你使用 Kubernetes ConfigMap：
-
+```yaml
 apiVersion: v1
-
 kind: ConfigMap
-
 metadata:
-
 name: app-config
-
 data:
-
 server-conf.properties: |
-
 server.port=443
-
 server.ssl.enabled=true
-
 server.ssl.key-store=classpath:keystore.p12
-
 server.ssl.key-store-password=changeit
-
 server.ssl.key-store-type=PKCS12
-
 server.ssl.key-alias=app
-
 spring.webflux.base-path=/v1
-
+```
 然后挂载至 Pod：
-
+```yaml
 volumeMounts:
-
 - name: config-volume
-
 mountPath: /app/config
-
 volumes:
-
 - name: config-volume
-
 configMap:
-
 name: app-config
-
+```
 并在启动命令或 application.properties 中引用：
 
 spring.config.additional-location=file:/app/config/
