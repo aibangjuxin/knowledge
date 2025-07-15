@@ -11,9 +11,9 @@ sequenceDiagram
 
     participant Client
 
-    participant ICAP_Client (e.g., Squid Proxy)
+    participant ICAP_Client Squid Proxy
 
-    participant ICAP_Server (e.g., Antivirus Server)
+    participant ICAP_Server Antivirus Server
 
 
 
