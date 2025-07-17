@@ -19,14 +19,14 @@
 
 ### **，只要满足以下条件：**
 
-| **要求项**      | **是否支持** | **说明**                                        |
-| --------------- | ------------ | ----------------------------------------------- |
-| HTTP/2 协议     | ✅           | Cloud Run 默认启用 HTTP/2（不管是内部还是外部） |
-| gRPC Streaming  | ✅           | 包括 Unary、Server-stream、Client-stream、双向  |
-| TLS 支持        | ✅           | Cloud Run 对外统一启用 HTTPS/HTTP2（TLS）       |
-| h2c（明文）支持 | ❌           | Cloud Run 不支持 h2c，必须是 TLS gRPC           |
+| **要求项** | **是否支持** | **说明** |
+| :--- | :--- | :--- |
+| HTTP/2 协议 | ✅ | Cloud Run 默认启用 HTTP/2（不管是内部还是外部） |
+| gRPC Streaming | ✅ | 包括 Unary、Server-stream、Client-stream、双向 |
+| TLS 支持 | ✅ | Cloud Run 对外统一启用 HTTPS/HTTP2（TLS） |
+| h2c（明文）支持 | ❌ | Cloud Run 不支持 h2c，必须是 TLS gRPC |
 
-> ✅ 所以你只需要将服务部署为支持 gRPC over TLS 即可，不需要额外处理证书（由 Cloud Run 管理）。
+> ✅ 所以你只需要将服务部署为支持 gRPC over TLS 即可，不需要额外处理证书��由 Cloud Run 管理）。
 
 ---
 
@@ -42,11 +42,11 @@ flowchart TD
 
 # **🔐 Cloud Run 如何暴露服务（两种方式）**
 
-| **暴露方式**       | **场景**                          | **是否支持 gRPC Streaming** | **推荐情况**         |
-| ------------------ | --------------------------------- | --------------------------- | -------------------- |
-| 直接暴露域名       | https://<hash>-<region>.a.run.app | ✅                          | 简单测试适用         |
-| 自定义域名 + HTTPS | 使用 GCP HTTPS LB + Cloud Run     | ✅                          | 生产推荐             |
-| 私网访问（内网）   | Cloud Run + VPC Connector         | ✅                          | 仅适用于内部系统通信 |
+| **暴露方式** | **场景** | **是否支持 gRPC Streaming** | **推荐情况** |
+| :--- | :--- | :--- | :--- |
+| 直接暴露域名 | https://<hash>-<region>.a.run.app | ✅ | 简单测试适用 |
+| 自定义域名 + HTTPS | 使用 GCP HTTPS LB + Cloud Run | ✅ | 生产推荐 |
+| 私网访问（内网） | Cloud Run + VPC Connector | ✅ | 仅适用于内部系统通信 |
 
 ---
 
@@ -54,7 +54,7 @@ flowchart TD
 
 ### **1. Dockerfile**
 
-```
+```dockerfile
 FROM python:3.11-slim
 WORKDIR /app
 COPY . .
@@ -64,7 +64,7 @@ CMD ["python", "server.py"]
 
 ### **2. 构建并部署（通过 gcloud）**
 
-```
+```bash
 gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/grpc-server
 
 gcloud run deploy grpc-server \
@@ -84,7 +84,7 @@ gcloud run deploy grpc-server \
 
 ## **关键：必须启用 HTTP/2 + TLS**
 
-```
+```nginx
 server {
     listen 443 ssl http2;
     server_name grpc.myapi.com;
@@ -113,7 +113,7 @@ server {
 
 # **✅ 验证方式**
 
-```
+```bash
 grpcurl -proto chat.proto \
   -d '{"user": "xu", "message": "hello"}' \
   -H "Host: grpc.myapi.com" \
@@ -125,23 +125,23 @@ grpcurl -proto chat.proto \
 
 # **🎯 总结：你的策略是否可行？**
 
-| **项目**            | **是否满足要求** | **说明**                                                    |
-| ------------------- | ---------------- | ----------------------------------------------------------- |
-| gRPC Streaming 支持 | ✅               | Cloud Run 默认支持，不用额外配置                            |
-| HTTP/2 支持         | ✅               | Cloud Run 启用 HTTPS + HTTP/2                               |
-| h2c 支持            | ❌               | Cloud Run **不支持 h2c**，要确保前端是 grpcs:// 协议        |
-| Nginx 转发兼容      | ✅               | Nginx L7 配置正确即可转发 gRPC over TLS 到 Cloud Run        |
-| 简化架构            | ✅               | 不需要配置复杂的 GKE/Kong 路由，适合快速 PoC 和中等量级场景 |
+| **项目** | **是否满足要求** | **说明** |
+| :--- | :--- | :--- |
+| gRPC Streaming 支持 | ✅ | Cloud Run 默认支持，不用额外配置 |
+| HTTP/2 支持 | ✅ | Cloud Run 启用 HTTPS + HTTP/2 |
+| h2c 支持 | ❌ | Cloud Run **不支持 h2c**，要确保前端是 grpcs:// 协议 |
+| Nginx 转发兼容 | ✅ | Nginx L7 配置正确即可转发 gRPC over TLS 到 Cloud Run |
+| 简化架构 | ✅ | 不需要配置复杂的 GKE/Kong 路由，适合快速 PoC 和中等量级场景 |
 
 ---
 
 ## **📘 建议做法**
 
-| **目标**       | **推荐方案**                                             |
-| -------------- | -------------------------------------------------------- |
-| PoC / 测试场景 | 直接将服务部署到 Cloud Run + 开启外部访问即可            |
-| 生产           | Cloud Run + 自定义域名（或 Google LB）+ mTLS/Cloud Armor |
-| 内部集成       | Cloud Run + VPC Connector + 通过负载均衡或内部入口       |
+| **目标** | **推荐方案** |
+| :--- | :--- |
+| PoC / 测试场景 | 直接将服务部署到 Cloud Run + 开启外部访问即可 |
+| 生产 | Cloud Run + 自定义域名（或 Google LB）+ mTLS/Cloud Armor |
+| 内部集成 | Cloud Run + VPC Connector + 通过负载均衡或内部入口 |
 
 ---
 
@@ -175,7 +175,7 @@ grpc-cloudrun/
 
 ## **chat.proto**
 
-```
+```proto
 syntax = "proto3";
 
 package chat;
@@ -197,7 +197,7 @@ message ChatMessage {
 
 ## **server.py**
 
-```Python
+```python
 import time
 import grpc
 from concurrent import futures
@@ -243,7 +243,7 @@ grpcio-tools
 
 ## **Dockerfile**
 
-```
+```dockerfile
 FROM python:3.11-slim
 WORKDIR /app
 COPY . .
@@ -255,7 +255,7 @@ CMD ["python", "server.py"]
 
 ## **☁️ 6. 部署到 Cloud Run**
 
-```
+```bash
 gcloud builds submit --tag gcr.io/[PROJECT_ID]/grpc-chat
 
 gcloud run deploy grpc-chat \
@@ -302,7 +302,7 @@ server {
 
 ## **🧪 8. 验证连接**
 
-```
+```bash
 grpcurl -proto chat.proto \
   -d '{"user": "test", "message": "hello"}' \
   -H "Host: grpc.myapi.com" \
@@ -314,13 +314,13 @@ grpcurl -proto chat.proto \
 
 ## **✅ 检查点 Checklist**
 
-| **项目**                 | **状态** | **验证方式**         |
-| ------------------------ | -------- | -------------------- |
-| gRPC Server 正常运行     | ✅       | Cloud Run 日志控制台 |
-| Nginx 是否监听 HTTP/2    | ✅       | listen 443 ssl http2 |
-| TLS 配置是否完整         | ✅       | 证书路径正确无误     |
-| 请求是否成功转发         | ✅       | grpcurl 能收到响应   |
-| Cloud Run 是否启用 HTTPS | ✅       | 默认开启，不支持 h2c |
+| **项目** | **状态** | **验证方式** |
+| :--- | :--- | :--- |
+| gRPC Server 正常运行 | ✅ | Cloud Run 日志控制台 |
+| Nginx 是否监听 HTTP/2 | ✅ | listen 443 ssl http2 |
+| TLS 配置是否完整 | ✅ | 证书路径正确无误 |
+| 请求是否成功转发 | ✅ | grpcurl 能收到响应 |
+| Cloud Run 是否启用 HTTPS | ✅ | 默认开启，不支持 h2c |
 
 ---
 

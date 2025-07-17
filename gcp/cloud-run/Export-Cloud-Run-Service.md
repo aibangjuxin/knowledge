@@ -9,11 +9,11 @@
 
 ## **✅ 目标场景建模**
 
-| **用户** | **请求入口**                     | **路由策略**               | **后端服务（Cloud Run）** |
-| -------- | -------------------------------- | -------------------------- | ------------------------- |
-| 用户 A   | https://api.example.com/tenant-a | Path 前缀匹配 /tenant-a/\* | Cloud Run A（独立服务）   |
-| 用户 B   | https://api.example.com/tenant-b | Path 前缀匹配 /tenant-b/\* | Cloud Run B（独立服务）   |
-| 用户 C   | https://api.example.com/asia     | 地区匹配 asia + 路由       | Cloud Run C（亚洲区服务） |
+| **用户** | **请求入口** | **路由策略** | **后端服务（Cloud Run）** |
+| :--- | :--- | :--- | :--- |
+| 用户 A | https://api.example.com/tenant-a | Path 前缀匹配 /tenant-a/* | Cloud Run A（独立服务） |
+| 用户 B | https://api.example.com/tenant-b | Path 前缀匹配 /tenant-b/* | Cloud Run B（独立服务） |
+| 用户 C | https://api.example.com/asia | 地区匹配 asia + 路由 | Cloud Run C（亚洲区服务） |
 
 ---
 
@@ -34,38 +34,38 @@ flowchart TD
 
 ## **✅ 架构核心组件**
 
-| **组件**                  | **作用**                                         |
-| ------------------------- | ------------------------------------------------ |
-| **HTTPS Load Balancer**   | 单一公网入口，支持路径、Header、地理等多维路由   |
-| **URL Map**               | 定义 /tenant-a/\* 等路径路由到对应的 Backend     |
-| **Serverless NEG**        | 每个 Cloud Run 服务都对应一个专属 Serverless NEG |
-| **Backend Service**       | 每个 Cloud Run 服务都配置一个 Backend            |
-| **Cloud DNS + 证书**      | 自定义域名绑定，统一 HTTPS 证书                  |
-| **Cloud Armor**           | 可选：接入 WAF、安全策略、用户白名单             |
-| **Cloud Logging + Quota** | 可选：按租户记录流量、配额分析                   |
+| **组件** | **作用** |
+| :--- | :--- |
+| **HTTPS Load Balancer** | 单一公网入口，支持路径、Header、地理等多维路由 |
+| **URL Map** | 定义 /tenant-a/* 等路径路由到对应的 Backend |
+| **Serverless NEG** | 每个 Cloud Run 服务都对应一个专属 Serverless NEG |
+| **Backend Service** | 每个 Cloud Run 服务都配置一个 Backend |
+| **Cloud DNS + 证书** | 自定义域名绑定，统一 HTTPS 证书 |
+| **Cloud Armor** | 可选：接入 WAF、安全策略、用户白名单 |
+| **Cloud Logging + Quota** | 可选：按租户记录流量、配额分析 |
 
 ---
 
 ## **🧩 多后端配置策略（按需拆分）**
 
-| **拆分方式**        | **是否支持** | **示例说明**                             |
-| ------------------- | ------------ | ---------------------------------------- |
-| **按 Path 拆分**    | ✅           | /tenant-a/\* → Cloud Run A               |
-| **按 Region 拆分**  | ✅           | Asia 用户请求自动转发到亚洲服务区        |
-| **按 Header 拆分**  | ✅           | Header 中含 X-Tenant-ID: abc → B         |
+| **拆分方式** | **是否支持** | **示例说明** |
+| :--- | :--- | :--- |
+| **按 Path 拆分** | ✅ | /tenant-a/* → Cloud Run A |
+| **按 Region 拆分** | ✅ | Asia 用户请求自动转发到亚洲服务区 |
+| **按 Header 拆分** | ✅ | Header 中含 X-Tenant-ID: abc → B |
 | **按 Cookie/Query** | ❌（不推荐） | 不支持复杂动态规则（可通过中转代理实现） |
 
 ---
 
 ## **☁️ 资源规划建议**
 
-| **模块**           | **说明**                                   |
-| ------------------ | ------------------------------------------ |
-| 统一域名入口       | api.example.com 对应 HTTPS LB + SSL        |
-| Cloud Run 服务命名 | 建议命名为 tenant-<name> 或 region-<id>    |
-| IAM 控制           | 每个 Cloud Run 服务配置独立的 Invoker 权限 |
-| CI/CD 集成         | 不同租户/模块可以有独立的部署流水线        |
-| 日志与监控         | 利用 Cloud Logging 打 tag 区分租户请求     |
+| **模块** | **说明** |
+| :--- | :--- |
+| 统一域名入口 | api.example.com 对应 HTTPS LB + SSL |
+| Cloud Run 服务命名 | 建议命名为 tenant-<name> 或 region-<id> |
+| IAM 控制 | 每个 Cloud Run 服务配置独立的 Invoker 权限 |
+| CI/CD 集成 | 不同租户/模块可以有独立的部署流水线 |
+| 日志与监控 | 利用 Cloud Logging 打 tag 区分租户请求 |
 
 ---
 
@@ -82,11 +82,11 @@ gcloud compute url-maps add-path-matcher platform-url-map \
 
 ## **🔐 安全建议**
 
-| **目标**     | **实施方案**                                    |
-| ------------ | ----------------------------------------------- |
+| **目标** | **实施方案** |
+| :--- | :--- |
 | 统一访问控制 | Cloud Armor / JWT 验证器 / Identity-Aware Proxy |
-| 用户隔离     | 每个 Cloud Run 服务 IAM 仅授权对应租户访问      |
-| 限流保护     | GCLB 层可配合 Cloud Armor 配额策略              |
+| 用户隔离 | 每个 Cloud Run 服务 IAM 仅授权对应租户访问 |
+| 限流保护 | GCLB 层可配合 Cloud Armor 配额策略 |
 
 ---
 
@@ -113,15 +113,15 @@ gcloud compute url-maps add-path-matcher platform-url-map \
 
 ## **✅ 最佳实践（3 个推荐方案）**
 
-| **方案编号** | **方案描述**                                    | **是否 Google 原生** | **跨项目访问** | **备注**                                             |
-| ------------ | ----------------------------------------------- | -------------------- | -------------- | ---------------------------------------------------- |
-| ✅①          | **使用 Cloud Run with IAM + IAM 条件访问**      | ✅                   | ✅             | 精准控制跨项目服务账号或组的访问权限                 |
-| ✅②          | **使用 VPC Access + Serverless NEG + HTTPS LB** | ✅                   | ✅             | GCP 推荐的生产级方案，允许通过统一入口访问 Cloud Run |
-| ③            | 使用 Cloud Run 默认公网地址 + token             | ✅                   | ✅（较弱）     | 简单场景适用，但不够安全可靠                         |
+| **方案编号** | **方案描述** | **是否 Google 原生** | **跨项目访问** | **备注** |
+| :--- | :--- | :--- | :--- | :--- |
+| ✅① | **使用 Cloud Run with IAM + IAM 条件访问** | ✅ | ✅ | 精准控制跨项目服务账号或组的访问权限 |
+| ✅② | **使用 VPC Access + Serverless NEG + HTTPS LB** | ✅ | ✅ | GCP 推荐的生产级方案，允许通过统一入口访问 Cloud Run |
+| ③ | 使用 Cloud Run 默认公网地址 + token | ✅ | ✅（较弱） | 简单场景适用，但不够安全可靠 |
 
 ---
 
-## **✅ 方案 ①：Cloud Run IAM 授权 + 跨项目服务账号访问（\*\***强烈推荐\*\*
+## **✅ 方案 ①：Cloud Run IAM 授权 + 跨项目服务账号访问（****强烈推荐****
 
 ## **）**
 
@@ -137,7 +137,7 @@ gcloud compute url-maps add-path-matcher platform-url-map \
 
 #### **✅ 1. Cloud Run 设置为私有访问（在工程 A）**
 
-```
+```bash
 gcloud run services update grpc-chat \
   --no-allow-unauthenticated \
   --region asia-east1
@@ -145,11 +145,11 @@ gcloud run services update grpc-chat \
 
 #### **✅ 2. 将工程 B 的服务账号添加到 Cloud Run IAM 中（工程 A）**
 
-```
+```bash
 gcloud run services add-iam-policy-binding grpc-chat \
   --region asia-east1 \
-  --member="serviceAccount:service-account-b@project-b.iam.gserviceaccount.com" \
-  --role="roles/run.invoker"
+  --member "serviceAccount:service-account-b@project-b.iam.gserviceaccount.com" \
+  --role roles/run.invoker
 ```
 
 #### **✅ 3. 工程 B 的服务账号调用 Cloud Run**
@@ -226,21 +226,21 @@ graph TD;
 
 ## **✅ 补充：私网部署 Cloud Run（VPC）**
 
-| **要素**               | **是否支持**             |
-| ---------------------- | ------------------------ |
+| **要素** | **是否支持** |
+| :--- | :--- |
 | Cloud Run 绑定私有 VPC | ✅（通过 VPC connector） |
-| 内部访问地址           | ❌（仍然通过 HTTPS）     |
-| 支持 Cloud DNS 映射    | ✅（结合 Cloud LB）      |
+| 内部访问地址 | ❌（仍然通过 HTTPS） |
+| 支持 Cloud DNS 映射 | ✅（结合 Cloud LB） |
 
 ---
 
 ## **🎯 推荐策略**
 
-| **场景**           | **推荐方式**                  |
-| ------------------ | ----------------------------- |
-| 跨项目内部访问     | ✅ 方案 ①（IAM 控制 + token） |
-| 多服务统一访问入口 | ✅ 方案 ②（Serverless NEG）   |
-| 简单测试或 PoC     | 方案 ③                        |
+| **场景** | **推荐方式** |
+| :--- | :--- |
+| 跨项目内部访问 | ✅ 方案 ①（IAM 控制 + token） |
+| 多服务统一访问入口 | ✅ 方案 ②（Serverless NEG） |
+| 简单测试或 PoC | 方案 ③ |
 
 ---
 
@@ -322,7 +322,7 @@ gcloud run services add-iam-policy-binding "${CLOUD_RUN_SERVICE}" \
 
 ### **1️⃣ 设置变量**
 
-```
+```bash
 PROJECT_ID="project-a-id"
 REGION="asia-east1"
 SERVICE_NAME="grpc-chat"
@@ -335,7 +335,7 @@ BACKEND_NAME="grpc-backend"
 
 ### **2️⃣ 创建 Serverless NEG**
 
-```
+```bash
 gcloud compute network-endpoint-groups create "${NEG_NAME}" \
   --region="${REGION}" \
   --network-endpoint-type=serverless \
@@ -346,11 +346,10 @@ gcloud compute network-endpoint-groups create "${NEG_NAME}" \
 
 ### **3️⃣ 创建 Backend Service 并添加 NEG**
 
-```
+```bash
 gcloud compute backend-services create "${BACKEND_NAME}" \
   --global \
   --protocol=HTTP2
-
 gcloud compute backend-services add-backend "${BACKEND_NAME}" \
   --global \
   --network-endpoint-group="${NEG_NAME}" \
@@ -361,7 +360,7 @@ gcloud compute backend-services add-backend "${BACKEND_NAME}" \
 
 ### **4️⃣ 创建 URL Map**
 
-```
+```bash
 gcloud compute url-maps create "${LB_NAME}-map" \
   --default-service="${BACKEND_NAME}"
 ```
@@ -370,7 +369,7 @@ gcloud compute url-maps create "${LB_NAME}-map" \
 
 ### **5️⃣ 创建 Target HTTPS Proxy**
 
-```
+```bash
 gcloud compute target-https-proxies create "${LB_NAME}-proxy" \
   --url-map="${LB_NAME}-map" \
   --ssl-certificates=[YOUR_CERT]  # 或使用 --certificate-manager-certificates
@@ -380,7 +379,7 @@ gcloud compute target-https-proxies create "${LB_NAME}-proxy" \
 
 ### **6️⃣ 分配 Global IP & Forwarding Rule**
 
-```
+```bash
 # 分配 IP
 gcloud compute addresses create "${LB_NAME}-ip" \
   --global
@@ -397,7 +396,7 @@ gcloud compute forwarding-rules create "${LB_NAME}-fr" \
 
 ### **🔚 最终效果**
 
-```
+```mermaid
 flowchart TD
     client[外部请求 (https://api.example.com)] --> lb[HTTPS Load Balancer]
     lb --> neg[Serverless NEG]
@@ -408,13 +407,13 @@ flowchart TD
 
 ## **🎯 总结对比**
 
-| **项目**                     | **方案 ①：IAM 认证**        | **方案 ②：LB + Serverless NEG** |
-| ---------------------------- | --------------------------- | ------------------------------- |
-| 跨项目访问                   | ✅ 支持                     | ✅ 支持                         |
-| 自定义域名                   | ❌ 需结合 Cloud DNS         | ✅ 可配置 SSL + 域名            |
-| Cloud Armor / 认证策略 / JWT | ❌ 需要客户端逻辑配合       | ✅ 可统一加在 LB 层             |
-| 安全性                       | 高（最小权限 + token 控制） | 高（LB + NEG + IAM）            |
-| 复杂度                       | 中                          | 较高（适合生产）                |
+| **项目** | **方案 ①：IAM 认证** | **方案 ②：LB + Serverless NEG** |
+| :--- | :--- | :--- |
+| 跨项目访问 | ✅ 支持 | ✅ 支持 |
+| 自定义域名 | ❌ 需结合 Cloud DNS | ✅ 可配置 SSL + 域名 |
+| Cloud Armor / 认证策略 / JWT | ❌ 需要客户端逻辑配合 | ✅ 可统一加在 LB 层 |
+| 安全性 | 高（最小权限 + token 控制） | 高（LB + NEG + IAM） |
+| 复杂度 | 中 | 较高（适合生产） |
 
 ---
 
@@ -468,7 +467,7 @@ HTTPS LB → Backend Service → Serverless NEG → Cloud Run 服务
 
 ## **🧩 Serverless NEG 绑定 Cloud Run 的典型命令：**
 
-```
+```bash
 # 创建 serverless NEG，绑定 Cloud Run 服务
 gcloud compute network-endpoint-groups create grpc-neg \
   --region=asia-east1 \
@@ -492,11 +491,11 @@ gcloud compute network-endpoint-groups create grpc-neg \
 
 ## **🎯 最佳实践总结**
 
-| **项目**                        | **是否推荐**                |
-| ------------------------------- | --------------------------- |
-| 将 Cloud Run 绑定 HTTPS LB      | ✅ 强烈推荐                 |
-| 使用 Serverless NEG             | ✅ 必须                     |
-| 直接用域名绕过 NEG              | ❌ 不支持                   |
+| **项目** | **是否推荐** |
+| :--- | :--- |
+| 将 Cloud Run 绑定 HTTPS LB | ✅ 强烈推荐 |
+| 使用 Serverless NEG | ✅ 必须 |
+| 直接用域名绕过 NEG | ❌ 不支持 |
 | 多个 Cloud Run 服务通过 LB 接入 | ✅ 支持基于路径或子域名路由 |
 
 ---
@@ -508,4 +507,4 @@ gcloud compute network-endpoint-groups create grpc-neg \
 
 那 Serverless NEG 是你必须走的路径。
 
-是否需要我生成一个绑定多个 Cloud Run 服务的路径匹配 LB 配置示例？
+是否需要我生成一个绑定多个 Cloud Run 服务的路径匹配 LB 配置示例?
