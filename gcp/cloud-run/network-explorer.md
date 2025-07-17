@@ -1060,3 +1060,198 @@ gcloud run jobs execute test-connectivity \
 - 合理配置防火墙规则，避免不必要的流量阻塞
 
 这样的配置确保了您的 Cloud Run Job 能够通过 VPC Access 连接器安全、高效地访问 GitHub 等外部服务.
+
+非常好的问题！让我详细解释 Cloud Run 如何通过路由表找到 Cloud NAT 的具体路径。
+
+## VPC 网络路由机制详解
+
+### 1. GCP VPC 默认路由表
+
+每个 VPC 网络在创建时都会自动生成默认路由表：
+
+```bash
+# 查看 VPC 路由表
+gcloud compute routes list --filter="network=default" --project=myproject
+```
+
+**默认路由表包含**：
+
+- **本地子网路由**: 各子网之间的直接路由
+- **默认互联网网关路由**: `0.0.0.0/0` → `default-internet-gateway`
+
+### 2. 路由决策过程
+
+```mermaid
+graph TD
+    subgraph "路由决策流程"
+        PACKET["数据包: 目标 GitHub IP"]
+        ROUTE_TABLE["VPC 路由表查询"]
+        MATCH_CHECK["路由匹配检查"]
+        PRIORITY["优先级比较"]
+        NEXTHOP["下一跳决策"]
+    end
+    
+    subgraph "路由条目"
+        LOCAL["本地路由 (10.0.0.0/8)"]
+        CUSTOM["自定义路由"]
+        DEFAULT["默认路由 (0.0.0.0/0)"]
+    end
+    
+    PACKET --> ROUTE_TABLE
+    ROUTE_TABLE --> MATCH_CHECK
+    MATCH_CHECK --> LOCAL
+    MATCH_CHECK --> CUSTOM
+    MATCH_CHECK --> DEFAULT
+    MATCH_CHECK --> PRIORITY
+    PRIORITY --> NEXTHOP
+```
+
+### 3. Cloud NAT 的路由配置
+
+当您创建 Cloud NAT 时，它会影响路由决策：
+
+```bash
+# 查看 Cloud NAT 配置
+gcloud compute routers describe router-name \
+    --region=europe-west2 \
+    --project=myproject
+```
+
+**关键配置**：
+
+- Cloud NAT 与 Cloud Router 绑定
+- Cloud Router 管理特定子网的路由
+- 修改默认路由行为
+
+### 4. 完整路由路径分析
+
+```mermaid
+sequenceDiagram
+    participant CR as Cloud Run Job
+    participant VPC as VPC Access Connector
+    participant RT as 路由表
+    participant CR_ROUTER as Cloud Router
+    participant NAT as Cloud NAT
+    participant GH as GitHub
+    
+    Note over CR,VPC: 1. 流量进入 VPC
+    CR->>VPC: 发送到 GitHub (140.82.112.3)
+    VPC->>RT: 查询路由表
+    
+    Note over RT: 2. 路由匹配过程
+    RT->>RT: 检查目标IP: 140.82.112.3
+    RT->>RT: 匹配默认路由: 0.0.0.0/0
+    RT->>RT: 下一跳: default-internet-gateway
+    
+    Note over RT,CR_ROUTER: 3. 路由重定向
+    RT->>CR_ROUTER: 检查 Cloud Router 配置
+    CR_ROUTER->>NAT: 重定向到 Cloud NAT
+    
+    Note over NAT,GH: 4. NAT 转换
+    NAT->>GH: 转换为公网IP访问
+    GH->>NAT: 响应返回
+    NAT->>VPC: 通过连接器返回
+```
+
+### 5. 路由表条目示例
+
+```bash
+# 典型的 VPC 路由表条目
+gcloud compute routes list --format="table(
+    name,
+    dest_range,
+    next_hop_gateway,
+    next_hop_instance,
+    priority
+)"
+```
+
+**输出示例**：
+
+|name                  |dest_range |next_hop_gateway        |priority|
+|----------------------|-----------|------------------------|--------|
+|default-route-internet|0.0.0.0/0  |default-internet-gateway|1000    |
+|default-route-subnet-1|10.0.0.0/24|-                       |1000    |
+|nat-route-custom      |0.0.0.0/0  |-                       |100     |
+
+### 6. Cloud NAT 如何改变路由行为
+
+```bash
+# Cloud NAT 创建时的路由影响
+gcloud compute routers create nat-router \
+    --network=default \
+    --region=europe-west2 \
+    --project=myproject
+
+gcloud compute routers nats create nat-gateway \
+    --router=nat-router \
+    --region=europe-west2 \
+    --nat-all-subnet-ip-ranges \
+    --auto-allocate-nat-external-ips \
+    --project=myproject
+```
+
+**路由行为变化**：
+
+1. **默认行为**: 流量 → `default-internet-gateway` → 直接出公网
+1. **NAT 配置后**: 流量 → `Cloud Router` → `Cloud NAT` → 出公网
+
+### 7. 路由优先级机制
+
+```mermaid
+graph TB
+    subgraph "路由优先级 (数字越小优先级越高)"
+        P0["0 - 系统保留"]
+        P1["1-999 - 高优先级自定义路由"]
+        P1000["1000 - 默认路由"]
+        P1001["1001+ - 低优先级路由"]
+    end
+    
+    subgraph "路由决策"
+        DEST["目标: GitHub IP"]
+        MATCH["匹配多个路由"]
+        SELECT["选择最高优先级"]
+        FORWARD["转发流量"]
+    end
+    
+    DEST --> MATCH
+    MATCH --> P1
+    MATCH --> P1000
+    MATCH --> SELECT
+    SELECT --> FORWARD
+```
+
+### 8. 实际配置验证
+
+```bash
+# 验证路由配置
+gcloud compute routes list \
+    --filter="destRange=0.0.0.0/0" \
+    --project=myproject
+
+# 检查 NAT 配置
+gcloud compute routers get-nat-mapping-info nat-router \
+    --region=europe-west2 \
+    --project=myproject
+
+# 测试连通性
+gcloud compute instances create test-vm \
+    --subnet=connector-subnet \
+    --no-address \
+    --region=europe-west2 \
+    --project=myproject
+```
+
+### 9. 总结
+
+Cloud Run 通过以下步骤找到 Cloud NAT：
+
+1. **VPC Access Connector** 将流量注入 VPC 网络
+1. **VPC 路由表** 查找目标 IP 匹配的路由
+1. **默认路由** `0.0.0.0/0` 匹配所有外部流量
+1. **Cloud Router** 拦截并重定向流量到 Cloud NAT
+1. **Cloud NAT** 执行地址转换并转发到互联网
+
+这个过程是**自动的**，不需要手动配置具体的路由地址，GCP 的路由表会自动处理这个流程。​​​​​​​​​​​​​​​​
+
+
