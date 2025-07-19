@@ -74,6 +74,162 @@ flowchart TB
     class squid,kong,api internalStyle
 
 ```
+---
+```mermaid
+flowchart TB
+    classDef clientStyle fill:#f9f7f7,stroke:#333,stroke-width:2px,color:#333,font-weight:bold
+    classDef trustConfigStyle fill:#f0f7ff,stroke:#4285f4,stroke-width:1px,color:#0b5394
+    classDef trustStoreStyle fill:#e6f2ff,stroke:#4285f4,stroke-width:1px,color:#0b5394
+    classDef certStyle fill:#fffde7,stroke:#fbbc04,stroke-width:1px,color:#594300
+    classDef securityStyle fill:#ecf9ec,stroke:#34a853,stroke-width:1px,color:#137333
+    classDef loadBalancerStyle fill:#e8f0fe,stroke:#4285f4,stroke-width:2px,color:#174ea6,font-weight:bold
+    
+    direction TB
+    subgraph "Client"
+        client[Client System]
+    end
+    
+    subgraph "Google Cloud configuration"
+        subgraph "External Security Layer"
+            subgraph "Certificate and Trust Configuration"
+                ca[Trust Config]
+                ca --> |contains| ts[Trust Store]
+                ts --> |contains| tc[Trust Anchor<br>Root Certificate]
+                ts --> |contains| ic[Intermediate CA<br>Certificate]
+            end
+            
+            mtls[MTLS Authentication] 
+            armor[Cloud Armor<br>Security Policy & IP Whitelist]
+            lb[Cloud Load Balancing]
+            
+            ca --> |provides trust chain| lb
+            client_auth[Client Authentication<br>Server TLS Policy]
+            client_auth --> lb
+        end
+    end
+    
+
+    
+    client --> |1 Initiate MTLS Request| mtls
+    mtls --> |2 Mutual TLS Authentication| lb
+    armor --> |3 Apply Security Policy| lb
+    %% lb --> |4 Forward Verified Request| nginx
+
+    
+    %% Apply styles
+    class client clientStyle
+    class ca,client_auth trustConfigStyle
+    class ts trustStoreStyle
+    class tc,ic certStyle
+    class armor,mtls securityStyle
+    class lb loadBalancerStyle
+```
+```mermaid
+flowchart LR
+
+    classDef loadBalancerStyle fill:#e8f0fe,stroke:#4285f4,stroke-width:2px,color:#174ea6,font-weight:bold
+    classDef dmzStyle fill:#fff8e1,stroke:#fbbc04,stroke-width:1px,color:#594300
+    classDef internalStyle fill:#e6f4ea,stroke:#34a853,stroke-width:1px,color:#137333
+    classDef serviceStyle fill:#f1f3f4,stroke:#5f6368,stroke-width:1px,color:#202124
+    lb[Cloud Load Balancing]  --> |4 Forward Verified Request| nginx
+    
+    subgraph "gce or physical network"
+        subgraph "ciDMZ Network"
+            nginx[Nginx Reverse Proxy<br>Client Certificate Subject Verification]
+        end
+        
+        subgraph "cInternal Network"
+            squid[Squid Forward Proxy]
+            
+            subgraph "Service Layer"
+                direction TB
+                kong[External Kong<br>Gateway Namespace]
+                api[External Runtime API<br>Namespace]
+            end
+        end
+    end
+    nginx --> |5 Certificate Subject Verification Passed| squid
+    squid --> |6 Forward to Service Gateway| kong
+    kong --> |7 Forward to API Service| api
+
+    %% Apply styles
+    class lb loadBalancerStyle
+    class nginx dmzStyle
+    class squid,kong,api internalStyle
+```
+
+
+update the flow
+```mermaid
+flowchart TB
+    %% 样式定义保持不变...
+    
+    direction TB
+    subgraph "Client"
+        client[Client System]
+    end
+    
+    subgraph "Google Cloud Platform"
+        subgraph "External Security Layer"
+            subgraph "Certificate and Trust Configuration"
+                ca[Trust Config]
+                ca --> |contains| ts[Trust Store]
+                ts --> |contains| tc[Trust Anchor<br>Root Certificate]
+                ts --> |contains| ic[Intermediate CA<br>Certificate]
+            end
+            
+            mtls[MTLS Authentication] 
+            armor[Cloud Armor<br>Security Policy & IP Whitelist]
+            lb[Cloud Load Balancing]
+            
+            ca --> |provides trust chain| lb
+            client_auth[Client Authentication<br>Server TLS Policy]
+            client_auth --> lb
+        end
+    end
+    
+    subgraph "On-Premises Network"
+        subgraph "Security Gateway"
+            direction TB
+            nginx[Nginx Reverse Proxy<br>Client Certificate Subject Verification]
+        end
+        
+        subgraph "Internal Services"
+            direction TB
+            squid[Squid Forward Proxy]
+            
+            subgraph "Service Layer"
+                direction TB
+                kong[External Kong<br>Gateway Namespace]
+                api[External Runtime API<br>Namespace]
+            end
+        end
+    end
+    
+    client --> |1 Initiate MTLS Request| mtls
+    mtls --> |2 Mutual TLS Authentication| lb
+    armor --> |3 Apply Security Policy| lb
+    
+    %% 使用中继点来优化连接线的布局
+    lb --> |4a Verified Request| SecurityGateway
+    SecurityGateway[/Security Gateway\] --> |4b Forward| nginx
+    
+    nginx --> |5 Certificate Subject Verification Passed| squid
+    squid --> |6 Forward to Service Gateway| kong
+    kong --> |7 Forward to API Service| api
+    
+    %% 应用样式
+    class client clientStyle
+    class ca,client_auth trustConfigStyle
+    class ts trustStoreStyle
+    class tc,ic certStyle
+    class armor,mtls securityStyle
+    class lb loadBalancerStyle
+    class nginx dmzStyle
+    class squid,kong,api internalStyle
+    style SecurityGateway fill:#f0f7ff,stroke:#4285f4,stroke-width:1px
+```
+
 https://cloud.google.com/trace/docs/trace-context?hl=zh-cn
 
 

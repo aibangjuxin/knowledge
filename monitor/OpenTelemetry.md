@@ -1,7 +1,8 @@
 # summary
 
 - 使用 OpenTelemetry 的 SDK 收集遥测数据，然后通过 OpenTelemetry Collector 或直接导出到 GCP 的 Cloud Monitoring 和 Cloud Trace
-- ad
+- Collection knowledge
+    -
 -
 
 # Concept
@@ -11,6 +12,122 @@ OpenTelemetry 是一个开源项目，旨在提供一组统一的工具、API �
 1. **追踪（Tracing）**：用于记录请求在分布式系统中的流动路径，帮助开发者了解请求的延迟和瓶颈。
 2. **指标（Metrics）**：用于量化系统的性能和行为，例如 CPU 使用率、请求速率、错误率等。
 3. **日志（Logs）**：用于记录系统运行中的事件和错误信息，便于排查问题。
+
+基于你平台当前架构：
+
+```
+client -> Nginx L7 -> Nginx L4 -> Kong DP -> Kong Runtime (GKE 内部)
+```
+
+你现在想要引入 **OpenTelemetry（OTel）** 来实现 **可观测性（Observability）**，比如：
+
+- 请求链路追踪（Trace）
+- 指标采集（Metrics）
+- 日志关联（Logging）
+
+---
+
+## **🧠 从架构层面你需要掌握的核心概念：**
+
+### **🔹 1. OpenTelemetry 三大核心组件**
+
+| **组件**      | **作用**                                                             |
+| ------------- | -------------------------------------------------------------------- |
+| **SDK/Agent** | 收集数据（Trace、Metrics、Logs），集成到应用代码或代理如 nginx、Kong |
+| **Collector** | 一个中间件，可进行数据聚合、转发、过滤、增强等                       |
+| **Exporter**  | 将数据导出至目标后端系统（如 Cloud Trace、Cloud Monitoring、Jaeger） |
+
+---
+
+### **🔹 2. 数据类型**
+
+| **数据类型** | **说明**                               |
+| ------------ | -------------------------------------- |
+| **Traces**   | 记录一次请求从入口到所有组件的传播过程 |
+| **Metrics**  | 性能指标，如 QPS、延迟、CPU 使用率等   |
+| **Logs**     | 日志信息，适合与 Trace 关联分析        |
+
+---
+
+## **🚀 在你的平台中部署 OpenTelemetry 需要做的事情（以 Flow 展示）**
+
+```mermaid
+graph TD
+    subgraph 用户请求链
+        A[Client Request] --> B[Nginx L7]
+        B --> C[Nginx L4]
+        C --> D[Kong DP]
+        D --> E[Kong Runtime in GKE]
+    end
+
+    subgraph OpenTelemetry 部署要点
+        F[部署 OTel Collector] --> G[配置 Exporter，如 GCP Trace/Monitoring]
+        H[Nginx L7 集成 OTel SDK 或 OTLP exporter] --> F
+        I[Kong DP 插件开启 OpenTelemetry trace] --> F
+        J[Kong Runtime 应用代码内集成 OTel SDK] --> F
+    end
+```
+
+---
+
+## **🧩 各组件需要做的适配说明：**
+
+| **组件**                   | **要做的事**                                                                                                                                                |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Nginx L7/L4**            | 集成 [opentelemetry-cpp/nginx module](https://github.com/open-telemetry/opentelemetry-cpp-contrib/tree/main/instrumentation/nginx) 或使用 log 格式输出 OTLP |
+| **Kong DP**                | 开启 Kong 的 OTel 插件（支持 OTLP trace 输出），并配置 OTel Collector 地址                                                                                  |
+| **Kong Runtime**           | 在 Java/Golang 应用中引入 OTel SDK，采集 trace、metrics 并上报                                                                                              |
+| **OTel Collector**         | 部署在 GKE 中的共享服务，负责接收各组件的 OTLP 数据、处理并导出到 Cloud Trace/Monitoring                                                                    |
+| **Cloud Trace/Monitoring** | GCP 原生可视化工具，用来展示追踪和性能图                                                                                                                    |
+
+---
+
+## **✅ GCP 平台你需要熟悉的服务**
+
+| **服务名**                        | **用途**                                       |
+| --------------------------------- | ---------------------------------------------- |
+| **Cloud Trace**                   | 可视化 Trace（调用链路）                       |
+| **Cloud Monitoring**              | 接收 Metrics，做图表与告警                     |
+| **Cloud Logging**                 | 与 Trace 结合查看日志上下文                    |
+| **Cloud Run / GKE OTel Exporter** | 如果使用 Managed Prometheus/Trace 可以统一接入 |
+
+---
+
+## **📦 你需要部署的组件清单（最小化实现）**
+
+| **类型**   | **名称/功能**                          | **建议部署位置** |
+| ---------- | -------------------------------------- | ---------------- |
+| Agent/SDK  | OTel SDK（Java、Go）                   | Kong Runtime Pod |
+| Plugin     | Kong OpenTelemetry Plugin              | Kong DP 容器中   |
+| Collector  | OTel Collector + Config（带 Exporter） | GKE 中或外部部署 |
+| Exporter   | OTLP -> GCP Trace/Monitoring           | OTel Collector   |
+| 可视化工具 | GCP Cloud Trace/Monitoring             | GCP Console      |
+
+---
+
+## **✍️ 示例 Kong DP 插件配置（简要）**
+
+```
+plugins:
+  - name: opentelemetry
+    config:
+      endpoint: http://otel-collector.default.svc.cluster.local:4317
+      resource_attributes:
+        service.name: kong-gateway
+```
+
+---
+
+## **🗂️ 最终可视化效果（你可以实现的目标）**
+
+- 在 Cloud Trace 中看到：
+    client -> Nginx L7 -> L4 -> Kong DP -> Kong Runtime 的完整 trace span
+- 每个组件的耗时、响应码等 trace 属性
+- 在 Cloud Monitoring 中看到各组件指标：
+    - QPS、延迟、错误率
+    - Prometheus metrics（自定义也可以）
+
+---
 
 ### OpenTelemetry 的核心目标
 
