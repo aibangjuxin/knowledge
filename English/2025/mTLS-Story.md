@@ -1,6 +1,7 @@
 # summary
 - change - The backend (IMRP) only needs to read the x-goog-authenticated-user-cert-cn header and verify it — no TLS logic required
 - x-goog-authenticated-user-cert-cn (CN check)
+- x-goog-authenticated-user-cert-cn
 
 ## **🔐 GCP HTTPS mTLS with CN Validation – Platform Security Architecture Evolution Story**
 

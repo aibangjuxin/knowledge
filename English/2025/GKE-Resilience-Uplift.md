@@ -1,3 +1,8 @@
+# summary 
+- changed 
+  - 关键服务 affinity：减少服务之间的跨节点延迟。
+  - ~~**Service-level affinity**: Co-locate dependent services when latency is critical.~~
+
 ## ☸️ GKE Resilience Uplift – Scheduling & Disruption Protection
 
 ### 📌 Background
@@ -6,7 +11,7 @@ As part of our platform-wide resilience uplift in 2025, we focused on improving 
 
 Historically, we faced:
 
-- Pods being drained too aggressively during cluster upgrades.
+- Pods being drained too aggressively during jiqun upgrades.
 - Key components being scheduled on the same node/zone, risking single point failures.
 - Disruption of traffic during high-pressure scaling or eviction scenarios.
 
@@ -22,7 +27,8 @@ We applied custom `affinity` settings to control where our critical Pods are sch
 
 - **Zone-level spread**: Ensures multi-zone redundancy.
 - **Anti-affinity per component**: Avoid colocating same component Pods (e.g., all Kong DPs).
-- **Service-level affinity**: Co-locate dependent services when latency is critical.
+- It is mandatory that Pods under the same Deployment must run on different Nodes, and preferably in different zones.
+- ~~**Service-level affinity**: Co-locate dependent services when latency is critical.~~
 
 ```yaml
 affinity:
@@ -35,6 +41,17 @@ affinity:
               values:
                 - kong-gateway
         topologyKey: "kubernetes.io/hostname"
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 1
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - kong-gateway
+            topologyKey: topology.kubernetes.io/zone
+  automountServiceAccountToken: false
 ```
 
 This ensures that workloads like gateways or runtimes **do not all land on the same node**, preventing simultaneous failure.
