@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Cloud Run Job 配置迁移脚本 (使用 jq 版本)
+# Cloud Run Job 配置迁移脚本 (使用 jq 版本 - 修复版)
 # 用于从源环境提取 Cloud Run Job 配置并生成目标环境的部署命令
 
 set -e
@@ -19,11 +19,12 @@ SOURCE_REGION=""
 TARGET_REGION=""
 JOB_NAME=""
 OUTPUT_FILE=""
+DEBUG=false
 
 # 显示帮助信息
 show_help() {
     cat << EOF
-Cloud Run Job 配置迁移脚本 (jq 版本)
+Cloud Run Job 配置迁移脚本 (jq 版本 - 修复版)
 
 用法: $0 [选项]
 
@@ -34,6 +35,7 @@ Cloud Run Job 配置迁移脚本 (jq 版本)
     -R, --target-region REGION       目标区域 (默认: 与源区域相同)
     -j, --job-name NAME              Cloud Run Job 名称
     -o, --output FILE                输出文件路径 (可选)
+    --debug                          启用调试模式
     -h, --help                       显示此帮助信息
 
 示例:
@@ -41,6 +43,13 @@ Cloud Run Job 配置迁移脚本 (jq 版本)
     $0 -s source-project -t target-project -j lextest -o deploy-commands.sh
 
 EOF
+}
+
+# 调试输出函数
+debug_log() {
+    if [[ "$DEBUG" == "true" ]]; then
+        echo -e "${BLUE}[DEBUG] $1${NC}" >&2
+    fi
 }
 
 # 解析命令行参数
@@ -70,6 +79,10 @@ parse_args() {
             -o|--output)
                 OUTPUT_FILE="$2"
                 shift 2
+                ;;
+            --debug)
+                DEBUG=true
+                shift
                 ;;
             -h|--help)
                 show_help
@@ -135,39 +148,84 @@ extract_job_config() {
     echo -e "${BLUE}从源环境提取 Job 配置...${NC}"
     
     # 检查 Job 是否存在
+    debug_log "检查 Job 是否存在: $JOB_NAME"
     if ! gcloud run jobs describe "$JOB_NAME" --region="$SOURCE_REGION" --project="$SOURCE_PROJECT" >/dev/null 2>&1; then
         echo -e "${RED}错误: 在项目 $SOURCE_PROJECT 的区域 $SOURCE_REGION 中找不到 Job: $JOB_NAME${NC}"
+        echo -e "${YELLOW}请检查以下信息:${NC}"
+        echo "  - Job 名称: $JOB_NAME"
+        echo "  - 项目: $SOURCE_PROJECT"
+        echo "  - 区域: $SOURCE_REGION"
+        echo ""
+        echo -e "${YELLOW}你可以运行以下命令查看可用的 Jobs:${NC}"
+        echo "gcloud run jobs list --project=$SOURCE_PROJECT --region=$SOURCE_REGION"
         exit 1
     fi
     
     # 获取完整的 Job 配置 (JSON 格式)
+    debug_log "获取 Job 配置 JSON"
     local job_config
-    job_config=$(gcloud run jobs describe "$JOB_NAME" \
+    local gcloud_output
+    local gcloud_error
+    
+    # 捕获 gcloud 命令的输出和错误
+    gcloud_output=$(gcloud run jobs describe "$JOB_NAME" \
         --region="$SOURCE_REGION" \
         --project="$SOURCE_PROJECT" \
-        --format="json" 2>/dev/null)
+        --format="json" 2>&1)
+    local exit_code=$?
+    
+    if [[ $exit_code -ne 0 ]]; then
+        echo -e "${RED}错误: gcloud 命令执行失败${NC}"
+        echo -e "${YELLOW}错误输出:${NC}"
+        echo "$gcloud_output"
+        exit 1
+    fi
+    
+    job_config="$gcloud_output"
     
     # 验证返回的是有效 JSON
-    if [[ -z "$job_config" ]] || ! echo "$job_config" | jq empty 2>/dev/null; then
-        echo -e "${RED}错误: 无法获取有效的 Job 配置 JSON${NC}"
-        echo -e "${YELLOW}调试信息: 尝试手动运行以下命令检查输出:${NC}"
+    debug_log "验证 JSON 格式"
+    if [[ -z "$job_config" ]]; then
+        echo -e "${RED}错误: gcloud 命令返回空结果${NC}"
+        exit 1
+    fi
+    
+    # 测试 JSON 是否有效
+    if ! echo "$job_config" | jq empty 2>/dev/null; then
+        echo -e "${RED}错误: 返回的不是有效的 JSON 格式${NC}"
+        echo -e "${YELLOW}gcloud 输出内容:${NC}"
+        echo "$job_config" | head -10
+        echo ""
+        echo -e "${YELLOW}请尝试手动运行以下命令检查输出:${NC}"
         echo "gcloud run jobs describe $JOB_NAME --region=$SOURCE_REGION --project=$SOURCE_PROJECT --format=json"
         exit 1
     fi
     
+    debug_log "JSON 验证通过"
     echo "$job_config"
+}
+
+# 安全的 jq 查询函数
+safe_jq() {
+    local query="$1"
+    local input="$2"
+    local default_value="${3:-}"
+    
+    local result
+    result=$(echo "$input" | jq -r "$query" 2>/dev/null || echo "$default_value")
+    
+    # 如果结果是 "null" 或空，返回默认值
+    if [[ "$result" == "null" || -z "$result" ]]; then
+        echo "$default_value"
+    else
+        echo "$result"
+    fi
 }
 
 # 解析环境变量
 parse_env_vars() {
     local job_config="$1"
-    local env_vars=""
-    
-    # 检查是否有环境变量配置
-    if ! echo "$job_config" | jq -e '.spec.template.spec.template.spec.containers[0].env' >/dev/null 2>&1; then
-        echo ""
-        return
-    fi
+    debug_log "解析环境变量"
     
     # 提取普通环境变量 (不包含 valueFrom 的)
     local env_list
@@ -175,19 +233,16 @@ parse_env_vars() {
         .spec.template.spec.template.spec.containers[0].env[]? 
         | select(.valueFrom == null) 
         | "\(.name)=\(.value)"
-    ' 2>/dev/null)
+    ' 2>/dev/null | tr '\n' ',' | sed 's/,$//')
     
-    if [[ -n "$env_list" ]]; then
-        env_vars=$(echo "$env_list" | tr '\n' ',' | sed 's/,$//')
-    fi
-    
-    echo "$env_vars"
+    debug_log "环境变量: $env_list"
+    echo "$env_list"
 }
 
 # 解析 Secret 环境变量
 parse_secret_env_vars() {
     local job_config="$1"
-    local secret_vars=""
+    debug_log "解析 Secret 环境变量"
     
     # 提取 Secret 环境变量
     local secret_list
@@ -197,28 +252,20 @@ parse_secret_env_vars() {
         | "\(.name)=\(.valueFrom.secretKeyRef.name):\(.valueFrom.secretKeyRef.key)"
     ' 2>/dev/null | tr '\n' ',' | sed 's/,$//')
     
+    debug_log "Secret 环境变量: $secret_list"
     echo "$secret_list"
 }
 
 # 解析其他配置参数
 parse_job_params() {
     local job_config="$1"
+    debug_log "解析其他配置参数"
     
-    # 提取镜像
-    local image
-    image=$(echo "$job_config" | jq -r '.spec.template.spec.template.spec.containers[0].image // ""')
-    
-    # 提取 CPU
-    local cpu
-    cpu=$(echo "$job_config" | jq -r '.spec.template.spec.template.spec.containers[0].resources.limits.cpu // "1"')
-    
-    # 提取内存
-    local memory
-    memory=$(echo "$job_config" | jq -r '.spec.template.spec.template.spec.containers[0].resources.limits.memory // "512Mi"')
-    
-    # 提取服务账号
-    local service_account
-    service_account=$(echo "$job_config" | jq -r '.spec.template.spec.template.spec.serviceAccountName // ""')
+    # 使用安全的 jq 查询
+    local image=$(safe_jq '.spec.template.spec.template.spec.containers[0].image' "$job_config" "")
+    local cpu=$(safe_jq '.spec.template.spec.template.spec.containers[0].resources.limits.cpu' "$job_config" "1")
+    local memory=$(safe_jq '.spec.template.spec.template.spec.containers[0].resources.limits.memory' "$job_config" "512Mi")
+    local service_account=$(safe_jq '.spec.template.spec.template.spec.serviceAccountName' "$job_config" "")
     
     # 提取标签
     local labels
@@ -227,35 +274,22 @@ parse_job_params() {
         | to_entries 
         | map("\(.key)=\(.value)") 
         | join(",")
-    ' 2>/dev/null)
+    ' 2>/dev/null || echo "")
     
-    # 提取 VPC 连接器
-    local vpc_connector
-    vpc_connector=$(echo "$job_config" | jq -r '.spec.template.spec.template.metadata.annotations."run.googleapis.com/vpc-access-connector" // ""')
+    # 提取注解
+    local vpc_connector=$(safe_jq '.spec.template.spec.template.metadata.annotations."run.googleapis.com/vpc-access-connector"' "$job_config" "")
+    local vpc_egress=$(safe_jq '.spec.template.spec.template.metadata.annotations."run.googleapis.com/vpc-access-egress"' "$job_config" "")
+    local binary_authorization=$(safe_jq '.spec.template.spec.template.metadata.annotations."run.googleapis.com/binary-authorization"' "$job_config" "")
     
-    # 提取 VPC 出口
-    local vpc_egress
-    vpc_egress=$(echo "$job_config" | jq -r '.spec.template.spec.template.metadata.annotations."run.googleapis.com/vpc-access-egress" // ""')
+    # 提取任务相关配置
+    local task_timeout=$(safe_jq '.spec.template.spec.template.spec.timeoutSeconds' "$job_config" "")
+    local task_attempts=$(safe_jq '.spec.template.spec.backoffLimit' "$job_config" "")
+    local parallelism=$(safe_jq '.spec.template.spec.parallelism' "$job_config" "")
+    local task_count=$(safe_jq '.spec.template.spec.completions' "$job_config" "")
     
-    # 提取二进制授权
-    local binary_authorization
-    binary_authorization=$(echo "$job_config" | jq -r '.spec.template.spec.template.metadata.annotations."run.googleapis.com/binary-authorization" // ""')
-    
-    # 提取任务超时
-    local task_timeout
-    task_timeout=$(echo "$job_config" | jq -r '.spec.template.spec.template.spec.timeoutSeconds // ""')
-    
-    # 提取任务重试次数
-    local task_attempts
-    task_attempts=$(echo "$job_config" | jq -r '.spec.template.spec.backoffLimit // ""')
-    
-    # 提取并行度
-    local parallelism
-    parallelism=$(echo "$job_config" | jq -r '.spec.template.spec.parallelism // ""')
-    
-    # 提取任务数量
-    local task_count
-    task_count=$(echo "$job_config" | jq -r '.spec.template.spec.completions // ""')
+    debug_log "镜像: $image"
+    debug_log "CPU: $cpu"
+    debug_log "内存: $memory"
     
     echo "IMAGE=$image"
     echo "CPU=$cpu"
@@ -412,12 +446,11 @@ EOF
 
 # 主函数
 main() {
-    echo -e "${GREEN}Cloud Run Job 配置迁移脚本 (jq 版本)${NC}"
-    echo "=============================================="
+    echo -e "${GREEN}Cloud Run Job 配置迁移脚本 (jq 版本 - 修复版)${NC}"
+    echo "======================================================"
     
     parse_args "$@"
     validate_args
-    check_access
     
     # 检查 jq 工具
     if ! command -v jq &> /dev/null; then
@@ -428,6 +461,8 @@ main() {
         echo "  CentOS/RHEL: sudo yum install jq"
         exit 1
     fi
+    
+    check_access
     
     local job_config
     job_config=$(extract_job_config)
@@ -442,21 +477,3 @@ main() {
 
 # 执行主函数
 main "$@"
-
-
-: << EOF 
-gcloud run jobs create lextest \
-  --image=gcr.io/source-project/my-app:latest \
-  --region=europe-west2 \
-  --project=target-project \
-  --cpu=1 \
-  --memory=768Mi \
-  --set-env-vars="ENV=production,VERSION=1.2.3,DEBUG=false" \
-  --set-secrets="DB_PASSWORD=db-secret:latest,API_KEY=api-secret:1" \
-  --service-account=my-service-account@target-project.iam.gserviceaccount.com \
-  --vpc-connector=my-connector \
-  --vpc-egress=all-traffic \
-  --binary-authorization=default \
-  --labels="refresh=image,team=backend"
-EOF
-
