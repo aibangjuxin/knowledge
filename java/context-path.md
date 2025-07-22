@@ -129,7 +129,7 @@ spring.config.additional-location=file:/app/config/
 这是一个典型的配置文件加载优先级问题。当你在配置文件中设置了 server.port=8443，但应用启动时显示 8080，说明有其他配置源覆盖了你的设置。
 
 让我帮你系统化地排查这个问题：
-
+```bash
 1. 检查 Spring Boot 配置加载顺序
 Spring Boot 配置有严格的优先级顺序（从高到低）：
 
@@ -248,3 +248,300 @@ kubectl exec -it <pod-name> -- curl localhost:8080/actuator/health
 
 # 3. 查看完整的环境配置
 kubectl exec -it <pod-name> -- curl localhost:8080/actuator/env | jq '.propertySources'
+```
+
+# Debug port 
+纠正下 我使用java -jar app.jar --server.port=8443启动服务之后 后面会提示
+
+Description: web server failed to start. Port 8443 was alread is use. 那么说明服务端口已经侦听了,那么我也看到有日志应该是我的几个Probe比如,readinessProbe的配置path有问题.有一点我确认必须以Deployment里面的配置为准比如为/apiname/v1.0.3/.well-know/health那么 我如何验证代码上必须要支持这种格式?
+
+
+1. 验证当前应用提供的健康检查路径
+检查 Spring Boot Actuator 端点
+# 直接在容器内测试各种可能的健康检查路径
+kubectl exec -it <pod-name> -- curl -v localhost:8443/actuator/health
+kubectl exec -it <pod-name> -- curl -v localhost:8443/health
+kubectl exec -it <pod-name> -- curl -v localhost:8443/apiname/v1.0.3/.well-known/health
+
+# 查看所有可用的 actuator 端点
+kubectl exec -it <pod-name> -- curl localhost:8443/actuator | jq '._links'
+检查应用的路径配置
+# 查看应用当前的 context-path 和 base-path 配置
+kubectl exec -it <pod-name> -- curl localhost:8443/actuator/env | jq '.propertySources[] | select(.properties | has("server.servlet.context-path", "spring.webflux.base-path"))'
+2. 分析 Deployment 中的 Probe 配置
+查看当前 Probe 配置
+kubectl get deployment <deployment-name> -o yaml | grep -A 10 -B 5 "Probe"
+典型的配置应该是这样：
+
+readinessProbe:
+  httpGet:
+    path: /apiname/v1.0.3/.well-known/health  # 这个路径必须匹配
+    port: 8443
+    scheme: HTTPS  # 如果使用 SSL
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+livenessProbe:
+  httpGet:
+    path: /apiname/v1.0.3/.well-known/health
+    port: 8443
+    scheme: HTTPS
+  initialDelaySeconds: 60
+  periodSeconds: 30
+3. 验证代码是否支持所需的路径格式
+方案1：配置 Spring Boot 以支持自定义健康检查路径
+如果你使用的是 Spring WebFlux：
+
+@Configuration
+public class HealthCheckConfig {
+    
+    @Bean
+    public RouterFunction<ServerResponse> healthRoutes() {
+        return RouterFunctions.route()
+            .GET("/apiname/v1.0.3/.well-known/health", this::health)
+            .build();
+    }
+    
+    private Mono<ServerResponse> health(ServerRequest request) {
+        return ServerResponse.ok()
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(Map.of("status", "UP", "timestamp", Instant.now()));
+    }
+}
+如果你使用的是 Spring MVC：
+
+@RestController
+@RequestMapping("/apiname/v1.0.3/.well-known")
+public class CustomHealthController {
+    
+    @Autowired
+    private HealthEndpoint healthEndpoint;
+    
+    @GetMapping("/health")
+    public ResponseEntity<?> health() {
+        Health health = healthEndpoint.health();
+        return ResponseEntity.ok(health);
+    }
+}
+方案2：配置 Actuator 管理端点路径
+# 在 server-conf.properties 中添加
+management.endpoints.web.base-path=/apiname/v1.0.3/.well-known
+management.endpoint.health.enabled=true
+management.endpoints.web.exposure.include=health
+
+# 或者更具体的路径映射
+management.endpoints.web.path-mapping.health=health
+方案3：使用 Spring Boot 的路径前缀配置
+# 如果使用 WebFlux
+spring.webflux.base-path=/apiname/v1.0.3
+
+# 如果使用 Servlet
+server.servlet.context-path=/apiname/v1.0.3
+
+# 然后健康检查路径就变成：
+# /apiname/v1.0.3/actuator/health
+4. 验证步骤
+逐步测试路径可达性
+# 1. 测试基础连通性
+kubectl exec -it <pod-name> -- curl -v localhost:8443/
+
+# 2. 测试 actuator 基础路径
+kubectl exec -it <pod-name> -- curl -v localhost:8443/actuator/
+
+# 3. 测试默认健康检查
+kubectl exec -it <pod-name> -- curl -v localhost:8443/actuator/health
+
+# 4. 测试自定义路径
+kubectl exec -it <pod-name> -- curl -v localhost:8443/apiname/v1.0.3/.well-known/health
+
+# 5. 如果是 HTTPS，添加 -k 参数忽略证书验证
+kubectl exec -it <pod-name> -- curl -kv https://localhost:8443/apiname/v1.0.3/.well-known/health
+检查应用日志中的路径映射
+# 查看应用启动日志，寻找路径映射信息
+kubectl logs <pod-name> | grep -i "mapping\|route\|endpoint"
+
+# 查看 WebFlux 或 MVC 的路径注册信息
+kubectl logs <pod-name> | grep -i "actuator\|health"
+5. 调试 Probe 失败的具体原因
+查看 Probe 失败日志
+# 查看 Pod 事件，了解 Probe 失败的具体原因
+kubectl describe pod <pod-name> | grep -A 5 -B 5 "Probe\|Health"
+
+# 查看详细的 Probe 失败信息
+kubectl get events --field-selector involvedObject.name=<pod-name> --sort-by='.lastTimestamp'
+手动模拟 Kubernetes Probe 请求
+# 从集群内其他 Pod 测试连通性
+kubectl run debug-pod --image=curlimages/curl -it --rm -- sh
+
+# 在 debug pod 中测试
+curl -v http://<pod-ip>:8443/apiname/v1.0.3/.well-known/health
+curl -kv https://<pod-ip>:8443/apiname/v1.0.3/.well-known/health
+6. 快速解决方案
+临时方案：修改 Probe 路径匹配当前应用
+# 如果发现应用实际提供的是 /actuator/health
+kubectl patch deployment <deployment-name> -p '{"spec":{"template":{"spec":{"containers":[{"name":"<container-name>","readinessProbe":{"httpGet":{"path":"/actuator/health"}}}]}}}}'
+长期方案：代码中添加自定义健康检查端点
+@RestController
+public class CustomHealthEndpoint {
+    
+    @GetMapping("/apiname/v1.0.3/.well-known/health")
+    public ResponseEntity<Map<String, Object>> customHealth() {
+        Map<String, Object> health = new HashMap<>();
+        health.put("status", "UP");
+        health.put("timestamp", System.currentTimeMillis());
+        health.put("service", "apiname");
+        health.put("version", "v1.0.3");
+        
+        return ResponseEntity.ok(health);
+    }
+}
+通过这些步骤，你应该能够确定问题所在并解决 Probe 配置与应用实际提供路径不匹配的问题。
+
+
+
+# unzip java 
+ 我对Java不熟悉,比如我源代码中有这样一个配置src/main/api/apiname.yaml我看到这里面定义了health paths之类的. 那么对于已经运行中的
+
+比如通过java -jar app.jar --server.port=8443运行的代码 我如何找到这个源文件?只能从容器里面Copy出来 自己解压 然后查看?
+```
+对的，你的理解是正确的！对于已经打包的 JAR 文件，你需要解压才能查看源文件。让我教你几种方法来查看运行中应用的配置：
+
+1. 从容器中提取并解压 JAR 文件
+复制 JAR 文件到本地
+# 找到 JAR 文件位置
+kubectl exec -it <pod-name> -- find / -name "*.jar" -type f 2>/dev/null
+
+# 复制到本地
+kubectl cp <pod-name>:/path/to/app.jar ./app.jar
+解压查看内容
+# JAR 文件本质上是 ZIP 文件，可以直接解压
+unzip -l app.jar | grep -i yaml
+unzip -l app.jar | grep -i apiname
+
+# 提取特定文件
+unzip -j app.jar "*/apiname.yaml" -d ./extracted/
+# 或者
+unzip app.jar "src/main/api/apiname.yaml"
+
+# 查看文件内容
+cat ./extracted/apiname.yaml
+使用 jar 命令（如果本地有 Java）
+# 列出 JAR 内容
+jar -tf app.jar | grep -i apiname
+jar -tf app.jar | grep -i yaml
+
+# 提取特定文件
+jar -xf app.jar src/main/api/apiname.yaml
+
+# 查看内容
+cat src/main/api/apiname.yaml
+2. 直接在容器内查看（推荐）
+在容器内解压查看
+# 进入容器
+kubectl exec -it <pod-name> -- sh
+
+# 在容器内创建临时目录
+mkdir /tmp/jar-extract
+cd /tmp/jar-extract
+
+# 解压 JAR 文件
+unzip /path/to/app.jar
+
+# 查找配置文件
+find . -name "*.yaml" -o -name "*.yml" | grep -i api
+find . -name "*apiname*"
+
+# 查看文件内容
+cat ./src/main/api/apiname.yaml
+使用 jar 命令在容器内
+kubectl exec -it <pod-name> -- sh -c "
+  cd /tmp && 
+  jar -tf /path/to/app.jar | grep -i apiname &&
+  jar -xf /path/to/app.jar src/main/api/apiname.yaml &&
+  cat src/main/api/apiname.yaml
+"
+3. 查看 Spring Boot 应用的配置信息
+使用 Actuator 端点（如果启用）
+# 查看所有配置属性
+kubectl exec -it <pod-name> -- curl localhost:8443/actuator/configprops
+
+# 查看环境配置
+kubectl exec -it <pod-name> -- curl localhost:8443/actuator/env
+
+# 查看所有可用端点
+kubectl exec -it <pod-name> -- curl localhost:8443/actuator
+
+# 如果有自定义的 API 文档端点
+kubectl exec -it <pod-name> -- curl localhost:8443/v3/api-docs
+kubectl exec -it <pod-name> -- curl localhost:8443/swagger-ui.html
+查看应用启动日志中的路径信息
+# 查看完整启动日志
+kubectl logs <pod-name> | grep -i "mapping\|route\|path\|endpoint"
+
+# 查找健康检查相关日志
+kubectl logs <pod-name> | grep -i "health\|actuator"
+
+# 查找 API 路径映射
+kubectl logs <pod-name> | grep -i "apiname\|api/"
+4. 分析 YAML 配置文件
+一旦你获得了 apiname.yaml 文件，通常它可能是：
+
+OpenAPI/Swagger 规范文件
+# 可能包含这样的路径定义
+paths:
+  /health:
+    get:
+      summary: Health check
+  /apiname/v1.0.3/.well-known/health:
+    get:
+      summary: Custom health endpoint
+Spring Boot 配置文件
+# 可能包含服务器和管理端点配置
+server:
+  port: 8443
+  servlet:
+    context-path: /apiname/v1.0.3
+
+management:
+  endpoints:
+    web:
+      base-path: /.well-known
+      exposure:
+        include: health
+5. 快速一键脚本
+创建一个脚本来自动化这个过程：
+
+#!/bin/bash
+POD_NAME="your-pod-name"
+NAMESPACE="your-namespace"
+
+echo "=== 查找 JAR 文件 ==="
+JAR_PATH=$(kubectl exec -n $NAMESPACE $POD_NAME -- find / -name "*.jar" -type f 2>/dev/null | head -1)
+echo "Found JAR: $JAR_PATH"
+
+echo "=== 复制 JAR 文件 ==="
+kubectl cp $NAMESPACE/$POD_NAME:$JAR_PATH ./app.jar
+
+echo "=== 查找配置文件 ==="
+unzip -l app.jar | grep -E "\.(yaml|yml|properties)$"
+
+echo "=== 提取 apiname.yaml ==="
+unzip -j app.jar "*/apiname.yaml" -d ./extracted/ 2>/dev/null || echo "apiname.yaml not found"
+
+echo "=== 查看配置内容 ==="
+if [ -f "./extracted/apiname.yaml" ]; then
+    cat ./extracted/apiname.yaml
+else
+    echo "Searching for similar files..."
+    unzip -l app.jar | grep -i api | grep -E "\.(yaml|yml)$"
+fi
+6. 验证健康检查路径
+一旦你找到了配置文件，查看其中定义的路径，然后验证：
+
+# 根据配置文件中的路径定义进行测试
+kubectl exec -it <pod-name> -- curl -v localhost:8443/[从yaml文件中找到的路径]
+
+# 例如，如果 yaml 中定义了 /api/health
+kubectl exec -it <pod-name> -- curl -v localhost:8443/api/health
+这样你就能找到应用实际支持的健康检查路径，然后相应地调整 Kubernetes Deployment 中的 Probe 配置。
+```
