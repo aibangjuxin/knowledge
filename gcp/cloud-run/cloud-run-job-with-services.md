@@ -21,6 +21,9 @@
 - 自动化脚本任务
 - 调用外部 API、运行 Agent                          |
 
+
+
+     |        |      |        |
      | ----- | ----- | ----- |
      | 日志与监控         | ✅ 支持 Cloud Logging、Cloud Trace、Cloud Monitoring                                | ✅ 同样支持完整的日志与运行状态跟踪                                             |  
      | IAM 权限粒度       | 支持每个 Service 设置 invoker（调用者）角色控制                                   | 支持每个 Job 设置执行权限（执行者需具备 roles/run.jobRunner 等角色）        |  
