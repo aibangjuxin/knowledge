@@ -12,6 +12,31 @@ gcloud run jobs deploy test-network-job \
   --command=bash \
   --args=-c,"curl -i -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email && echo && curl -i https://github.com && echo && curl -i http://nexus.intra.corp:8081 && echo && curl -s https://ifconfig.me" \
   --service-account=my-sa@myproject.iam.gserviceaccount.com
+
+gcloud run jobs deploy test-network-job \
+  --image=ghcr.io/chainguard-dev/debug-base \
+  --region=europe-west2 \
+  --vpc-connector=vpc-conn-europe \
+  --vpc-egress=private-ranges-only \
+  --command=bash \
+  --args=-c,"\
+echo '================= 1. METADATA SERVER ================='; \
+curl -i -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email || echo '❌ Metadata access failed'; \
+echo -e '\n=======================================================\n'; \
+\
+echo '================= 2. GITHUB ================='; \
+curl -i https://github.com || echo '❌ GitHub access failed'; \
+echo -e '\n=======================================================\n'; \
+\
+echo '================= 3. NEXUS ================='; \
+curl -i http://nexus.intra.corp:8081 || echo '❌ Nexus access failed'; \
+echo -e '\n=======================================================\n'; \
+\
+echo '================= 4. OUTBOUND IP ================='; \
+curl -s https://ifconfig.me || echo '❌ Outbound IP failed'; \
+echo -e '\n===================== DONE ==========================' \
+" \
+  --service-account=my-sa@myproject.iam.gserviceaccount.com
 ```
 
 # Claude
