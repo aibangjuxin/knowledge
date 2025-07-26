@@ -582,18 +582,18 @@ gcloud iam service-accounts keys create key.json \
 检查角色与服务账户的关系
 要确认根据SA检查角色或根据角色查找SA，可以使用以下方法：
 	•	通过GCP控制台： 转到IAM & Admin > Service Accounts，选择项目，点击SA邮箱，查看“Permissions”标签下的角色。
-	•	通过gcloud CLI： 使用命令： gcloud iam service-accounts get-iam-policy [SERVICE_ACCOUNT_EMAIL]
-	•	 查看SA的IAM策略。
+	•	通过gcloud CLI： 使用命令：gcloud iam service-accounts get-iam-policy [SERVICE_ACCOUNT_EMAIL]
+	•	查看SA的IAM策略。
 	•	查找具有特定角色的SA： 使用gcloud projects get-iam-policy [PROJECT_ID] --format=json检查项目IAM策略，然后解析输出。
 项目级别的角色检查较直观，服务级别的角色需查看特定服务的IAM策略（如Cloud Run的roles/run.invoker）。
 
 为Cloud Run最小化SA权限
 为Cloud Run指定SA以仅触发特定任务，步骤如下：
-	1	创建自定义SA： gcloud iam service-accounts create cloud-run-job-sa --display-name "Cloud Run Job SA"
+	1	创建自定义SA：gcloud iam service-accounts create cloud-run-job-sa --display-name "Cloud Run Job SA"
 	2	
-	3	授予最小权限： 例如，仅需触发Cloud Run服务，授予roles/run.invoker角色： gcloud run services add-iam-policy-binding [SERVICE_NAME] --region=[REGION] --member="serviceAccount:[SERVICE_ACCOUNT_EMAIL]" --role=roles/run.invoker
-	4	 如需访问其他资源（如Cloud SQL），添加对应角色（如roles/cloudsql.client）。
-	5	部署Cloud Run服务： 使用自定义SA： gcloud run deploy [SERVICE_NAME] --image [IMAGE_URL] --service-account [SERVICE_ACCOUNT_EMAIL] --no-allow-unauthenticated
+	3	授予最小权限： 例如，仅需触发Cloud Run服务，授予roles/run.invoker角色：gcloud run services add-iam-policy-binding [SERVICE_NAME] --region=[REGION] --member="serviceAccount:[SERVICE_ACCOUNT_EMAIL]" --role=roles/run.invoker
+	4	如需访问其他资源（如Cloud SQL），添加对应角色（如roles/cloudsql.client）。
+	5	部署Cloud Run服务： 使用自定义SA：gcloud run deploy [SERVICE_NAME] --image [IMAGE_URL] --service-account [SERVICE_ACCOUNT_EMAIL] --no-allow-unauthenticated
 	6	
 	7	验证与监控： 使用IAM Recommender检查多余权限，监控访问日志通过Logging > Logs Explorer。
 
@@ -608,14 +608,14 @@ GCP的IAM体系基于资源层次结构（组织、文件夹、项目、资源�
 	•	检查SA的角色：
 	◦	项目级别： 项目级别的角色直接分配给SA，可通过GCP控制台或gcloud命令查看。例如：
 	▪	控制台路径：IAM & Admin > Service Accounts，选择SA后查看“Permissions”标签。
-	▪	CLI命令： gcloud iam service-accounts get-iam-policy [SERVICE_ACCOUNT_EMAIL]
-	▪	 输出显示SA的IAM策略，包括所有角色。
+	▪	CLI命令：gcloud iam service-accounts get-iam-policy [SERVICE_ACCOUNT_EMAIL]
+	▪	输出显示SA的IAM策略，包括所有角色。
 	◦	服务级别： 服务级别的角色（如Cloud Run的roles/run.invoker）通常通过资源级别的IAM策略分配。需检查特定服务的IAM政策，例如Cloud Run服务的“Permissions”页面。
 	•	查找具有特定角色的SA：
 	◦	GCP无直接接口查找所有具有某角色的SA，但可通过以下方法：
 	▪	使用gcloud projects get-iam-policy [PROJECT_ID] --format=json获取项目IAM策略，解析JSON查找SA。
 	▪	使用Cloud Asset Inventory API搜索跨项目或组织的IAM策略，适合大规模环境。
-	◦	示例流程图（Mermaid格式）： flowchart TD
+	◦	示例流程图（Mermaid格式）：flowchart TD
 	◦	    A[开始] --> B{项目级别?}
 	◦	    B -->|是| C[使用gcloud查看SA策略]
 	◦	    B -->|否| D[检查服务IAM政策]
@@ -628,14 +628,14 @@ GCP的IAM体系基于资源层次结构（组织、文件夹、项目、资源�
 Cloud Run中SA权限最小化
 Cloud Run服务默认使用Compute Engine默认SA（具有Editor角色），权限过广，需创建自定义SA并遵循最小权限原则。
 	•	最佳实践：
-	◦	创建专用SA，例如： gcloud iam service-accounts create cloud-run-job-sa --display-name "Cloud Run Job SA"
+	◦	创建专用SA，例如：gcloud iam service-accounts create cloud-run-job-sa --display-name "Cloud Run Job SA"
 	◦	
 	◦	授予最小权限：根据任务需求，示例角色包括：
 	▪	roles/run.invoker：允许触发Cloud Run服务。
 	▪	roles/cloudsql.client：访问Cloud SQL。
 	▪	roles/storage.objectViewer：读取Cloud Storage对象。
-	◦	部署时指定SA： gcloud run deploy [SERVICE_NAME] --image [IMAGE_URL] --service-account [SERVICE_ACCOUNT_EMAIL] --no-allow-unauthenticated
-	◦	 --no-allow-unauthenticated确保仅认证用户/服务可访问。
+	◦	部署时指定SA：gcloud run deploy [SERVICE_NAME] --image [IMAGE_URL] --service-account [SERVICE_ACCOUNT_EMAIL] --no-allow-unauthenticated
+	◦	--no-allow-unauthenticated确保仅认证用户/服务可访问。
 	◦	使用IAM条件进一步限制，例如仅在工作日访问：
 	▪	在IAM & Admin > IAM中添加条件。
 	•	监控与审计：
@@ -661,7 +661,7 @@ SA自动生成密钥
 SA密钥用于外部环境认证，默认由用户或管理员创建，SA本身无生成密钥能力。
 	•	密钥创建方式：
 	◦	需roles/iam.serviceAccountKeyAdmin角色权限。
-	◦	使用CLI示例： gcloud iam service-accounts keys create key.json --iam-account=[SERVICE_ACCOUNT_EMAIL]
+	◦	使用CLI示例：gcloud iam service-accounts keys create key.json --iam-account=[SERVICE_ACCOUNT_EMAIL]
 	◦	
 	◦	控制台路径：IAM & Admin > Service Accounts，选择SA，点击“Keys” > “Add Key” > “Create New Key”。
 	•	SA无法自动生成密钥： 官方文档明确指出SA无此能力，出于安全考虑，建议使用Workload Identity Federation替代密钥，减少密钥管理负担。

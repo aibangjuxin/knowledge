@@ -9,3 +9,9 @@
 ```bash
 gcloud run jobs descirbe job-name --region europe-west2 --fromat="json"|jq -r '.spec.template.spec.template.spec.containers[0].env[]?|select(.valueFrom == null)|"\(.name)=\(.value)"'
 ```
+
+
+
+```
+gcloud run jobs descirbe job-name --region europe-west2 --fromat="json"|jq -r '.spec.template.spec.template.spec.containers[0].env[]?|select(.valueFrom == null)|"\(.name)=\(.value)"'| tr '\n' ','|sed 's/,$//'
+```
