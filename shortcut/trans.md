@@ -1,5 +1,19 @@
 - prompt
+```txt
+As an English grammar and spelling expert.
 
+Task:
+1. Please fix any grammar, spelling, punctuation, or sentence structure issues in the following English input.
+2. Output only the corrected English version first (no explanation).
+3. Then provide a fluent Chinese translation of the corrected version.
+
+Input:
+"""
+{selection}
+"""
+```
+---
+- js
 ````js
 function escapeShellArg(str) {
   return "'" + str.replace(/'/g, "'\\''") + "'";
