@@ -167,17 +167,7 @@ echo "Housekeeping 完成。"
   - `select(.status.completionTime and .status.completionTime < $CUTOFF_DATE)`: 选择那些 `completionTime` 存在且早于我们计算的截止日期的执行。
 # Claude
 
-# 基本使用 - 删除失败的执行
-./cloud-run-job-housekeep.sh -f my-job europe-west2
 
-# 干运行模式 - 预览要删除的内容
-./cloud-run-job-housekeep.sh -d -f -o 7 my-job europe-west2
-
-# 批量处理 - 使用配置文件
-./cloud-run-job-housekeep.sh -b -c jobs.conf
-
-# 完整清理 - 删除失败和30天前的执行
-./cloud-run-job-housekeep.sh -f -o 30 -v my-job europe-west2
 
 通过这种方式，您可以轻松地扩展脚本以支持更复杂的清理逻辑。
 
