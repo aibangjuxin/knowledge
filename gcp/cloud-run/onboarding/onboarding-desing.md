@@ -45,22 +45,22 @@ graph TD
     subgraph "执行层 (Execution Layer)"
         C --> E{核心逻辑};
         D --> E;
-        E --> F[1. 读取 GCS 租户配置];
-        F --> G[2. 检查证书有效期];
+        E --> F[1 读取 GCS 租户配置];
+        F --> G[2 检查证书有效期];
         G --> H{是否需要续期?};
     end
 
     subgraph "GCP API 交互层 (GCP API Interaction)"
-        H -- Yes --> I[3. 调用 Certificate Manager API];
-        I --> J[4. 更新 mTLS 证书];
-        J --> K[5. 更新 TrustConfig];
-        K --> L[6. 更新 GCS 证书指纹];
+        H -- Yes --> I[3 调用 Certificate Manager API];
+        I --> J[4 更新 mTLS 证书];
+        J --> K[5 更新 TrustConfig];
+        K --> L[6 更新 GCS 证书指纹];
         H -- No --> M[结束];
     end
 
     subgraph "审计与存储层 (Audit & Storage Layer)"
-        F -- "gs://[tenant-bucket]/config.json" --> Storage[GCS Bucket];
-        L -- "gs://[tenant-bucket]/config.json" --> Storage;
+        F -- "gs\://[tenant-bucket]/config.json" --> Storage[GCS Bucket];
+        L -- "gs\://[tenant-bucket]/config.json" --> Storage;
         E -- "记录操作日志" --> Audit[BigQuery / Cloud Logging];
     end
 ```
