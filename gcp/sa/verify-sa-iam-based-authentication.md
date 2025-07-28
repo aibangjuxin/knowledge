@@ -1,15 +1,17 @@
+# summary 
 脚本的主要功能：
-保持原参数不变: 仍然使用 <deployment-name> 和 <namespace> 作为输入参数
-PROJECT_ID定义: 继续定义为运行GKE Deployment的工程ID
-获取KSA: 从Deployment中获取Kubernetes ServiceAccount，逻辑不变
-拆分GCP Service Account:
-从 sa-name@project-id.iam.gserviceaccount.com 格式中提取项目ID
-判断SA是否位于不同项目（IAM based authentication的标志）
-获取SA在对应项目中的IAM权限:
-检查SA在其所属项目中的项目级IAM角色
-检查SA级别的IAM策略
+- 保持原参数不变: 仍然使用 <deployment-name> 和 <namespace> 作为输入参数
+- PROJECT_ID定义: 继续定义为运行GKE Deployment的工程ID
+- 获取KSA: 从Deployment中获取Kubernetes ServiceAccount，逻辑不变
+- 拆分GCP Service Account:
+- 从 sa-name@project-id.iam.gserviceaccount.com 格式中提取项目ID
+- 判断SA是否位于不同项目（IAM based authentication的标志）
+- 获取SA在对应项目中的IAM权限:
+- 检查SA在其所属项目中的项目级IAM角色
+- 检查SA级别的IAM策略
 ---
 - the script 
+- veritify the next script success
 
 
 ```shell
