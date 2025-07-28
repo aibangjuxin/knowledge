@@ -165,9 +165,8 @@ echo "Housekeeping 完成。"
   ```
   - `--arg CUTOFF_DATE "$CUTOFF_DATE"`: 将 shell 变量 `$CUTOFF_DATE` 传递给 `jq`。
   - `select(.status.completionTime and .status.completionTime < $CUTOFF_DATE)`: 选择那些 `completionTime` 存在且早于我们计算的截止日期的执行。
+
 # Claude
-
-
 
 通过这种方式，您可以轻松地扩展脚本以支持更复杂的清理逻辑。
 
@@ -191,8 +190,8 @@ echo "Housekeeping 完成。"
 # - 错误处理和重试机制
 # - 统计报告
 #
-# 作者: DevOps Team
-# 版本: 2.0
+# 作者: Lex
+# 版本: 1.0
 # 更新时间: $(date +"%Y-%m-%d")
 #
 # =============================================================================
@@ -425,7 +424,8 @@ get_executions() {
 
     if [ "$executions_json" = "[]" ] || [ -z "$executions_json" ]; then
         log "INFO" "作业 '$job_name' 没有找到任何执行"
-        return 1
+        echo "[]"
+        return 0
     fi
 
     echo "$executions_json"
@@ -566,7 +566,14 @@ process_job() {
     # 获取执行列表
     local executions_json
     if ! executions_json=$(get_executions "$job_name" "$region"); then
-        log "WARN" "跳过作业 '$job_name'"
+        log "ERROR" "无法获取作业 '$job_name' 的执行列表"
+        ((FAILED_COUNT++))
+        return 1
+    fi
+
+    # 检查是否有执行记录
+    if [ "$executions_json" = "[]" ]; then
+        log "INFO" "作业 '$job_name' 没有执行记录，跳过处理"
         ((SKIPPED_COUNT++))
         return 0
     fi
@@ -582,6 +589,18 @@ process_job() {
     fi
 
     log "INFO" "完成处理作业: $job_name"
+
+    # 如果没有删除任何执行，但也没有失败，给出友好提示
+    local job_deleted=0
+    local job_skipped=0
+
+    if [ "$delete_failed" = true ] && [ -n "$older_than_days" ]; then
+        log "INFO" "作业 '$job_name' 处理完成 - 已检查失败执行和 $older_than_days 天前的执行"
+    elif [ "$delete_failed" = true ]; then
+        log "INFO" "作业 '$job_name' 处理完成 - 已检查失败执行"
+    elif [ -n "$older_than_days" ]; then
+        log "INFO" "作业 '$job_name' 处理完成 - 已检查 $older_than_days 天前的执行"
+    fi
 }
 
 # --- 批量处理 ---
@@ -638,11 +657,12 @@ generate_report() {
     log "INFO" "  - 处理失败: $FAILED_COUNT"
     log "INFO" "=================================================="
 
+    # 只有在实际操作失败时才返回错误码，而不是因为没有找到要删除的项目
     if [ $FAILED_COUNT -gt 0 ]; then
         log "WARN" "存在处理失败的项目，请检查日志文件: $LOG_FILE"
-        return 1
     fi
 
+    # 总是返回成功，让主函数决定最终的退出码
     return 0
 }
 
@@ -650,17 +670,24 @@ generate_report() {
 cleanup() {
     local exit_code=$?
 
-    if [ $exit_code -ne 0 ]; then
-        log "ERROR" "脚本异常退出，退出码: $exit_code"
-    fi
-
+    # 生成报告
     generate_report
 
     if [ "$VERBOSE" = true ]; then
         log "INFO" "详细日志已保存到: $LOG_FILE"
     fi
 
-    exit $exit_code
+    # 根据实际的失败情况决定退出码
+    if [ $FAILED_COUNT -gt 0 ]; then
+        log "ERROR" "脚本执行过程中存在失败项目，退出码: 1"
+        exit 1
+    elif [ $exit_code -ne 0 ]; then
+        log "ERROR" "脚本异常退出，退出码: $exit_code"
+        exit $exit_code
+    else
+        log "INFO" "脚本执行完成"
+        exit 0
+    fi
 }
 
 # --- 主函数 ---
