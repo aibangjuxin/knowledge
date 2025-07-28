@@ -343,7 +343,7 @@ delete_older_executions() {
     if [ -z "$older_executions" ]; then
         log "INFO" "No executions found older than $days days"
         return 0
-    }
+    fi
 
     local count=0
     while IFS= read -r execution_name; do
@@ -491,7 +491,7 @@ generate_report() {
 
 # --- Cleanup Function ---
 cleanup() {
-    local exit_code=$?
+    #local exit_code=$?
 
     # Generate report
     generate_report
@@ -504,9 +504,6 @@ cleanup() {
     if [ $FAILED_COUNT -gt 0 ]; then
         log "ERROR" "Script execution had failures, exiting with code: 1"
         exit 1
-    elif [ $exit_code -ne 0 ]; then
-        log "ERROR" "Script exited abnormally with code: $exit_code"
-        exit $exit_code
     else
         log "INFO" "Script finished successfully"
         exit 0
