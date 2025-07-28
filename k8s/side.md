@@ -203,7 +203,9 @@ echo -e "  wget http://localhost:3000"
 echo ""
 
 # 执行实际的 debug 命令
-kubectl debug "$SELECTED_POD" -n "$NAMESPACE" -it --image="$GAR_IMAGE_PATH" --target="$TARGET_CONTAINER"
+echo "kubectl debug "$SELECTED_POD" -n "$NAMESPACE" -it --image="$GAR_IMAGE_PATH" --target="$TARGET_CONTAINER" -- bash "
+
+
 
 echo ""
 echo -e "${GREEN}Ephemeral container session ended${NC}"
