@@ -43,3 +43,37 @@ Best regards,
 ⸻
 
 如需我帮你根据具体的项目或工作内容定制几段示范话术（比如偏技术/项目管理/跨部门协作），也可以继续告诉我。
+
+
+主题：关于 [某某同事姓名] 的工作反馈
+
+您好，
+
+我有幸与 [某某同事姓名] 在多个项目中合作，他/她在工作中展现出了非常突出的专业能力与合作精神。
+
+在我们协作的过程中，[某某] 始终表现出极强的责任心，不仅响应非常及时，而且能深入理解问题的本质，快速提出切实可行的技术解决方案。在面对复杂或紧急的问题时，他/她总是能够保持冷静，并持续跟进，直到问题真正解决，体现了“负责到底”的专业态度。
+
+此外，[某某] 与团队成员沟通顺畅，协作非常愉快，能积极倾听并理解他人的需求，在跨部门沟通中也能有效推动问题解决。
+
+我非常认可他/她的工作能力，并期待未来有更多合作机会。
+
+此致  
+敬礼！  
+[署名]  
+
+
+
+Subject: Feedback for [Colleague's Name]
+
+Dear [Reviewer/Team],
+
+I’ve had the opportunity to work with [Colleague's Name] on several projects, and I’d like to share some feedback based on our collaboration.
+
+[Name] is a highly skilled and reliable professional. Throughout our work together, they consistently demonstrated strong technical expertise, responded promptly to issues, and always ensured problems were thoroughly resolved. Even in time-sensitive or complex situations, [Name] remained calm, solution-oriented, and took full ownership until closure.
+
+Our collaboration was always smooth and pleasant. [Name] communicates clearly and effectively, and is always willing to listen, understand, and adapt to the needs of the team. Their proactive attitude and professionalism made a significant difference in our work.
+
+It’s been a pleasure working with [Name], and I look forward to collaborating again in the future.
+
+Best regards,  
+[Your Name]
