@@ -1,3 +1,261 @@
+在GKE中监控Pod内存使用情况，即使无法登录到Pod内部，有多种方法可以实现。我来为你详细介绍：
+
+## 基础监控方法
+
+### 1. kubectl top 命令
+
+```bash
+# 查看Pod总体资源使用
+kubectl top pods -n <namespace>
+
+# 查看Pod中容器的资源使用
+kubectl top pods <pod-name> -n <namespace> --containers
+```
+
+### 2. kubectl describe 查看资源限制和请求
+
+```bash
+kubectl describe pod <pod-name> -n <namespace>
+```
+
+## 高级监控解决方案
+
+### 3. 使用 Kubernetes Metrics Server + Custom Queries
+
+```bash
+# 通过 kubectl 获取详细指标
+kubectl get --raw "/api/v1/nodes/<node-name>/proxy/metrics/cadvisor" | grep container_memory
+```
+
+### 4. Google Cloud Monitoring集成
+
+```bash
+# 启用GKE监控
+gcloud container clusters update <cluster-name> \
+    --enable-cloud-monitoring \
+    --zone=<zone>
+```
+
+## 进程级别监控方案
+
+### 5. 使用 Debug Container (Kubernetes 1.20+)
+
+```bash
+# 创建调试容器
+kubectl debug <pod-name> -it --image=busybox --target=<container-name>
+
+# 在调试容器中查看进程
+ps aux
+top -p <pid>
+```
+
+### 6. 部署 Node Exporter + Prometheus
+
+```yaml
+# node-exporter-daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+    spec:
+      hostPID: true
+      hostNetwork: true
+      containers:
+      - name: node-exporter
+        image: prom/node-exporter:latest
+        args:
+        - '--path.procfs=/host/proc'
+        - '--path.sysfs=/host/sys'
+        - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($|/)'
+        volumeMounts:
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: sys
+          mountPath: /host/sys
+          readOnly: true
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+```
+
+## AppDynamics (APPD) 集成方案
+
+### 7. AppDynamics Machine Agent部署
+
+```yaml
+# appd-machine-agent.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: appd-machine-agent
+spec:
+  selector:
+    matchLabels:
+      app: appd-machine-agent
+  template:
+    metadata:
+      labels:
+        app: appd-machine-agent
+    spec:
+      containers:
+      - name: machine-agent
+        image: appdynamics/machine-agent-analytics:latest
+        env:
+        - name: APPDYNAMICS_CONTROLLER_HOST_NAME
+          value: "<controller-host>"
+        - name: APPDYNAMICS_CONTROLLER_PORT
+          value: "443"
+        - name: APPDYNAMICS_CONTROLLER_SSL_ENABLED
+          value: "true"
+        - name: APPDYNAMICS_AGENT_ACCOUNT_NAME
+          value: "<account-name>"
+        - name: APPDYNAMICS_AGENT_ACCOUNT_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: appd-secret
+              key: access-key
+        - name: APPDYNAMICS_MACHINE_HIERARCHY_PATH
+          value: "GKE|<cluster-name>|<node-name>"
+        volumeMounts:
+        - name: proc
+          mountPath: /hostroot/proc
+          readOnly: true
+        - name: sys
+          mountPath: /hostroot/sys
+          readOnly: true
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+          readOnly: true
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: docker-sock
+        hostPath:
+          path: /var/run/docker.sock
+```
+
+### 8. AppDynamics应用级监控配置
+
+```yaml
+# 在应用Pod中注入AppD Java Agent
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: your-app
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: appd-agent
+        image: appdynamics/java-agent:latest
+        command: ['cp', '-r', '/opt/appdynamics/.', '/shared-vol/']
+        volumeMounts:
+        - name: appd-agent-vol
+          mountPath: /shared-vol
+      containers:
+      - name: your-app
+        image: your-app:latest
+        env:
+        - name: JAVA_OPTS
+          value: "-javaagent:/opt/appdynamics/javaagent.jar"
+        - name: APPDYNAMICS_CONTROLLER_HOST_NAME
+          value: "<controller-host>"
+        - name: APPDYNAMICS_AGENT_APPLICATION_NAME
+          value: "<app-name>"
+        - name: APPDYNAMICS_AGENT_TIER_NAME
+          value: "<tier-name>"
+        volumeMounts:
+        - name: appd-agent-vol
+          mountPath: /opt/appdynamics
+      volumes:
+      - name: appd-agent-vol
+        emptyDir: {}
+```
+
+## 内存监控流程图
+
+```mermaid
+flowchart TD
+    A[Pod内存监控需求] --> B{能否登录Pod?}
+    B -->|否| C[基础监控方案]
+    B -->|是| D[直接进程监控]
+    
+    C --> E[kubectl top]
+    C --> F[GCP Monitoring]
+    C --> G[Debug Container]
+    
+    E --> H[Pod级别资源使用]
+    F --> I[集群级别监控]
+    G --> J[容器内进程分析]
+    
+    D --> K[top/htop命令]
+    D --> L[ps aux分析]
+    
+    H --> M[AppDynamics集成]
+    I --> M
+    J --> M
+    K --> M
+    L --> M
+    
+    M --> N[Machine Agent]
+    M --> O[Application Agent]
+    
+    N --> P[主机级别监控]
+    O --> Q[应用级别监控]
+    
+    P --> R[进程内存详情]
+    Q --> R
+    
+    R --> S[内存使用报告]
+```
+
+## AppDynamics内存监控配置表
+
+|监控类型           |Agent类型|部署方式        |监控粒度  |数据保留|
+|---------------|-------|------------|------|----|
+|Machine Agent  |机器代理   |DaemonSet   |主机/容器级|90天 |
+|Java Agent     |应用代理   |Sidecar/Init|方法/线程级|30天 |
+|Analytics Agent|分析代理   |独立部署        |事务级   |1年  |
+|Network Agent  |网络代理   |DaemonSet   |网络流量  |30天 |
+
+## 推荐监控策略
+
+### 短期解决方案
+
+```bash
+# 1. 立即查看资源使用
+kubectl top pods --all-namespaces --sort-by=memory
+
+# 2. 创建调试容器查看进程
+kubectl debug <pod-name> -it --image=busybox
+```
+
+### 长期监控方案
+
+1. **部署AppDynamics Machine Agent**用于主机级监控
+1. **集成Application Agent**用于应用级深度监控
+1. **配置GCP Monitoring**用于集群整体监控
+1. **设置告警规则**用于异常检测
+
+通过这种分层监控策略，你可以获得从集群到进程级别的完整内存使用视图，即使无法直接登录到Pod内部。​​​​​​​​​​​​​​​​
+
 关键要点
 
 - 无法直接从外部查看 Pod 内部的进程或线程级内存占用，需登录 Pod 或运行命令。
