@@ -1,40 +1,8 @@
-# Cloud Run Onboarding 自动化流程设计
-
-
-我已经为你创建了一个完整的 Cloud Run Onboarding 自动化流程设计文档。这个设计包含了以下关键要素：
-
-🎯 核心设计亮点
-1. 事件驱动架构
-GitHub Webhook → Pub/Sub → Eventarc → Cloud Run Jobs
-支持多种触发方式：GitHub 事件、定时任务、手动触发
-2. 专用 Service Account
-Onboard-sa@project.iam.gserviceaccount.com 配置了最小权限
-支持 Secret Manager、Cloud Storage、Kubernetes 访问
-3. 多场景支持
-mTLS 证书续期：定时检查和自动续期
-GitHub Pipeline：代码变更自动触发 Onboarding 流程
-可扩展性：易于添加新的 Onboarding 场景
-🚀 迁移路径
-文档提供了完整的 5 个阶段迁移计划：
-
-基础设施准备 - Service Account、VPC、Secrets
-容器镜像构建 - 标准化的 Docker 镜像
-Cloud Run Jobs 部署 - 具体的部署命令
-测试和验证 - 完整的测试策略
-监控和日志 - 生产环境监控
-💡 技术实现
-Python 应用示例：包含证书续期和 GitHub Pipeline 的完整代码
-容器化设计：标准化的 Dockerfile 和入口点脚本
-安全最佳实践：Secret Manager 集成、VPC 隔离
-监控和故障排除：完整的运维指南
-这个设计充分利用了 Cloud Run 的优势，实现了高度自动化、安全可靠的 Onboarding 流程。你可以根据具体需求调整配置参数和实现细节。
-
-需要我详细解释任何特定部分或者帮你实现某个具体组件吗？
-
-
-## 概述
+## Cloud Run Onboarding 自动化流程设计
 
 本文档描述如何将现有的 Onboarding pipeline 迁移到 Cloud Run，实现基于事件驱动的自动化流程，包括 mTLS 证书续期、GitHub 触发的自动化操作等场景。
+
+---
 
 ## 架构设计
 
@@ -83,11 +51,13 @@ graph TB
     CRJ3 --> AR
 ```
 
+---
+
 ## 核心组件设计
 
 ### 1. Service Account 配置
 
-#### Onboard-sa@project.iam.gserviceaccount.com 权限设计
+#### `Onboard-sa@project.iam.gserviceaccount.com` 权限设计
 
 ```bash
 # 基础权限
@@ -199,6 +169,8 @@ gcloud scheduler jobs create pubsub cert-renewal-scheduler \
     --message-body='{"action":"check_and_renew","cert_type":"mtls","threshold_days":30}' \
     --location=europe-west2
 ```
+
+---
 
 ## 实现细节
 
@@ -461,151 +433,163 @@ if __name__ == "__main__":
     executor.process_github_event(event_data)
 ```
 
+---
+
 ## 迁移步骤
 
 ### Phase 1: 基础设施准备
 
-1. **创建 Service Account 和权限配置**
-```bash
-# 创建 Service Account
-gcloud iam service-accounts create onboard-sa \
-    --display-name="Onboarding Service Account"
+1.  **创建 Service Account 和权限配置**
+    ```bash
+    # 创建 Service Account
+    gcloud iam service-accounts create onboard-sa \
+        --display-name="Onboarding Service Account"
 
-# 配置权限（参考上面的权限配置）
-```
+    # 配置权限（参考上面的权限配置）
+    ```
 
-2. **设置 VPC 网络连接**
-```bash
-# 创建 VPC Connector（如果不存在）
-gcloud compute networks vpc-access connectors create vpc-conn-europe \
-    --region=europe-west2 \
-    --subnet=onboarding-subnet \
-    --subnet-project=project-id
-```
+2.  **设置 VPC 网络连接**
+    ```bash
+    # 创建 VPC Connector（如果不存在）
+    gcloud compute networks vpc-access connectors create vpc-conn-europe \
+        --region=europe-west2 \
+        --subnet=onboarding-subnet \
+        --subnet-project=project-id
+    ```
 
-3. **配置 Secret Manager**
-```bash
-# 存储敏感信息
-gcloud secrets create github-access-token --data-file=github-token.txt
-gcloud secrets create ca-private-key --data-file=ca-key.pem
-gcloud secrets create k8s-config --data-file=kubeconfig.yaml
-```
+3.  **配置 Secret Manager**
+    ```bash
+    # 存储敏感信息
+    gcloud secrets create github-access-token --data-file=github-token.txt
+    gcloud secrets create ca-private-key --data-file=ca-key.pem
+    gcloud secrets create k8s-config --data-file=kubeconfig.yaml
+    ```
 
 ### Phase 2: 容器镜像构建
 
-1. **构建基础镜像**
-```bash
-# 构建并推送镜像
-docker build -t europe-west2-docker.pkg.dev/project/containers/onboarding-base:latest .
-docker push europe-west2-docker.pkg.dev/project/containers/onboarding-base:latest
-```
+1.  **构建基础镜像**
+    ```bash
+    # 构建并推送镜像
+    docker build -t europe-west2-docker.pkg.dev/project/containers/onboarding-base:latest .
+    docker push europe-west2-docker.pkg.dev/project/containers/onboarding-base:latest
+    ```
 
-2. **构建专用镜像**
-```bash
-# 证书续期镜像
-docker build -f Dockerfile.cert-renewal -t europe-west2-docker.pkg.dev/project/containers/cert-renewal:latest .
+2.  **构建专用镜像**
+    ```bash
+    # 证书续期镜像
+    docker build -f Dockerfile.cert-renewal -t europe-west2-docker.pkg.dev/project/containers/cert-renewal:latest .
 
-# Pipeline 执行器镜像
-docker build -f Dockerfile.pipeline -t europe-west2-docker.pkg.dev/project/containers/pipeline-executor:latest .
-```
+    # Pipeline 执行器镜像
+    docker build -f Dockerfile.pipeline -t europe-west2-docker.pkg.dev/project/containers/pipeline-executor:latest .
+    ```
 
 ### Phase 3: Cloud Run Jobs 部署
 
-1. **部署 Jobs**（参考上面的部署命令）
+1.  **部署 Jobs**（参考上面的部署命令）
 
-2. **配置事件触发器**（参考上面的 Eventarc 配置）
+2.  **配置事件触发器**（参考上面的 Eventarc 配置）
 
 ### Phase 4: 测试和验证
 
-1. **单元测试**
-```bash
-# 手动触发 Job 测试
-gcloud run jobs execute mtls-cert-renewal \
-    --region=europe-west2 \
-    --wait
-```
+1.  **单元测试**
+    ```bash
+    # 手动触发 Job 测试
+    gcloud run jobs execute mtls-cert-renewal \
+        --region=europe-west2 \
+        --wait
+    ```
 
-2. **集成测试**
-```bash
-# 发送测试事件到 Pub/Sub
-gcloud pubsub topics publish github-webhook-events \
-    --message='{"action":"test","repository":{"name":"test-repo"}}'
-```
+2.  **集成测试**
+    ```bash
+    # 发送测试事件到 Pub/Sub
+    gcloud pubsub topics publish github-webhook-events \
+        --message='{"action":"test","repository":{"name":"test-repo"}}'
+    ```
 
 ### Phase 5: 监控和日志
 
-1. **设置监控**
-```bash
-# 创建 Cloud Monitoring 告警
-gcloud alpha monitoring policies create --policy-from-file=monitoring-policy.yaml
-```
+1.  **设置监控**
+    ```bash
+    # 创建 Cloud Monitoring 告警
+    gcloud alpha monitoring policies create --policy-from-file=monitoring-policy.yaml
+    ```
 
-2. **日志聚合**
-```bash
-# 查看 Cloud Run Jobs 日志
-gcloud logging read "resource.type=cloud_run_job" --limit=50
-```
+2.  **日志聚合**
+    ```bash
+    # 查看 Cloud Run Jobs 日志
+    gcloud logging read "resource.type=cloud_run_job" --limit=50
+    ```
+
+---
 
 ## 最佳实践
 
 ### 1. 安全性
-- 使用最小权限原则配置 Service Account
-- 敏感信息存储在 Secret Manager 中
-- 启用 VPC 网络隔离
-- 定期轮换访问令牌和证书
+
+-   使用最小权限原则配置 Service Account
+-   敏感信息存储在 Secret Manager 中
+-   启用 VPC 网络隔离
+-   定期轮换访问令牌和证书
 
 ### 2. 可靠性
-- 配置适当的重试策略
-- 实现幂等性操作
-- 设置超时和资源限制
-- 监控和告警配置
+
+-   配置适当的重试策略
+-   实现幂等性操作
+-   设置超时和资源限制
+-   监控和告警配置
 
 ### 3. 可维护性
-- 使用标准化的容器镜像
-- 实现结构化日志记录
-- 版本控制和回滚策略
-- 文档和运维手册
+
+-   使用标准化的容器镜像
+-   实现结构化日志记录
+-   版本控制和回滚策略
+-   文档和运维手册
 
 ### 4. 成本优化
-- 合理配置 CPU 和内存资源
-- 使用 Cloud Run 的按需计费特性
-- 优化容器启动时间
-- 监控资源使用情况
+
+-   合理配置 CPU 和内存资源
+-   使用 Cloud Run 的按需计费特性
+-   优化容器启动时间
+-   监控资源使用情况
+
+---
 
 ## 故障排除
 
 ### 常见问题
 
-1. **Service Account 权限不足**
-```bash
-# 检查权限
-gcloud projects get-iam-policy PROJECT_ID \
-    --flatten="bindings[].members" \
-    --format="table(bindings.role)" \
-    --filter="bindings.members:Onboard-sa@project.iam.gserviceaccount.com"
-```
+1.  **Service Account 权限不足**
+    ```bash
+    # 检查权限
+    gcloud projects get-iam-policy PROJECT_ID \
+        --flatten="bindings[].members" \
+        --format="table(bindings.role)" \
+        --filter="bindings.members:Onboard-sa@project.iam.gserviceaccount.com"
+    ```
 
-2. **网络连接问题**
-```bash
-# 检查 VPC Connector 状态
-gcloud compute networks vpc-access connectors describe vpc-conn-europe \
-    --region=europe-west2
-```
+2.  **网络连接问题**
+    ```bash
+    # 检查 VPC Connector 状态
+    gcloud compute networks vpc-access connectors describe vpc-conn-europe \
+        --region=europe-west2
+    ```
 
-3. **Secret Manager 访问失败**
-```bash
-# 测试 Secret 访问
-gcloud secrets versions access latest --secret="github-access-token"
-```
+3.  **Secret Manager 访问失败**
+    ```bash
+    # 测试 Secret 访问
+    gcloud secrets versions access latest --secret="github-access-token"
+    ```
+
+---
 
 ## 总结
 
 通过将 Onboarding pipeline 迁移到 Cloud Run，我们实现了：
 
-- **事件驱动的自动化**：GitHub 变更自动触发相应的处理流程
-- **弹性和可扩展性**：Cloud Run 的自动扩缩容能力
-- **安全性**：基于 Service Account 的身份验证和最小权限原则
-- **成本效益**：按需付费，无需维护常驻服务器
-- **可维护性**：标准化的容器化部署和监控
+-   **事件驱动的自动化**：GitHub 变更自动触发相应的处理流程
+-   **弹性和可扩展性**：Cloud Run 的自动扩缩容能力
+-   **安全性**：基于 Service Account 的身份验证和最小权限原则
+-   **成本效益**：按需付费，无需维护常驻服务器
+-   **可维护性**：标准化的容器化部署和监控
 
-这个设计提供了一个完整的、生产就绪的 Onboarding 自动化解决方案，可以根据具体需求进行调整和扩展。
+这个设计提供了一个完整的、生产就绪的 Onboarding 自动化解决方案，可以根据具体需求进行调整和扩展.

@@ -1,26 +1,26 @@
-# **Cloud Run Onboarding 自动化设计方案：mTLS 证书续期**
+# Cloud Run Onboarding 自动化设计方案：mTLS 证书续期
 
-## **1. 方案概述**
+## 1. 方案概述
 
-### **1.1. 背景与目标**
+### 1.1. 背景与目标
 
 在多租户（Multi-Tenant）或大规模用户场景下，手动为每个新用户（Tenant）配置和管理 mTLS 证书是低效且易错的。本方案旨在设计一个全自动化的用户 Onboarding 流程，以 **mTLS 证书自动续期（Renew）** 为核心用例，实现 Serverless、安全、可审计的自动化工作流。
 
-### **1.2. 设计原则**
+### 1.2. 设计原则
 
 本方案严格遵循以下 GCP 最佳实践：
 
-- **最小权限原则 (Least Privilege)**: Service Account 仅授予完成任务所必需的最小权限集合，通过自定义 IAM Role 实现。
-- **Serverless 优先**: 核心逻辑部署在 Cloud Run 上，无需管理底层服务器，实现按需扩缩容和成本优化。
-- **VPC 服务控制 (VPC Service Controls)**: 通过 VPC Connector 和内部 Ingress，将服务流量限制在可信的 VPC 网络内，增强安全性。
-- **基础设施即代码 (IaC)**: 所有组件（Cloud Run, IAM, GCS）均可通过 Terraform 或 gcloud CLI 进行版本化管理和部署。
-- **可观测性 (Observability)**: 所有关键操作均记录到 Cloud Logging 和 BigQuery，便于审计、监控和排错。
+-   **最小权限原则 (Least Privilege)**: Service Account 仅授予完成任务所必需的最小权限集合，通过自定义 IAM Role 实现。
+-   **Serverless 优先**: 核心逻辑部署在 Cloud Run 上，无需管理底层服务器，实现按需扩缩容和成本优化。
+-   **VPC 服务控制 (VPC Service Controls)**: 通过 VPC Connector 和内部 Ingress，将服务流量限制在可信的 VPC 网络内，增强安全性。
+-   **基础设施即代码 (IaC)**: 所有组件（Cloud Run, IAM, GCS）均可通过 Terraform 或 gcloud CLI 进行版本化管理和部署。
+-   **可观测性 (Observability)**: 所有关键操作均记录到 Cloud Logging 和 BigQuery，便于审计、监控和排错。
 
 ---
 
-## **2. 架构设计**
+## 2. 架构设计
 
-### **2.1. 核心组件**
+### 2.1. 核心组件
 
 | 组件 | 技术实现 | 核心职责 |
 | :--- | :--- | :--- |
@@ -32,7 +32,7 @@
 | **状态存储** | Cloud Storage (GCS) | 持久化存储每个 Tenant 的证书元数据和 CA 配置。 |
 | **审计日志** | BigQuery / Cloud Logging | 记录所有自动化操作的日志，用于审计和监控。 |
 
-### **2.2. 自动化流程图**
+### 2.2. 自动化流程图
 
 ```mermaid
 graph TD
@@ -67,9 +67,9 @@ graph TD
 
 ---
 
-## **3. 实现细节**
+## 3. 实现细节
 
-### **3.1. Cloud Run 服务部署**
+### 3.1. Cloud Run 服务部署
 
 使用 `gcloud` CLI 部署服务，并强制其在 VPC 网络内运行，确保流量安全。
 
@@ -86,7 +86,7 @@ gcloud run deploy cert-renew-service \
   --set-env-vars="GCS_BUCKET_NAME=tenant-certs-store"
 ```
 
-### **3.2. 核心逻辑伪代码**
+### 3.2. 核心逻辑伪代码
 
 ```python
 # main.py - Cloud Run 服务入口
@@ -128,7 +128,7 @@ def cert_renew_handler(request):
 # ... 其他辅助函数 (read_gcs_config, is_cert_expiring, etc.)
 ```
 
-### **3.3. GCS 存储结构**
+### 3.3. GCS 存储结构
 
 为每个租户创建一个独立的配置对象，存储其证书相关信息。
 
@@ -146,9 +146,9 @@ def cert_renew_handler(request):
 
 ---
 
-## **4. 安全与权限设计**
+## 4. 安全与权限设计
 
-### **4.1. 自定义 IAM Role**
+### 4.1. 自定义 IAM Role
 
 为了实现最小权限，我们创建一个自定义 IAM Role，仅包含续期流程所需的权限。
 
@@ -164,7 +164,7 @@ def cert_renew_handler(request):
 | `storage.objects.create` | 向 GCS 写入更新后的租户配置文件。 |
 | `logging.logEntries.create` | 写入操作日志到 Cloud Logging。 |
 
-### **4.2. Service Account 绑定**
+### 4.2. Service Account 绑定
 
 将此自定义角色授予 Cloud Run 使用的 Service Account。
 
@@ -186,11 +186,11 @@ gcloud projects add-iam-policy-binding your-project \
 
 ---
 
-## **5. 扩展与未来规划**
+## 5. 扩展与未来规划
 
 本方案可作为 Onboarding 自动化的基础框架，未来可扩展至以下场景：
 
-- **自动创建租户 GCS 目录**: 在用户 Onboarding 时，自动创建 `gs://<bucket>/<tenant_id>/` 结构。
-- **动态 Service Account 生成**: 为每个租户或特定应用场景动态创建拥有不同权限的 Service Account。
-- **客户端证书生成与分发**: 通过 Cloud Functions 生成客户端证书，并使用 SendGrid 或其他邮件服务安全地分发给用户。
-- **DNS 记录自动化**: 集成 Cloud DNS API，自动为新租户添加和验证域名所有权（例如，用于 ACME DNS-01 挑战）。
+-   **自动创建租户 GCS 目录**: 在用户 Onboarding 时，自动创建 `gs://<bucket>/<tenant_id>/` 结构。
+-   **动态 Service Account 生成**: 为每个租户或特定应用场景动态创建拥有不同权限的 Service Account。
+-   **客户端证书生成与分发**: 通过 Cloud Functions 生成客户端证书，并使用 SendGrid 或其他邮件服务安全地分发给用户。
+-   **DNS 记录自动化**: 集成 Cloud DNS API，自动为新租户添加和验证域名所有权（例如，用于 ACME DNS-01 挑战）。

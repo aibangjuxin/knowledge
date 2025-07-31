@@ -4,9 +4,11 @@
 
 ## 核心需求
 
-- **删除失败的执行**: 自动识别并删除所有状态为失败的作业执行。
-- **删除过期的执行**: 根据指定的时间点，删除在此之前完成的所有执行。
-- **灵活性**: 脚本应支持通过参数指定目标作业和区域。
+-   **删除失败的执行**: 自动识别并删除所有状态为失败的作业执行。
+-   **删除过期的执行**: 根据指定的时间点，删除在此之前完成的所有执行。
+-   **灵活性**: 脚本应支持通过参数指定目标作业和区域。
+
+---
 
 ## 设计思路与流程
 
@@ -16,7 +18,7 @@
 2.  **解析与过滤**: 利用 `jq` 工具解析 JSON 输出，根据预设条件（如状态、时间）进行过滤。
 3.  **执行删除**: 对过滤后的结果执行删除操作。
 
-### 可视化流程 (Mermaid)
+### 可视化流程
 
 ```mermaid
 graph TD
@@ -31,148 +33,11 @@ graph TD
     G --> H;
 ```
 
+---
+
 ## Housekeeping 脚本
 
-这是一个示例脚本，您可以根据自己的需求进行修改和扩展。
-
-```bash
-#!/bin/bash
-
-# 脚本用途: 清理 Cloud Run 作业的执行 (Executions)
-#
-# 使用方法:
-# ./housekeep.sh <JOB_NAME> <REGION> [DELETE_FAILED] [DELETE_OLDER_THAN_DAYS]
-#
-# 示例:
-#   - 删除所有失败的执行:
-#     ./housekeep.sh my-job europe-west2 true
-#
-#   - 删除30天前完成的执行:
-#     ./housekeep.sh my-job europe-west2 false 30
-#
-#   - 删除所有失败的执行 和 30天前完成的执行:
-#     ./housekeep.sh my-job europe-west2 true 30
-
-# --- 参数配置 ---
-JOB_NAME="$1"
-REGION="$2"
-DELETE_FAILED=${3:-false} # 是否删除失败的执行 (true/false)
-DELETE_OLDER_THAN_DAYS="$4" # 删除多少天前的执行 (例如: 30)
-
-# --- 安全检查 ---
-if [ -z "$JOB_NAME" ] || [ -z "$REGION" ]; then
-  echo "错误: 必须提供 JOB_NAME 和 REGION."
-  echo "用法: $0 <JOB_NAME> <REGION> [DELETE_FAILED] [DELETE_OLDER_THAN_DAYS]"
-  exit 1
-fi
-
-echo "配置信息:"
-echo "  - Job Name: $JOB_NAME"
-echo "  - Region: $REGION"
-echo "  - 删除失败的执行: $DELETE_FAILED"
-if [ -n "$DELETE_OLDER_THAN_DAYS" ]; then
-  echo "  - 删除天数早于: $DELETE_OLDER_THAN_DAYS 天"
-fi
-echo "---"
-
-# --- 获取执行列表 ---
-echo "正在获取 '$JOB_NAME' 的执行列表..."
-EXECUTIONS_JSON=$(gcloud run jobs executions list --job="$JOB_NAME" --region="$REGION" --format="json")
-
-if [ -z "$EXECUTIONS_JSON" ]; then
-  echo "未找到任何执行，或获取时出错。"
-  exit 0
-fi
-
-# --- 1. 删除失败的执行 ---
-if [ "$DELETE_FAILED" = true ]; then
-  echo "正在查找失败的执行..."
-  FAILED_EXECUTIONS=$(echo "$EXECUTIONS_JSON" | jq -r '.[] | select(.status.failedCount > 0) | .metadata.name')
-
-  if [ -n "$FAILED_EXECUTIONS" ]; then
-    echo "找到以下失败的执行，将进行删除:"
-    echo "$FAILED_EXECUTIONS"
-    echo "$FAILED_EXECUTIONS" | while read -r EXECUTION_NAME; do
-      echo "  -> 正在删除 $EXECUTION_NAME..."
-      gcloud run jobs executions delete "$EXECUTION_NAME" --region="$REGION" --quiet
-    done
-  else
-    echo "没有找到失败的执行。"
-  fi
-fi
-
-# --- 2. 删除过期的执行 ---
-if [ -n "$DELETE_OLDER_THAN_DAYS" ]; then
-  echo "正在查找 $DELETE_OLDER_THAN_DAYS 天前完成的执行..."
-  # 计算截止日期 (ISO 8601 格式)
-  CUTOFF_DATE=$(date -v-"$DELETE_OLDER_THAN_DAYS"d -u +"%Y-%m-%dT%H:%M:%SZ")
-  echo "截止日期: $CUTOFF_DATE"
-
-  OLDER_EXECUTIONS=$(echo "$EXECUTIONS_JSON" | jq -r --arg CUTOFF_DATE "$CUTOFF_DATE" '.[] | select(.status.completionTime and .status.completionTime < $CUTOFF_DATE) | .metadata.name')
-
-  if [ -n "$OLDER_EXECUTIONS" ]; then
-    echo "找到以下过期的执行，将进行删除:"
-    echo "$OLDER_EXECUTIONS"
-    echo "$OLDER_EXECUTIONS" | while read -r EXECUTION_NAME; do
-      echo "  -> 正在删除 $EXECUTION_NAME..."
-      gcloud run jobs executions delete "$EXECUTION_NAME" --region="$REGION" --quiet
-    done
-  else
-    echo "没有找到符合条件的过期执行。"
-  fi
-fi
-
-echo "---"
-echo "Housekeeping 完成。"
-
-```
-
-### 如何使用脚本
-
-1.  **保存脚本**: 将上面的代码保存到一个名为 `cloud-run-job-housekeep.sh` 的文件中。
-2.  **授予执行权限**: 在终端中运行 `chmod +x cloud-run-job-housekeep.sh`。
-3.  **运行脚本**:
-    - **仅删除失败的执行**:
-      ```bash
-      ./cloud-run-job-housekeep.sh your-job-name your-region true
-      ```
-    - **仅删除 30 天前的执行**:
-      ```bash
-      ./cloud-run-job-housekeep.sh your-job-name your-region false 30
-      ```
-    - **同时删除失败和 30 天前的执行**:
-      ```bash
-      ./cloud-run-job-housekeep.sh your-job-name your-region true 30
-      ```
-
-## `jq` 命令解析
-
-脚本的核心是 `jq` 查询，这里是关键部分的解释：
-
-- **查找失败的执行**:
-
-  ```jq
-  jq -r '.[] | select(.status.failedCount > 0) | .metadata.name'
-  ```
-
-  - `.[]`: 遍历 JSON 数组中的每个执行对象。
-  - `select(.status.failedCount > 0)`: 选择 `status` 对象中 `failedCount` 大于 0 的执行。
-  - `.metadata.name`: 提取该执行的名称。
-
-- **查找过期的执行**:
-  ```jq
-  jq -r --arg CUTOFF_DATE "$CUTOFF_DATE" '.[] | select(.status.completionTime and .status.completionTime < $CUTOFF_DATE) | .metadata.name'
-  ```
-  - `--arg CUTOFF_DATE "$CUTOFF_DATE"`: 将 shell 变量 `$CUTOFF_DATE` 传递给 `jq`。
-  - `select(.status.completionTime and .status.completionTime < $CUTOFF_DATE)`: 选择那些 `completionTime` 存在且早于我们计算的截止日期的执行。
-
-# Claude
-
-通过这种方式，您可以轻松地扩展脚本以支持更复杂的清理逻辑。
-
-## 增强版 Housekeep 脚本
-
-以下是一个功能更完整的 housekeep 脚本，包含了更多的功能和错误处理：
+这是一个功能完整的 housekeep 脚本，包含了更多的功能和错误处理。
 
 ```bash
 #!/bin/bash
@@ -591,9 +456,6 @@ process_job() {
     log "INFO" "完成处理作业: $job_name"
 
     # 如果没有删除任何执行，但也没有失败，给出友好提示
-    local job_deleted=0
-    local job_skipped=0
-
     if [ "$delete_failed" = true ] && [ -n "$older_than_days" ]; then
         log "INFO" "作业 '$job_name' 处理完成 - 已检查失败执行和 $older_than_days 天前的执行"
     elif [ "$delete_failed" = true ]; then
@@ -668,8 +530,6 @@ generate_report() {
 
 # --- 清理函数 ---
 cleanup() {
-    local exit_code=$?
-
     # 生成报告
     generate_report
 
@@ -681,9 +541,6 @@ cleanup() {
     if [ $FAILED_COUNT -gt 0 ]; then
         log "ERROR" "脚本执行过程中存在失败项目，退出码: 1"
         exit 1
-    elif [ $exit_code -ne 0 ]; then
-        log "ERROR" "脚本异常退出，退出码: $exit_code"
-        exit $exit_code
     else
         log "INFO" "脚本执行完成"
         exit 0
@@ -738,11 +595,58 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 fi
 ```
 
-## 配置文件示例
+### `jq` 命令解析
+
+脚本的核心是 `jq` 查询，这里是关键部分的解释：
+
+-   **查找失败的执行**:
+
+    ```jq
+    jq -r '.[] | select(.status.failedCount > 0) | .metadata.name'
+    ```
+
+    -   `.[]`: 遍历 JSON 数组中的每个执行对象。
+    -   `select(.status.failedCount > 0)`: 选择 `status` 对象中 `failedCount` 大于 0 的执行。
+    -   `.metadata.name`: 提取该执行的名称。
+
+-   **查找过期的执行**:
+
+    ```jq
+    jq -r --arg CUTOFF_DATE "$CUTOFF_DATE" '.[] | select(.status.completionTime and .status.completionTime < $CUTOFF_DATE) | .metadata.name'
+    ```
+
+    -   `--arg CUTOFF_DATE "$CUTOFF_DATE"`: 将 shell 变量 `$CUTOFF_DATE` 传递给 `jq`。
+    -   `select(.status.completionTime and .status.completionTime < $CUTOFF_DATE)`: 选择那些 `completionTime` 存在且早于我们计算的截止日期的执行。
+
+---
+
+## 使用示例
+
+### 1. 基本使用
+
+```bash
+# 删除失败的执行
+./cloud-run-job-housekeep.sh -f my-job europe-west2
+
+# 删除7天前的执行
+./cloud-run-job-housekeep.sh -o 7 my-job europe-west2
+
+# 同时删除失败和过期的执行
+./cloud-run-job-housekeep.sh -f -o 30 my-job europe-west2
+```
+
+### 2. 干运行模式
+
+```bash
+# 查看将要删除的内容，但不实际删除
+./cloud-run-job-housekeep.sh -d -f -o 7 my-job europe-west2
+```
+
+### 3. 批量处理
 
 创建一个名为 `jobs.conf` 的配置文件用于批量处理：
 
-```bash
+```
 # Cloud Run Jobs Housekeeping Configuration
 # 格式: JOB_NAME,REGION,DELETE_FAILED,OLDER_THAN_DAYS
 #
@@ -769,29 +673,7 @@ monthly-report,europe-west2,false,30
 quarterly-analysis,us-central1,false,90
 ```
 
-## 使用示例
-
-### 1. 基本使用
-
-```bash
-# 删除失败的执行
-./cloud-run-job-housekeep.sh -f my-job europe-west2
-
-# 删除7天前的执行
-./cloud-run-job-housekeep.sh -o 7 my-job europe-west2
-
-# 同时删除失败和过期的执行
-./cloud-run-job-housekeep.sh -f -o 30 my-job europe-west2
-```
-
-### 2. 干运行模式
-
-```bash
-# 查看将要删除的内容，但不实际删除
-./cloud-run-job-housekeep.sh -d -f -o 7 my-job europe-west2
-```
-
-### 3. 批量处理
+然后运行：
 
 ```bash
 # 使用配置文件批量处理多个作业
@@ -813,29 +695,30 @@ quarterly-analysis,us-central1,false,90
 0 3 * * 0 /path/to/cloud-run-job-housekeep.sh -f -o 30 critical-job europe-west2
 ```
 
+---
+
 ## 脚本特性
 
 ### 增强功能
 
-- **干运行模式**: 预览将要删除的内容
-- **批量处理**: 支持配置文件批量处理多个作业
-- **重试机制**: 自动重试失败的操作
-- **详细日志**: 完整的操作日志记录
-- **错误处理**: 完善的错误处理和恢复
-- **统计报告**: 执行结果统计
+-   **干运行模式**: 预览将要删除的内容
+-   **批量处理**: 支持配置文件批量处理多个作业
+-   **重试机制**: 自动重试失败的操作
+-   **详细日志**: 完整的操作日志记录
+-   **错误处理**: 完善的错误处理和恢复
+-   **统计报告**: 执行结果统计
 
 ### 安全特性
 
-- **参数验证**: 严格的参数验证
-- **依赖检查**: 自动检查必需的工具
-- **认证验证**: 检查 gcloud 认证状态
-- **确认机制**: 重要操作前的确认
+-   **参数验证**: 严格的参数验证
+-   **依赖检查**: 自动检查必需的工具
+-   **认证验证**: 检查 gcloud 认证状态
 
 ### 运维特性
 
-- **日志轮转**: 自动生成带时间戳的日志文件
-- **进度显示**: 实时显示处理进度
-- **状态码**: 标准的退出状态码
-- **信号处理**: 优雅的中断处理
+-   **日志轮转**: 自动生成带时间戳的日志文件
+-   **进度显示**: 实时显示处理进度
+-   **状态码**: 标准的退出状态码
+-   **信号处理**: 优雅的中断处理
 
 这个增强版脚本提供了生产环境所需的所有功能，可以安全、可靠地管理 Cloud Run Job 的执行清理工作。

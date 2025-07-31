@@ -344,7 +344,7 @@ delete_older_executions() {
     if [ -z "$older_executions" ]; then
         log "INFO" "No executions found older than $days days"
         return 0
-    }
+    fi
 
     local count=0
     while IFS= read -r execution_name; do
