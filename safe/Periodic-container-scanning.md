@@ -28,22 +28,22 @@
 
 ```mermaid
 graph TD
-    subgraph "CI/CD Pipeline (Shift-Left)"
+    subgraph "CI/CD Pipeline Shift-Left"
         A[1. 开发者提交代码] --> B[2. Cloud Build 构建镜像];
         B --> C[3. 推送镜像至 Artifact Registry];
-        C --> D[4. Artifact Analysis 自动扫描 (On-Push)];
+        C --> D[4. Artifact Analysis 自动扫描 On-Push];
         D --> E{5. 发现高危漏洞?};
         E -- 是 --> F[中断部署并通知];
         E -- 否 --> G[部署至 GKE];
     end
 
-    subgraph "定期运行时扫描 (Shift-Right)"
-        H[A. Cloud Scheduler (每日触发)] --> I[B. Cloud Function #1: 发现与扫描];
+    subgraph "定期运行时扫描 Shift-Right"
+        H[A. Cloud Scheduler 每日触发] --> I[B. Cloud Function #1: 发现与扫描];
         I -- 调用 --> J[C. GKE API: 获取运行中的镜像列表];
         J -- 返回镜像列表 --> I;
         I -- 检查镜像是否陈旧 --> K{D. 镜像 > 30天未活动?};
         K -- 是 --> L[E. Artifact Analysis 按需扫描 API];
-        K -- 否 --> M[F. 忽略 (依赖持续分析)];
+        K -- 否 --> M[F. 忽略 依赖持续分析];
     end
 
     subgraph "统一漏洞处理"
@@ -90,7 +90,7 @@ graph TD
 
 执行以下命令以确保所有必需的 GCP 服务 API 都已启用：
 
-```bash
+	 ```bash
 gcloud services enable \\
     container.googleapis.com \\
     artifactregistry.googleapis.com \\
