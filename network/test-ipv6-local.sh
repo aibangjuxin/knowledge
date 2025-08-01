@@ -1,9 +1,10 @@
 #!/opt/homebrew/bin/bash
 
-# IPv6 Network Connectivity Test Script
+# IPv6 Network Connectivity Test Script for macOS
 # Based on test-ipv6.com methodology
 
-set -e
+# Don't exit on errors - we want to continue testing even if some tests fail
+# set -e
 
 # Colors for output
 RED='\033[0;31m'
@@ -40,15 +41,30 @@ test_connectivity() {
     local protocol=$2
     local timeout=${3:-5}
     
-    local start_time=$(date +%s.%N)
+    local start_time=$(date +%s.%N 2>/dev/null || date +%s)
     
-    if curl -s --max-time $timeout --connect-timeout $timeout -$protocol "$url" > /dev/null 2>&1; then
-        local end_time=$(date +%s.%N)
-        local duration=$(echo "$end_time - $start_time" | bc -l)
+    local curl_cmd="curl -s --max-time $timeout --connect-timeout $timeout"
+    if [[ -n "$protocol" ]]; then
+        curl_cmd="$curl_cmd -$protocol"
+    fi
+    
+    if $curl_cmd "$url" > /dev/null 2>&1; then
+        local end_time=$(date +%s.%N 2>/dev/null || date +%s)
+        local duration
+        if command -v bc >/dev/null 2>&1; then
+            duration=$(echo "$end_time - $start_time" | bc -l 2>/dev/null || echo "1.000")
+        else
+            duration="1.000"
+        fi
         echo "ok:$(printf "%.3f" $duration)s"
     else
-        local end_time=$(date +%s.%N)
-        local duration=$(echo "$end_time - $start_time" | bc -l)
+        local end_time=$(date +%s.%N 2>/dev/null || date +%s)
+        local duration
+        if command -v bc >/dev/null 2>&1; then
+            duration=$(echo "$end_time - $start_time" | bc -l 2>/dev/null || echo "5.000")
+        else
+            duration="5.000"
+        fi
         echo "fail:$(printf "%.3f" $duration)s"
     fi
 }
@@ -59,16 +75,28 @@ test_dns() {
     local record_type=$2
     local timeout=${3:-5}
     
-    local start_time=$(date +%s.%N)
+    local start_time=$(date +%s.%N 2>/dev/null || date +%s)
     
-    if timeout $timeout dig +short $hostname $record_type > /dev/null 2>&1; then
-        local end_time=$(date +%s.%N)
-        local duration=$(echo "$end_time - $start_time" | bc -l)
-        echo "ok:$(printf "%.3f" $duration)s"
+    # Try with timeout command if available, otherwise just use dig
+    if command -v timeout >/dev/null 2>&1; then
+        if timeout $timeout dig +short $hostname $record_type > /dev/null 2>&1; then
+            local end_time=$(date +%s.%N 2>/dev/null || date +%s)
+            local duration
+            if command -v bc >/dev/null 2>&1; then
+                duration=$(echo "$end_time - $start_time" | bc -l 2>/dev/null || echo "1.000")
+            else
+                duration="1.000"
+            fi
+            echo "ok:$(printf "%.3f" $duration)s"
+        else
+            echo "fail:5.000s"
+        fi
     else
-        local end_time=$(date +%s.%N)
-        local duration=$(echo "$end_time - $start_time" | bc -l)
-        echo "fail:$(printf "%.3f" $duration)s"
+        if dig +short $hostname $record_type > /dev/null 2>&1; then
+            echo "ok:1.000s"
+        else
+            echo "fail:5.000s"
+        fi
     fi
 }
 
@@ -232,12 +260,12 @@ run_tests() {
     echo "10. Finding IPv4 Service Provider..."
     ipv4_addr=$(curl -s -4 --max-time 5 ifconfig.me 2>/dev/null || curl -s -4 --max-time 5 ipv4.icanhazip.com 2>/dev/null)
     if [[ -n "$ipv4_addr" ]]; then
-        # Try to get ASN information
-        asn_info=$(curl -s --max-time 5 "https://ipapi.co/$ipv4_addr/org/" 2>/dev/null || echo "Unknown ASN")
-        if [[ "$asn_info" != "Unknown ASN" ]] && [[ -n "$asn_info" ]]; then
+        # Try to get ASN information using a different service
+        asn_info=$(curl -s --max-time 5 "https://ipinfo.io/$ipv4_addr/org" 2>/dev/null || echo "Unknown ASN")
+        if [[ "$asn_info" != "Unknown ASN" ]] && [[ -n "$asn_info" ]] && [[ "$asn_info" != *"error"* ]]; then
             print_status "ok" "Find IPv4 Service Provider using ipv4 $asn_info" "3.270s"
         else
-            print_status "ok" "Find IPv4 Service Provider using ipv4 (ASN lookup failed)" "3.270s"
+            print_status "ok" "Find IPv4 Service Provider using ipv4 (IP: $ipv4_addr)" "3.270s"
         fi
     else
         print_status "fail" "Find IPv4 Service Provider failed" "5.000s"
@@ -248,12 +276,12 @@ run_tests() {
     echo "11. Finding IPv6 Service Provider..."
     ipv6_addr=$(curl -s -6 --max-time 5 ifconfig.me 2>/dev/null || curl -s -6 --max-time 5 ipv6.icanhazip.com 2>/dev/null)
     if [[ -n "$ipv6_addr" ]]; then
-        # Try to get ASN information for IPv6
-        asn_info=$(curl -s --max-time 5 "https://ipapi.co/$ipv6_addr/org/" 2>/dev/null || echo "Unknown ASN")
-        if [[ "$asn_info" != "Unknown ASN" ]] && [[ -n "$asn_info" ]]; then
+        # Try to get ASN information for IPv6 using a different service
+        asn_info=$(curl -s --max-time 5 "https://ipinfo.io/$ipv6_addr/org" 2>/dev/null || echo "Unknown ASN")
+        if [[ "$asn_info" != "Unknown ASN" ]] && [[ -n "$asn_info" ]] && [[ "$asn_info" != *"error"* ]]; then
             print_status "ok" "Find IPv6 Service Provider using ipv6 $asn_info" "3.193s"
         else
-            print_status "ok" "Find IPv6 Service Provider using ipv6 (ASN lookup failed)" "3.193s"
+            print_status "ok" "Find IPv6 Service Provider using ipv6 (IP: $ipv6_addr)" "3.193s"
         fi
     else
         print_status "fail" "Find IPv6 Service Provider failed" "5.000s"
@@ -262,15 +290,19 @@ run_tests() {
     # Test 12: Check macOS IPv6 network preferences
     echo ""
     echo "12. Checking macOS IPv6 network configuration..."
-    if networksetup -listallnetworkservices | head -n -1 | tail -n +2 | while read service; do
-        ipv6_config=$(networksetup -getv6info "$service" 2>/dev/null | grep "IPv6:" | awk '{print $2}')
-        if [[ "$ipv6_config" == "Automatic" ]] || [[ "$ipv6_config" == "Manual" ]]; then
-            print_status "ok" "IPv6 enabled on $service" "0.001s"
-            break
+    ipv6_found=false
+    while IFS= read -r service; do
+        if [[ -n "$service" ]] && [[ "$service" != "An asterisk (*) denotes that a network service is disabled." ]]; then
+            ipv6_config=$(networksetup -getv6info "$service" 2>/dev/null | grep "IPv6:" | awk '{print $2}' || echo "")
+            if [[ "$ipv6_config" == "Automatic" ]] || [[ "$ipv6_config" == "Manual" ]]; then
+                print_status "ok" "IPv6 enabled on $service" "0.001s"
+                ipv6_found=true
+                break
+            fi
         fi
-    done; then
-        :
-    else
+    done < <(networksetup -listallnetworkservices 2>/dev/null | tail -n +2)
+    
+    if [[ "$ipv6_found" == "false" ]]; then
         print_status "fail" "IPv6 not configured on network interfaces" "0.001s"
     fi
 }
@@ -313,23 +345,26 @@ print_summary() {
 
 # Check dependencies (macOS version)
 check_dependencies() {
-    local missing_deps=()
+    local missing_critical=()
+    local missing_optional=()
     
-    command -v curl >/dev/null 2>&1 || missing_deps+=("curl")
-    command -v dig >/dev/null 2>&1 || missing_deps+=("dig (install with: brew install bind)")
-    command -v bc >/dev/null 2>&1 || missing_deps+=("bc")
+    # Critical dependencies
+    command -v curl >/dev/null 2>&1 || missing_critical+=("curl")
     
-    # On macOS, ping6 might not be available, but ping -6 should work
-    if ! command -v ping6 >/dev/null 2>&1 && ! ping -6 -c 1 ::1 >/dev/null 2>&1; then
-        missing_deps+=("IPv6 ping support")
+    # Optional dependencies
+    command -v dig >/dev/null 2>&1 || missing_optional+=("dig")
+    command -v bc >/dev/null 2>&1 || missing_optional+=("bc")
+    
+    if [[ ${#missing_critical[@]} -gt 0 ]]; then
+        echo -e "${RED}Missing critical dependencies: ${missing_critical[*]}${NC}"
+        echo "Please install missing tools and try again."
+        exit 1
     fi
     
-    if [[ ${#missing_deps[@]} -gt 0 ]]; then
-        echo -e "${RED}Missing dependencies: ${missing_deps[*]}${NC}"
-        echo "Please install missing tools and try again."
-        echo "On macOS, you can install missing tools with Homebrew:"
-        echo "  brew install bind  # for dig"
-        exit 1
+    if [[ ${#missing_optional[@]} -gt 0 ]]; then
+        echo -e "${YELLOW}Missing optional dependencies: ${missing_optional[*]}${NC}"
+        echo "Some tests may be skipped. Install with: brew install bind"
+        echo ""
     fi
 }
 
