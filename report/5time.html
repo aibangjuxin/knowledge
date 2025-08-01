@@ -48,14 +48,14 @@
       
       .header {
         text-align: center;
-        margin-bottom: 40px;
+        margin-bottom: 25px;
         color: white;
         position: relative;
       }
       
       .header h1 {
-        font-size: 3rem;
-        margin-bottom: 15px;
+        font-size: 2.5rem;
+        margin-bottom: 10px;
         text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3);
         font-weight: 700;
         letter-spacing: -1px;
@@ -81,19 +81,19 @@
       
       .clock-container {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-        gap: 25px;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
         max-width: 1400px;
         width: 100%;
-        margin-bottom: 40px;
+        margin-bottom: 30px;
       }
       
       .clock-card {
         background: rgba(255, 255, 255, 0.95);
-        border-radius: 20px;
-        padding: 30px;
+        border-radius: 15px;
+        padding: 20px;
         box-shadow: 
-          0 10px 40px rgba(0, 0, 0, 0.1),
+          0 8px 30px rgba(0, 0, 0, 0.1),
           0 2px 8px rgba(0, 0, 0, 0.05);
         backdrop-filter: blur(20px);
         border: 1px solid rgba(255, 255, 255, 0.3);
@@ -127,7 +127,7 @@
       .card-header {
         display: flex;
         align-items: center;
-        margin-bottom: 20px;
+        margin-bottom: 15px;
         position: relative;
         z-index: 1;
       }
@@ -162,25 +162,25 @@
       
       .time-section {
         text-align: center;
-        margin: 25px 0;
+        margin: 15px 0;
         position: relative;
         z-index: 1;
       }
       
       .time-display {
-        font-size: 2.8rem;
+        font-size: 2.2rem;
         font-weight: 800;
         color: #2c3e50;
-        margin-bottom: 8px;
+        margin-bottom: 5px;
         font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
         letter-spacing: -1px;
         text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
       
       .date-display {
-        font-size: 1.1rem;
+        font-size: 0.9rem;
         color: #5a6c7d;
-        margin-bottom: 15px;
+        margin-bottom: 10px;
         font-weight: 500;
       }
       
@@ -237,13 +237,13 @@
         background: rgba(255, 255, 255, 0.9);
         backdrop-filter: blur(10px);
         border-radius: 15px;
-        padding: 20px;
-        margin-bottom: 30px;
+        padding: 15px;
+        margin-bottom: 20px;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
         display: flex;
         justify-content: space-around;
         flex-wrap: wrap;
-        gap: 20px;
+        gap: 15px;
         max-width: 1400px;
         width: 100%;
       }
@@ -342,6 +342,25 @@
           height: 50px;
           font-size: 1.2rem;
         }
+        
+        .calendar-card {
+          min-width: 300px;
+          padding: 20px;
+        }
+        
+        .calendar-title h3 {
+          font-size: 1.5rem;
+        }
+        
+        .nav-btn {
+          width: 35px;
+          height: 35px;
+          font-size: 1rem;
+        }
+        
+        .day {
+          font-size: 0.8rem;
+        }
       }
       
       .theme-toggle {
@@ -364,6 +383,195 @@
         background: rgba(255, 255, 255, 0.3);
         transform: translateY(-2px);
       }
+      
+      /* 日历样式 */
+      .calendar-container {
+        max-width: 1400px;
+        width: 100%;
+        margin-bottom: 25px;
+        display: flex;
+        justify-content: center;
+      }
+      
+      .calendar-card {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 
+          0 8px 30px rgba(0, 0, 0, 0.1),
+          0 2px 8px rgba(0, 0, 0, 0.05);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        position: relative;
+        overflow: hidden;
+        min-width: 320px;
+        max-width: 400px;
+      }
+      
+      .calendar-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 
+          0 20px 60px rgba(0, 0, 0, 0.15),
+          0 5px 20px rgba(0, 0, 0, 0.1);
+      }
+      
+      .calendar-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid rgba(108, 117, 125, 0.1);
+      }
+      
+      .calendar-title {
+        text-align: center;
+        flex: 1;
+      }
+      
+      .calendar-title h3 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #2c3e50;
+        margin-bottom: 3px;
+        letter-spacing: -0.5px;
+      }
+      
+      .calendar-title p {
+        font-size: 1rem;
+        color: #7f8c8d;
+        font-weight: 500;
+      }
+      
+      .nav-btn {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        border: none;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        color: white;
+        font-size: 1.2rem;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+      }
+      
+      .nav-btn:hover {
+        transform: scale(1.1);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+      }
+      
+      .nav-btn:active {
+        transform: scale(0.95);
+      }
+      
+      .calendar-grid {
+        margin-bottom: 15px;
+      }
+      
+      .weekdays {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 5px;
+        margin-bottom: 10px;
+      }
+      
+      .weekday {
+        text-align: center;
+        font-weight: 600;
+        color: #7f8c8d;
+        font-size: 0.8rem;
+        padding: 8px 3px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      
+      .days-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 5px;
+      }
+      
+      .day {
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        position: relative;
+        font-size: 0.9rem;
+      }
+      
+      .day:hover {
+        background: rgba(102, 126, 234, 0.1);
+        transform: scale(1.05);
+      }
+      
+      .day.other-month {
+        color: #bdc3c7;
+        opacity: 0.5;
+      }
+      
+      .day.today {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        font-weight: 700;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        animation: todayPulse 2s infinite;
+      }
+      
+      .day.today:hover {
+        background: linear-gradient(135deg, #5a6fd8, #6a42a0);
+        transform: scale(1.1);
+      }
+      
+      @keyframes todayPulse {
+        0%, 100% { 
+          box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        50% { 
+          box-shadow: 0 6px 25px rgba(102, 126, 234, 0.5);
+        }
+      }
+      
+      .day.selected {
+        background: linear-gradient(135deg, #27ae60, #2ecc71);
+        color: white;
+        font-weight: 600;
+      }
+      
+      .calendar-footer {
+        text-align: center;
+        padding-top: 10px;
+        border-top: 2px solid rgba(108, 117, 125, 0.1);
+      }
+      
+      .today-info {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+      }
+      
+      .today-label {
+        font-size: 0.9rem;
+        color: #7f8c8d;
+        font-weight: 500;
+      }
+      
+      .today-date {
+        font-size: 1rem;
+        color: #2c3e50;
+        font-weight: 600;
+        background: rgba(102, 126, 234, 0.1);
+        padding: 5px 12px;
+        border-radius: 15px;
+      }
     </style>
   </head>
   <body>
@@ -380,6 +588,40 @@
 
     <div class="stats-bar" id="statsBar">
       <!-- 统计信息由 JS 动态生成 -->
+    </div>
+
+    <!-- 日历组件 -->
+    <div class="calendar-container">
+      <div class="calendar-card">
+        <div class="calendar-header">
+          <button class="nav-btn" onclick="previousMonth()">‹</button>
+          <div class="calendar-title">
+            <h3 id="calendarMonth"></h3>
+            <p id="calendarYear"></p>
+          </div>
+          <button class="nav-btn" onclick="nextMonth()">›</button>
+        </div>
+        <div class="calendar-grid">
+          <div class="weekdays">
+            <div class="weekday">日</div>
+            <div class="weekday">一</div>
+            <div class="weekday">二</div>
+            <div class="weekday">三</div>
+            <div class="weekday">四</div>
+            <div class="weekday">五</div>
+            <div class="weekday">六</div>
+          </div>
+          <div class="days-grid" id="daysGrid">
+            <!-- 日期由 JS 动态生成 -->
+          </div>
+        </div>
+        <div class="calendar-footer">
+          <div class="today-info">
+            <span class="today-label">今天</span>
+            <span class="today-date" id="todayDate"></span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="clock-container" id="clockContainer">
@@ -438,6 +680,16 @@
           workingHours: [9, 18],
           isCurrent: true,
         },
+      ];
+
+      // 日历相关变量
+      let currentCalendarDate = new Date();
+      let selectedDate = null;
+
+      // 月份名称
+      const monthNames = [
+        "一月", "二月", "三月", "四月", "五月", "六月",
+        "七月", "八月", "九月", "十月", "十一月", "十二月"
       ];
 
       function getWorkingStatus(hour, workingHours, isCurrent = false) {
@@ -640,6 +892,116 @@
         }
       }
       
+      // 日历功能
+      function generateCalendar(date) {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const today = new Date();
+        
+        // 更新标题
+        document.getElementById('calendarMonth').textContent = monthNames[month];
+        document.getElementById('calendarYear').textContent = year + '年';
+        
+        // 获取当月第一天和最后一天
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const firstDayWeek = firstDay.getDay();
+        const daysInMonth = lastDay.getDate();
+        
+        // 获取上个月的最后几天
+        const prevMonth = new Date(year, month, 0);
+        const daysInPrevMonth = prevMonth.getDate();
+        
+        const daysGrid = document.getElementById('daysGrid');
+        daysGrid.innerHTML = '';
+        
+        // 添加上个月的日期
+        for (let i = firstDayWeek - 1; i >= 0; i--) {
+          const dayElement = createDayElement(daysInPrevMonth - i, true);
+          daysGrid.appendChild(dayElement);
+        }
+        
+        // 添加当月的日期
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dayElement = createDayElement(day, false);
+          const currentDate = new Date(year, month, day);
+          
+          // 标记今天
+          if (currentDate.toDateString() === today.toDateString()) {
+            dayElement.classList.add('today');
+          }
+          
+          // 标记选中的日期
+          if (selectedDate && currentDate.toDateString() === selectedDate.toDateString()) {
+            dayElement.classList.add('selected');
+          }
+          
+          daysGrid.appendChild(dayElement);
+        }
+        
+        // 添加下个月的日期以填满网格
+        const totalCells = daysGrid.children.length;
+        const remainingCells = 42 - totalCells; // 6行 × 7列
+        for (let day = 1; day <= remainingCells; day++) {
+          const dayElement = createDayElement(day, true);
+          daysGrid.appendChild(dayElement);
+        }
+        
+        // 更新今天信息
+        updateTodayInfo();
+      }
+      
+      function createDayElement(day, isOtherMonth) {
+        const dayElement = document.createElement('div');
+        dayElement.className = 'day';
+        dayElement.textContent = day;
+        
+        if (isOtherMonth) {
+          dayElement.classList.add('other-month');
+        }
+        
+        dayElement.addEventListener('click', function() {
+          if (!isOtherMonth) {
+            // 移除之前的选中状态
+            document.querySelectorAll('.day.selected').forEach(el => {
+              el.classList.remove('selected');
+            });
+            
+            // 添加选中状态
+            dayElement.classList.add('selected');
+            selectedDate = new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth(), day);
+            updateTodayInfo();
+          }
+        });
+        
+        return dayElement;
+      }
+      
+      function updateTodayInfo() {
+        const today = new Date();
+        const displayDate = selectedDate || today;
+        const todayDateElement = document.getElementById('todayDate');
+        
+        const options = { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric', 
+          weekday: 'long' 
+        };
+        
+        todayDateElement.textContent = displayDate.toLocaleDateString('zh-CN', options);
+      }
+      
+      function previousMonth() {
+        currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
+        generateCalendar(currentCalendarDate);
+      }
+      
+      function nextMonth() {
+        currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
+        generateCalendar(currentCalendarDate);
+      }
+      
       // 添加键盘快捷键
       document.addEventListener('keydown', function(e) {
         if (e.key === 'f' || e.key === 'F') {
@@ -648,12 +1010,25 @@
           toggleTheme();
         } else if (e.key === 'r' || e.key === 'R') {
           updateAllClocks();
+        } else if (e.key === 'ArrowLeft') {
+          previousMonth();
+        } else if (e.key === 'ArrowRight') {
+          nextMonth();
         }
       });
 
+      // 初始化
       updateAllClocks();
+      generateCalendar(currentCalendarDate);
       setInterval(updateTimes, 1000);
       setInterval(updateAllClocks, 60000);
+      setInterval(() => {
+        // 每分钟检查是否需要更新日历（跨天时）
+        const now = new Date();
+        if (now.getHours() === 0 && now.getMinutes() === 0) {
+          generateCalendar(currentCalendarDate);
+        }
+      }, 60000);
     </script>
   </body>
 </html>

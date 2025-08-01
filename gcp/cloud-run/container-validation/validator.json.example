@@ -1,0 +1,80 @@
+{
+  "environments": [
+    {
+      "type": "production",
+      "description": "生产环境",
+      "projects": [
+        "mycompany-app-prod",
+        "mycompany-api-production"
+      ],
+      "patterns": [
+        "*-prd",
+        "*-prod",
+        "*-production",
+        "company-*-prod"
+      ],
+      "validation": {
+        "required_branch": "master",
+        "requires_approval": true,
+        "required_env_vars": [
+          "DATABASE_URL",
+          "API_KEY",
+          "SECRET_KEY",
+          "REDIS_URL"
+        ],
+        "forbidden_env_vars": [
+          "DEBUG",
+          "TEST_MODE"
+        ]
+      }
+    },
+    {
+      "type": "pre-production",
+      "description": "预生产环境",
+      "projects": [
+        "mycompany-app-staging",
+        "mycompany-api-uat"
+      ],
+      "patterns": [
+        "*-ppd",
+        "*-preprod",
+        "*-staging",
+        "*-uat",
+        "company-*-staging"
+      ],
+      "validation": {
+        "required_branch": "release",
+        "requires_approval": false,
+        "required_env_vars": [
+          "DATABASE_URL",
+          "API_KEY"
+        ]
+      }
+    },
+    {
+      "type": "development",
+      "description": "开发环境",
+      "projects": [
+        "mycompany-app-dev",
+        "mycompany-api-test"
+      ],
+      "patterns": [
+        "*-dev",
+        "*-test",
+        "*-sandbox",
+        "*-local",
+        "company-*-dev"
+      ],
+      "validation": {
+        "required_branch": null,
+        "requires_approval": false,
+        "required_env_vars": []
+      }
+    }
+  ],
+  "global_settings": {
+    "strict_mode": true,
+    "debug_mode": false,
+    "timeout_seconds": 30
+  }
+}

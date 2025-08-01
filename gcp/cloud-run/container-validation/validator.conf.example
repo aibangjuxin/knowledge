@@ -1,0 +1,50 @@
+# 容器启动校验器配置文件
+# 支持多种配置方式来识别环境类型
+
+# 方法1: 基于项目名称模式匹配
+PRODUCTION_PATTERNS=(
+    "*-prd"
+    "*-prod" 
+    "*-production"
+    "company-*-prod"
+)
+
+PRE_PRODUCTION_PATTERNS=(
+    "*-ppd"
+    "*-preprod"
+    "*-staging"
+    "*-uat"
+    "company-*-staging"
+)
+
+DEVELOPMENT_PATTERNS=(
+    "*-dev"
+    "*-test"
+    "*-sandbox"
+    "*-local"
+    "company-*-dev"
+)
+
+# 分支要求配置
+REQUIRED_PRODUCTION_BRANCH="master"
+REQUIRED_PREPROD_BRANCH="release"
+
+# 生产环境必需的环境变量
+REQUIRED_PROD_ENV_VARS=(
+    "DATABASE_URL"
+    "API_KEY"
+    "SECRET_KEY"
+    "REDIS_URL"
+)
+
+# 预生产环境必需的环境变量
+REQUIRED_PREPROD_ENV_VARS=(
+    "DATABASE_URL"
+    "API_KEY"
+)
+
+# 是否启用严格模式
+STRICT_MODE="${STRICT_MODE:-true}"
+
+# 是否启用调试日志
+DEBUG_MODE="${DEBUG_MODE:-false}"
