@@ -2,6 +2,7 @@
 
 # IPv6 Network Connectivity Test Script for macOS
 # Based on test-ipv6.com methodology
+# write this script for my macOS
 
 # Don't exit on errors - we want to continue testing even if some tests fail
 # set -e
