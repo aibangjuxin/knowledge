@@ -1,6 +1,118 @@
+# Grok4
+
+### SSE 与 Streamable HTTP 的探索：AI 实时响应的最佳实践
+
+在现代应用中，尤其是 AI 驱动的实时响应场景（如聊天机器人或生成式 AI 的流式输出），服务器推送技术至关重要。SSE (Server-Sent Events) 和 Streamable HTTP（也称为 HTTP Streaming 或 Chunked HTTP）是两种核心方法，用于实现服务器向客户端的单向数据推送。本文将深入分析它们的工作机制、核心差异，并聚焦于在 Google Kubernetes Engine (GKE)、Kong（API 网关）和 Nginx（Web 服务器）环境下的选择与实施策略。这些技术特别适用于 AI 实时回复，能提升用户体验，避免传统轮询的延迟和资源浪费。
+
+#### SSE 的工作机制
+
+SSE 是一种基于 HTTP 的标准化协议，专为服务器向客户端推送实时事件而设计。它利用浏览器内置的 EventSource API，实现单向数据流。
+
+- **连接建立**：客户端通过标准 HTTP GET 请求连接服务器，指定 Accept: text/event-stream。服务器响应以 MIME 类型 text/event-stream，并保持连接开放。
+- **事件格式**：数据以纯文本块发送，每条事件以 "data: " 开头，后跟消息内容，并以双换行符 (\n\n) 结束。支持额外字段如 event:（事件类型）、id:（事件 ID，用于重连）和 retry:（重试间隔）。
+- **内置功能**：浏览器自动处理重连（默认每 3 秒重试一次，如果连接中断），并支持 last-event-id 以恢复丢失事件。
+- **适用场景**：适合 AI 实时响应，如 LLM（Large Language Model）生成文本时逐字推送，避免客户端等待完整响应。
+
+例如，在 JavaScript 中使用：
+
+```javascript
+const eventSource = new EventSource("/api/sse");
+eventSource.onmessage = (event) => console.log(event.data);
+```
+
+#### Streamable HTTP 的工作机制
+
+Streamable HTTP 是一种更通用的 HTTP 流式传输机制，利用 HTTP/1.1 的 chunked transfer encoding 或 HTTP/2 的多路复用，实现服务器分块发送数据，而不关闭连接。
+
+- **连接建立**：客户端发送标准 HTTP 请求，服务器响应以 Transfer-Encoding: chunked，并逐步发送数据块。每个块以十六进制长度开头，后跟内容和 CRLF（回车换行）。
+- **数据格式**：无标准化事件结构，开发者需自定义分隔符（如换行符）。没有内置重连机制，需要客户端手动实现。
+- **灵活性**：支持任意数据类型（如 JSON 或二进制），但依赖服务器保持连接开放。
+- **适用场景**：适合大文件传输或自定义协议的 AI 数据流，如多模态 AI 输出。但在实时响应中，可能需要额外逻辑处理边界。
+
+SSE 实际上是 Streamable HTTP 的一个特定实现，但前者添加了事件解析层。
+
+#### 核心差异对比
+
+以下表格总结 SSE 和 Streamable HTTP 的关键差异，帮助在 AI 场景中选择：
+
+| 方面           | SSE (Server-Sent Events)                         | Streamable HTTP (HTTP Streaming)           |
+| -------------- | ------------------------------------------------ | ------------------------------------------ |
+| **通信方向**   | 单向（服务器 → 客户端）                          | 单向（服务器 → 客户端）                    |
+| **协议基础**   | 基于 HTTP/1.1 或 HTTP/2，MIME: text/event-stream | 基于 HTTP/1.1 chunked 或 HTTP/2 流         |
+| **事件处理**   | 标准化事件格式，支持 event/id/retry              | 无标准化，需要自定义分隔和解析             |
+| **重连机制**   | 内置自动重连（浏览器处理）                       | 无内置，需要客户端手动实现                 |
+| **浏览器支持** | 原生 EventSource API，简单集成                   | 需要 XMLHttpRequest 或 Fetch API，手动解析 |
+| **性能与资源** | 高效，低开销；适合频繁小更新                     | 灵活，但可能更高开销；适合大块数据         |
+| **兼容性**     | 良好，支持大多数现代浏览器和代理                 | 更通用，但易受代理/负载均衡器干扰          |
+| **安全性**     | 支持 CORS 和 HTTPS                               | 同上，但需注意自定义格式的安全             |
+| **AI 适用性**  | 优于实时响应（如 LLM 流式输出），简单且交互性强  | 适合自定义 AI 数据（如多媒体），但实现复杂 |
+
+差异源于 SSE 的标准化 vs. Streamable HTTP 的灵活性：SSE 更易用，尤其在 AI 中减少开发负担；Streamable HTTP 适合非标准场景，但可能增加错误风险。
+
+#### 在实时 AI 回复场景中的选择
+
+对于 AI 实时响应（如 Grok 或类似模型的流式生成），SSE 是首选：
+
+- **优势**：简化客户端渲染（逐字显示），减少延迟；内置重连提升鲁棒性。许多 AI 框架（如 OpenAI SDK）原生支持 SSE。
+- **何时用 Streamable HTTP**：如果需要双向互动或非文本数据（如图像流），但 AI 通常单向推送，SSE 更高效。
+- **最佳实践**：
+    - 确保服务器生成响应时使用异步迭代器，避免阻塞。
+    - 处理错误：SSE 支持发送错误事件；Streamable HTTP 需自定义。
+    - 监控连接：限制并发连接，防止资源耗尽。
+    - 测试：模拟网络中断，验证重连。
+
+在 AI 中，SSE 的采用率更高，如 MCP 项目从 SSE 切换到 Streamable HTTP 以优化自定义需求，但对于标准实时回复，SSE 仍是主流。
+
+#### 在 GKE/Kong/Nginx 环境下的实施与最佳方案
+
+GKE 提供 Kubernetes 集群，Kong 作为 Ingress Controller 处理路由，Nginx 常用于反向代理。这些环境支持 SSE 和 Streamable HTTP，但需配置以处理长连接和无缓冲响应。
+
+- **GKE 配置**：
+
+    - 使用 GKE 的 Ingress（如基于 Kong 或 Nginx）暴露服务。
+    - 启用 HTTP/2 以支持多路复用。
+    - 负载均衡：使用 Google Cloud Load Balancer (GCLB)，配置为 TCP/SSL 以避免连接超时（默认 30 秒）。对于 SSE，避免 HTTP 负载均衡器的缓冲。
+
+- **Kong 配置**：
+
+    - 创建 Service 和 Route：设置 upstream 服务指向 AI 后端，Route 指定 Accept: text/event-stream。
+    - 插件：使用 proxy-cache 或 rate-limiting，但禁用缓冲（stream_mode: true）。
+    - SSE 支持：Kong 原生支持，通过配置允许长连接。潜在问题：如果 CLB 关闭连接，使用 TCP LB 前置。
+    - 示例 YAML：
+        ```yaml
+        apiVersion: configuration.konghq.com/v1
+        kind: KongIngress
+        metadata: { name: sse-ingress }
+        proxy: { stream: true }
+        ```
+
+- **Nginx 配置**：
+
+    - 作为 Ingress 或独立代理：设置 proxy_buffering off; 和 proxy_http_version 1.1; 以支持 chunked。
+    - SSE 特定：添加 Content-Type: text/event-stream; 和 X-Accel-Buffering: no;。
+    - 示例 conf：
+        ```nginx
+        location /sse {
+            proxy_pass http://backend;
+            proxy_buffering off;
+            proxy_set_header Connection '';
+            proxy_http_version 1.1;
+            chunked_transfer_encoding on;
+        }
+        ```
+
+- **最佳方案**：
+    - **选择 SSE**：在 GKE 中部署 AI 服务（如 FastAPI 或 Node.js），使用 Kong Route 处理 SSE。适用于标准 AI 流式（如 OpenAI 兼容端点）。
+    - **选择 Streamable HTTP**：如果自定义需求强，使用 Nginx 的 chunked 配置。监控 GKE 指标，确保 pod 自动缩放。
+    - **实施步骤**：1) 在 GKE 创建 Deployment 和 Service；2) 配置 Kong/Nginx Ingress；3) 测试连接持久性；4) 集成 AI 框架（如 PyTorch Serving）。
+    - **注意事项**：处理超时（设置 keepalive_timeout 高值）；安全使用 HTTPS；在生产中监控日志，避免连接泄漏。
+
+总之，对于 AI 实时响应，SSE 在简单性和兼容性上胜出，尤其在 GKE/Kong/Nginx 环境中易于部署。如果项目需高度自定义，Streamable HTTP 是备选。通过这些实践，能构建高效、可扩展的系统。
+
 # 探索 SSE 与 Streamable HTTP：AI 实时响应的最佳实践
 
 本文档旨在深入探讨并对比两种核心的服务器推送技术：**SSE (Server-Sent Events)** 和通用的 **Streamable HTTP**。我们将分析它们的工作机制、核心差异，并最终聚焦于如何在 `GKE/Nginx` 环境下，为**实时 AI 回复**等现代应用场景选择和实施最佳方案。
+探索 SSE 与 Streamable HTTP：AI 实时响应的最佳实践 再深入探讨并对比两种核心的服务器推送技术：SSE (Server-Sent Events) 和通用的 Streamable HTTP。我们将分析它们的工作机制、核心差异，并最终聚焦于如何在 GKE/Kong/Nginx 环境下，为实时 AI 回复等现代应用场景选择和实施最佳方案。
 
 ---
 
@@ -733,7 +845,7 @@ config:
   minute: 100
   hour: 2000
   policy: redis
-  redis_host: redis-cluster
+  redis_host: redis-jiqun
   redis_port: 6379
 ```
 
@@ -1087,7 +1199,7 @@ spec:
         - containerPort: 8080
         env:
         - name: REDIS_HOST
-          value: "redis-cluster"
+          value: "redis-jiqun"
         - name: REDIS_PORT
           value: "6379"
         - name: MAX_CONNECTIONS
@@ -1424,8 +1536,8 @@ graph TD
 
 这样的架构既保证了技术的一致性，又为不同场景提供了最适合的接口选择。
 
-
 # Grok
+
 # 探索 SSE 与 Streamable HTTP：AI 实时响应的最佳实践
 
 在现代 AI 应用场景下，实时响应变得至关重要，尤其是在需要低延迟和高并发支持的场景中，例如聊天机器人、实时数据分析和智能代理等。服务器推送技术是实现实时响应的核心，Server-Sent Events (SSE) 和 Streamable HTTP 是两种常见的技术选择。本文将深入探讨这两种技术的机制、差异，并在 Google Kubernetes Engine (GKE)、Kong 和 Nginx 环境下分析如何为 AI 实时回复场景选择和实施最佳方案。
@@ -1433,21 +1545,24 @@ graph TD
 ## 1. SSE (Server-Sent Events) 的工作机制和特点
 
 ### 1.1 工作机制
+
 SSE 是一种基于 HTTP 协议的服务器推送技术，允许服务器通过单一的长时间连接向客户端发送事件流。它使用 `text/event-stream` 作为 MIME 类型，服务器通过这种格式向客户端推送更新，客户端则通过浏览器原生的 `EventSource` API 或其他 HTTP 客户端解析这些事件流 [2][3]。
 
 - **连接方式**：客户端通过 建立一个持久的 HTTP GET 连接，服务器通过该连接发送事件数据。
 - **单向通信**：SSE 仅支持从服务器到客户端的数据推送，客户端若需发送数据，必须通过单独的 HTTP POST 请求 [1][2]。
 - **消息格式**：事件数据通常以 `data:` 开头，每条消息由换行符分隔，例如：
-  ```
-  data: {"  {"message": "update"}
-  ```
+    ```
+    data: {"  {"message": "update"}
+    ```
 
 ### 1.2 优点
+
 - **简单性**：基于标准 HTTP 协议，易于实现，不需要额外的协议或复杂设置 [2]。
 - **事件驱动**：支持服务器主动向客户端推送通知或状态更新，适合实时警报或仪表盘更新 [2]。
 - **浏览器支持**：通过 `EventSource` API 提供原生支持，并内置自动重连机制 [3][4]。
 
 ### 1.3 缺点
+
 - **资源消耗**：需要服务器维持长时间连接，在高并发场景下会导致显著的资源占用 [1][2]。
 - **单向限制**：SSE 仅支持服务器到客户端的数据流，客户端发送消息需额外建立 HTTP 请求 [2][3]。
 - **基础设施兼容性问题**：某些企业防火墙或代理服务器可能会强制终止超时连接，导致服务不稳定 [1]。
@@ -1455,6 +1570,7 @@ SSE 是一种基于 HTTP 协议的服务器推送技术，允许服务器通过�
 ## 2. Streamable HTTP 的工作机制和特点
 
 ### 2.1 工作机制
+
 Streamable HTTP 是一种基于纯 HTTP 的流式数据传输技术，旨在支持实时通信而无需依赖长时间连接。它通过标准 HTTP POST 和 GET 请求在一个统一的端点上处理客户端和服务器之间的通信，可选地使用 SSE 来实现流式传输。这种方法特别在 Model Context Protocol (MCP) 等 AI 协议中被广泛采用 [1][2]。
 
 - **统一端点设计**：所有通信通过单一 HTTP 端点进行，简化了架构，减少了连接数量 [1]。
@@ -1462,12 +1578,14 @@ Streamable HTTP 是一种基于纯 HTTP 的流式数据传输技术，旨在支�
 - **会话管理**：通过 `Mcp-Session-Id` 头支持状态管理和恢复，确保断线重连后消息不丢失 [1]。
 
 ### 2.2 优点
+
 - **稳定性**：在高并发场景下表现更优，TCP 连接数远低于 SSE，整体执行时间较短 [1]。
 - **性能**：响应时间更短且稳定，即使在高并发用户条件下也能维持较低的延迟 [1]。
 - **兼容性**：与现有网络基础设施（如防火墙、代理服务器）兼容性更好，减少连接中断问题 [1][2]。
 - **客户端简单性**：实现代码更简洁，维护和调试成本低，无需复杂连接管理逻辑 [1]。
 
 ### 2.3 缺点
+
 - **实现较新**：作为较新的技术，生态系统支持和工具链可能不如 SSE 成熟 [2]。
 - **复杂场景依赖 SSE**：在需要持续流式传输的场景中，仍可能回退到 SSE 模式，部分继承其局限性 [2]。
 
@@ -1475,84 +1593,87 @@ Streamable HTTP 是一种基于纯 HTTP 的流式数据传输技术，旨在支�
 
 以下表格总结了两者在关键技术维度上的对比，尤其关注 AI 实时响应场景的需求：
 
-| 特性                  | SSE (HTTP+SSE)                          | Streamable HTTP                       |
-|-----------------------|----------------------------------------|---------------------------------------|
-| **通信类型**          | 单向（服务器 → 客户端）                | 双向（客户端 ↴라, 通过单一端点支持 GET/POST         |
-| **HTTP 协议使用**     | GET 用于流式传输，POST 用于客户端消息   | 通过单一端点使用标准 HTTP POST 和 GET |
-| **状态性**            | 有状态，需要维持长时间连接             | 支持无状态服务器，但也可有状态         |
-| **需长时间连接**      | 是                                     | 否                                    |
-| **高可用性需求**      | 是，需要持续连接可用性                 | 否，支持无状态或临时服务器             |
-| **可扩展性**          | 有限，高并发下连接数激增               | 高，连接数少且稳定                   |
-| **流式支持**          | 是，通过 `text/event-stream`           | 是，可选通过 SSE 增强                |
-| **重连机制**          | 浏览器内置自动重连（通过 `EventSource`）| 需应用程序自行处理                   |
-| **客户端复杂性**      | 需要管理连接和重连逻辑                 | 代码更简洁，无需复杂连接管理          |
-| **性能（高并发）**    | 响应时间波动大，延迟增加               | 响应时间短且稳定                     |
-| **基础设施兼容性**    | 可能被防火墙或代理中断                 | 兼容性更好，减少中断问题              |
+| 特性               | SSE (HTTP+SSE)                           | Streamable HTTP                             |
+| ------------------ | ---------------------------------------- | ------------------------------------------- |
+| **通信类型**       | 单向（服务器 → 客户端）                  | 双向（客户端 ↴라, 通过单一端点支持 GET/POST |
+| **HTTP 协议使用**  | GET 用于流式传输，POST 用于客户端消息    | 通过单一端点使用标准 HTTP POST 和 GET       |
+| **状态性**         | 有状态，需要维持长时间连接               | 支持无状态服务器，但也可有状态              |
+| **需长时间连接**   | 是                                       | 否                                          |
+| **高可用性需求**   | 是，需要持续连接可用性                   | 否，支持无状态或临时服务器                  |
+| **可扩展性**       | 有限，高并发下连接数激增                 | 高，连接数少且稳定                          |
+| **流式支持**       | 是，通过 `text/event-stream`             | 是，可选通过 SSE 增强                       |
+| **重连机制**       | 浏览器内置自动重连（通过 `EventSource`） | 需应用程序自行处理                          |
+| **客户端复杂性**   | 需要管理连接和重连逻辑                   | 代码更简洁，无需复杂连接管理                |
+| **性能（高并发）** | 响应时间波动大，延迟增加                 | 响应时间短且稳定                            |
+| **基础设施兼容性** | 可能被防火墙或代理中断                   | 兼容性更好，减少中断问题                    |
 
 ## 4. 在 GKE/Kong/Nginx 环境下实施实时 AI 回复的最佳实践
 
 在为 GKE、Kong 和 Nginx 环境选择 SSE 或 Streamable HTTP 时，需要综合考虑 AI 实时回复场景的特性，包括低延迟、高并发、连接稳定性以及基础设施的兼容性。以下是在这些环境下实施的最佳实践和建议。
 
 ### 4.1 GKE (Google Kubernetes Engine) 环境
+
 GKE 是一个托管的 Kubernetes 服务，广泛用于部署 AI 应用和微服务。Kubernetes API 本身并不直接使用 SSE，而是依赖 Streaming HTTP（例如 `watch` 和 `logs` 端点）和 WebSocket（例如 `exec` 和 `portforward`）[3][4]。但 SSE 和 Streamable HTTP 可以在 GKE 的应用层实现。
 
 - **技术选择建议**：推荐使用 **Streamable HTTP**，因为 GKE 环境通常涉及高并发连接（例如，多用户同时访问 AI 聊天服务）。Streamable HTTP 能够在高负载下维持较少的 TCP 连接数，降低资源消耗，并与 GKE 的自动扩展能力更好配合 [1]。
 - **实施步骤**：
-  1. **部署 MCP 服务器**：在 GKE 上部署一个支持 Streamable HTTP 的 MCP 服务器（例如基于 Higress 的实现），确保配置单一端点支持 POST 和 GET 请求 [1]。
-  2. **配置 Ingress**：使用 GKE 的 Ingress Controller（如 Google Cloud Load Balancer）配置路由规则，确保所有请求通过单一端点，禁用不必要的长连接维持。
-  3. **会话管理**：实现 `Mcp-Session-Id` 头支持，确保用户断线重连后状态恢复，提升 AI 回复的连续性 [1]。
+    1. **部署 MCP 服务器**：在 GKE 上部署一个支持 Streamable HTTP 的 MCP 服务器（例如基于 Higress 的实现），确保配置单一端点支持 POST 和 GET 请求 [1]。
+    2. **配置 Ingress**：使用 GKE 的 Ingress Controller（如 Google Cloud Load Balancer）配置路由规则，确保所有请求通过单一端点，禁用不必要的长连接维持。
+    3. **会话管理**：实现 `Mcp-Session-Id` 头支持，确保用户断线重连后状态恢复，提升 AI 回复的连续性 [1]。
 - **监控和扩展**：利用 GKE 的监控工具（如 Cloud Monitoring）跟踪连接数和响应时间，根据负载自动扩展 Pod 数量。
 - **Mermaid 流程图**：
-  ```mermaid
-  graph TD;
-      A[客户端发起 AI 回复请求] --> B[GKE Ingress 路由到 MCP 端点];
-      B --> C[Streamable HTTP 处理请求];
-      C --> D{请求类型判断};
-      D -->|简单请求| E[标准 HTTP 响应];
-      D -->|复杂或流式请求| F[启用 SSE 流式传输];
-      E --> G[返回 AI 回复数据];
-      F --> G;
-  ```
+    ```mermaid
+    graph TD;
+        A[客户端发起 AI 回复请求] --> B[GKE Ingress 路由到 MCP 端点];
+        B --> C[Streamable HTTP 处理请求];
+        C --> D{请求类型判断};
+        D -->|简单请求| E[标准 HTTP 响应];
+        D -->|复杂或流式请求| F[启用 SSE 流式传输];
+        E --> G[返回 AI 回复数据];
+        F --> G;
+    ```
 
 ### 4.2 Kong API 网关环境
+
 Kong 是一个高性能 API 网关，适合管理 AI 服务的流量和路由，支持自定义插件和负载均衡。
 
 - **技术选择建议**：推荐使用 **Streamable HTTP**，因为 Kong 对 HTTP 协议有原生支持，且其插件架构能够轻松集成 Streamable HTTP 的单一端点设计，减少连接管理复杂性 [1]。
 - **实施步骤**：
-  1. **Kong 服务配置**：在 Kong 中定义一个服务，指向后端的 AI 模型服务器（支持 Streamable HTTP），设置统一的端点路径。
-  2. **路由和插件**：配置路由规则，确保所有 AI 回复请求通过单一端点，并启用 Kong 的会话管理插件支持状态一致性。
-  3. **负载均衡**：利用 Kong 的上游负载均衡功能，将请求分发到多个后端实例，提升高并发场景下的稳定性。
+    1. **Kong 服务配置**：在 Kong 中定义一个服务，指向后端的 AI 模型服务器（支持 Streamable HTTP），设置统一的端点路径。
+    2. **路由和插件**：配置路由规则，确保所有 AI 回复请求通过单一端点，并启用 Kong 的会话管理插件支持状态一致性。
+    3. **负载均衡**：利用 Kong 的上游负载均衡功能，将请求分发到多个后端实例，提升高并发场景下的稳定性。
 - **注意事项**：避免使用 SSE 为主的实现，因为 Kong 环境下的长时间连接可能会因代理超时配置而中断，影响用户体验 [1]。
 
 ### 4.3 Nginx 环境
+
 Nginx 是一个轻量级且高性能的 Web 服务器和反向代理，广泛用于托管 AI 应用的前端或作为负载均衡器。
 
 - **技术选择建议**：若 AI 回复场景以浏览器客户端为主，且无需复杂后端状态管理，可选择 **SSE**，因为其在浏览器中内置自动重连机制，减少开发成本 [3][4]。若涉及高并发或非浏览器客户端，推荐 **Streamable HTTP** 以提升性能和兼容性 [1]。
 - **实施步骤（SSE）**：
-  1. **Nginx 配置**：在 Nginx 配置文件中启用 SSE 支持，设置 `proxy_read_timeout` 和 `proxy_connect_timeout` 为较高值，以避免长时间连接被中断。例如：
-     ```nginx
-     server {
-         location /sse {
-             proxy_pass http://backend_ai_server;
-             proxy_http_version 1.1;
-             proxy_set_header Connection "";
-             proxy_read_timeout 300s;
-             proxy_connect_timeout 300s;
-         }
-     }
-     ```
-  2. **后端实现**：确保后端 AI 服务器通过 `text/event-stream` 格式推送流式回复。
+    1. **Nginx 配置**：在 Nginx 配置文件中启用 SSE 支持，设置 `proxy_read_timeout` 和 `proxy_connect_timeout` 为较高值，以避免长时间连接被中断。例如：
+        ```nginx
+        server {
+            location /sse {
+                proxy_pass http://backend_ai_server;
+                proxy_http_version 1.1;
+                proxy_set_header Connection "";
+                proxy_read_timeout 300s;
+                proxy_connect_timeout 300s;
+            }
+        }
+        ```
+    2. **后端实现**：确保后端 AI 服务器通过 `text/event-stream` 格式推送流式回复。
 - **实施步骤（Streamable HTTP）**：
-  1. **单一端点配置**：在 Nginx 中配置单一端点路由到后端 AI 服务器，避免设置长时间连接选项，确保标准 HTTP 请求处理：
-     ```nginx
-     server {
-         location /api/ai {
-             proxy_pass http://backend_ai_server;
-             proxy_http_version 1.1;
-         }
-     }
-     ```
-  2. **优化性能**：启用 Nginx 的 `keepalive` 连接复用，减少 TCP 连接开销，支持高并发。
+    1. **单一端点配置**：在 Nginx 中配置单一端点路由到后端 AI 服务器，避免设置长时间连接选项，确保标准 HTTP 请求处理：
+        ```nginx
+        server {
+            location /api/ai {
+                proxy_pass http://backend_ai_server;
+                proxy_http_version 1.1;
+            }
+        }
+        ```
+    2. **优化性能**：启用 Nginx 的 `keepalive` 连接复用，减少 TCP 连接开销，支持高并发。
 - **注意事项**：SSE 在 Nginx 环境下可能因防火墙或代理超时而中断，建议对连接稳定性进行充分测试 [1]。
 
 ## 5. 总结与最终建议

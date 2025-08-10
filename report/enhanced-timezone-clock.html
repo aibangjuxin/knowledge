@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>全球团队协作中心</title>
+    <link rel="icon" href="https://vectorcraftr.com/library/blink/Young%20woman%20with%20headphones.svg" type="image/svg+xml" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <style>
+        :root {
+            --bg-color-light: #f0f2f5;
+            --bg-color-dark: #1a1a1a;
+            --card-bg-light: #ffffff;
+            --card-bg-dark: #2c2c2c;
+            --text-color-light: #2c3e50;
+            --text-color-dark: #ecf0f1;
+            --primary-color: #3498db;
+            --secondary-color: #9b59b6;
+            --gradient-start: #8e44ad;
+            --gradient-end: #3498db;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color-light);
+            color: var(--text-color-light);
+            transition: background-color 0.3s, color 0.3s;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        body.dark-mode {
+            --bg-color-light: var(--bg-color-dark);
+            --card-bg-light: var(--card-bg-dark);
+            --text-color-light: var(--text-color-dark);
+        }
+
+        .main-container {
+            width: 100%;
+            max-width: 1600px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .controls-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            align-items: center;
+            padding: 15px;
+            background-color: var(--card-bg-light);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .search-box input {
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            min-width: 250px;
+            font-size: 1rem;
+        }
+
+        .action-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.15);
+        }
+
+        .clock-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+        }
+
+        .clock-card {
+            background-color: var(--card-bg-light);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s, box-shadow 0.3s;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .clock-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .country-flag { font-size: 2.5rem; }
+        .country-name { font-size: 1.6rem; font-weight: 700; }
+        .timezone-info { font-size: 0.9rem; color: #888; }
+
+        .time-display {
+            font-size: 2.8rem;
+            font-weight: 700;
+            text-align: center;
+            font-family: 'Roboto Mono', monospace;
+        }
+        .date-display {
+            text-align: center;
+            font-size: 1rem;
+            color: #777;
+        }
+
+        .status-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .status-indicator {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: white;
+        }
+        .working-hours { background-color: #27ae60; }
+        .off-hours { background-color: #c0392b; }
+        .current-timezone { background-color: #f39c12; }
+
+        .weather-section {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1rem;
+        }
+        .weather-icon { color: var(--primary-color); }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background-color: var(--card-bg-light);
+            margin: auto;
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .modal-header h2 { font-size: 1.8rem; }
+        .close-btn {
+            font-size: 2rem;
+            font-weight: bold;
+            cursor: pointer;
+            color: #888;
+        }
+        .close-btn:hover { color: #333; }
+
+        /* Add Timezone Modal */
+        #timezoneList {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .tz-option {
+            padding: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .tz-option:hover { background-color: #eee; }
+        body.dark-mode .tz-option:hover { background-color: #444; }
+
+        /* Meeting Scheduler Modal */
+        .scheduler-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 15px;
+            align-items: center;
+        }
+        #meetingTimeResult {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f0f2f5;
+            border-radius: 8px;
+        }
+        body.dark-mode #meetingTimeResult { background-color: #333; }
+
+        @media (max-width: 768px) {
+            .header h1 { font-size: 2.2rem; }
+            .controls-toolbar { flex-direction: column; align-items: stretch; }
+            .clock-container { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <div class="header">
+            <h1><i class="fas fa-globe-americas"></i> 全球团队协作中心</h1>
+            <p>一个现代化的团队时区与协作仪表盘</p>
+        </div>
+
+        <div class="controls-toolbar">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="🔍 搜索城市或国家..." aria-label="搜索时区">
+            </div>
+            <button class="action-btn" id="addTzBtn" aria-label="添加时区"><i class="fas fa-plus"></i> 添加时区</button>
+            <button class="action-btn" id="schedulerBtn" aria-label="会议安排器"><i class="fas fa-calendar-alt"></i> 会议安排器</button>
+            <button class="action-btn" id="themeToggleBtn" aria-label="切换主题"><i class="fas fa-moon"></i> 深色模式</button>
+        </div>
+
+        <div class="clock-container" id="clockContainer">
+            <!-- Clock cards will be dynamically inserted here -->
+        </div>
+    </div>
+
+    <!-- Add Timezone Modal -->
+    <div id="addTzModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>选择要添加的时区</h2>
+                <span class="close-btn" data-modal="addTzModal">&times;</span>
+            </div>
+            <div id="timezoneList">
+                <!-- Timezone options will be dynamically inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Meeting Scheduler Modal -->
+    <div id="schedulerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>会议安排器</h2>
+                <span class="close-btn" data-modal="schedulerModal">&times;</span>
+            </div>
+            <div class="scheduler-grid">
+                <label for="meetingTime">选择您的时间:</label>
+                <input type="datetime-local" id="meetingTime" />
+                <label for="sourceTz">您的时区:</label>
+                <select id="sourceTz">
+                    <!-- Source timezones will be populated here -->
+                </select>
+            </div>
+            <div id="meetingTimeResult">
+                选择一个时间查看各地的对应时间。
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const clockContainer = document.getElementById('clockContainer');
+        const searchInput = document.getElementById('searchInput');
+        const addTzBtn = document.getElementById('addTzBtn');
+        const schedulerBtn = document.getElementById('schedulerBtn');
+        const themeToggleBtn = document.getElementById('themeToggleBtn');
+        const addTzModal = document.getElementById('addTzModal');
+        const schedulerModal = document.getElementById('schedulerModal');
+        const closeBtns = document.querySelectorAll('.close-btn');
+
+        let timezones = [];
+        const allTimezones = Intl.supportedValuesOf('timeZone');
+
+        const initialTimezones = [
+            "Asia/Shanghai", "Asia/Kolkata", "Europe/London", "America/New_York", "America/Los_Angeles",
+            Intl.DateTimeFormat().resolvedOptions().timeZone
+        ];
+
+        function getCountryFlag(timezone) {
+            const flagMap = {
+                "Asia/Shanghai": "🇨🇳", "Asia/Kolkata": "🇮🇳", "Europe/London": "🇬🇧",
+                "America/New_York": "🇺🇸", "America/Los_Angeles": "🇺🇸", "UTC": "🌐"
+            };
+            return flagMap[timezone] || '🏳️';
+        }
+        
+        function getCountryName(timezone) {
+            try {
+                const region = timezone.split('/')[1].replace(/_/g, ' ');
+                return region;
+            } catch (e) {
+                return timezone;
+            }
+        }
+
+        function loadTimezones() {
+            const savedTzs = JSON.parse(localStorage.getItem('timezones'));
+            const uniqueTzs = [...new Set(savedTzs || initialTimezones)];
+            timezones = uniqueTzs.map(tz => ({
+                id: tz,
+                name: getCountryName(tz),
+                flag: getCountryFlag(tz),
+                workingHours: [9, 18],
+                isCurrent: tz === Intl.DateTimeFormat().resolvedOptions().timeZone
+            }));
+        }
+
+        function saveTimezones() {
+            localStorage.setItem('timezones', JSON.stringify(timezones.map(tz => tz.id)));
+        }
+
+        function renderClocks() {
+            const searchTerm = searchInput.value.toLowerCase();
+            const filteredTimezones = timezones.filter(tz => tz.name.toLowerCase().includes(searchTerm));
+            
+            clockContainer.innerHTML = filteredTimezones.map(createClockCard).join('');
+        }
+
+        function createClockCard(timezone) {
+            const now = new Date();
+            const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone.id }));
+            const hour = localTime.getHours();
+
+            const statusClass = timezone.isCurrent ? "current-timezone" : (hour >= timezone.workingHours[0] && hour < timezone.workingHours[1] ? "working-hours" : "off-hours");
+            const statusText = timezone.isCurrent ? "当前" : (hour >= timezone.workingHours[0] && hour < timezone.workingHours[1] ? "工作时间" : "休息");
+
+            // Placeholder for weather
+            const weather = { icon: 'sun', temp: '25°C' }; // API call would go here
+
+            return `
+                <div class="clock-card" data-timezone-id="${timezone.id}">
+                    <div class="card-header">
+                        <div class="country-flag">${timezone.flag}</div>
+                        <div class="country-info">
+                            <div class="country-name">${timezone.name}</div>
+                            <div class="timezone-info">${timezone.id}</div>
+                        </div>
+                        <button class="action-btn" style="background: #e74c3c;" onclick="removeTimezone('${timezone.id}')">&times;</button>
+                    </div>
+                    <div class="time-display">${formatTime(localTime)}</div>
+                    <div class="date-display">${formatDate(localTime)}</div>
+                    <div class="status-section">
+                        <div class="status-indicator ${statusClass}">${statusText}</div>
+                        <div class="weather-section">
+                            <i class="fas fa-${weather.icon} weather-icon"></i>
+                            <span>${weather.temp}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateTimes() {
+            document.querySelectorAll('.clock-card').forEach(card => {
+                const tzId = card.dataset.timezoneId;
+                if (!tzId) return;
+
+                const now = new Date();
+                const localTime = new Date(now.toLocaleString("en-US", { timeZone: tzId }));
+
+                card.querySelector('.time-display').textContent = formatTime(localTime);
+                card.querySelector('.date-display').textContent = formatDate(localTime);
+            });
+        }
+
+        function formatTime(date) {
+            return date.toLocaleTimeString("en-GB");
+        }
+
+        function formatDate(date) {
+            return date.toLocaleDateString("zh-CN", { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        }
+
+        window.removeTimezone = (tzId) => {
+            timezones = timezones.filter(tz => tz.id !== tzId);
+            saveTimezones();
+            renderClocks();
+        };
+
+        // Event Listeners
+        searchInput.addEventListener('input', renderClocks);
+
+        addTzBtn.addEventListener('click', () => {
+            const tzList = document.getElementById('timezoneList');
+            tzList.innerHTML = allTimezones.map(tz => `<div class="tz-option" data-tz="${tz}">${tz.replace(/_/g, ' ')}</div>`).join('');
+            addTzModal.style.display = 'flex';
+        });
+
+        document.getElementById('timezoneList').addEventListener('click', (e) => {
+            if (e.target.classList.contains('tz-option')) {
+                const tzId = e.target.dataset.tz;
+                if (!timezones.some(tz => tz.id === tzId)) {
+                    timezones.push({
+                        id: tzId,
+                        name: getCountryName(tzId),
+                        flag: getCountryFlag(tzId),
+                        workingHours: [9, 18],
+                        isCurrent: false
+                    });
+                    saveTimezones();
+                    renderClocks();
+                }
+                addTzModal.style.display = 'none';
+            }
+        });
+
+        schedulerBtn.addEventListener('click', () => {
+            const sourceTzSelect = document.getElementById('sourceTz');
+            sourceTzSelect.innerHTML = timezones.map(tz => `<option value="${tz.id}">${tz.name}</option>`).join('');
+            schedulerModal.style.display = 'flex';
+        });
+
+        document.getElementById('meetingTime').addEventListener('change', updateMeetingTimes);
+        document.getElementById('sourceTz').addEventListener('change', updateMeetingTimes);
+
+        function updateMeetingTimes() {
+            const meetingTimeInput = document.getElementById('meetingTime');
+            const sourceTz = document.getElementById('sourceTz').value;
+            const resultDiv = document.getElementById('meetingTimeResult');
+
+            if (!meetingTimeInput.value || !sourceTz) {
+                resultDiv.innerHTML = '请选择时间和您的时区。';
+                return;
+            }
+
+            const sourceDate = new Date(meetingTimeInput.value);
+            
+            let results = `<h4>各地时间:</h4><ul>`;
+            timezones.forEach(tz => {
+                const options = { timeZone: tz.id, year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false };
+                const localMeetingTime = sourceDate.toLocaleString('zh-CN', options);
+                results += `<li><strong>${tz.name}:</strong> ${localMeetingTime}</li>`;
+            });
+            results += `</ul>`;
+            resultDiv.innerHTML = results;
+        }
+
+        themeToggleBtn.addEventListener('click', () => {
+            document.body.classList.toggle('dark-mode');
+            if (document.body.classList.contains('dark-mode')) {
+                themeToggleBtn.innerHTML = '<i class="fas fa-sun"></i> 浅色模式';
+                localStorage.setItem('theme', 'dark');
+            } else {
+                themeToggleBtn.innerHTML = '<i class="fas fa-moon"></i> 深色模式';
+                localStorage.setItem('theme', 'light');
+            }
+        });
+
+        closeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById(btn.dataset.modal).style.display = 'none';
+            });
+        });
+
+        window.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                e.target.style.display = 'none';
+            }
+        });
+        
+        // Load theme preference
+        if (localStorage.getItem('theme') === 'dark') {
+            document.body.classList.add('dark-mode');
+            themeToggleBtn.innerHTML = '<i class="fas fa-sun"></i> 浅色模式';
+        }
+
+        // Initial Load
+        loadTimezones();
+        renderClocks();
+        setInterval(updateTimes, 1000);
+    });
+    </script>
+</body>
+</html>
