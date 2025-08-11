@@ -111,6 +111,14 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+REQUIRED_CMDS=("dig" "curl" "timeout" "grep" "head" "tr")
+for cmd in "${REQUIRED_CMDS[@]}"; do
+    if ! command_exists "$cmd"; then
+        print_error "Missing required command: $cmd"
+        exit 1
+    fi
+done
+
 # Optimized function to run command with timeout and caching
 run_command_fast() {
     local cmd="$1"
