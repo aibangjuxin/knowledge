@@ -1,0 +1,140 @@
+[0;32m✓[0m Primary IP: 198.0.0.9
+
+[0;34m╔══════════════════════════════╗[0m
+[1;37m  DNS ANALYSIS[0m
+[0;34m╚══════════════════════════════╝[0m
+
+[0;36mIPv4 Addresses:[0m
+  198.0.0.9
+[0;32m✓[0m Found        1 A record(s)
+
+[0;36mIPv6 Addresses:[0m
+  198.0.0.9
+[0;32m✓[0m Found        1 AAAA record(s)
+
+[0;36mCanonical Name:[0m
+  198.0.0.9
+[0;32m✓[0m Found        1 CNAME record(s)
+
+[0;36mMail Exchange:[0m
+  198.0.0.9
+[0;32m✓[0m Found        1 MX record(s)
+
+[0;36mName Servers:[0m
+  198.0.0.9
+[0;32m✓[0m Found        1 NS record(s)
+
+[0;36mText Records:[0m
+  198.0.0.9
+[0;32m✓[0m Found        1 TXT record(s)
+
+[0;36mStart of Authority:[0m
+  198.0.0.9
+[0;32m✓[0m Found        1 SOA record(s)
+
+[0;34m╔══════════════════════════════╗[0m
+[1;37m  PORT SCANNING[0m
+[0;34m╚══════════════════════════════╝[0m
+[0;35mℹ[0m Scanning common ports...
+
+[0;36mOpen Ports:[0m
+  21/tcp   open  ftp
+  22/tcp   open  ssh
+  23/tcp   open  telnet
+  25/tcp   open  smtp
+  53/tcp   open  domain
+  80/tcp   open  http
+  110/tcp  open  pop3
+  143/tcp  open  imap
+  443/tcp  open  https
+  993/tcp  open  imaps
+  995/tcp  open  pop3s
+  3306/tcp open  mysql
+  5432/tcp open  postgresql
+  6379/tcp open  redis
+  8080/tcp open  http-proxy
+  8443/tcp open  https-alt
+  9000/tcp open  cslistener
+
+[0;34m╔══════════════════════════════╗[0m
+[1;37m  WEB ANALYSIS[0m
+[0;34m╚══════════════════════════════╝[0m
+
+[0;36mHTTP Headers:[0m
+  HTTP/1.1 200 OK
+  Content-Type: text/html
+  Server: bfe/1.0.8.18
+
+[0;36mHTTPS Headers:[0m
+  HTTP/1.1 200 OK
+  Content-Type: text/html
+  Server: bfe/1.0.8.18
+
+[0;36mPerformance Metrics:[0m
+  "DNS:0.002309
+  Connect:0.002584
+  SSL:0.145639
+  TTFB:0.195330
+  Total:0.195524
+  Speed:12494"
+[0;36mRobots.txt:[0m
+  User-agent: Baiduspider
+  Disallow: /baidu
+  Disallow: /s?
+  Disallow: /ulink?
+  Disallow: /link?
+  Disallow: /home/news/data/
+  Disallow: /bh
+  
+  User-agent: Googlebot
+  Disallow: /baidu
+[0;35mℹ[0m ... truncated
+
+[0;36mSitemap.xml:[0m
+  <!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">
+  <html><head>
+  <title>404 Not Found</title>
+  </head><body>
+  <h1>Not Found</h1>
+  <p>The requested URL /sitemap.xml was not found on this server.</p>
+  </body></html>
+
+[0;36mSecurity Headers:[0m
+[1;33m⚠[0m   Strict-Transport-Security: ✗
+[1;33m⚠[0m   X-Frame-Options: ✗
+[1;33m⚠[0m   Content-Security-Policy: ✗
+
+[0;34m╔══════════════════════════════╗[0m
+[1;37m  SSL/TLS ANALYSIS[0m
+[0;34m╚══════════════════════════════╝[0m
+
+[0;36mCertificate Details:[0m
+          Issuer: C=BE, O=GlobalSign nv-sa, CN=GlobalSign RSA OV SSL CA 2018
+              Not Before: Jul  9 07:01:02 2025 GMT
+          Subject: C=CN, ST=beijing, L=beijing, O=Beijing Baidu Netcom Science Technology Co., Ltd, CN=baidu.com
+
+[0;36mDNS Names:[0m
+              X509v3 Subject Alternative Name: 
+                  DNS:baidu.com, DNS:baifubao.com, DNS:www.baidu.cn, DNS:www.baidu.com.cn, DNS:mct.y.nuomi.com, DNS:apollo.auto, DNS:dwz.cn, DNS:*.baidu.com, DNS:*.baifubao.com, DNS:*.baidustatic.com, DNS:*.bdstatic.com, DNS:*.bdimg.com, DNS:*.hao123.com, DNS:*.nuomi.com, DNS:*.chuanke.com, DNS:*.trustgo.com, DNS:*.bce.baidu.com, DNS:*.eyun.baidu.com, DNS:*.map.baidu.com, DNS:*.mbd.baidu.com, DNS:*.fanyi.baidu.com, DNS:*.baidubce.com, DNS:*.mipcdn.com, DNS:*.news.baidu.com, DNS:*.baidupcs.com, DNS:*.aipage.com, DNS:*.aipage.cn, DNS:*.bcehost.com, DNS:*.safe.baidu.com, DNS:*.im.baidu.com, DNS:*.baiducontent.com, DNS:*.dlnel.com, DNS:*.dlnel.org, DNS:*.dueros.baidu.com, DNS:*.su.baidu.com, DNS:*.91.com, DNS:*.hao123.baidu.com, DNS:*.apollo.auto, DNS:*.xueshu.baidu.com, DNS:*.bj.baidubce.com, DNS:*.gz.baidubce.com, DNS:*.smartapps.cn, DNS:*.bdtjrcv.com, DNS:*.hao222.com, DNS:*.haokan.com, DNS:*.pae.baidu.com, DNS:*.vd.bdstatic.com, DNS:*.cloud.baidu.com, DNS:click.hm.baidu.com, DNS:log.hm.baidu.com, DNS:cm.pos.baidu.com, DNS:wn.pos.baidu.com, DNS:update.pan.baidu.com
+
+[0;36mCertificate Expiry:[0m Aug 10 07:01:01 2026 GMT (363 days remaining)
+
+[0;34m╔══════════════════════════════╗[0m
+[1;37m  SECURITY ANALYSIS[0m
+[0;34m╚══════════════════════════════╝[0m
+
+[0;36mSPF Record:[0m
+  198.0.0.9
+
+[0;36mDMARC Record:[0m
+  198.0.17.0
+
+[0;36mCAA Record:[0m
+  198.0.0.9
+
+[0;34m╔══════════════════════════════╗[0m
+[1;37m  COMPLETED[0m
+[0;34m╚══════════════════════════════╝[0m
+Report saved: [0;35mdomain_report_www.baidu.com_20250811_195341.txt[0m
+Size: 8.0K, Lines: 
+     139
