@@ -1,0 +1,4 @@
+com/example/healthcheck/model/HealthResponse.class
+com/example/healthcheck/HealthCheckApplication.class
+com/example/healthcheck/service/HealthService.class
+com/example/healthcheck/controller/HealthController.class
