@@ -1,0 +1,57 @@
+This is ApacheBench, Version 2.3 <$Revision: 1913912 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking www.toutiao.com (be patient)
+Completed 100 requests
+Completed 200 requests
+Completed 300 requests
+Completed 400 requests
+Completed 500 requests
+Completed 600 requests
+Completed 700 requests
+Completed 800 requests
+Completed 900 requests
+Completed 1000 requests
+Finished 1000 requests
+
+
+Server Software:        Tengine
+Server Hostname:        www.toutiao.com
+Server Port:            443
+SSL/TLS Protocol:       TLSv1.2,ECDHE-RSA-CHACHA20-POLY1305,2048,256
+Server Temp Key:        ECDH X25519 253 bits
+TLS Server Name:        www.toutiao.com
+
+Document Path:          /w/1840396364175372/?log_from=386af56e4fc548_1755142542314
+Document Length:        72914 bytes
+
+Concurrency Level:      10
+Time taken for tests:   22.265 seconds
+Complete requests:      1000
+Failed requests:        3
+   (Connect: 0, Receive: 0, Length: 3, Exceptions: 0)
+Total transferred:      73900026 bytes
+HTML transferred:       72888854 bytes
+Requests per second:    44.91 [#/sec] (mean)
+Time per request:       222.649 [ms] (mean)
+Time per request:       22.265 [ms] (mean, across all concurrent requests)
+Transfer rate:          3241.34 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:       33   87 192.7     51    2052
+Processing:    52  133  34.6    139     506
+Waiting:       42  109  32.5    115     475
+Total:         99  220 197.0    191    2187
+
+Percentage of the requests served within a certain time (ms)
+  50%    191
+  66%    203
+  75%    209
+  80%    213
+  90%    227
+  95%    259
+  98%   1190
+  99%   1207
+ 100%   2187 (longest request)

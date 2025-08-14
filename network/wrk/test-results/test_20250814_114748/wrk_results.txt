@@ -1,0 +1,8 @@
+Running 1m test @ https://www.toutiao.com/w/1840396364175372/?log_from=386af56e4fc548_1755142542314
+  2 threads and 10 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    67.78ms   19.12ms 346.76ms   88.37%
+    Req/Sec    74.49     16.64   101.00     73.01%
+  8917 requests in 1.00m, 628.51MB read
+Requests/sec:    148.36
+Transfer/sec:     10.46MB
