@@ -1,0 +1,75 @@
+spring:
+  application:
+    name: secret-manager-demo
+  config:
+    import: "sm://"  # Enable Secret Manager integration
+  profiles:
+    active: gcp
+
+server:
+  port: 8080
+
+# GCP Configuration
+gcp:
+  project-id: ${GOOGLE_CLOUD_PROJECT:your-project-id}
+
+# Application-specific configuration
+app:
+  secrets:
+    # Key-value secrets
+    database-password: ${sm://database-password}
+    api-key: ${sm://third-party-api-key}
+    jwt-secret: ${sm://jwt-signing-key}
+    
+    # File-based secrets (will be retrieved programmatically)
+    keystore-file: keystore-jks-secret
+    ssl-certificate: ssl-cert-secret
+    
+  # File paths where secrets will be written (if needed)
+  secret-files:
+    keystore-path: /tmp/secrets/keystore.jks
+    ssl-cert-path: /tmp/secrets/ssl-cert.pem
+
+# Logging configuration
+logging:
+  level:
+    com.google.cloud: INFO
+    com.example: DEBUG
+    root: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+
+# Management endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+---
+# Development profile
+spring:
+  config:
+    activate:
+      on-profile: dev
+  
+app:
+  secrets:
+    # For development, you might use different secret names
+    database-password: ${sm://dev-database-password}
+    api-key: ${sm://dev-api-key}
+
+---
+# Production profile  
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+app:
+  secrets:
+    database-password: ${sm://prod-database-password}
+    api-key: ${sm://prod-api-key}
