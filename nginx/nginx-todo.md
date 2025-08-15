@@ -19,4 +19,4 @@
 	    `ssl_session_cache` 通过在服务器端缓存会话信息来减少握手开销，而 `ssl_session_tickets`（默认为 on）则是将加密的会话信息存储在客户端 。启用  
 	    
 	    `ssl_session_cache` 是标准的高性能实践。
-	- ![ssl_session_cache](./nginx-session-cache.md)
+	- [ssl_session_cache](./nginx-session-cache.md)

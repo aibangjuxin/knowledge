@@ -498,13 +498,13 @@ server 块
 该服务器所有位置块
 重定向和多层代理的头部设置
 你提到请求经过多次跳转（如 www.abc.com/apiname/v1/health → Kong → Runtime），需要确保每次都设置 X-Content-Type-Options。根据 Claudia Kuenzler’s Blog: Nginx add_header not working，add_header 默认适用于成功响应（200 OK）和重定向（301、302），但不适用于错误响应（4xx、5xx），除非使用 always 参数。
-	•	使用 always 参数：在 Nginx 1.7.5+ 版本中，add_header ... always; 确保头部包含在所有响应中，包括重定向和错误响应。例如： add_header X-Content-Type-Options nosniff always;
-	•	 这适合你的场景，确保重定向响应也包含头部。
+	•	使用 always 参数：在 Nginx 1.7.5+ 版本中，add_header ... always; 确保头部包含在所有响应中，包括重定向和错误响应。例如：add_header X-Content-Type-Options nosniff always;
+	•	这适合你的场景，确保重定向响应也包含头部。
 	•	多层代理：你的架构涉及 Nginx → Kong → Runtime。由于 Kong 和 Runtime 可能也处理响应，确保它们也设置头部很重要。但对于 Nginx 层，设置 add_header 已覆盖初始响应。如果 Kong 或 Runtime 是最终服务器，建议在它们配置中也设置安全头部。
 最佳实践和你的场景
 鉴于你的使用场景（开源 Nginx，包含多个 API，每个 API 有对应 location 块），以下是建议：
 ```nginx.conf
-	1	位置：在 server 块设置 add_header，如： server {
+	1	位置：在 server 块设置 add_header，如：server {
 	2	    listen 80;
 	3	    server_name www.abc.com;
 	4	    add_header X-Content-Type-Options nosniff always;
@@ -515,7 +515,7 @@ server 块
 	9	    }
 	10	}
 ```
-	11	 这样确保所有位置块继承这些头部。
+	11	这样确保所有位置块继承这些头部。
 	12	测试配置：运行 nginx -t 检查语法，确保无错误。
 	13	重定向处理：使用 always 参数，确保重定向响应也包含头部。
 	14	多层代理：如果 Kong 或 Runtime 需要设置头部，分别在它们配置中添加。例如，Kong 可能也支持类似 add_header 的设置，具体看其文档。
