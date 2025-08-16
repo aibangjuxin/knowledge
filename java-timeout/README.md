@@ -643,7 +643,7 @@ Downloaded from central: https://repo.maven.apache.org/maven2/com/google/guava/g
 ```
 
 # Run
-java -jar target/timeout-api-1.0.0.jar
+`java -jar target/timeout-api-1.0.0.jar`
 ```bash
 java -jar target/timeout-api-1.0.0.jar
 
