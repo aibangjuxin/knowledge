@@ -65,12 +65,22 @@ if [ -n "$git_status" ]; then
   echo "----------------------------------"
   echo "Processing changed files..."
   
-  # 获取所有改变的文件列表
-  changed_files=$(git diff --name-only HEAD)
+  # 获取所有改变的文件列表 (包括新文件、修改文件、删除文件)
+  changed_files=$(git status --porcelain | awk '{
+    if ($1 == "D") {
+      # Skip deleted files as they no longer exist
+      next
+    } else if ($1 == "??") {
+      # New untracked files
+      print $2
+    } else {
+      # Modified, added, renamed files
+      print $2
+    }
+  }')
   
   if [ -z "$changed_files" ]; then
-    echo "No modified files found (only new/deleted files)"
-    changed_files=$(git status --porcelain | awk '{print $2}')
+    echo "No files to process (only deleted files or empty changes)"
   fi
   
   echo "Changed files list:"
@@ -87,6 +97,12 @@ if [ -n "$git_status" ]; then
     full_path=$(pwd)/$filename
     echo "   Full path: $full_path"
     
+    # 检查文件是否存在 (跳过目录和不存在的文件)
+    if [ ! -f "$full_path" ]; then
+      echo "   ⚠ Skipping: $filename (not a regular file or doesn't exist)"
+      continue
+    fi
+    
     # 检查替换脚本是否存在
     if [ ! -f "/Users/lex/shell/replace.sh" ]; then
       echo "   ⚠ Warning: Replace script not found at /Users/lex/shell/replace.sh"
@@ -102,8 +118,8 @@ if [ -n "$git_status" ]; then
     if [ $? -eq 0 ]; then
       echo "   ✓ Replace script executed successfully for $filename"
     else
-      echo "   ✗ Failed to execute replace script for $filename"
-      exit 1
+      echo "   ⚠ Replace script failed for $filename, but continuing..."
+      # Don't exit here, just continue with other files
     fi
   done
   
