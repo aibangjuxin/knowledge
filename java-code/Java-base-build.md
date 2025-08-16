@@ -59,6 +59,47 @@
 ```bash
 java -jar target/health-check-api-1.1.0.jar
 ```
+the result 
+```bash
+java -jar target/health-check-api-1.1.0.jar
+🚀 启动健康检查API服务...
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2025-08-16T17:39:15.377+08:00  INFO 22224 --- [           main] c.e.healthcheck.HealthCheckApplication   : Starting HealthCheckApplication v1.1.0 using Java 24.0.2 with PID 22224 (/Users/lex/git/knowledge/java-code/target/health-check-api-1.1.0.jar started by lex in /Users/lex/git/knowledge/java-code)
+2025-08-16T17:39:15.379+08:00  INFO 22224 --- [           main] c.e.healthcheck.HealthCheckApplication   : No active profile set, falling back to 1 default profile: "default"
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.apache.tomcat.jni.Library in an unnamed module (jar:nested:/Users/lex/git/knowledge/java-code/target/health-check-api-1.1.0.jar/!BOOT-INF/lib/tomcat-embed-core-10.1.16.jar!/)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+2025-08-16T17:39:15.789+08:00  INFO 22224 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2025-08-16T17:39:15.793+08:00  INFO 22224 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2025-08-16T17:39:15.793+08:00  INFO 22224 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.16]
+2025-08-16T17:39:15.805+08:00  INFO 22224 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2025-08-16T17:39:15.805+08:00  INFO 22224 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 395 ms
+2025-08-16T17:39:16.010+08:00  INFO 22224 --- [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint(s) beneath base path '/actuator'
+2025-08-16T17:39:16.047+08:00  INFO 22224 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path ''
+2025-08-16T17:39:16.055+08:00  INFO 22224 --- [           main] c.e.healthcheck.HealthCheckApplication   : Started HealthCheckApplication in 0.824 seconds (process running for 1.061)
+✅ 健康检查API服务启动成功！
+📍 健康检查地址: http://localhost:8080/api_name_samples/v1.1.0/.well-known/health
+2025-08-16T17:39:34.595+08:00  INFO 22224 --- [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2025-08-16T17:39:34.595+08:00  INFO 22224 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2025-08-16T17:39:34.596+08:00  INFO 22224 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+📋 收到健康检查请求 - 2025-08-16T17:39:34.611220
+📋 收到健康检查请求 - 2025-08-16T17:40:01.887942
+📋 收到健康检查请求 - 2025-08-16T17:40:37.731790
+📋 收到健康检查请求 - 2025-08-16T17:41:04.311339
+📋 收到健康检查请求 - 2025-08-16T17:41:06.340032
+📋 收到健康检查请求 - 2025-08-16T17:41:06.921850
+📋 收到健康检查请求 - 2025-08-16T17:41:07.397339
+```
 
 服务启动后，您可以访问以下地址进行健康检查：
 
@@ -79,7 +120,45 @@ java -jar target/health-check-api-1.1.0.jar
 ```bash
 ./mvnw test
 ```
+the result
+```bash
+./mvnw test
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.fusesource.jansi.internal.JansiLoader in an unnamed module (file:/Users/lex/.m2/wrapper/dists/apache-maven-3.8.4-bin/99c998df/apache-maven-3.8.4/lib/jansi-2.4.0.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
 
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper (file:/Users/lex/.m2/wrapper/dists/apache-maven-3.8.4-bin/99c998df/apache-maven-3.8.4/lib/guava-25.1-android.jar)
+WARNING: Please consider reporting this to the maintainers of class com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------------------< com.example:health-check-api >--------------------
+[INFO] Building health-check-api 1.1.0
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- maven-resources-plugin:3.3.1:resources (default-resources) @ health-check-api ---
+[INFO] Copying 0 resource from src/main/resources to target/classes
+[INFO] Copying 0 resource from src/main/resources to target/classes
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.11.0:compile (default-compile) @ health-check-api ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-resources-plugin:3.3.1:testResources (default-testResources) @ health-check-api ---
+[INFO] skip non existing resourceDirectory /Users/lex/git/knowledge/java-code/src/test/resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.11.0:testCompile (default-testCompile) @ health-check-api ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-surefire-plugin:3.1.2:test (default-test) @ health-check-api ---
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  0.354 s
+[INFO] Finished at: 2025-08-16T17:42:05+08:00
+[INFO] ------------------------------------------------------------------------
+```
 
 要在 macOS 系统中访问并使用 Maven 编辑和管理你位于 `java-code` 目录中的 Java 源代码，你需要完成以下步骤。我会逐步讲解每个必要的操作，包括安装 Java 环境、Maven 以及如何配置和使用它们来管理你的代码。
 
