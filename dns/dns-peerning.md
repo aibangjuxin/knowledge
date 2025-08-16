@@ -144,7 +144,7 @@ VPC2是我的工程里面的Private VPC我的GKE 的环境运行在这个VPC2上
 我也知道这个配置能正确的前提是在我的Shared VPC1上有大概下面这个配置 
 gcloud dns managed-zones describe aibang —project shared-project 这是一个Forward zone 其会讲对应的请求Forward 我们这个VPC1对应的2台DNS服务器
 
-我现在的问题是这样的 比如我内部还有一些域名假设是azure.com这个域名 我们也在Share-project里面配置了对应的forward zone到我们对应的DNS服务器.
+我现在的问题是这样的比如我内部还有一些域名假设是azure.com这个域名 我们也在Share-project里面配置了对应的forward zone到我们对应的DNS服务器.
 
 我有这样一个担心 假设我也参考aiang.这个域名一样在我的VPC2的工程里面配置增加一个DNS Peering的配置
 那么我以后的GKE 里面对真正的需要访问外部网络的关于这个azure.com的域名就有一些麻烦了.它是不是还是先去我的Shared VPC做解析?拿不到的会自动递归继续往外查询?
