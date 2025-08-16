@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GKE 成本计算器 - 增强版</title>
+    <title>API 平台成本计算器</title>
     <link href="https://cdn.jsdelivr.net/npm/chart.js" rel="stylesheet">
     <style>
         :root {
@@ -22,6 +22,7 @@
             --success: #34a853;
             --warning: #fbbc04;
             --chart-bg: #ffffff;
+            --gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
 
         [data-theme="dark"] {
@@ -37,6 +38,7 @@
             --bg-panel: #292a2d;
             --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 1px 3px 1px rgba(0,0,0,0.15);
             --chart-bg: #292a2d;
+            --gradient: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
         }
 
         * {
@@ -48,16 +50,17 @@
 
         body {
             color: var(--text);
-            background-color: var(--bg-main);
+            background: var(--gradient);
             line-height: 1.5;
             font-size: 14px;
             overflow-x: hidden;
-            transition: background-color 0.3s ease;
+            transition: all 0.3s ease;
+            min-height: 100vh;
         }
 
         .header {
             background-color: var(--bg-panel);
-            padding: 16px 24px;
+            padding: 20px 24px;
             box-shadow: var(--shadow);
             position: relative;
             z-index: 10;
@@ -73,24 +76,25 @@
         }
 
         .logo {
-            font-size: 20px;
-            font-weight: 500;
+            font-size: 24px;
+            font-weight: 600;
             color: var(--primary);
             display: flex;
             align-items: center;
         }
 
         .logo-icon {
-            margin-right: 8px;
-            width: 24px;
-            height: 24px;
-            background-color: var(--primary);
-            border-radius: 50%;
+            margin-right: 12px;
+            width: 32px;
+            height: 32px;
+            background: var(--gradient);
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--bg-panel);
+            color: white;
             font-weight: bold;
+            font-size: 16px;
         }
 
         .theme-toggle {
@@ -98,13 +102,14 @@
             border: none;
             color: var(--text-secondary);
             cursor: pointer;
-            padding: 8px;
-            border-radius: 50%;
-            transition: background-color 0.2s;
+            padding: 12px;
+            border-radius: 8px;
+            transition: all 0.2s;
         }
 
         .theme-toggle:hover {
             background-color: var(--primary-light);
+            transform: scale(1.05);
         }
 
         .calculator-container {
@@ -112,54 +117,67 @@
             max-width: 1400px;
             margin: 0 auto;
             position: relative;
-            height: calc(100vh - 60px);
-            gap: 24px;
-            padding: 24px;
+            min-height: calc(100vh - 80px);
+            gap: 32px;
+            padding: 32px;
         }
 
         .configuration-panel {
-            width: 400px;
-            min-width: 300px;
+            width: 420px;
+            min-width: 350px;
             background-color: var(--bg-panel);
-            border-radius: 8px;
+            border-radius: 16px;
             box-shadow: var(--shadow);
             overflow-y: auto;
             transition: all 0.3s ease;
-            height: 100%;
-            padding: 24px;
+            height: fit-content;
+            padding: 32px;
         }
 
         .result-panel {
             flex: 1;
             background-color: var(--bg-panel);
-            border-radius: 8px;
+            border-radius: 16px;
             box-shadow: var(--shadow);
             overflow-y: auto;
-            height: 100%;
-            padding: 24px;
+            height: fit-content;
+            padding: 32px;
             transition: background-color 0.3s ease;
         }
 
         .section {
-            margin-bottom: 24px;
+            margin-bottom: 32px;
         }
 
         .section-title {
-            font-size: 16px;
-            font-weight: 500;
-            margin-bottom: 16px;
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 24px;
             color: var(--text);
+            position: relative;
+            padding-bottom: 8px;
+        }
+
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 40px;
+            height: 3px;
+            background: var(--gradient);
+            border-radius: 2px;
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 28px;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            font-size: 14px;
+            margin-bottom: 12px;
+            font-weight: 600;
+            font-size: 15px;
             color: var(--text);
         }
 
@@ -171,206 +189,288 @@
 
         .input-error {
             border-color: var(--error) !important;
+            box-shadow: 0 0 0 2px rgba(234, 67, 53, 0.2) !important;
         }
 
         .error-message {
             color: var(--error);
             font-size: 12px;
-            margin-top: 4px;
+            margin-top: 6px;
             display: none;
+            font-weight: 500;
         }
 
         input[type="number"] {
             width: 100%;
-            padding: 10px 12px;
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            font-size: 14px;
+            padding: 14px 16px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 15px;
             transition: all 0.2s;
             outline: none;
             background-color: var(--bg-panel);
             color: var(--text);
+            font-weight: 500;
         }
 
         input[type="number"]:focus {
             border-color: var(--primary);
-            box-shadow: 0 0 0 2px var(--primary-light);
+            box-shadow: 0 0 0 3px var(--primary-light);
+            transform: translateY(-1px);
         }
 
         .input-suffix {
             position: absolute;
-            right: 12px;
+            right: 16px;
             color: var(--text-secondary);
             font-size: 14px;
             pointer-events: none;
+            font-weight: 600;
         }
 
         .help-text {
-            margin-top: 4px;
-            font-size: 12px;
+            margin-top: 8px;
+            font-size: 13px;
             color: var(--text-secondary);
+            font-style: italic;
         }
 
         .slider-container {
-            margin-top: 8px;
+            margin-top: 16px;
         }
 
         .slider {
             -webkit-appearance: none;
             width: 100%;
-            height: 4px;
+            height: 6px;
             background: var(--border);
             outline: none;
-            border-radius: 2px;
+            border-radius: 3px;
             transition: background 0.3s ease;
         }
 
         .slider::-webkit-slider-thumb {
             -webkit-appearance: none;
             appearance: none;
-            width: 16px;
-            height: 16px;
+            width: 20px;
+            height: 20px;
             border-radius: 50%;
-            background: var(--primary);
+            background: var(--gradient);
             cursor: pointer;
             transition: transform 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
 
         .slider::-webkit-slider-thumb:hover {
-            transform: scale(1.2);
+            transform: scale(1.3);
         }
 
         .range-labels {
             display: flex;
             justify-content: space-between;
-            margin-top: 6px;
+            margin-top: 8px;
             font-size: 12px;
             color: var(--text-secondary);
+            font-weight: 500;
         }
 
         .button {
-            background-color: var(--primary);
+            background: var(--gradient);
             color: white;
             border: none;
-            padding: 12px 24px;
-            border-radius: 4px;
-            font-size: 14px;
-            font-weight: 500;
+            padding: 16px 24px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
             width: 100%;
+            box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
         }
 
         .button:hover {
-            background-color: var(--primary-dark);
-            transform: translateY(-1px);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(26, 115, 232, 0.4);
+        }
+
+        .button:active {
+            transform: translateY(0);
         }
 
         .cost-summary {
-            background-color: var(--bg-panel);
-            border-radius: 8px;
-            box-shadow: var(--shadow);
-            padding: 24px;
-            margin-bottom: 24px;
-            transition: background-color 0.3s ease;
+            background: var(--gradient);
+            border-radius: 16px;
+            padding: 32px;
+            margin-bottom: 32px;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cost-summary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            z-index: -1;
         }
 
         .total-cost {
-            font-size: 32px;
-            font-weight: 500;
-            color: var(--text);
+            font-size: 48px;
+            font-weight: 700;
             margin-bottom: 8px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
 
         .cost-period {
-            color: var(--text-secondary);
+            font-size: 16px;
             margin-bottom: 24px;
+            opacity: 0.9;
         }
 
         .cost-breakdown {
-            margin-top: 24px;
+            margin-top: 32px;
+            background-color: var(--bg-panel);
+            border-radius: 12px;
+            padding: 24px;
         }
 
         .cost-item {
             display: flex;
             justify-content: space-between;
-            padding: 12px 0;
-            border-top: 1px solid var(--border);
+            align-items: center;
+            padding: 16px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .cost-item:last-child {
+            border-bottom: none;
         }
 
         .cost-item-label {
             color: var(--text);
+            font-weight: 500;
+            font-size: 15px;
         }
 
         .cost-item-value {
-            font-weight: 500;
-            color: var(--text);
+            font-weight: 700;
+            color: var(--primary);
+            font-size: 16px;
         }
 
         .chart-container {
-            margin-top: 24px;
-            padding: 16px;
+            margin-top: 32px;
+            padding: 24px;
             background-color: var(--chart-bg);
-            border-radius: 8px;
+            border-radius: 12px;
             transition: background-color 0.3s ease;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
         }
 
         .info-card {
             background-color: var(--bg-panel);
-            border-radius: 8px;
+            border-radius: 16px;
             box-shadow: var(--shadow);
-            padding: 20px;
+            padding: 28px;
             margin-bottom: 24px;
-            transition: background-color 0.3s ease;
+            transition: all 0.3s ease;
+            border: 1px solid var(--border);
+        }
+
+        .info-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(60,64,67,0.15);
         }
 
         .info-card-title {
-            font-size: 16px;
-            font-weight: 500;
-            margin-bottom: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
             color: var(--primary);
         }
 
         .info-card-content {
             font-size: 14px;
             color: var(--text-secondary);
+            line-height: 1.6;
         }
 
         .info-card-list {
             list-style: none;
-            margin-top: 12px;
+            margin-top: 16px;
         }
 
         .info-card-list li {
-            margin-bottom: 8px;
+            margin-bottom: 12px;
             position: relative;
-            padding-left: 20px;
+            padding-left: 24px;
+            font-size: 14px;
+            line-height: 1.5;
         }
 
         .info-card-list li:before {
             content: "";
             position: absolute;
             left: 0;
-            top: 7px;
-            width: 6px;
-            height: 6px;
+            top: 8px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
+            background: var(--gradient);
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .action-button {
             background-color: var(--secondary);
+            color: white;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .action-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(52, 168, 83, 0.3);
+        }
+
+        .action-button.secondary {
+            background-color: var(--warning);
+            color: var(--text);
+        }
+
+        .action-button.secondary:hover {
+            box-shadow: 0 4px 12px rgba(251, 188, 4, 0.3);
         }
 
         @media (max-width: 768px) {
             .calculator-container {
                 flex-direction: column;
-                height: auto;
                 padding: 16px;
-                gap: 16px;
+                gap: 24px;
             }
 
-            .configuration-panel,
-            .result-panel {
+            .configuration-panel {
                 width: 100%;
-                height: auto;
-                max-height: none;
+                padding: 24px;
+            }
+
+            .result-panel {
+                padding: 24px;
             }
 
             .header-content {
@@ -378,7 +478,11 @@
             }
 
             .total-cost {
-                font-size: 28px;
+                font-size: 36px;
+            }
+
+            .action-buttons {
+                grid-template-columns: 1fr;
             }
         }
 
@@ -387,17 +491,45 @@
                 transition: none !important;
             }
         }
+
+        /* 新增动画效果 */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .configuration-panel,
+        .result-panel {
+            animation: slideIn 0.6s ease-out;
+        }
+
+        .cost-item {
+            transition: all 0.2s ease;
+        }
+
+        .cost-item:hover {
+            background-color: var(--primary-light);
+            border-radius: 6px;
+            margin: 0 -8px;
+            padding: 16px 8px;
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <div class="header-content">
             <div class="logo">
-                <div class="logo-icon">G</div>
-                GKE 成本计算器
+                <div class="logo-icon">API</div>
+                API 平台成本计算器
             </div>
             <button class="theme-toggle" onclick="toggleTheme()" aria-label="切换主题">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
                 </svg>
             </button>
@@ -407,7 +539,7 @@
     <div class="calculator-container">
         <div class="configuration-panel" id="configPanel">
             <div class="section">
-                <div class="section-title">计算 GKE 集群成本</div>
+                <div class="section-title">API 资源配置</div>
                 <div class="form-group">
                     <label for="cpu">CPU 数量 (vCPU)</label>
                     <div class="input-wrapper">
@@ -422,7 +554,7 @@
                             <span>96</span>
                         </div>
                     </div>
-                    <div class="help-text">每个节点的CPU核心数量</div>
+                    <div class="help-text">每个API实例分配的CPU核心数</div>
                 </div>
 
                 <div class="form-group">
@@ -439,7 +571,7 @@
                             <span>128</span>
                         </div>
                     </div>
-                    <div class="help-text">每个节点的内存大小</div>
+                    <div class="help-text">每个API实例分配的内存大小</div>
                 </div>
 
                 <div class="form-group">
@@ -456,7 +588,7 @@
                             <span>20</span>
                         </div>
                     </div>
-                    <div class="help-text">集群中节点的最大副本数</div>
+                    <div class="help-text">API的最大实例副本数量</div>
                 </div>
 
                 <div class="form-group">
@@ -473,12 +605,16 @@
                             <span>100</span>
                         </div>
                     </div>
-                    <div class="help-text">需要部署的API数量</div>
+                    <div class="help-text">用户需要部署的API总数量</div>
                 </div>
             </div>
 
             <div class="section">
-                <button class="button" onclick="updateCost()">更新成本估算</button>
+                <button class="button" onclick="updateCost()">重新计算成本</button>
+                <div class="action-buttons">
+                    <button class="action-button" onclick="saveConfiguration()">保存配置</button>
+                    <button class="action-button secondary" onclick="loadConfiguration()">加载配置</button>
+                </div>
             </div>
         </div>
 
@@ -495,12 +631,12 @@
 
                     <div class="cost-item">
                         <div class="cost-item-label">CPU 成本</div>
-                        <div class="cost-item-value" id="cpuCostDisplay">$0.00</div>
+                        <div class="cost-item-value" id="cpuCostDisplay">$76.00</div>
                     </div>
 
                     <div class="cost-item">
                         <div class="cost-item-label">内存成本</div>
-                        <div class="cost-item-value" id="memoryCostDisplay">$0.00</div>
+                        <div class="cost-item-value" id="memoryCostDisplay">$76.00</div>
                     </div>
 
                     <div class="cost-item">
@@ -515,25 +651,27 @@
             </div>
 
             <div class="info-card">
-                <div class="info-card-title">计算说明</div>
+                <div class="info-card-title">计费公式说明</div>
                 <div class="info-card-content">
-                    此计算器基于以下公式估算 GKE 集群的每月成本：
+                    本计算器基于以下定价公式为用户API计算平台使用费用：
                     <div class="info-card-list">
-                        <li>基础成本: $180/月</li>
-                        <li>每 vCPU 的成本: $19 × vCPU数量 × 副本数 ÷ 2</li>
-                        <li>每 GB内存 的成本: $19 × 内存GB × 副本数 ÷ 2</li>
+                        <li><strong>基础成本:</strong> $180/月 (平台基础设施费用)</li>
+                        <li><strong>CPU 成本:</strong> $19 × vCPU数量 × 副本数 ÷ 2</li>
+                        <li><strong>内存成本:</strong> $19 × 内存GB × 副本数 ÷ 2</li>
+                        <li><strong>总成本:</strong> (基础成本 + CPU成本 + 内存成本) × API数量</li>
                     </div>
                 </div>
             </div>
 
             <div class="info-card">
-                <div class="info-card-title">优化建议</div>
+                <div class="info-card-title">PM 使用指南</div>
                 <div class="info-card-content">
                     <div class="info-card-list">
-                        <li>考虑使用承诺使用折扣 (CUDs) 以节省长期运行工作负载的成本</li>
-                        <li>为无状态应用配置自动扩缩以优化资源利用率</li>
-                        <li>评估使用抢占式虚拟机以降低非关键工作负载的成本</li>
-                        <li>定期监控和审核集群资源利用率，调整规格以避免过度配置</li>
+                        <li>根据用户API的资源需求调整CPU和内存配置</li>
+                        <li>副本数决定API的高可用性和负载承受能力</li>
+                        <li>可保存常用配置模板，提高报价效率</li>
+                        <li>成本计算结果可直接用于客户报价和内部成本核算</li>
+                        <li>建议为不同规模的客户准备标准化的配置方案</li>
                     </div>
                 </div>
             </div>
@@ -592,16 +730,19 @@
         function updateSliderValue(sliderId, inputId) {
             const slider = document.getElementById(sliderId);
             const input = document.getElementById(inputId);
-            slider.value = input.value;
+            if (slider) {
+                slider.value = input.value;
+            }
         }
 
-        // 成本计算
+        // 成本计算 - 保持原始公式
         function calculateCost() {
             let cpu = parseFloat(document.getElementById("cpu").value) || 0;
             let memory = parseFloat(document.getElementById("memory").value) || 0;
             let maxReplicas = parseInt(document.getElementById("maxReplicas").value) || 4;
             let apiCount = parseInt(document.getElementById("apiCount").value) || 1;
             
+            // 原始计算公式
             let base_cost = 180;
             let cpu_cost = 19 * cpu * maxReplicas / 2;
             let memory_cost = 19 * memory * maxReplicas / 2;
@@ -618,6 +759,7 @@
 
         // 更新成本显示
         let costChart;
+        
         function updateCost() {
             const costs = calculateCost();
             
@@ -651,7 +793,8 @@
                             '#34a853',
                             '#fbbc04'
                         ],
-                        borderWidth: 0
+                        borderWidth: 0,
+                        hoverOffset: 4
                     }]
                 },
                 options: {
@@ -664,8 +807,10 @@
                                 color: textColor,
                                 font: {
                                     family: '"Google Sans", "Segoe UI", Arial, sans-serif',
-                                    size: 12
-                                }
+                                    size: 13,
+                                    weight: '500'
+                                },
+                                padding: 20
                             }
                         },
                         tooltip: {
@@ -675,7 +820,12 @@
                                     const percentage = ((value / costs.total) * 100).toFixed(1);
                                     return `$${value.toFixed(2)} (${percentage}%)`;
                                 }
-                            }
+                            },
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            titleColor: 'white',
+                            bodyColor: 'white',
+                            borderColor: '#1a73e8',
+                            borderWidth: 1
                         }
                     }
                 }
@@ -687,6 +837,76 @@
             if (costChart) {
                 const costs = calculateCost();
                 updateChart(costs);
+            }
+        }
+
+        // 获取当前配置
+        function getCurrentConfiguration() {
+            return {
+                cpu: parseFloat(document.getElementById("cpu").value),
+                memory: parseFloat(document.getElementById("memory").value),
+                maxReplicas: parseInt(document.getElementById("maxReplicas").value),
+                apiCount: parseInt(document.getElementById("apiCount").value)
+            };
+        }
+
+        // 保存配置
+        function saveConfiguration() {
+            const config = getCurrentConfiguration();
+            localStorage.setItem('api-cost-calculator-config', JSON.stringify(config));
+            
+            // 显示保存成功提示
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '已保存!';
+            button.style.backgroundColor = '#34a853';
+            
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.backgroundColor = '';
+            }, 2000);
+        }
+
+        // 加载配置
+        function loadConfiguration() {
+            const savedConfig = localStorage.getItem('api-cost-calculator-config');
+            if (savedConfig) {
+                const config = JSON.parse(savedConfig);
+                
+                document.getElementById("cpu").value = config.cpu || 2;
+                document.getElementById("memory").value = config.memory || 4;
+                document.getElementById("maxReplicas").value = config.maxReplicas || 4;
+                document.getElementById("apiCount").value = config.apiCount || 1;
+                
+                // 更新滑块
+                document.getElementById("cpuSlider").value = config.cpu || 2;
+                document.getElementById("memorySlider").value = config.memory || 4;
+                document.getElementById("replicasSlider").value = config.maxReplicas || 4;
+                document.getElementById("apiSlider").value = config.apiCount || 1;
+                
+                updateCost();
+                
+                // 显示加载成功提示
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = '已加载!';
+                button.style.backgroundColor = '#34a853';
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.style.backgroundColor = '';
+                }, 2000);
+            } else {
+                // 显示未找到配置提示
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = '无配置';
+                button.style.backgroundColor = '#ea4335';
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.style.backgroundColor = '';
+                }, 2000);
             }
         }
 
