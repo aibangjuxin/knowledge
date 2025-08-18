@@ -85,7 +85,7 @@ get_project_info() {
     fi
 }
 
-# 审计日志桶配置
+# 审计日志桶配置 this filter need re-fix 
 audit_log_buckets() {
     log_info "=== 审计日志桶配置 ==="
     
@@ -95,6 +95,7 @@ audit_log_buckets() {
     
     # 获取日志桶列表
     log_info "获取日志桶列表..."
+    # need fix thie one . 
     buckets_output=$(gcloud logging buckets list --project="$PROJECT_ID" --format="table(name,retentionDays,location,lifecycleState)" 2>/dev/null)
     
     if [ $? -eq 0 ] && [ -n "$buckets_output" ]; then
@@ -148,7 +149,7 @@ audit_log_sinks() {
     echo ""
 }
 
-# 审计排除项配置
+# 审计排除项配置 this gcloud is a bugs 
 audit_exclusions() {
     log_info "=== 审计排除项配置 ==="
     
@@ -173,22 +174,22 @@ audit_exclusions() {
 }
 
 # 审计 GKE 集群配置
-audit_gke_clusters() {
+audit_gke_jiquns() {
     log_info "=== 审计 GKE 集群日志配置 ==="
     
     # 获取 GKE 集群列表
-    clusters=$(gcloud container clusters list --project="$PROJECT_ID" --format="value(name,location)" 2>/dev/null)
+    jiquns=$(gcloud container jiquns list --project="$PROJECT_ID" --format="value(name,location)" 2>/dev/null)
     
-    if [ $? -eq 0 ] && [ -n "$clusters" ]; then
-        while IFS=$'\t' read -r cluster_name location; do
-            if [ -n "$cluster_name" ] && [ -n "$location" ]; then
-                log_info "检查集群: $cluster_name (位置: $location)"
+    if [ $? -eq 0 ] && [ -n "$jiquns" ]; then
+        while IFS=$'\t' read -r jiqun_name location; do
+            if [ -n "$jiqun_name" ] && [ -n "$location" ]; then
+                log_info "检查集群: $jiqun_name (位置: $location)"
                 
                 # 获取集群日志配置
-                logging_config=$(gcloud container clusters describe "$cluster_name" \
+                logging_config=$(gcloud container jiquns describe "$jiqun_name" \
                     --location="$location" \
                     --project="$PROJECT_ID" \
-                    --format="value(loggingConfig.enableComponents)" 2>/dev/null)
+                    --format="value(loggingConfig.componentConfig.enableComponents)" 2>/dev/null)
                 
                 if [ -n "$logging_config" ]; then
                     echo "  日志组件: $logging_config"
@@ -205,10 +206,10 @@ audit_gke_clusters() {
                 fi
                 
                 # 检查集群监控配置
-                monitoring_config=$(gcloud container clusters describe "$cluster_name" \
+                monitoring_config=$(gcloud container jiquns describe "$jiqun_name" \
                     --location="$location" \
                     --project="$PROJECT_ID" \
-                    --format="value(monitoringConfig.enableComponents)" 2>/dev/null)
+                    --format="value(monitoringConfig.componentConfig.enableComponents)" 2>/dev/null)
                 
                 if [ -n "$monitoring_config" ]; then
                     echo "  监控组件: $monitoring_config"
@@ -216,7 +217,7 @@ audit_gke_clusters() {
                 
                 echo ""
             fi
-        done <<< "$clusters"
+        done <<< "$jiquns"
     else
         log_info "项目中未发现 GKE 集群"
     fi
@@ -439,8 +440,8 @@ main() {
     # 执行审计
     audit_log_buckets
     audit_log_sinks
-    audit_exclusions
-    audit_gke_clusters
+    # audit_exclusions need re-debug this one   
+    audit_gke_jiquns
     audit_audit_logs
     
     # 生成建议和脚本
