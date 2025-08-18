@@ -1,0 +1,40 @@
+# GCP 日志成本优化 Terraform 配置示例
+# 复制此文件为 terraform.tfvars 并根据您的需求修改
+
+# 必需参数
+project_id = "your-gcp-project-id"
+region     = "us-central1"
+
+# 环境类型 - 决定保留策略和过滤器强度
+# 可选值: "dev", "test", "staging", "prod"
+environment = "dev"
+
+# 可选参数
+enable_gcs_archive = true
+enable_cost_optimization_filters = true
+
+# 环境配置说明:
+# 
+# dev (开发环境):
+#   - 保留期: 7天
+#   - 日志级别: ERROR+
+#   - 预期节省: 70-80%
+#   - 适用于: 开发调试环境
+#
+# test (测试环境):
+#   - 保留期: 14天
+#   - 日志级别: WARNING+
+#   - 预期节省: 60-70%
+#   - 适用于: 自动化测试环境
+#
+# staging (预生产环境):
+#   - 保留期: 30天
+#   - 日志级别: INFO+
+#   - 预期节省: 30-40%
+#   - 适用于: 预生产验证环境
+#
+# prod (生产环境):
+#   - 保留期: 90天
+#   - 日志级别: INFO+
+#   - 预期节省: 20-30%
+#   - 适用于: 生产环境
