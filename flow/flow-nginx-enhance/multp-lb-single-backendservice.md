@@ -1,9 +1,26 @@
 
-- 需要明确自己的目标是using https + Cloud armor 
+- 需要明确自己的目标是
+  - using https + Cloud armor 
 	- the cloud armor only for Some independent or single common api 
 - The way of verification is already 
 	- multiple https load balance + single backend ==> using nginx Listen different service_name then proxy_pass to different backend service 
-	- How to compress
+	- GCPBackendPolicy bind the cloud Armor Rule 
+-  My thoughts.
+	- [ ] [First](./simple-architecture.md)
+		- [ ] reduce the number of the components. Merging components A and B is a natural and highly recommended simplification of the architecture]()
+	- [ ] [The second](./switch-https.md)
+		- [ ] step is to switch TCP load balance to HTTPS load balance. 
+		- [ ] apply a new https lb then ==> through dns switch ==> switch tcp lb ==> https lb 
+- 1.  **升级负载均衡器**: 将4层的TCP/SSL代理负载均衡器替换为7层的**外部HTTPS负载均衡器**。这是实现Cloud Armor防护的**关键前提**。
+- 2.  **利用Nginx A**: 将Nginx A作为实现金丝雀部署的**流量切分控制点**。
+
+
+
+Merging components A and B is a natural and highly recommended simplification of the architecture. 
+It reduces complexity, cost, and a potential point of failure
+By making the L7 Nginx server dual-homed, you eliminate the need for the separate L4 TCP proxy entirely. The logic is sound.
+  
+
 
 我想了解对于GCP 平台来说 其一个load balancing 有没有可能能同时支持TCP和https 这样我是否可以将两个域名都解析在这个load balance 上面 其实我想实现的是一个入口 同时支持tcp https 这样的话，我后面的backend service 可以是一个nginx ? 或者多个nginx 来实现 其实我想实现的是金丝雀的部署
 
