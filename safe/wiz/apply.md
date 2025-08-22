@@ -37,8 +37,8 @@ wiz capabilities available to My project
 -  For **private clusters**:  
   - Access must be provided via **VPC Peering**, **Private Service Connect**, or **proxy solutions** (such as Cloud NAT + Proxy Pod).  
 -  If public endpoints are allowed:  
-  - Restrict Wiz’s outbound IP addresses using **Master Authorized Networks**—this enhances security.  
-  - Reduces the need for Runtime Sensor deployment, thereby lowering the operational overhead of maintaining DaemonSet pods.  
+	  - Restrict Wiz’s outbound IP addresses using **Master Authorized Networks**—this enhances security.  
+	  - Reduces the need for Runtime Sensor deployment, thereby lowering the operational overhead of maintaining DaemonSet pods.  
 
 ---
 
