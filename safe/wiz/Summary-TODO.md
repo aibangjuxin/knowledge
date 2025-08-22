@@ -1,15 +1,8 @@
-https://cloud.google.com/wiz?hl=en#see-and-secure-every-workload-with-wiz-on-google-cloud
-
-https://console.cloud.google.com/marketplace/product/wiz-public/wiz-gcp-marketplace?project=gen-lang-client-0775319228
-
-
-https://app.wiz.io/login?redirect=%2Fdocs%2Fkubernets-connectors
-
-
-https://docs.wiz.io/docs/kubernetes-connectors#required-access-and-permissions
-
-
-https://cloud.google.com/architecture/partners/id-prioritize-security-risks-with-wiz
+- https://cloud.google.com/wiz?hl=en#see-and-secure-every-workload-with-wiz-on-google-cloud
+- https://console.cloud.google.com/marketplace/product/wiz-public/wiz-gcp-marketplace?project=gen-lang-client-0775319228
+- https://app.wiz.io/login?redirect=%2Fdocs%2Fkubernets-connectors
+- https://docs.wiz.io/docs/kubernetes-connectors#required-access-and-permissions
+- https://cloud.google.com/architecture/partners/id-prioritize-security-risks-with-wiz
 
 
 wiz capabilities available to My project 
@@ -24,7 +17,8 @@ wiz capabilities available to My project
 - 如果允许公共端点访问
 	- 通过 **Master Authorized Networks** 限制 Wiz 出站 IP，安全性更高。
 	- 减少 Sensor 部署需求，降低 DaemonSet 维护成本
-- Our Status GKE  is private network 
+- Our Status 
+	- GKE  at private network 
 
 
 - Need to evaluate mode selection  
@@ -39,6 +33,8 @@ wiz capabilities available to My project
 -  If public endpoints are allowed:  
 	  - Restrict Wiz’s outbound IP addresses using **Master Authorized Networks**—this enhances security.  
 	  - Reduces the need for Runtime Sensor deployment, thereby lowering the operational overhead of maintaining DaemonSet pods.  
+- Our Status 
+	- GKE  at private network
 
 ---
 
