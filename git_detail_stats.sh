@@ -2,16 +2,59 @@
 
 # 配置参数
 COMMIT_COUNT=${1:-20}
-DATE_RANGE=${2:-"1 month ago"}
+TIME_RANGE=${2:-""}
+
+# 处理时间范围参数
+if [[ -n "$TIME_RANGE" ]]; then
+    case "$TIME_RANGE" in
+        *week*|*weeks*)
+            # 提取数字，如果没有数字默认为1
+            weeks=$(echo "$TIME_RANGE" | grep -o '[0-9]\+' | head -1)
+            weeks=${weeks:-1}
+            DATE_RANGE="${weeks} weeks ago"
+            ;;
+        *day*|*days*)
+            days=$(echo "$TIME_RANGE" | grep -o '[0-9]\+' | head -1)
+            days=${days:-1}
+            DATE_RANGE="${days} days ago"
+            ;;
+        *month*|*months*)
+            months=$(echo "$TIME_RANGE" | grep -o '[0-9]\+' | head -1)
+            months=${months:-1}
+            DATE_RANGE="${months} months ago"
+            ;;
+        [0-9]*)
+            # 如果是纯数字，当作天数处理
+            DATE_RANGE="${TIME_RANGE} days ago"
+            ;;
+        *)
+            # 如果是其他格式，直接使用
+            DATE_RANGE="$TIME_RANGE"
+            ;;
+    esac
+else
+    # 如果没有指定时间范围，使用提交数量限制
+    DATE_RANGE=""
+fi
 
 echo "=== Git 提交记录知识点分析工具 ==="
-echo "分析范围: 最近 ${COMMIT_COUNT} 次提交 或 ${DATE_RANGE} 以来的提交"
+if [[ -n "$DATE_RANGE" ]]; then
+    echo "分析范围: 最近 ${COMMIT_COUNT} 次提交 且 ${DATE_RANGE} 以来的提交"
+else
+    echo "分析范围: 最近 ${COMMIT_COUNT} 次提交"
+fi
 echo "分析时间: $(date)"
 echo
 
 # 获取所有修改的文件
 get_changed_files() {
-  git log --since="$DATE_RANGE" --name-only --pretty=format: | grep -v '^$' | sort -u
+    if [[ -n "$DATE_RANGE" ]]; then
+        # 如果指定了时间范围，同时考虑提交数量和时间
+        git log -${COMMIT_COUNT} --since="$DATE_RANGE" --name-only --pretty=format: | grep -v '^$' | sort -u
+    else
+        # 只按提交数量限制
+        git log -${COMMIT_COUNT} --name-only --pretty=format: | grep -v '^$' | sort -u
+    fi
 }
 
 # 1. 直接展示所有修改的文件（按目录结构）
@@ -51,11 +94,19 @@ git log -${COMMIT_COUNT} --name-only --oneline | grep -v "^[0-9a-f]\{7\}" | grep
 
 echo -e "\n📝 最近的提交记录（文件 + 提交信息）："
 echo "================================================"
-git log --since="$DATE_RANGE" --oneline --name-status | head -30
+if [[ -n "$DATE_RANGE" ]]; then
+    git log -${COMMIT_COUNT} --since="$DATE_RANGE" --oneline --name-status | head -30
+else
+    git log -${COMMIT_COUNT} --oneline --name-status | head -30
+fi
 
 echo -e "\n🏷️ 提交消息关键词分析："
 echo "================================================"
-git log --since="$DATE_RANGE" --pretty=format:"%s" |
+if [[ -n "$DATE_RANGE" ]]; then
+    git log -${COMMIT_COUNT} --since="$DATE_RANGE" --pretty=format:"%s"
+else
+    git log -${COMMIT_COUNT} --pretty=format:"%s"
+fi |
   tr '[:upper:]' '[:lower:]' |
   sed 's/[^a-z0-9\s]/ /g' |
   tr ' ' '\n' |
@@ -161,7 +212,16 @@ if [[ $script_count -gt 0 ]]; then
   echo "3. 你开发了 $script_count 个脚本工具"
 fi
 
-echo -e "\n使用方法："
-echo "  $0 [提交数量] [时间范围]"
-echo "  例如: $0 50 '2 weeks ago'"
-echo "  例如: $0 30 '1 month ago'"
+echo -e "\n📖 使用方法："
+echo "================================================"
+echo "  $0                    # 分析最近20次提交"
+echo "  $0 30                 # 分析最近30次提交"
+echo "  $0 20 2weeks          # 分析最近20次提交且2周内的"
+echo "  $0 50 1month          # 分析最近50次提交且1个月内的"
+echo "  $0 10 7days           # 分析最近10次提交且7天内的"
+echo "  $0 15 14              # 分析最近15次提交且14天内的"
+echo ""
+echo "时间范围支持格式："
+echo "  - 数字 (当作天数): 7, 14, 30"
+echo "  - 带单位: 1week, 2weeks, 1month, 3months, 7days"
+echo "  - Git格式: '1 week ago', '2 months ago'"
