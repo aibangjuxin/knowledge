@@ -18,25 +18,14 @@ if [[ "$TIME_RANGE" =~ ^(console|json|markdown)$ ]]; then
     TIME_RANGE=""
 fi
 
-# 颜色定义 - 检测终端是否支持颜色
-if [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]] && command -v tput >/dev/null 2>&1 && tput colors >/dev/null 2>&1 && [[ $(tput colors) -ge 8 ]]; then
-    readonly RED='\033[0;31m'
-    readonly GREEN='\033[0;32m'
-    readonly YELLOW='\033[1;33m'
-    readonly BLUE='\033[0;34m'
-    readonly PURPLE='\033[0;35m'
-    readonly CYAN='\033[0;36m'
-    readonly NC='\033[0m' # No Color
-else
-    # 如果不支持颜色，使用空字符串
-    readonly RED=''
-    readonly GREEN=''
-    readonly YELLOW=''
-    readonly BLUE=''
-    readonly PURPLE=''
-    readonly CYAN=''
-    readonly NC=''
-fi
+# 颜色定义 - 简化版本，默认启用颜色
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly BLUE='\033[0;34m'
+readonly PURPLE='\033[0;35m'
+readonly CYAN='\033[0;36m'
+readonly NC='\033[0m' # No Color
 
 # 统计数据存储
 declare -A dir_stats=() file_stats=() ext_stats=()
