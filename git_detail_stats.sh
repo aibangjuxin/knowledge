@@ -106,11 +106,11 @@ if [[ -n "$DATE_RANGE" ]]; then
     git log -${COMMIT_COUNT} --since="$DATE_RANGE" --pretty=format:"%s"
 else
     git log -${COMMIT_COUNT} --pretty=format:"%s"
-fi |
-  tr '[:upper:]' '[:lower:]' |
-  sed 's/[^a-z0-9\s]/ /g' |
-  tr ' ' '\n' |
-  grep -E '^[a-z]{3,}$' |
+fi | \
+  tr '[:upper:]' '[:lower:]' | \
+  sed 's/[^a-z0-9\s]/ /g' | \
+  tr ' ' '\n' | \
+  grep -E '^[a-z]{3,}$' | \
   sort | uniq -c | sort -nr | head -20
 
 echo -e "\n🎯 知识点文件分析（基于文件名和路径）："
