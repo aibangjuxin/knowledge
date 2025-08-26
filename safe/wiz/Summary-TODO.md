@@ -19,7 +19,8 @@ wiz capabilities available to My project
 	- 减少 Sensor 部署需求，降低 DaemonSet 维护成本
 - Our Status 
 	- GKE  at private network 
-
+	- we need using psc network ?
+---
 
 - Need to evaluate mode selection  
 	- Two available modes: **Only API Scan** and **Enable Runtime Sensor**  
@@ -35,6 +36,8 @@ wiz capabilities available to My project
 	  - Reduces the need for Runtime Sensor deployment, thereby lowering the operational overhead of maintaining DaemonSet pods.  
 - Our Status 
 	- GKE  at private network
+    	- if we only API Scan ==> need created a service account ?
+    	- 
 
 ---
 
