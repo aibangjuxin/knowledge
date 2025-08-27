@@ -1,4 +1,7 @@
 # summary 
+
+I've analyzed the domains of our mutual Transport Layer Security (mTLS). These domains are issued by DigiCert, so we need to renew all of them. Additionally, before renewal, we should first notify users to regenerate their corresponding client certificates. Then, add the updated Root and intermediate key certificates to our trust configuration through our pipeline. After that, we can renew the server certificates at an appropriate time node. This is my current understanding. If you have any questions, please feel free to contact me.
+
 ---
 
 ### **1. 变更背景**
@@ -55,6 +58,204 @@
 - **场景2: 用于 mTLS (客户端认证)**
   - **动作**: 必须使用由 **私有 CA** 签发的 **专用客户端证书**。公有 CA（如 Digicert）签发的证书仅用于服务器端。
   - 替换mTLS的由Digicert签发的证书中包含EKU的就可以了.
+
+
+你的理解 **基本正确**，但要细化一下：
+
+---
+
+### **TLS（单向认证）情况**
+
+- **服务端证书由公有 CA（如 DigiCert）签发**，用于 HTTPS 服务器身份验证。
+    
+- 只要当前证书 **还未过期**，就能继续工作。
+    
+- 当它过期后，你续签的新证书将 **不再包含 Client Authentication EKU**，但这 **不影响单向 TLS**，因为客户端不依赖该 EKU。
+    
+- **结论**：单向 TLS 不受影响，更新证书时无需做额外动作。
+    
+
+---
+
+### **mTLS（双向认证）情况**
+
+- **mTLS 要求：**
+    
+    - 服务器证书用于证明服务器身份。
+        
+    - 客户端证书用于证明客户端身份（必须包含 Client Authentication EKU）。
+        
+    
+- 如果你的应用目前用的是 **同一张 DigiCert 证书做 mTLS 客户端认证**（少见，但可能发生），那么：
+    
+    - 当这张证书过期后，你 **不能再用 DigiCert 公有证书做客户端认证**。
+        
+    - 必须改为 **客户端证书由私有 CA 签发**。
+        
+    
+- 如果你目前是 **服务器用 DigiCert 证书，客户端用单独的私有 CA 证书**：
+    
+    - 那么服务器证书过期后，只需更新服务器端证书（不影响客户端）。
+        
+    - 客户端证书不需要变更。
+        
+    
+
+---
+
+### **关键点**
+
+- **更新服务端证书，不会强制要求客户端一起更新**，只要客户端信任新服务器证书的 CA。
+    
+- **客户端必须更新**，只有当：
+    
+    - 你当前用 DigiCert 公有证书做客户端身份认证（未来不再可行）。
+        
+    - 或者你的策略要求客户端信任列表严格绑定到某个证书（而不是 CA）。
+        
+    
+
+---
+使用 **GCP Certificate Manager Trust Configs** 的情况下，mTLS 的证书信任模型依赖于 **CA 证书链**，而不是具体的 Leaf 证书。这意味着：
+
+---
+
+### **1. Trust Configs 的工作原理**
+
+- Trust Config 定义了客户端或服务器应信任的 **CA 证书或 CA 池**。
+    
+- mTLS 验证时，客户端证书只需由受信任的 CA 签发即可。
+    
+- 因此，当你更新服务器证书时，只要仍然由同一个受信任 CA 签发，客户端无需更新。
+    
+
+---
+
+### **2. 变更影响**
+
+- **普通 TLS**
+    
+    - 无影响，只需正常更新服务器证书（由 Digicert 签发，包含 Server Authentication EKU 即可）。
+        
+    
+- **mTLS**
+    
+    - 如果客户端证书当前是由 **Digicert 公有 CA 签发**，在 2025-10-01 后无法续签，必须切换到 **私有 CA**。
+        
+    - 你需要在 Trust Config 中 **新增私有 CA 的根证书或 CA 池**，以便服务器信任新的客户端证书。
+        
+    
+
+---
+
+### **3. 是否需要同时更新客户端证书？**
+
+- **如果客户端证书原本就是私有 CA 签发** → 不需要改动。
+    
+- **如果客户端证书是 Digicert 公有 CA 签发** → 需要重新颁发客户端证书（私有 CA），并更新 Trust Config 以加入新的 CA。
+    
+
+---
+
+### **4. 建议行动**
+
+1. 审计当前 GCP Trust Config，确认哪些客户端证书链指向 Digicert。
+    
+2. 为这些客户端建立新的私有 CA 签发体系（GCP CAS 或内部 CA）。
+    
+3. 在 Trust Config 中加入新 CA，确保平滑切换。
+    
+
+---
+
+要不要我帮你写一个 **GCP Trust Config 审计与迁移清单 (Markdown 表格)**，列出：
+
+- 当前证书链来源
+    
+- 是否包含 Client Authentication EKU
+    
+- 是否需要切换到私有 CA
+    
+- 对应的更新动作
+
+
+对于mTLS来说,其实就是要让用户先更新我先加入到Trust config然后 我再去更新我的服务端的证书?
+
+正确，但需要分清 **谁需要更新** 以及 **更新顺序**：
+
+---
+
+## **mTLS 证书更新顺序（结合 GCP Trust Config）**
+
+  
+
+### **1. 用户（客户端）证书更新**
+
+- 如果客户端证书当前由 Digicert 公有 CA 签发，并且包含 **Client Authentication EKU**：
+    
+    - 在 2025-10-01 后无法再续签。
+        
+    - 需要提前重新签发客户端证书，由私有 CA 颁发。
+        
+    
+
+  
+
+### **2. 更新 Trust Config**
+
+- 在服务器端的 GCP Trust Config 中：
+    
+    - 添加新的私有 CA 根证书或 CA 池。
+        
+    - 保留旧 CA 直到所有客户端完成迁移。
+        
+    - 允许同时信任旧证书和新证书，确保平滑过渡。
+        
+    
+
+  
+
+### **3. 更新服务端证书**
+
+- 服务器证书可继续使用 Digicert 签发的公有 TLS 证书（只需包含 Server Authentication EKU）。
+    
+- 当现有服务器证书过期时，再替换为新的公有 TLS 证书。
+    
+- 服务端证书更新不会影响客户端，只要证书链仍由受信任 CA 签发。
+    
+
+---
+
+### **更新顺序总结**
+
+```mermaid
+graph TD;
+    A[签发新客户端证书 私有 CA] --> B[更新 GCP Trust Config 添加新 CA];
+    B --> C[客户端逐步替换证书];
+    C --> D[确认所有客户端已更新];
+    D --> E[到期后再更新服务端证书 DigiCert 公有 A];
+```
+
+---
+
+## **关键原因**
+
+- Trust Config 基于 CA 信任，而不是具体的证书。
+    
+- 必须先确保服务器信任新证书的 CA，才能安全切换客户端证书。
+    
+
+---
+
+是否要我帮你写一份 **详细迁移计划 (Markdown 表格)**，包括：
+
+- 时间节点
+    
+- 动作
+    
+- 责任方（客户端 / 服务器 / 证书管理团队）
+    
+- 风险及回滚方案
 
 # Client Authentication EKU 从公共 TLS 证书中移除
 
