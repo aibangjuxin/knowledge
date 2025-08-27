@@ -8,6 +8,10 @@
 wiz capabilities available to My project 
 
 # summary 
+我现在大概了解了 WIZ 的工作方式，现在我有几个疑问需要你们帮我们解答疑惑，
+1 首先是我的理解,如果有错误的话,请帮忙纠正下
+2 目前WIZ平台已经介入的GCP用户实现方式? 或者有没有成功的案例参考,或者对应的文档参考
+3 我们这次会议的重点也是聚焦在这几个问题之上。
  - 需要评估模式选择
 	 - **仅API扫描** 和 **启用Runtime Sensor** 两种模式
 	 - Wiz 是一款**无代理（agentless）**的云安全平台，它通过读取云环境 API（如 GCP/GKE）来扫描整个云架构，而无需在主机或容器内安装代理。同时，它也支持在 GKE 集群部署**轻量级 sensor（Runtime Sensor）**以提供运行时监控
@@ -21,6 +25,11 @@ wiz capabilities available to My project
 	- GKE  at private network 
 	- we need using psc network ?
 ---
+
+I roughly understand the working mode of WIZ now. Currently, I have several questions that need you to help us answer. 
+1. First of all, here is my understanding. If there are any mistakes, please help correct them.
+2. What is the implementation method for GCP users that the WIZ platform has intervened in? Or are there any successful case references, or corresponding document references?
+3. The focus of our meeting this time also lies on these questions.
 
 - Need to evaluate mode selection  
 	- Two available modes: **Only API Scan** and **Enable Runtime Sensor**  
