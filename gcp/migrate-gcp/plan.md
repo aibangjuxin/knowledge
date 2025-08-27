@@ -1,3 +1,95 @@
+以下是基于 GAP 分析与已知架构要素整理的 迁移注意事项分类清单，可作为 HLD 和 Checklist 的输入参考。
+
+⸻
+
+1. 基础设施与计算资源
+	•	运行环境确认
+	•	Java、Python、Node.js 服务运行位置：GKE、GCE、Cloud Run 或混合部署？
+	•	是否需要容器化改造，或引入 Service Mesh（Istio）增强流量管理？
+	•	节点安全配置
+	•	GKE 节点版本、补丁策略、加固方案。
+	•	节点间 TLS（mTLS）通信是否启用，证书颁发及轮换策略是否明确？
+
+⸻
+
+2. 网络与流量管理
+	•	Ingress 流量管理
+	•	是否通过 HTTPS LB 统一入口？是否需要支持 mTLS 校验？
+	•	是否需要 Cloud Armor、WAF、Rate Limiting 保护策略？
+	•	Egress 流量管理
+	•	当前是否存在 API/工作负载可直接访问公网的情况？
+	•	是否计划通过 Private Google Access、VPC Service Controls 控制出口流量？
+	•	租户隔离策略
+	•	是否已定义 Network Policy 以限制不同租户间通信？
+
+⸻
+
+3. 数据管理
+	•	Redis 使用情况
+	•	Redis 用于缓存、Session，还是持久化用户数据？
+	•	是否存在持久化 Key 及敏感信息存储？
+	•	Cloud SQL 数据迁移
+	•	是否存在用户数据？是否需 DMS（Database Migration Service）迁移？
+	•	数据合规与加密
+	•	是否需开启 CMEK（Customer-Managed Encryption Keys）？
+	•	是否存在 Firestore、BigQuery 关联数据？
+
+⸻
+
+4. 安全与密钥管理
+	•	证书管理
+	•	是否存在 mTLS 证书签发与轮换机制？
+	•	是否需要 CAEP 平台统一管理 CA 证书？
+	•	Secret 管理
+	•	是否使用 POP Secret Manager？是否迁移到 CAEP 统一 Secret 管理系统？
+
+⸻
+
+5. 命名规范（Naming Convention）
+	•	是否有统一标准？
+	•	命名是否包含：
+	•	环境（dev/stage/prod）
+	•	服务标识
+	•	租户标识
+	•	是否需与 CAEP 平台命名标准对齐？
+
+⸻
+
+6. CICD 与部署管控
+	•	是否已引入 ArgoCD 或 GitOps 流程？
+	•	部署前是否存在自动化安全扫描及资源限制校验（CPU/Mem）？
+	•	是否需要蓝绿或金丝雀发布策略以降低迁移风险？
+
+⸻
+
+7. API 治理与网关管理
+	•	Kong Gateway 的部署位置是否需调整到 Federated 平台内部？
+	•	API 是否需要强制 AuthN & AuthZ 机制？
+	•	现有 Kong 插件与 CAEP 插件是否存在功能缺口？
+
+⸻
+
+8. 监控与告警
+	•	是否需要统一迁移至 CAEP 监控体系（Cloud Logging + Cloud Monitoring + Trace）？
+	•	API 级别的指标采集与告警规则是否一致？
+
+⸻
+
+9. 运营与计费
+	•	是否需要定义租户 SLA？
+	•	是否需要引入计费模型？如果是，需在 API 层面埋点以统计使用量。
+
+⸻
+
+10. DNS 与服务发现
+	•	是否使用 GKE 内部 DNS 或 Cloud DNS 进行服务发现？
+	•	新平台是否需要申请新的 FQDN 并配置 SSL？
+
+⸻
+
+要不要我 整理成一个高层架构设计（HLD）章节目录 + 迁移 Checklist 表格，每个 Checklist 条目带有“完成状态（√/×）”和“负责人”列？
+还是先出 迁移风险清单（Risk Register） 帮助团队评估？
+
 以下是一个针对 POP 平台迁移到新的 Federated GCP 工程 的完整方案，结合现有的 API Platform (aibang) 标准及安全要求，包含流程、关键步骤及必要细节。
 
 ⸻
@@ -16,6 +108,8 @@
 	•	安全需求：
 	•	是否已使用 mTLS？
 	•	是否需要 Cloud Armor 或其他安全策略？
+    •	GKE dns ? cloud Run 
+    •   naming coversion 	
 
 1.2 差距评估
 	•	比较 aibang 平台与 POP 平台的差异点：

@@ -83,7 +83,7 @@ openssl x509 -text -noout
 
 # 检查在线证书
 ./check_eku.sh example.com:443
-./check_eku.sh api-platform-pprd.business.hsbc.co.uk:443
+./check_eku.sh api-platform-pprd.business.aibang.co.uk:443
 
 # 批量检查多个证书
 ./check_eku.sh certs/*.crt
@@ -168,6 +168,106 @@ Extended Key Usage:
 - [RFC 5280 - Internet X.509 Public Key Infrastructure Certificate](https://tools.ietf.org/html/rfc5280)
 - [CA/Browser Forum Baseline Requirements](https://cabforum.org/baseline-requirements-documents/)
 - [OpenSSL Documentation](https://www.openssl.org/docs/)
+
+# effect 
+后续处理的核心步骤就是 **重新申请并替换证书**，但要根据使用场景来细化：
+
+---
+
+### **1. 为什么需要新证书？**
+
+- **Digicert 自 2025-10-01 起不再在公有证书中提供 Client Authentication EKU**。
+    
+- 如果现有证书依赖该 EKU（用于 mTLS 或客户端认证），在证书更新或重新签发后将不再包含此功能，导致认证失败。
+    
+
+---
+
+### **2. 后续处理步骤**
+
+  
+
+#### **步骤 A：区分使用场景**
+
+- **仅用于服务器端 TLS（HTTPS）**
+    
+    - 只需要 Server Authentication EKU，无需改动。
+        
+    - 证书到期后按正常流程更新即可。
+        
+    
+- **用于 mTLS（客户端认证）**
+    
+    - 必须生成新的 **客户端证书**，由 **私有 CA** 或企业 CA 颁发（非公有 CA）。
+        
+    - 公有证书（如 Digicert）只用于服务器端。
+        
+    
+
+---
+
+#### **步骤 B：申请新证书**
+
+1. **服务器端证书（公有 CA）**
+    
+    - 继续使用 Digicert 等公有 CA 签发。
+        
+    - 不需要 Client Authentication EKU。
+        
+    
+2. **客户端证书（私有 CA）**
+    
+    - 使用 GCP Certificate Authority Service (CAS) 或自建 CA。
+        
+    - 签发仅包含 Client Authentication EKU 的证书。
+        
+    
+
+---
+
+#### **步骤 C：替换与验证**
+
+1. 替换证书文件并重启相关服务（Nginx/Kong/GKE Ingress 等）。
+    
+2. 使用以下命令验证新证书：
+    
+
+```
+openssl x509 -in new_client.crt -text -noout | grep -A 1 "Extended Key Usage"
+```
+
+2. 确认 EKU 包含：
+    
+
+```
+TLS Web Client Authentication
+```
+
+  
+
+---
+
+### **3. 推荐做法（结合 POP Migration）**
+
+- 在 Federated GCP 中：
+    
+    - 使用 **Google Certificate Manager** 管理服务器证书。
+        
+    - 使用 **GCP Private CA** 管理客户端证书。
+        
+    
+- 分离证书用途，避免未来证书更新时引发业务中断。
+    
+
+---
+
+要不要我帮你做一个 **后续行动清单 (Markdown 表格)**，包括
+
+- 需要替换的证书清单
+    
+- 是否需申请新证书
+    
+- 是否需改造 mTLS 方案
 
 
 # script 
