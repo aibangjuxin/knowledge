@@ -41,10 +41,33 @@ check_dependencies() {
     fi
 }
 
-# Parse EKU
+# Check if certificate is issued by DigiCert
+check_digicert_issuer() {
+    local issuer="$1"
+    
+    # DigiCert issuer patterns (case insensitive)
+    local digicert_patterns=(
+        "DigiCert"
+        "Symantec"  # DigiCert acquired Symantec CA
+        "GeoTrust"  # DigiCert acquired GeoTrust
+        "Thawte"    # DigiCert acquired Thawte
+        "RapidSSL"  # DigiCert acquired RapidSSL
+    )
+    
+    for pattern in "${digicert_patterns[@]}"; do
+        if echo "$issuer" | grep -qi "$pattern"; then
+            return 0  # Is DigiCert
+        fi
+    done
+    
+    return 1  # Not DigiCert
+}
+
+# Parse EKU and check DigiCert impact
 parse_eku() {
     local eku_line="$1"
     local verbose="$2"
+    local issuer="$3"
     
     echo -e "${BLUE}Extended Key Usage:${NC}"
     
@@ -80,10 +103,35 @@ parse_eku() {
         echo "$eku_line" | sed 's/^/  /'
     fi
     
-    # Digicert change warning
-    if [ "$has_client_auth" = true ]; then
-        echo -e "${YELLOW}⚠️  Warning: This certificate contains Client Authentication EKU${NC}"
-        echo -e "${YELLOW}   From October 1st, 2025, Digicert new certificates will no longer include this EKU${NC}"
+    echo ""
+    
+    # Check if this is a DigiCert certificate
+    local is_digicert=false
+    if check_digicert_issuer "$issuer"; then
+        is_digicert=true
+        echo -e "${BLUE}Certificate Authority:${NC} ${YELLOW}DigiCert Family (Affected by EKU change)${NC}"
+    else
+        echo -e "${BLUE}Certificate Authority:${NC} ${GREEN}Non-DigiCert (Not affected by EKU change)${NC}"
+    fi
+    
+    echo ""
+    
+    # DigiCert-specific warnings
+    if [ "$has_client_auth" = true ] && [ "$is_digicert" = true ]; then
+        echo -e "${RED}🚨 CRITICAL: DigiCert certificate with Client Authentication EKU detected!${NC}"
+        echo -e "${RED}   Action Required: This certificate will be affected by the October 1st, 2025 change${NC}"
+        echo -e "${RED}   Impact: Client Authentication EKU will be removed from new/renewed certificates${NC}"
+        echo -e "${YELLOW}   Recommendation: Plan for separate client authentication certificates${NC}"
+    elif [ "$has_client_auth" = true ] && [ "$is_digicert" = false ]; then
+        echo -e "${YELLOW}⚠️  Info: Non-DigiCert certificate with Client Authentication EKU${NC}"
+        echo -e "${YELLOW}   Status: Not affected by DigiCert's October 2025 change${NC}"
+        echo -e "${YELLOW}   Note: Check with your CA for their EKU policies${NC}"
+    elif [ "$is_digicert" = true ]; then
+        echo -e "${GREEN}✅ DigiCert certificate without Client Authentication EKU${NC}"
+        echo -e "${GREEN}   Status: Already compliant with post-October 2025 standards${NC}"
+    else
+        echo -e "${GREEN}✅ Non-DigiCert certificate${NC}"
+        echo -e "${GREEN}   Status: Not affected by DigiCert EKU change${NC}"
     fi
     
     return 0
@@ -116,9 +164,13 @@ check_cert_file() {
     local eku_info=$(openssl x509 -in "$cert_file" -noout -text 2>/dev/null | grep -A 10 "X509v3 Extended Key Usage" | grep -v "X509v3 Extended Key Usage" | head -1 | xargs)
     
     if [ -n "$eku_info" ]; then
-        parse_eku "$eku_info" "$verbose"
+        parse_eku "$eku_info" "$verbose" "$issuer"
     else
         echo -e "${RED}Extended Key Usage information not found${NC}"
+        # Still check if it's DigiCert even without EKU
+        if check_digicert_issuer "$issuer"; then
+            echo -e "${YELLOW}⚠️  DigiCert certificate without visible EKU information${NC}"
+        fi
     fi
     
     echo ""
@@ -171,9 +223,13 @@ check_online_cert() {
     fi
     
     if [ -n "$eku_info" ]; then
-        parse_eku "$eku_info" "$verbose"
+        parse_eku "$eku_info" "$verbose" "$issuer"
     else
         echo -e "${RED}Extended Key Usage information not found${NC}"
+        # Still check if it's DigiCert even without EKU
+        if check_digicert_issuer "$issuer"; then
+            echo -e "${YELLOW}⚠️  DigiCert certificate without visible EKU information${NC}"
+        fi
         if [ "$debug" != true ]; then
             echo -e "${YELLOW}Tip: Use -d option to see debug information${NC}"
         fi

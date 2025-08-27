@@ -1,0 +1,38 @@
+DigiCert Client Authentication EKU Impact Assessment Report
+Generated: Wed Aug 27 11:18:19 CST 2025
+========================================================
+
+SUMMARY:
+- DigiCert will remove Client Authentication EKU from new certificates starting October 1st, 2025
+- This assessment identifies certificates that will be affected
+- Action is required for DigiCert certificates with Client Authentication EKU
+
+ASSESSMENT RESULTS:
+
+----------------------------------------
+[0;34mChecking: google.com[0m
+[0;34mChecking online certificate: google.com:443[0m
+----------------------------------------
+[0;34mSubject:[0m CN=*.google.com
+[0;34mIssuer:[0m C=US, O=Google Trust Services, CN=WE2
+[0;34mExpires:[0m Sep 29 08:34:13 2025 GMT
+
+[0;34mExtended Key Usage:[0m
+  [0;32m✓ Server Authentication (TLS Web Server)[0m
+
+[0;34mCertificate Authority:[0m [0;32mNon-DigiCert (Not affected by EKU change)[0m
+
+[0;32m✅ Non-DigiCert certificate[0m
+[0;32m   Status: Not affected by DigiCert EKU change[0m
+
+
+[1mASSESSMENT SUMMARY[0m
+==================
+Total certificates checked: 1
+
+[0;32m✅ Non-DigiCert: 1 certificates[0m
+   Not affected by DigiCert EKU change
+
+[0;32m✅ No immediate action required[0m
+All certificates are either non-DigiCert or already compliant
+
