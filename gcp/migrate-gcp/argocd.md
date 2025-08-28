@@ -1,4 +1,4 @@
-# 什么是 Argo CD？
+œ# 什么是 Argo CD？
 
 Argo CD 是一个为 Kubernetes 设计的、遵循声明式 GitOps 理念的持续部署 (CD) 工具。它的核心思想是使用 Git 仓库作为定义应用所需状态的唯一真实来源 (Single Source of Truth)。
 

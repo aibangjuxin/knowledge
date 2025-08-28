@@ -1,3 +1,239 @@
+
+POP迁移方案
+
+Overall Migration Principles
+Everything must be based on the baseline standards of the AIBANG platform (network, IAM, certificates, gateway, monitoring, CI/CD, security policies).
+
+POP
+Project Level Prepare:
+- [ ] PM apply new Project ==> 
+- [ ] All concepts ==> mindmap 
+- [ ] Build Which components ==> at new components ==> prepare the Terraform ==> 
+    - [ ] POP components  ==> mapping ==> AIBANG components. 
+
+
+
+
+- [ ] Public ingress FQDN ==> internal ingress FQDN ==> basing location path OR how to ingress 
+- [ ] Need get all of the project list ==> apply view access ? 
+    - [ ] Yes. UK first 
+    - [ ] 
+- [ ] Ingress / Egress proxy Using what ?
+    - [ ] Nginx or squid or L3 NAT
+- [ ] Using PSC ==> connect Application Project ==> PostgreSQL DB 
+- [ ] When Onboarding to AIBANG need Define GBGF ?
+- [ ] GCP Redis What is the purpose of this? 
+- [ ] DNS ==> Cloud DNS ==> how to egress to Some of the third party's Domain
+- [ ] Is it directly maintained when the new API name is signed?  
+
+A平台比如我们称其为POP平台 也是运行在GCP平台的.
+但是和我们平台的一些Flow并不一样.根据历史你应该知道我们是一个GCP的API Platform 一些架构应该也有了解 
+比如我们有external,Internal的Flow都不一样
+我们需要给安装一个新的GCP工程Federated的平台,参考我们的模式,当然不是完全照搬,但是我们是一个标准.
+比如Component ==> Java Or Python ==> node ?
+Redis ==> Cloud SQL ==> need save User data
+
+AIBANG 平台 API 迁移大框架（GCP 上旧平台 → 新平台）
+
+目标：在不影响业务的前提下，将旧平台 API 平滑迁移到新平台 AIBANG（以新平台标准为准），并在独立的新 GCP Project 中构建接管与清理流程。
+
+⸻
+
+一、总体迁移原则
+	•	标准先行：一切以 AIBANG 平台规范为基线（网络、IAM、证书、网关、观测、CI/CD、安全策略）。
+	•	双栈并行：新旧平台并行一段时间，灰度切流，验证 OK 再完成切换。
+	•	可回滚：任一里程碑后都能快速回切，明确回滚路径与数据一致性策略。
+	•	自动化与可追溯：基础设施 IaC、网关声明化、策略与证书自动化、日志与指标可追溯。
+	•	最小变更面：优先“Lift & Shift + 最小重构”，必要时再做平台化适配改造。
+
+⸻
+
+二、阶段与里程碑
+
+1）发现与基线核对（Inventory & Gap）
+	•	盘点 API、域名、证书、QPS/TPS、配额、依赖外部 API、数据源、合规要求。
+	•	新平台基线对齐：VPC、子网划分、NAT、DNS、私有访问、Cloud Armor、mTLS、证书 TrustConfig、Org Policy、VPC-SC。
+	•	评估差异：Ingress/Gateway 模型、Kong 插件与路由策略、鉴权方式、观测方案、发布与回滚能力。
+
+2）新项目落地与基础设施
+	•	新建 GCP Project（遵循 AIBANG 命名和标签规范）。
+	•	建 VPC、子网、Cloud NAT、FW 规则、Private DNS、PSC（如需对接托管服务）。
+	•	证书与 Certificate Manager + TrustConfig、Cloud Armor 策略基线。
+	•	观测基线：Cloud Logging/Monitoring、LogSink 到 BigQuery、告警策略、SLO。
+	•	Artifact Registry、Binary Authorization、镜像扫描与发布准入。
+
+3）平台与网关层
+	•	GKE 基线：节点池、升级策略、PDB、HPA、PodDisruptionBudget、资源配额与配额上限。
+	•	网络入口：外部 HTTPS LB（全站 HTTPS+mTLS 终止策略）、GKE Gateway/Ingress、NEG。
+	•	Kong Gateway：声明化配置（decK/CRDs），上游服务、路由、插件（鉴权、速率限制、重试、熔断、超时）。
+	•	流量灰度策略：DNS 权重、Kong traffic-split、Gateway API backend weight、Header/Path 条件路由。
+
+4）应用适配与数据迁移
+	•	容器规格与健康探针（liveness/readiness/startup）、资源 request/limit、JVM/连接池调优。
+	•	配置与密钥：Secret Manager、Workload Identity、ConfigMap 分层环境配置。
+	•	数据迁移：FireStore/CloudSQL/Spanner/BigQuery 的回填、双写/回放、校验与切换窗口。
+
+5）灰度与切换
+	•	影子流量或小流量灰度 → 金丝雀 → 分批扩大 → 全量切换。
+	•	切换前检查清单：SLO、错误率、延迟、日志无异常、依赖可用性。
+	•	回滚预案：路由回切、DNS 回权重、数据回退或补偿流程。
+
+6）旧平台下线
+	•	冻结发布、只读保护、长尾流量观测期。
+	•	释放域名与证书绑定、回收 IP/LB、防火墙规则、服务账号、磁盘/快照、Key/Secrets。
+	•	合规留存：日志、备份、成本/配额清理和锁定策略。
+
+⸻
+
+三、宏观流程图
+
+graph TD;
+    A[盘点与差异评估] --> B[新GCP项目与基础设施基线];
+    B --> C[网关与入口配置 Kong GKE Gateway];
+    C --> D[应用容器化与平台适配];
+    D --> E[数据迁移与一致性策略];
+    E --> F[灰度流量与金丝雀验证];
+    F --> G[全量切换];
+    G --> H[旧平台观测期与下线];
+
+
+⸻
+
+四、关键清单（精简版）
+
+类别	要点	说明
+网络	VPC/子网/NAT/PSC	与 AIBANG 标准一致，预留增长空间
+安全	Cloud Armor、Org Policy、VPC-SC	入口防护、服务周界与策略约束
+证书	HTTPS 证书与 mTLS TrustConfig	服务端证书轮换、客户端 CA 维护与指纹治理
+身份	Workload Identity、SA 最小权限	人/机分离，最小权限，审计必开
+网关	Kong 声明化、限流、重试、熔断	平滑迁移、灰度控制与快速回滚
+观测	日志、指标、追踪、LogSink	SLO/告警，回溯与容量规划
+发布	CI/CD、Binary Auth、镜像扫描	阶段门禁，防误发与风险控制
+数据	回填、双写/回放、校验、窗口	RPO/RTO 约束与补偿策略
+性能	HPA、PDB、资源界限、连接池	升级无感、抗抖动、避免 502/连接拒绝
+成本	配额/预算告警、日志分流归档	降本与容量上限控制
+
+
+⸻
+
+五、流量迁移策略（推荐做法与可选项）
+```mermaid
+graph TD;
+    subgraph 入口层
+    I1[外部HTTPS LB] --> I2[Gateway/Ingress]
+    end
+    subgraph 网关层
+    K1[Kong Route A] -->|权重90| O[旧上游]
+    K1 -->|权重10| N[新上游 AIBANG]
+    end
+    I2 --> K1
+```
+	•	推荐：在 Kong 层使用 traffic-split 或基于 Gateway API 的 backendRef weight 实现权重切分；支持按 Header/Path 做定向金丝雀（如 X-Canary: 1）。
+	•	备选：DNS 权重（切换慢、缓存不可控）、客户端白名单定向路由、灰度用户组。
+
+⸻
+
+六、Kong 声明化与路由示例（精简）
+
+# 权重切分示例（基于 Kong upstream target 或 Gateway API BackendRef weight）
+# 这里给出 conceptual 片段，请按实际网关版本与CRD实现
+
+注：生产中建议使用 decK 管理全量声明，配合 GitOps 审核与回滚。
+
+⸻
+
+七、GKE 部署与高可用要点
+
+
+关键：maxUnavailable: 0 + PDB + 正确的 readinessProbe 防止滚更期间 502 与连接拒绝；结合连接池与超时、重试策略。
+
+⸻
+
+八、mTLS 与证书治理要点（AIBANG 标准）
+	•	服务端证书：采用 Certificate Manager；到期前 30–60 天轮换；LB 侧热切换。
+	•	客户端信任：TrustConfig 管理多个 CA；按租户/客户端分组；指纹文件化管理（GCS + JSON/YAML），脚本增量更新。
+	•	迁移节奏：先将新客户端 CA 加入 TrustConfig → 验证通过 → 再更新服务端证书；避免客户端中断。
+
+⸻
+
+九、数据迁移套路（按类型）
+
+存储	策略	校验
+Firestore	双写或迁移窗口只读 + 回放变更	文档数、关键字段 checksum、抽样比对
+Cloud SQL	DMS/原生复制 + 窗口切换	表级 count、主键范围、延迟 < RPO
+Spanner	导出+回放或 CDC	版本时间戳比对、延迟
+BigQuery	视图过渡、分区表回填	表行数、分区范围、查询结果一致性
+
+
+⸻
+
+十、发布与准入
+	•	Artifact Registry + Binary Authorization：分环境策略与豁免流程。
+	•	镜像扫描：结合 GCP 原生与现有 SAST/DAST；阻断高危。
+	•	CI/CD：多环境流水线、自动化 Smoke/E2E、回滚按钮。
+
+⸻
+
+十一、切换与回滚验收清单（节选）
+
+检查项	通过标准
+延迟/错误率	P50/P95 不劣于旧平台，错误率 < 阈值
+鉴权/配额	鉴权成功率、限流策略符合预期
+观测/日志	指标齐全、日志落地 BigQuery、告警有效
+依赖可用性	外部 API 成功率与时延在基线内
+回滚演练	业务不感知，RTO 满足要求
+
+
+⸻
+
+十二、旧平台下线步骤（概览）
+
+# 1) 冻结变更，开启长尾观测
+# 2) 关闭入口流量（DNS/LB 回收）
+# 3) 回收GCP资源（IP/LB/防火墙/SA/秘钥/磁盘/快照/Topics/Subs）
+# 4) 导出合规留存（日志/备份/账单）
+# 5) 项目封存或删除（遵循组织策略与审批）
+
+
+⸻
+
+十三、迁移工单模板（示例）
+
+title: AIBANG 平台 API 迁移批次 N
+owners:
+  - platform: AIBANG-team
+  - app: team-xyz
+windows:
+  freeze_start: 2025-09-10T02:00:00Z
+  cutover_start: 2025-09-12T02:00:00Z
+risk:
+  rto: 10m
+  rpo: 0m
+checks:
+  - slo_ok
+  - error_rate_below_threshold
+  - cert_trustconfig_updated
+  - canary_10_percent_ok
+rollback:
+  steps:
+    - kong_route_weight: old=100 new=0
+    - dns_weight: old=100 new=0
+    - data_compensation: replay_queue
+
+
+⸻
+
+十四、你可以按此顺序开工
+	1.	清单与差异：完成盘点表与差异评审，冻结基线。
+	2.	新项目落地：一键 IaC 部署网络、安全、观测与网关基线。
+	3.	应用适配：容器规范、探针、资源、连接与超时、Kong 路由与插件。
+	4.	数据方案：确定各存储迁移模型与校验方式，演练。
+	5.	灰度计划：按租户/流量百分比逐步扩大，完成验收。
+	6.	全量切换：切换窗口、监控与回滚保护。
+	7.	下线与留存：清理旧平台、归档与合规收尾。
+
+需要我把上述步骤细化为 分周计划 + 责任人 + 输出物模板，或生成 decK/K8S/Gateway 的一套起步仓库结构吗？我可以直接给出可拷贝的 Markdown 与 YAML 清单。
+
 以下是基于 GAP 分析与已知架构要素整理的 迁移注意事项分类清单，可作为 HLD 和 Checklist 的输入参考。
 
 ⸻
@@ -39,9 +275,9 @@
 4. 安全与密钥管理
 	•	证书管理
 	•	是否存在 mTLS 证书签发与轮换机制？
-	•	是否需要 CAEP 平台统一管理 CA 证书？
+	•	是否需要 AIBANG 平台统一管理 CA 证书？
 	•	Secret 管理
-	•	是否使用 POP Secret Manager？是否迁移到 CAEP 统一 Secret 管理系统？
+	•	是否使用 POP Secret Manager？是否迁移到 AIBANG 统一 Secret 管理系统？
 
 ⸻
 
@@ -51,7 +287,7 @@
 	•	环境（dev/stage/prod）
 	•	服务标识
 	•	租户标识
-	•	是否需与 CAEP 平台命名标准对齐？
+	•	是否需与 AIBANG 平台命名标准对齐？
 
 ⸻
 
@@ -65,12 +301,12 @@
 7. API 治理与网关管理
 	•	Kong Gateway 的部署位置是否需调整到 Federated 平台内部？
 	•	API 是否需要强制 AuthN & AuthZ 机制？
-	•	现有 Kong 插件与 CAEP 插件是否存在功能缺口？
+	•	现有 Kong 插件与 AIBANG 插件是否存在功能缺口？
 
 ⸻
 
 8. 监控与告警
-	•	是否需要统一迁移至 CAEP 监控体系（Cloud Logging + Cloud Monitoring + Trace）？
+	•	是否需要统一迁移至 AIBANG 监控体系（Cloud Logging + Cloud Monitoring + Trace）？
 	•	API 级别的指标采集与告警规则是否一致？
 
 ⸻
@@ -203,7 +439,7 @@ graph TD;
 
   
 
-> 目标：将 **POP 平台**迁移至**新的 Federated GCP 工程**，在对齐 **CAEP 标准**的同时，支持外部与内部双流量路径、mTLS、自动化 Onboarding、多语言运行时（Java/Python/Node）、状态数据迁移（Redis→Memorystore、Cloud SQL）、可观测性与合规。
+> 目标：将 **POP 平台**迁移至**新的 Federated GCP 工程**，在对齐 **AIBANG 标准**的同时，支持外部与内部双流量路径、mTLS、自动化 Onboarding、多语言运行时（Java/Python/Node）、状态数据迁移（Redis→Memorystore、Cloud SQL）、可观测性与合规。
 
 ---
 
@@ -319,7 +555,7 @@ graph TD
 
 - **首选 GKE（Autopilot/Standard）**：统一 Sidecar、HPA、PDB、灰度流量等能力；或按服务特性选 **Cloud Run**（冷启动小、自动缩放）。
     
-- **API 网关**：Kong Gateway + Kong Runtime（与现有 CAEP 模式对齐）。
+- **API 网关**：Kong Gateway + Kong Runtime（与现有 AIBANG 模式对齐）。
     
 
   
@@ -839,4 +1075,4 @@ curl -sS -X POST http://kong-admin.kong:8001/services/$TENANT-svc/routes \
 
   
 
-> 需要我把以上内容拆成**可执行的仓库结构**（/environments、/gateways、/apps、/onboarding、/ops-runbook），并补齐 Makefile 与 GitHub Actions/Cloud Build Pipeline 示例吗？我可以直接按你们 CAEP 标准生成一套“开箱即用”的模板。
+> 需要我把以上内容拆成**可执行的仓库结构**（/environments、/gateways、/apps、/onboarding、/ops-runbook），并补齐 Makefile 与 GitHub Actions/Cloud Build Pipeline 示例吗？我可以直接按你们 AIBANG 标准生成一套“开箱即用”的模板。
