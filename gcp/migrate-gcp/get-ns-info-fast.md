@@ -132,7 +132,7 @@ analyze_deployments() {
         [.metadata.name, 
          .spec.replicas, 
          .status.readyReplicas // 0,
-         (.spec.template.spec.containers[].image | @base64d),
+         (.spec.template.spec.containers[].image),
          (.spec.template.spec.serviceAccountName // "default")] | 
         @tsv' /tmp/deployments.json | while IFS=$'\t' read -r name replicas ready images sa; do
         echo "| $name | $replicas | $ready | $images | $sa |" >> "$REPORT_FILE"
