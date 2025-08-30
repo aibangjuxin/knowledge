@@ -1,0 +1,191 @@
+# Namespace 模板文件
+# 用于创建新的 namespace 时使用
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: "{{ .NamespaceName }}"
+  labels:
+    # 基础标签
+    name: "{{ .NamespaceName }}"
+    
+    # 迁移相关标签
+    migration.tool: "pop-migrate"
+    migration.version: "1.0.0"
+    migration.timestamp: "{{ .Timestamp }}"
+    migration.source.project: "{{ .SourceProject }}"
+    migration.target.project: "{{ .TargetProject }}"
+    
+    # 环境标签 (可选)
+    environment: "{{ .Environment | default "production" }}"
+    team: "{{ .Team | default "unknown" }}"
+    
+    # 自定义标签
+    {{- range $key, $value := .CustomLabels }}
+    {{ $key }}: "{{ $value }}"
+    {{- end }}
+  
+  annotations:
+    # 基础注解
+    description: "Migrated namespace from {{ .SourceProject }}"
+    
+    # 迁移信息
+    migration.pop-migrate/source-project: "{{ .SourceProject }}"
+    migration.pop-migrate/source-cluster: "{{ .SourceCluster }}"
+    migration.pop-migrate/target-project: "{{ .TargetProject }}"
+    migration.pop-migrate/target-cluster: "{{ .TargetCluster }}"
+    migration.pop-migrate/migration-date: "{{ .Timestamp }}"
+    migration.pop-migrate/migration-tool-version: "1.0.0"
+    
+    # 联系信息
+    contact.email: "{{ .ContactEmail | default "admin@company.com" }}"
+    contact.team: "{{ .Team | default "platform-team" }}"
+    
+    # 自定义注解
+    {{- range $key, $value := .CustomAnnotations }}
+    {{ $key }}: "{{ $value }}"
+    {{- end }}
+
+---
+# 默认的 ResourceQuota (可选)
+{{- if .EnableResourceQuota }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: "{{ .NamespaceName }}-quota"
+  namespace: "{{ .NamespaceName }}"
+  labels:
+    migration.tool: "pop-migrate"
+spec:
+  hard:
+    # 计算资源限制
+    requests.cpu: "{{ .ResourceQuota.RequestsCPU | default "4" }}"
+    requests.memory: "{{ .ResourceQuota.RequestsMemory | default "8Gi" }}"
+    limits.cpu: "{{ .ResourceQuota.LimitsCPU | default "8" }}"
+    limits.memory: "{{ .ResourceQuota.LimitsMemory | default "16Gi" }}"
+    
+    # 存储资源限制
+    requests.storage: "{{ .ResourceQuota.RequestsStorage | default "100Gi" }}"
+    persistentvolumeclaims: "{{ .ResourceQuota.PVCCount | default "10" }}"
+    
+    # 对象数量限制
+    pods: "{{ .ResourceQuota.Pods | default "50" }}"
+    services: "{{ .ResourceQuota.Services | default "20" }}"
+    secrets: "{{ .ResourceQuota.Secrets | default "50" }}"
+    configmaps: "{{ .ResourceQuota.ConfigMaps | default "50" }}"
+    replicationcontrollers: "{{ .ResourceQuota.ReplicationControllers | default "20" }}"
+    
+    # 网络资源限制
+    services.loadbalancers: "{{ .ResourceQuota.LoadBalancers | default "5" }}"
+    services.nodeports: "{{ .ResourceQuota.NodePorts | default "10" }}"
+{{- end }}
+
+---
+# 默认的 LimitRange (可选)
+{{- if .EnableLimitRange }}
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: "{{ .NamespaceName }}-limits"
+  namespace: "{{ .NamespaceName }}"
+  labels:
+    migration.tool: "pop-migrate"
+spec:
+  limits:
+  # Container 级别限制
+  - type: Container
+    default:
+      cpu: "{{ .LimitRange.DefaultCPU | default "500m" }}"
+      memory: "{{ .LimitRange.DefaultMemory | default "512Mi" }}"
+    defaultRequest:
+      cpu: "{{ .LimitRange.DefaultRequestCPU | default "100m" }}"
+      memory: "{{ .LimitRange.DefaultRequestMemory | default "128Mi" }}"
+    max:
+      cpu: "{{ .LimitRange.MaxCPU | default "2" }}"
+      memory: "{{ .LimitRange.MaxMemory | default "4Gi" }}"
+    min:
+      cpu: "{{ .LimitRange.MinCPU | default "50m" }}"
+      memory: "{{ .LimitRange.MinMemory | default "64Mi" }}"
+  
+  # Pod 级别限制
+  - type: Pod
+    max:
+      cpu: "{{ .LimitRange.PodMaxCPU | default "4" }}"
+      memory: "{{ .LimitRange.PodMaxMemory | default "8Gi" }}"
+  
+  # PVC 级别限制
+  - type: PersistentVolumeClaim
+    max:
+      storage: "{{ .LimitRange.PVCMaxStorage | default "100Gi" }}"
+    min:
+      storage: "{{ .LimitRange.PVCMinStorage | default "1Gi" }}"
+{{- end }}
+
+---
+# 默认的 NetworkPolicy (可选)
+{{- if .EnableNetworkPolicy }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: "{{ .NamespaceName }}-default-deny"
+  namespace: "{{ .NamespaceName }}"
+  labels:
+    migration.tool: "pop-migrate"
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # 默认拒绝所有入站流量
+  ingress: []
+  
+  # 允许必要的出站流量
+  egress:
+  # 允许 DNS 查询
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  
+  # 允许访问 Kubernetes API
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  
+  # 允许同 namespace 内的通信
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: "{{ .NamespaceName }}"
+
+---
+# 允许同 namespace 内通信的 NetworkPolicy (可选)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: "{{ .NamespaceName }}-allow-same-namespace"
+  namespace: "{{ .NamespaceName }}"
+  labels:
+    migration.tool: "pop-migrate"
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: "{{ .NamespaceName }}"
+  
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: "{{ .NamespaceName }}"
+{{- end }}
