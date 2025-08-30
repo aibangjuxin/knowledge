@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/opt/homebrew/bin/bash
 
 # GKE Namespace Statistics Script - Focus on counts and unique values
 # Usage: ./get-ns-stats.sh -n <namespace> [-o output_dir]

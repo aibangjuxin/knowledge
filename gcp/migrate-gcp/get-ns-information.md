@@ -1,6 +1,7 @@
 ```bash
 #!/bin/bash
-
+# This is a loop program, so the efficiency is a little low. 
+# the enhance Version is get-ns-info-fast.sh or only using get-ns-stats.sh
 # GKE Namespace Information Extraction Script
 # Usage: ./get-ns-information.sh -n <namespace> [-o output_dir]
 
