@@ -1,7 +1,7 @@
 # Enhanced Kubernetes Namespace Statistics Report
 **Namespace:** lex
 **Cluster:** default
-**Generated:** Sat Aug 30 10:59:09 CST 2025
+**Generated:** Sat Aug 30 19:28:44 CST 2025
 
 # Overall Resource Statistics
 
@@ -75,7 +75,7 @@
 ### HTTP Liveness Probe Paths
 | Count | Path | Port |
 |-------|------|------|
-| 1 | /metrics | 9100 |
+| 1 | /metrics | 8888 |
 | 1 | /health | 80 |
 | 1 | / | 80 |
 
@@ -91,7 +91,7 @@
 | Count | Path | Port |
 |-------|------|------|
 | 1 | /ready | 80 |
-| 1 | / | 9100 |
+| 1 | / | 8888 |
 | 1 | / | 80 |
 
 ## Startup Probe Analysis
@@ -121,8 +121,8 @@
 ## Port Usage
 | Count | Port | Protocol | Name |
 |-------|------|----------|------|
-| 1 | 9100 | TCP | metrics |
 | 1 | 9100 | TCP | lb-port-9100 |
+| 1 | 8888 | TCP | metrics |
 | 1 | 80 | TCP | lb-port-80 |
 | 1 | 80 | TCP | http |
 | 1 | 6379 | TCP | redis |
@@ -204,8 +204,8 @@
 ## Pod Disruption Budgets
 | Name | Min Available | Max Unavailable | Selector |
 |------|---------------|-----------------|----------|
-| busybox-pdb | 1 | N/A | app=busybox |
 | complex-web-app-pdb | 2 | N/A | app=complex-web-app |
+| busybox-pdb | 1 | N/A | app=busybox |
 
 # Network Policies Analysis
 
@@ -263,8 +263,8 @@
 | Workload | Node Selector | Affinity | Tolerations |
 |----------|---------------|----------|-------------|
 | Deployment/nginx-deployment | No | No | 0 |
-| Deployment/busybox-deployment | No | No | 0 |
 | Deployment/complex-web-app | Yes | Yes | 1 |
+| Deployment/busybox-deployment | No | No | 0 |
 | DaemonSet/svclb-complex-web-app-service | No | No | 3 |
 
 ## Migration Checklist
