@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: psc-demo
+  labels:
+    name: psc-demo
+    purpose: private-service-connect-demo
