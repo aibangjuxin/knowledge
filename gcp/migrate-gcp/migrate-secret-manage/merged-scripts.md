@@ -1,3 +1,8 @@
+# Shell Scripts Collection
+
+Generated on: 2025-09-01 14:48:56
+Directory: /Users/lex/git/knowledge/gcp/migrate-gcp/migrate-secret-manage
+
 ## `01-setup.sh`
 
 ```bash
