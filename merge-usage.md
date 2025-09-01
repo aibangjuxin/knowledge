@@ -76,3 +76,6 @@ Directory: /Users/lex/git/knowledge
 - `*.py` - Python 文件
 - `*.js` - JavaScript 文件  
 - `*.txt` - 文本文件
+```bash
+{ for file in \*.sh; do echo "## \`$file\`"; echo; echo '```bash'; cat "$file"; echo; echo '```'; echo; done; } > script.md
+```
