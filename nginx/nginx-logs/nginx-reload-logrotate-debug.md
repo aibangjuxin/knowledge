@@ -107,7 +107,7 @@ gzip --version
 #### 5. **logrotate 执行失败**
 ```bash
 # 检查 logrotate 状态文件
-cat /var/lib/logrotate/status | grep nginx
+cat /var/lib/logrotate/logrotate.status | grep nginx
 ```
 
 #### 6. **配置语法错误**
@@ -201,7 +201,7 @@ kill -HUP $(cat /var/run/nginx.pid)
 systemctl status logrotate
 
 # 2. 检查最近的轮转记录
-cat /var/lib/logrotate/status | grep nginx
+cat /var/lib/logrotate/logrotate.status | grep nginx
 
 # 3. 检查日志文件
 ls -la /var/log/nginx/
