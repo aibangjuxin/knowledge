@@ -1,0 +1,82 @@
+# DNS Configuration for Cluster Migration
+# This ConfigMap contains DNS mappings and resolution configuration
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: migration-dns-config
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+    component: dns-config
+data:
+  # DNS mappings for service resolution
+  dns-mappings.yaml: |
+    # Old cluster to new cluster DNS mappings
+    mappings:
+      - old_host: "api-name01.teamname.dev.aliyun.intracloud.cn.aibang"
+        new_host: "api-name01.kong.dev.aliyun.intracloud.cn.aibang"
+        service_name: "bbdm-api"
+        ports: [80, 443, 8078]
+      
+      - old_host: "*.teamname.dev.aliyun.intracloud.cn.aibang"
+        new_host: "*.kong.dev.aliyun.intracloud.cn.aibang"
+        service_name: "generic"
+        ports: [80, 443]
+    
+    # External service configurations
+    external_services:
+      - name: "new-cluster-bbdm-api"
+        external_name: "api-name01.kong.dev.aliyun.intracloud.cn.aibang"
+        namespace: "aibang-1111111111-bbdm"
+        target_namespace: "kong-bbdm"
+      
+      - name: "new-cluster-gateway"
+        external_name: "kong.dev.aliyun.intracloud.cn.aibang"
+        namespace: "aibang-1111111111-bbdm"
+        target_namespace: "kong-system"
+
+  # DNS resolution verification script
+  verify-dns.sh: |
+    #!/bin/bash
+    # DNS Resolution Verification Script
+    
+    echo "=== DNS Resolution Verification ==="
+    
+    # Test new cluster endpoints
+    NEW_CLUSTER_ENDPOINTS=(
+      "api-name01.kong.dev.aliyun.intracloud.cn.aibang"
+      "kong.dev.aliyun.intracloud.cn.aibang"
+    )
+    
+    for endpoint in "${NEW_CLUSTER_ENDPOINTS[@]}"; do
+      echo "Testing DNS resolution for: $endpoint"
+      if nslookup "$endpoint" > /dev/null 2>&1; then
+        echo "✓ DNS resolution successful for $endpoint"
+        # Test connectivity
+        if nc -z "$endpoint" 443 2>/dev/null; then
+          echo "✓ Port 443 connectivity successful for $endpoint"
+        else
+          echo "✗ Port 443 connectivity failed for $endpoint"
+        fi
+      else
+        echo "✗ DNS resolution failed for $endpoint"
+      fi
+      echo "---"
+    done
+
+  # Port mapping configuration
+  port-mappings.yaml: |
+    # Port mappings between old and new clusters
+    port_mappings:
+      bbdm-api:
+        old_port: 8078
+        new_ports: [80, 443, 8078]
+        protocol: "TCP"
+        health_check_path: "/health"
+      
+      generic:
+        old_port: 80
+        new_ports: [80, 443]
+        protocol: "TCP"
+        health_check_path: "/ping"

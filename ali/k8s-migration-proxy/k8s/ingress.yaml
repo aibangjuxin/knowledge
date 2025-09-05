@@ -1,0 +1,271 @@
+# Ingress Configuration for K8s Cluster Migration
+# Supports canary routing, multiple hosts/paths, and hot configuration updates
+
+---
+# Main Ingress for bbdm-api service with canary support
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bbdm-api-migration
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+    component: ingress
+    service-name: bbdm-api
+  annotations:
+    # Nginx Ingress Controller annotations
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    
+    # Proxy configuration
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-buffering: "on"
+    
+    # Keep original headers for proper forwarding
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-Original-Host $host;
+      proxy_set_header X-Original-URI $request_uri;
+      proxy_set_header X-Original-Method $request_method;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Real-IP $remote_addr;
+      
+    # Migration-specific annotations
+    migration.k8s.io/enabled: "true"
+    migration.k8s.io/service-name: "bbdm-api"
+    migration.k8s.io/canary-enabled: "false"
+    migration.k8s.io/canary-weight: "0"
+    migration.k8s.io/target-cluster: "kong"
+    migration.k8s.io/fallback-enabled: "true"
+spec:
+  tls:
+  - hosts:
+    - api-name01.teamname.dev.aliyun.intracloud.cn.aibang
+    secretName: bbdm-api-tls
+  rules:
+  - host: api-name01.teamname.dev.aliyun.intracloud.cn.aibang
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: migration-proxy
+            port:
+              number: 80
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: migration-proxy
+            port:
+              number: 80
+      - path: /health
+        pathType: Prefix
+        backend:
+          service:
+            name: migration-proxy
+            port:
+              number: 8080
+
+---
+# Canary Ingress for gradual traffic migration
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bbdm-api-canary
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+    component: ingress
+    service-name: bbdm-api
+    ingress-type: canary
+  annotations:
+    # Nginx Ingress Controller annotations
+    kubernetes.io/ingress.class: "nginx"
+    
+    # Canary configuration - initially disabled
+    nginx.ingress.kubernetes.io/canary: "false"
+    nginx.ingress.kubernetes.io/canary-weight: "0"
+    
+    # Advanced canary routing options
+    nginx.ingress.kubernetes.io/canary-by-header: "X-Canary"
+    nginx.ingress.kubernetes.io/canary-by-header-value: "new-cluster"
+    nginx.ingress.kubernetes.io/canary-by-cookie: "canary"
+    
+    # Proxy configuration for new cluster
+    nginx.ingress.kubernetes.io/upstream-vhost: "api-name01.kong.dev.aliyun.intracloud.cn.aibang"
+    nginx.ingress.kubernetes.io/proxy-ssl-verify: "false"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    
+    # Migration-specific annotations
+    migration.k8s.io/enabled: "false"
+    migration.k8s.io/service-name: "bbdm-api"
+    migration.k8s.io/canary-enabled: "true"
+    migration.k8s.io/target-cluster: "kong"
+    migration.k8s.io/canary-type: "weight"
+spec:
+  tls:
+  - hosts:
+    - api-name01.teamname.dev.aliyun.intracloud.cn.aibang
+    secretName: bbdm-api-tls
+  rules:
+  - host: api-name01.teamname.dev.aliyun.intracloud.cn.aibang
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: new-cluster-bbdm-api
+            port:
+              number: 443
+
+---
+# Generic Ingress template for multiple services
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: migration-template
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+    component: ingress
+    ingress-type: template
+  annotations:
+    # This is a template - not active by default
+    migration.k8s.io/template: "true"
+    migration.k8s.io/enabled: "false"
+    
+    # Standard annotations for migration ingresses
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+    
+    # Header preservation
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-Original-Host $host;
+      proxy_set_header X-Original-URI $request_uri;
+      proxy_set_header X-Original-Method $request_method;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Real-IP $remote_addr;
+      
+    # Migration configuration placeholders
+    migration.k8s.io/service-name: "PLACEHOLDER_SERVICE_NAME"
+    migration.k8s.io/old-host: "PLACEHOLDER_OLD_HOST"
+    migration.k8s.io/new-host: "PLACEHOLDER_NEW_HOST"
+    migration.k8s.io/canary-enabled: "false"
+    migration.k8s.io/canary-weight: "0"
+spec:
+  tls:
+  - hosts:
+    - example.teamname.dev.aliyun.intracloud.cn.aibang
+    secretName: PLACEHOLDER_TLS_SECRET
+  rules:
+  - host: example.teamname.dev.aliyun.intracloud.cn.aibang
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: migration-proxy
+            port:
+              number: 80
+
+---
+# Multi-host Ingress for services with multiple domains
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: multi-host-migration
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+    component: ingress
+    ingress-type: multi-host
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    
+    # Advanced routing configuration
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location ~* ^/api/v[0-9]+/ {
+        proxy_pass http://upstream_backend;
+        proxy_set_header X-API-Version $1;
+      }
+      
+    # Migration configuration
+    migration.k8s.io/enabled: "false"
+    migration.k8s.io/multi-host: "true"
+    migration.k8s.io/canary-enabled: "false"
+spec:
+  tls:
+  - hosts:
+    - "*.teamname.dev.aliyun.intracloud.cn.aibang"
+    secretName: wildcard-teamname-tls
+  rules:
+  # Primary API host
+  - host: api-name01.teamname.dev.aliyun.intracloud.cn.aibang
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: migration-proxy
+            port:
+              number: 80
+      - path: /api/v1
+        pathType: Prefix
+        backend:
+          service:
+            name: migration-proxy
+            port:
+              number: 80
+      - path: /api/v2
+        pathType: Prefix
+        backend:
+          service:
+            name: migration-proxy
+            port:
+              number: 80
+  
+  # Additional API hosts (if needed)
+  - host: api-name02.teamname.dev.aliyun.intracloud.cn.aibang
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: migration-proxy
+            port:
+              number: 80
+  
+  # Admin/Management interface
+  - host: admin.teamname.dev.aliyun.intracloud.cn.aibang
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: migration-proxy
+            port:
+              number: 80
+      - path: /admin
+        pathType: Prefix
+        backend:
+          service:
+            name: migration-proxy
+            port:
+              number: 80

@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: migration-config
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+    component: config
+data:
+  migration.yaml: |
+    # 迁移配置文件
+    global:
+      # 全局配置
+      default_timeout: 30s
+      retry_attempts: 3
+      health_check_interval: 30s
+      
+    services:
+      # 服务迁移配置列表
+      - name: "api-name01"
+        # 旧集群配置
+        old_host: "api-name01.teamname.dev.aliyun.intracloud.cn.aibang"
+        old_backend: "bbdm-api.aibang-1111111111-bbdm.svc.cluster.local:8078"
+        old_protocol: "http"
+        
+        # 新集群配置
+        new_host: "api-name01.kong.dev.aliyun.intracloud.cn.aibang"
+        new_backend: "api-name01.kong.dev.aliyun.intracloud.cn.aibang:443"
+        new_protocol: "https"
+        
+        # 迁移策略配置
+        migration:
+          enabled: true
+          strategy: "weight"  # weight, header, ip, canary
+          percentage: 0       # 0-100，新集群流量百分比
+          
+        # 灰度策略配置
+        canary:
+          # 基于请求头的路由
+          header_rules:
+            - header: "X-Migration-Target"
+              value: "new"
+              target: "new_cluster"
+            - header: "X-User-Type"
+              value: "beta"
+              target: "new_cluster"
+          
+          # 基于IP的路由
+          ip_rules:
+            - cidr: "10.0.0.0/8"
+              target: "new_cluster"
+              
+          # 基于用户ID的路由
+          user_rules:
+            - user_id_header: "X-User-ID"
+              hash_range: "0-10"  # 用户ID哈希值在0-10%范围内路由到新集群
+              target: "new_cluster"
+        
+        # 健康检查配置
+        health_check:
+          old_cluster:
+            path: "/health"
+            timeout: 5s
+            interval: 10s
+          new_cluster:
+            path: "/health"
+            timeout: 5s
+            interval: 10s
+            
+        # 降级配置
+        fallback:
+          enabled: true
+          max_failures: 5
+          failure_window: 60s
+          recovery_time: 300s
+          
+      # 可以配置多个服务
+      - name: "api-name02"
+        old_host: "api-name02.teamname.dev.aliyun.intracloud.cn.aibang"
+        old_backend: "another-api.aibang-1111111111-bbdm.svc.cluster.local:8080"
+        old_protocol: "http"
+        new_host: "api-name02.kong.dev.aliyun.intracloud.cn.aibang"
+        new_backend: "api-name02.kong.dev.aliyun.intracloud.cn.aibang:443"
+        new_protocol: "https"
+        migration:
+          enabled: false
+          strategy: "weight"
+          percentage: 0
+        health_check:
+          old_cluster:
+            path: "/ping"
+            timeout: 5s
+            interval: 10s
+          new_cluster:
+            path: "/ping"
+            timeout: 5s
+            interval: 10s
+        fallback:
+          enabled: true
+          max_failures: 3
+          failure_window: 30s
+          recovery_time: 180s

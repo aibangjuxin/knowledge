@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bbdm
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app.kubernetes.io/instance: api-name01
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api-name01.teamname.dev.aliyun.intracloud.cn.aibang
+      http:
+        paths:
+          - backend:
+              service:
+                name: bbdm-api
+                port:
+                  number: 8078
+            path: /
+            pathType: ImplementationSpecific
+    - host: api-name01.01.teamname.dev.aliyun.intracloud.cn.aibang
+      http:
+        paths:
+          - backend:
+              service:
+                name: bbdm-api
+                port:
+                  number: 8078
+            path: /
+            pathType: ImplementationSpecific

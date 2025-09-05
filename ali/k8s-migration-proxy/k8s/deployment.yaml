@@ -1,0 +1,148 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: migration-proxy
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+    component: proxy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: migration-proxy
+  template:
+    metadata:
+      labels:
+        app: migration-proxy
+        component: proxy
+    spec:
+      serviceAccountName: migration-proxy
+      containers:
+      - name: migration-proxy
+        image: migration-proxy:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80
+          name: http
+        - containerPort: 443
+          name: https
+        - containerPort: 8080
+          name: health
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CONFIGMAP_NAME
+          value: "migration-config"
+        - name: CONFIG_KEY
+          value: "migration.yaml"
+        - name: NGINX_CONFIG_PATH
+          value: "/etc/nginx/conf.d/migration.conf"
+        - name: LOG_LEVEL
+          value: "INFO"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d
+        - name: nginx-logs
+          mountPath: /var/log/nginx
+        - name: migration-config
+          mountPath: /app/config
+          readOnly: true
+      volumes:
+      - name: nginx-config
+        emptyDir: {}
+      - name: nginx-logs
+        emptyDir: {}
+      - name: migration-config
+        configMap:
+          name: migration-config
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: migration-proxy
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+spec:
+  selector:
+    app: migration-proxy
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 443
+    protocol: TCP
+  - name: health
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: migration-proxy
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: migration-proxy
+  namespace: aibang-1111111111-bbdm
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch", "update", "patch"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: migration-proxy
+  namespace: aibang-1111111111-bbdm
+subjects:
+- kind: ServiceAccount
+  name: migration-proxy
+  namespace: aibang-1111111111-bbdm
+roleRef:
+  kind: Role
+  name: migration-proxy
+  apiGroup: rbac.authorization.k8s.io
