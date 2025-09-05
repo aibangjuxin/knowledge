@@ -55,6 +55,12 @@ if [ ! -f "$REPLACE_FILE" ]; then
     exit 1
 fi
 
+# 检查目标目录是否存在
+if [ ! -d "$TARGET_DIR" ]; then
+    echo "错误: 目标目录不存在 $TARGET_DIR"
+    exit 1
+fi
+
 echo "批量替换预览模式"
 echo "替换规则文件: $REPLACE_FILE"
 echo "目标目录: $TARGET_DIR"
@@ -62,26 +68,35 @@ echo "----------------------------------------"
 
 # 预览将要进行的替换
 echo "将要进行的替换:"
-while IFS=' ' read -r source target || [ -n "$source" ]; do
+while read -r line || [ -n "$line" ]; do
     # 跳过空行和注释行
-    if [[ -z "$source" || "$source" =~ ^#.* ]]; then
+    if [[ -z "$line" || "$line" =~ ^#.* || "$line" =~ ^[[:space:]]*$ ]]; then
+        continue
+    fi
+    
+    # 解析源字符串和目标字符串（用第一个空格分隔）
+    source=$(echo "$line" | cut -d' ' -f1)
+    target=$(echo "$line" | cut -d' ' -f2-)
+    
+    # 跳过无效行
+    if [[ -z "$source" || -z "$target" ]]; then
         continue
     fi
     
     echo "  '$source' -> '$target'"
     
     # 查找包含源字符串的文件
-    files_with_source=$(grep -rl "$source" "$TARGET_DIR" 2>/dev/null | grep -v ".git" | grep -v "__pycache__" | grep -v "node_modules")
+    files_with_source=$(grep -rl "$source" "$TARGET_DIR" 2>/dev/null | grep -v ".git" | grep -v "__pycache__" | grep -v "node_modules" | grep -v ".DS_Store")
     
     if [ -n "$files_with_source" ]; then
         echo "    影响的文件:"
-        echo "$files_with_source" | while read -r file; do
+        while IFS= read -r file; do
             echo "      - $file"
-            # 显示匹配的行
-            grep -n "$source" "$file" | head -3 | while read -r line; do
-                echo "        $line"
+            # 显示匹配的行（限制显示前3行）
+            grep -n "$source" "$file" | head -3 | while IFS= read -r match_line; do
+                echo "        $match_line"
             done
-        done
+        done <<< "$files_with_source"
     fi
     echo ""
 done < "$REPLACE_FILE"

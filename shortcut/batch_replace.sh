@@ -55,6 +55,12 @@ if [ ! -f "$REPLACE_FILE" ]; then
     exit 1
 fi
 
+# 检查目标目录是否存在
+if [ ! -d "$TARGET_DIR" ]; then
+    echo "错误: 目标目录不存在 $TARGET_DIR"
+    exit 1
+fi
+
 echo "开始批量替换..."
 echo "替换规则文件: $REPLACE_FILE"
 echo "目标目录: $TARGET_DIR"
@@ -65,32 +71,47 @@ total_files=0
 modified_files=0
 
 # 读取替换规则并执行替换
-while IFS=' ' read -r source target || [ -n "$source" ]; do
+while read -r line || [ -n "$line" ]; do
     # 跳过空行和注释行
-    if [[ -z "$source" || "$source" =~ ^#.* ]]; then
+    if [[ -z "$line" || "$line" =~ ^#.* || "$line" =~ ^[[:space:]]*$ ]]; then
+        continue
+    fi
+    
+    # 解析源字符串和目标字符串（用第一个空格分隔）
+    source=$(echo "$line" | cut -d' ' -f1)
+    target=$(echo "$line" | cut -d' ' -f2-)
+    
+    # 跳过无效行
+    if [[ -z "$source" || -z "$target" ]]; then
         continue
     fi
     
     echo "替换规则: '$source' -> '$target'"
     
     # 查找包含源字符串的文件
-    files_with_source=$(grep -rl "$source" "$TARGET_DIR" 2>/dev/null | grep -v ".git" | grep -v "__pycache__" | grep -v "node_modules")
+    files_with_source=$(grep -rl "$source" "$TARGET_DIR" 2>/dev/null | grep -v ".git" | grep -v "__pycache__" | grep -v "node_modules" | grep -v ".DS_Store")
     
     if [ -n "$files_with_source" ]; then
         echo "  找到包含 '$source' 的文件:"
-        echo "$files_with_source" | while read -r file; do
+        file_count=0
+        while IFS= read -r file; do
             echo "    - $file"
             # 执行替换
             if [[ "$OSTYPE" == "darwin"* ]]; then
-                # macOS 使用 BSD sed
-                sed -i '' "s|$source|$target|g" "$file"
+                # macOS 使用 BSD sed，转义特殊字符
+                escaped_source=$(printf '%s\n' "$source" | sed 's/[[\.*^$()+?{|]/\\&/g')
+                escaped_target=$(printf '%s\n' "$target" | sed 's/[[\.*^$()+?{|]/\\&/g')
+                sed -i '' "s|$escaped_source|$escaped_target|g" "$file"
             else
-                # Linux 使用 GNU sed
-                sed -i "s|$source|$target|g" "$file"
+                # Linux 使用 GNU sed，转义特殊字符
+                escaped_source=$(printf '%s\n' "$source" | sed 's/[[\.*^$()+?{|]/\\&/g')
+                escaped_target=$(printf '%s\n' "$target" | sed 's/[[\.*^$()+?{|]/\\&/g')
+                sed -i "s|$escaped_source|$escaped_target|g" "$file"
             fi
-            ((modified_files++))
-        done
-        ((total_files += $(echo "$files_with_source" | wc -l)))
+            ((file_count++))
+        done <<< "$files_with_source"
+        ((total_files += file_count))
+        ((modified_files += file_count))
     else
         echo "  未找到包含 '$source' 的文件"
     fi
