@@ -1,0 +1,9 @@
+[2025-09-06 19:54:32] [0;34m[INFO][0m Starting k8s-ingress-migration-optimized.sh v2.0.0
+[2025-09-06 19:54:32] [0;34m[INFO][0m Starting k8s-ingress-migration-optimized.sh v2.0.0
+[2025-09-06 19:54:32] [0;31m[ERROR][0m Command failed with exit code 1 at line 205: cut -d'"' -f4
+[2025-09-06 19:54:32] [0;31m[ERROR][0m Command failed with exit code 1 at line 205: cut -d'"' -f4
+./k8s-ingress-migration-optimized.sh: line 73: TEMP_FILES[@]: unbound variable
+[2025-09-06 19:54:32] [0;31m[ERROR][0m Command failed with exit code 1 at line 193: kubectl_version=$(kubectl version --client -o json | grep -o '"gitVersion":"[^"]*"' | cut -d'"' -f4)
+[2025-09-06 19:54:32] [0;31m[ERROR][0m Command failed with exit code 1 at line 193: kubectl_version=$(kubectl version --client -o json | grep -o '"gitVersion":"[^"]*"' | cut -d'"' -f4)
+./k8s-ingress-migration-optimized.sh: line 73: TEMP_FILES[@]: unbound variable
+./k8s-ingress-migration-optimized.sh: line 73: TEMP_FILES[@]: unbound variable

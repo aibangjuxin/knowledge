@@ -1,0 +1,16 @@
+# Kubernetes Ingress Migration Configuration
+# Format: old_host,new_host
+# Lines starting with # are comments and will be ignored
+
+# API Services
+api-name01.teamname.dev.aliyun.intracloud.cn.aibang,api-name01.kong.dev.aliyun.intracloud.cn.aibang
+api-name02.teamname.dev.aliyun.intracloud.cn.aibang,api-name02.kong.dev.aliyun.intracloud.cn.aibang
+api-name03.teamname.dev.aliyun.intracloud.cn.aibang,api-name03.kong.dev.aliyun.intracloud.cn.aibang
+
+# Web Services
+web-app01.teamname.dev.aliyun.intracloud.cn.aibang,web-app01.kong.dev.aliyun.intracloud.cn.aibang
+web-app02.teamname.dev.aliyun.intracloud.cn.aibang,web-app02.kong.dev.aliyun.intracloud.cn.aibang
+
+# Additional Services (uncomment to enable)
+# service01.teamname.dev.aliyun.intracloud.cn.aibang,service01.kong.dev.aliyun.intracloud.cn.aibang
+# service02.teamname.dev.aliyun.intracloud.cn.aibang,service02.kong.dev.aliyun.intracloud.cn.aibang
