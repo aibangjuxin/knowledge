@@ -4,6 +4,8 @@
 - If we find a network team to help us switch DNS, they can actually roll back directly. So this risk can be reduced. But if we use our own DNS, we can configure the transfer. In this way, the network team will not intervene. 
 - There is a solution to this problem. We can listen to the new song directly during the creation process. This will be a solution to the problem. We can use the new song directly in the future. 
 - if we using ExternalName this method. The advantage of this is that we can directly use the new Domain in the new cluster. In the future, when deleting old cluster it does not affect anything in my feature.
+- 在新集群中，需要为新域名配置对应的证书（通过cert-manager或手动）
+
 ```
 我现在做的事情是要做k8s集群的迁移
 假设我现在有一个旧的集群在这个旧的k8s 集群里面 我安装 了ingress controller 在Kube-system 这个命名空间下 然后我对应的服务会在其他的，比如说另外一个name space里面 然后后面跟对应的deployment services 
