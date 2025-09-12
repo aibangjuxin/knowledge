@@ -47,7 +47,7 @@ web01 192.168.1.10
 api 192.168.1.20
 
 
-
+# add next
 # Knowledge Base Repository
 
 This repository contains infrastructure configurations and automation tools for DNS management and Kubernetes deployments.
