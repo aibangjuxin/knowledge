@@ -24,7 +24,7 @@
 
 ### **流程示意**
 
-```bash
+```mermaid
 graph TD;
     A[客户端请求 - domain1.com / domain2.com] --> B[阿里云 SLB - 多个域名监听];
     B --> C[Ingress Controller Service];
@@ -74,7 +74,7 @@ graph TD;
 
 **Ingress 示例**：
 
-```
+```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
