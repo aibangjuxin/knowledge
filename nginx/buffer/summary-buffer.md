@@ -49,6 +49,11 @@ client_request_buffer_max_size 64 KB 
 ### 方案一：调整Squid配置以“模拟”流式传输（最快尝试）
 
 虽然Squid没有像Nginx那样直接的`proxy_request_buffering off;`指令，但我们可以通过修改配置来**最大程度地减少缓冲带来的影响**。这个方案的本质是“欺骗”Squid，让它认为不需要对请求体大小做严格限制，从而可能改变其缓冲行为。
+If I simply change the configuration from the structural logic, I should not change more configurations. I directly make some corresponding restrictions on the outer layer, which is enough to meet my needs. So I don't need to adjust so many parameters. 
+
+If I add the maximum value here, the reflection will affect the processing logic of my squid. 
+
+The squid is also a size that can be judged by receiving the request completely. So the size of the request is not suitable here. 
 
 **请尝试以下操作：**
 
