@@ -140,3 +140,13 @@ graph TD
   - 合理设置 `worker_connections`，确保其值远小于 `worker_rlimit_nofile`。
 
 通过以上配置，可以有效解决 "Too many open files" 问题，确保 Linux 服务器在高并发下稳定运行。
+
+## 6. 常见误区澄清：`ulimit` 是针对单个进程的限制
+
+一个常见的问题是：“如果我的系统硬限制很高，为什么 `ulimit -n` 的软限制为 1024 会成为问题？即使我有 2 个 worker 进程，总共也才 2048 个文件描述符，远低于系统上限。”
+
+这是一个非常好的问题，它触及了限制如何工作的核心。关键在于：**`ulimit -n` 设置的是每个独立进程的限制，而不是所有进程共享的总和。**
+
+- **独立限制**: 如果 `worker_processes` 设置为 `2`，Nginx 会启动两个独立的 worker 进程。从启动环境继承的 `1024` 软限制将分别应用于**每一个** worker 进程。
+- **瓶颈所在**: 这意味着 Worker 进程 1 最多可以处理 1024 个文件描述符，同时 Worker 进程 2 也可以处理 1024 个。它们之间不共享这个配额。如果 Worker 1 上的并发连接数超过了 1024，即使 Worker 2 非常空闲，Worker 1 依然会触发 “Too many open files” 错误。
+- **结论**: 因此，尽管整个系统能够支持远超 2048 个文件描述符，但单个 worker 进程的低限制成为了瓶颈。这就是为什么必须通过修改 `/etc/security/limits.conf` 或使用 Nginx 的 `worker_rlimit_nofile` 指令来提高**每个 worker 进程**的可用文件描述符数量。
