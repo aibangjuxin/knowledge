@@ -1,3 +1,77 @@
+将 worker_processes 从 1 调整为 2 是可行的，但有重要的限制需要注意。
+
+分析你的情况：
+ulimit -n = 1024 (软限制)
+ulimit -Hn = 262144 (硬限制)
+当前 worker_processes = 1，想调整为 2
+可行性分析：
+技术上可行：每个 worker 进程都有独立的 1024 文件描述符限制，所以 2 个 worker 进程理论上可以处理总共 2048 个并发连接。
+
+但存在瓶颈：关键问题在于负载分布。如果某个 worker 进程承担了超过 1024 个连接，它就会触发 "Too many open files" 错误，即使另一个 worker 进程很空闲。
+
+建议的操作顺序：
+方案一：先提高软限制（推荐）
+# 临时提高当前会话的软限制
+ulimit -n 65536
+
+# 然后重启 Nginx
+sudo systemctl restart nginx
+方案二：永久解决
+编辑 /etc/security/limits.conf：
+
+sudo vim /etc/security/limits.conf
+添加：
+
+* soft nofile 65536
+* hard nofile 65536
+然后重新登录系统。
+
+方案三：在 Nginx 配置中直接设置
+在 nginx.conf 中添加：
+```nginx.conf
+worker_rlimit_nofile 65536;
+worker_processes 2;
+
+events {
+    worker_connections 16384;
+}
+```
+回答你的核心问题：
+可以将 worker_processes 调整为 2，但为了避免单个 worker 进程的 1024 限制成为瓶颈，建议同时：
+
+要么先提高系统的软限制
+要么在 Nginx 配置中使用 worker_rlimit_nofile 指令
+你的硬限制 262144 已经足够高，所以主要是解决软限制的问题。最简单的方法是在 Nginx 配置中直接设置 worker_rlimit_nofile。
+
+
+方案三确实是最简洁的解决方案。
+
+方案三的优势：
+
+无需系统级权限：不需要 sudo 编辑 /etc/security/limits.conf
+无需重新登录：不用退出重新登录系统
+配置集中管理：所有相关设置都在 Nginx 配置文件中
+立即生效：只需 sudo systemctl reload nginx 即可
+具体操作：
+
+在你的 nginx.conf 中添加：
+
+# 在主配置区域（http 块之外）
+worker_rlimit_nofile 65536;
+worker_processes 2;  # 或者使用 auto
+
+events {
+    worker_connections 16384;  # 可以根据需要调整
+}
+
+http {
+    # 你的其他配置...
+}
+然后重新加载配置：
+
+sudo systemctl reload nginx
+这样 Nginx 的每个 worker 进程就能使用最多 65536 个文件描述符，完全绕过了系统默认的 1024 软限制。这是最实用的方案，特别适合你只需要解决 Nginx 问题的场景。
+
 # Linux 文件描述符限制与 Nginx 最佳实践
 
 当在 Linux 系统上遇到 "Too many open files" 错误时，这通常意味着进程尝试打开的文件句柄（包括网络连接、文件、管道等）超出了系统为其分配的限制。对于像 Nginx 这样的高并发 Web 服务器，默认的 `1024` 文件描述符限制是远远不够的。
@@ -41,9 +115,10 @@ Nginx 每接收一个客户端连接，就需要一个文件描述符。如果�
 ```bash
 # 检查软限制
 ulimit -n
-
+1024
 # 检查硬限制
 ulimit -Hn
+262144 
 ```
 
 ### 步骤 2：临时提高限制（仅限当前会话）
