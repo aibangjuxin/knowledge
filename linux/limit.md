@@ -11,12 +11,12 @@ ulimit -Hn = 262144 (硬限制)
 
 建议的操作顺序：
 方案一：先提高软限制（推荐）
-# 临时提高当前会话的软限制
+## 临时提高当前会话的软限制
 ulimit -n 65536
 
 # 然后重启 Nginx
 sudo systemctl restart nginx
-方案二：永久解决
+## 方案二：永久解决
 编辑 /etc/security/limits.conf：
 
 sudo vim /etc/security/limits.conf
@@ -26,7 +26,7 @@ sudo vim /etc/security/limits.conf
 * hard nofile 65536
 然后重新登录系统。
 
-方案三：在 Nginx 配置中直接设置
+## 方案三：在 Nginx 配置中直接设置
 在 nginx.conf 中添加：
 ```nginx.conf
 worker_rlimit_nofile 65536;
@@ -57,6 +57,8 @@ events {
 在你的 nginx.conf 中添加：
 
 # 在主配置区域（http 块之外）
+
+```nginx.conf
 worker_rlimit_nofile 65536;
 worker_processes 2;  # 或者使用 auto
 
@@ -67,9 +69,10 @@ events {
 http {
     # 你的其他配置...
 }
+```
 然后重新加载配置：
 
-sudo systemctl reload nginx
+`sudo systemctl reload nginx`
 这样 Nginx 的每个 worker 进程就能使用最多 65536 个文件描述符，完全绕过了系统默认的 1024 软限制。这是最实用的方案，特别适合你只需要解决 Nginx 问题的场景。
 
 # Linux 文件描述符限制与 Nginx 最佳实践
