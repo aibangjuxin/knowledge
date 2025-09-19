@@ -93,9 +93,10 @@ curl -v http://<nginx-ip>/static/largefile.bin -o /dev/null
 
 ---
 
-# **流程图（简单示意 — 数据如何通过 Nginx/内核被合并发送）**
+# **流程图（简单示意 — 数据如何通过 Nginx/内核被合并发送）
 
-```
+
+```mermaid
 graph TD
     A[Client 发起 HTTP 请求] --> B[Nginx worker 接收请求]
     B --> C{是否使用 sendfile?}
