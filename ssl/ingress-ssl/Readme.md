@@ -40,6 +40,8 @@ kubectl get secret my-tls-secret -n test-tls
 kubectl describe secret my-tls-secret -n test-tls
 
 ➜  ingress-ssl git:(main) ✗ bash -x check-tls-secret.sh lex-tls-secret lex
+./check-tls-secret.sh lex-tls-secret lex
+
 ```
 
 ### 方法二：使用 YAML 文件创建## 完整的测试流程
@@ -115,3 +117,55 @@ kubectl create secret tls test-tls-secret \
 | Certificate Chain | ✓ Pass | 3 certificate(s) in chain |
 
 这样你就可以完整地测试你的 TLS Secret 验证脚本了。自签名证书完全适合用于测试和开发环境。
+
+
+the Check Result
+
+=== TLS Secret Validation Tool ===
+ℹ Checking TLS secret: lex-tls-secret in namespace: lex
+
+=== Checking Secret Existence and Type ===
+✓ Secret 'lex-tls-secret' exists in namespace 'lex'
+✓ Secret type is correct: kubernetes.io/tls
+
+=== Exporting TLS Files ===
+✓ Certificate exported to: /var/folders/n5/m8hhw0t9443br2598sqsfxwc0000gn/T/tmp.gjAULYfrfn/tls.crt
+✓ Private key exported to: /var/folders/n5/m8hhw0t9443br2598sqsfxwc0000gn/T/tmp.gjAULYfrfn/tls.key
+
+=== Validating Certificate and Key Consistency ===
+✓ Certificate and private key match
+
+=== Certificate Information ===
+ℹ Certificate Details:
+  Issuer: C=UK, ST=London, L=London, O=AiBang, CN=api01.gcp.uk.aibang.com
+  Not Before: Sep 20 01:47:41 2025 GMT
+  Not After : Sep 20 01:47:41 2026 GMT
+  Subject: C=UK, ST=London, L=London, O=AiBang, CN=api01.gcp.uk.aibang.com
+  DNS:api01.gcp.uk.aibang.com, DNS:*.gcp.uk.aibang.com, DNS:localhost
+
+ℹ Subject: C=UK, ST=London, L=London, O=AiBang, CN=api01.gcp.uk.aibang.com
+ℹ Issuer: C=UK, ST=London, L=London, O=AiBang, CN=api01.gcp.uk.aibang.com
+
+ℹ Valid From: Sep 20 01:47:41 2025 GMT
+ℹ Valid Until: Sep 20 01:47:41 2026 GMT
+✓ Certificate is currently valid
+✓ Certificate is not expiring within 30 days
+
+ℹ Subject Alternative Names:
+  DNS:api01.gcp.uk.aibang.com, DNS:*.gcp.uk.aibang.com, DNS:localhost
+
+=== Certificate Chain Analysis ===
+ℹ Number of certificates in chain: 1
+⚠ Only one certificate found (no intermediate certificates)
+✓ Certificate chain verification passed
+
+=== Validation Summary ===
+| Check | Status | Details |
+|-------|--------|---------|
+| Secret Exists | ✓ Pass | Found in namespace lex |
+| Secret Type | ✓ Pass | kubernetes.io/tls |
+| Cert/Key Match | ✓ Pass | Modulus validation successful |
+| Certificate Validity | ✓ Pass | Currently valid |
+| Certificate Chain | ⚠ Warning | 1 certificate(s) in chain |
+✓ TLS secret validation completed successfully
+ℹ Temporary files cleaned up
