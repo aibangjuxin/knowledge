@@ -36,23 +36,25 @@ We are the company's GKE maintenance team and have received this requirement. Wh
 # Check current image formats in use
 kubectl get pods --all-namespaces -o jsonpath='{range .items[*]}{.spec.containers[*].image}{"\n"}{end}' | sort -u > current_images.txt
 
-# Use gcloud to check GAR image manifest information
+# Get access token for GAR API calls
+TOKEN=$(gcloud auth print-access-token)
+
+# Use curl to check GAR image manifest information
 for image in $(cat current_images.txt); do
   if [[ $image == *"pkg.dev"* ]]; then
     echo "Checking GAR image: $image"
     # Extract GAR image information
-    LOCATION=$(echo $image | cut -d'/' -f1 | cut -d'-' -f1)
+    LOCATION=$(echo $image | cut -d'/' -f1)
     PROJECT=$(echo $image | cut -d'/' -f2)
     REPO=$(echo $image | cut -d'/' -f3)
     IMAGE_TAG=$(echo $image | cut -d'/' -f4)
 
-    # Get image manifest
-    gcloud artifacts docker images describe $image \
-      --format="value(image_summary.digest)" 2>/dev/null
+    # Build the GAR API URL
+    GAR_URL="https://${LOCATION}/v2/${PROJECT}/${REPO}/manifests/${IMAGE_TAG}"
 
-    # Check manifest schema version
-    gcloud artifacts docker images describe $image \
-      --format="json" | jq -r '.manifest.schemaVersion // "unknown"'
+    # Check manifest schema version using curl
+    curl -s -H "Authorization: Bearer $TOKEN" "$GAR_URL" | \
+      jq '.schemaVersion'
   else
     echo "Non-GAR image: $image"
     docker manifest inspect $image --verbose | grep -i "schemaVersion"
@@ -60,7 +62,27 @@ for image in $(cat current_images.txt); do
 done
 ```
 
+---
+
+```bash
+# Your method - single image check
+TOKEN=$(gcloud auth print-access-token)
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://europe-docker.pkg.dev/v2/project/containers/manifests/version" | \
+  jq '.schemaVersion'
+
+# Batch version for multiple tags
+for tag in latest v1.0 v2.0; do
+  curl -s -H "Authorization: Bearer $TOKEN" \
+    "https://europe-docker.pkg.dev/v2/project/containers/manifests/$tag" | \
+    jq -r ".schemaVersion // \"unknown\""
+done
+
+```
+
 #### 2.1.1 GAR Image Detailed Check Commands
+
+**Method 1: Using gcloud CLI**
 
 ```bash
 # List all images in GAR repositories
@@ -90,6 +112,77 @@ gcloud artifacts docker images list \
 done
 ```
 
+**Method 2: Using Docker Registry HTTP API v2 (More Efficient)**
+
+```bash
+# Get access token for authentication
+TOKEN=$(gcloud auth print-access-token)
+
+# Check single image schema version using Registry API
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://LOCATION-docker.pkg.dev/v2/PROJECT/REPOSITORY/manifests/TAG" | \
+  jq '.schemaVersion'
+
+# Example for your case:
+TOKEN=$(gcloud auth print-access-token)
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://europe-docker.pkg.dev/v2/project/containers/manifests/version" | \
+  jq '.schemaVersion'
+
+# Batch check using Registry API (faster for multiple images)
+TOKEN=$(gcloud auth print-access-token)
+for tag in $(gcloud artifacts docker tags list \
+  LOCATION-docker.pkg.dev/PROJECT/REPOSITORY \
+  --format="value(TAG)"); do
+
+  echo "Checking tag: $tag"
+  schema=$(curl -s -H "Authorization: Bearer $TOKEN" \
+    "https://LOCATION-docker.pkg.dev/v2/PROJECT/REPOSITORY/manifests/$tag" | \
+    jq -r '.schemaVersion // "unknown"')
+
+  if [ "$schema" = "1" ]; then
+    echo "⚠️  Schema 1 found: $tag"
+  elif [ "$schema" = "2" ]; then
+    echo "✅ Schema 2: $tag"
+  else
+    echo "❓ Unknown schema: $tag"
+  fi
+done
+```
+
+**Method 3: Advanced Registry API with Error Handling**
+
+```bash
+#!/bin/bash
+# Advanced GAR schema checker using Registry API
+
+check_image_schema() {
+  local location=$1
+  local project=$2
+  local repository=$3
+  local tag=$4
+
+  local token=$(gcloud auth print-access-token)
+  local url="https://${location}-docker.pkg.dev/v2/${project}/${repository}/manifests/${tag}"
+
+  local response=$(curl -s -w "%{http_code}" -H "Authorization: Bearer $token" "$url")
+  local http_code="${response: -3}"
+  local body="${response%???}"
+
+  if [ "$http_code" = "200" ]; then
+    local schema=$(echo "$body" | jq -r '.schemaVersion // "unknown"')
+    echo "$tag,$schema,success"
+  else
+    echo "$tag,error,http_$http_code"
+  fi
+}
+
+# Usage example:
+# check_image_schema "europe" "project" "containers" "version"
+```
+
+````
+
 #### 2.2 Base Image Audit
 
 - [ ] Check all FROM statements in Dockerfiles
@@ -116,7 +209,7 @@ gcloud container clusters create containerd2-test \
 
 # 2. Deploy existing applications in test cluster
 kubectl apply -f your-deployment-manifests/
-```
+````
 
 #### 3.2 Image Modernization Strategy
 
@@ -146,8 +239,8 @@ name: Image Compatibility Check
 on:
   pull_request:
     paths:
-      - 'k8s/**'
-      - 'Dockerfile*'
+      - "k8s/**"
+      - "Dockerfile*"
 
 jobs:
   check-images:
@@ -217,14 +310,14 @@ metadata:
   name: containerd-monitoring
 spec:
   groups:
-  - name: containerd.rules
-    rules:
-    - alert: ContainerdImagePullFailure
-      expr: increase(container_runtime_image_pull_failures_total[5m]) > 0
-      labels:
-        severity: warning
-      annotations:
-        summary: "Container image pull failure detected"
+    - name: containerd.rules
+      rules:
+        - alert: ContainerdImagePullFailure
+          expr: increase(container_runtime_image_pull_failures_total[5m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "Container image pull failure detected"
 ```
 
 ### 6. Common Issues & Solutions
@@ -271,7 +364,9 @@ kubectl logs -n kube-system -l k8s-app=containerd
 kubectl describe node your-node-name
 ```
 
-### 7. Validation Script
+### 7. Validation Scripts
+
+#### 7.1 Standard Validation Script
 
 ```bash
 #!/bin/bash
@@ -328,6 +423,98 @@ if [ $schema1_count -gt 0 ]; then
   exit 1
 else
   echo "✅ All images compatible with containerd 2.0"
+  exit 0
+fi
+```
+
+#### 7.2 Fast Registry API Validation Script (Your Method)
+
+```bash
+#!/bin/bash
+# containerd2-fast-check.sh - Using Registry HTTP API
+
+echo "=== Fast GKE containerd 2.0 Check using Registry API ==="
+
+# Get authentication token
+TOKEN=$(gcloud auth print-access-token)
+
+# Function to check schema using Registry API
+check_gar_schema() {
+  local image=$1
+
+  # Parse GAR image URL: LOCATION-docker.pkg.dev/PROJECT/REPOSITORY/IMAGE:TAG
+  if [[ $image =~ ^([^-]+)-docker\.pkg\.dev/([^/]+)/([^/]+)/(.+)$ ]]; then
+    local location="${BASH_REMATCH[1]}"
+    local project="${BASH_REMATCH[2]}"
+    local repository="${BASH_REMATCH[3]}"
+    local image_tag="${BASH_REMATCH[4]}"
+
+    # Handle image:tag format
+    if [[ $image_tag == *":"* ]]; then
+      local tag="${image_tag##*:}"
+    else
+      local tag="latest"
+    fi
+
+    local url="https://${location}-docker.pkg.dev/v2/${project}/${repository}/manifests/${tag}"
+
+    # Make API call (your method)
+    local schema=$(curl -s -H "Authorization: Bearer $TOKEN" "$url" 2>/dev/null | \
+      jq -r '.schemaVersion // "error"')
+
+    echo "$schema"
+  else
+    echo "not-gar"
+  fi
+}
+
+# Check all images
+echo "Extracting all images in use..."
+kubectl get pods --all-namespaces -o jsonpath='{range .items[*]}{.spec.containers[*].image}{"\n"}{end}' | sort -u > all_images.txt
+
+echo "Checking image Schema versions using Registry API..."
+schema1_count=0
+total_count=0
+api_errors=0
+
+while read image; do
+  echo "Checking: $image"
+  total_count=$((total_count + 1))
+
+  if [[ $image == *"pkg.dev"* ]]; then
+    schema=$(check_gar_schema "$image")
+
+    case $schema in
+      "1")
+        echo "⚠️  Schema 1: $image"
+        schema1_count=$((schema1_count + 1))
+        ;;
+      "2")
+        echo "✅ Schema 2: $image"
+        ;;
+      "error")
+        echo "❌ API Error: $image"
+        api_errors=$((api_errors + 1))
+        ;;
+      "not-gar")
+        echo "❓ Not GAR: $image"
+        ;;
+    esac
+  else
+    echo "🔍 Non-GAR image: $image (manual check required)"
+  fi
+done < all_images.txt
+
+echo "=== Fast Check Complete ==="
+echo "Total images: $total_count"
+echo "Schema 1 images: $schema1_count"
+echo "API errors: $api_errors"
+
+if [ $schema1_count -gt 0 ]; then
+  echo "⚠️  Found $schema1_count Schema 1 images, upgrade required before using containerd 2.0"
+  exit 1
+else
+  echo "✅ All GAR images compatible with containerd 2.0"
   exit 0
 fi
 ```
@@ -481,10 +668,10 @@ kubectl get deploy -A -o=jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.
 
 1.
 
-2.  **检测镜像是否是 Schema 1**
+2. **检测镜像是否是 Schema 1**
 
-    - Docker Hub 上的老镜像（2017 前构建的）可能是 Schema 1
-    - 可用 skopeo 检查：
+   - Docker Hub 上的老镜像（2017 前构建的）可能是 Schema 1
+   - 可用 skopeo 检查：
 
 ```
 skopeo inspect docker://<image> | jq .SchemaVersion
@@ -500,9 +687,9 @@ skopeo inspect docker://<image> | jq .SchemaVersion
 ### **C. API 使用检查**
 
 - 搜索代码/脚本中是否有对 v1alpha2 CRI 的调用
-    典型位置：
-    - 自定义 CNI 插件或容器运行时工具
-    - kubelet runtimeClass 的配置
+  典型位置：
+  - 自定义 CNI 插件或容器运行时工具
+  - kubelet runtimeClass 的配置
 
 ### **D. Runtime 行为验证**
 
@@ -553,8 +740,8 @@ graph TD
 - **强制升级镜像仓库**：统一要求团队推送 OCI/Docker Schema 2 镜像
 - **提前做 staging 验证**：在非生产 GKE 1.33 上回归测试
 - **CI/CD 最佳实践**：
-    - 使用 docker buildx build --push 确保 OCI 镜像
-    - 镜像扫描/验签工具（如 GCP Artifact Registry Vulnerability Scan）同步升级
+  - 使用 docker buildx build --push 确保 OCI 镜像
+  - 镜像扫描/验签工具（如 GCP Artifact Registry Vulnerability Scan）同步升级
 - **文档沉淀**：建立一个清单，记录哪些镜像/服务已验证通过，以后升级更快
 
 ---
