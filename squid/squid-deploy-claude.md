@@ -779,3 +779,140 @@ echo "部署完成 - 模式: $MODE"
 4. **易于扩展** - 未来添加新模式只需在 values.yaml 中增加配置
 
 这个方案是最轻量级的，只需要修改 squid.conf 模板和 values.yaml，就能满足你的两种配置需求。
+
+
+# Claude Squid 配置多模式支持方案
+
+## 问题分析
+
+您需要在不修改现有 Squid 镜像的前提下，通过 Helm 支持两种配置模式：
+
+- **Local 模式**：使用变量 `{{ENV}}-proxy.aliyun.cloud.{{REGION}}.local:3128`
+- **Blue 模式**：使用变量 `{{HOST}}:{{PORT}}`
+
+## 解决方案
+
+### 1. 修改 squid.conf 配置
+
+将原有的 cache_peer 相关配置修改为：
+
+```bash
+acl app_proxy dstdomain {{TARGET_FQDN}}
+cache_peer {{CACHE_PEER_HOST}} parent {{CACHE_PEER_PORT}} 0
+cache_peer_access {{CACHE_PEER_HOST}} allow app_proxy
+```
+
+### 2. values.yaml 配置结构
+
+```yaml
+# Squid 配置模式
+squid:
+  # 配置模式: local 或 blue
+  mode: "local"
+  
+  # 公共配置
+  targetFqdn: "example.com"
+  
+  # Local 模式配置
+  local:
+    env: "prod"
+    region: "us-central1"
+  
+  # Blue 模式配置
+  blue:
+    host: "my_local.proxy.aibang"
+    port: 8080
+```
+
+### 3. Helm Template 配置
+
+在 `templates/deployment.yaml` 中添加环境变量配置：
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "squid.fullname" . }}
+spec:
+  template:
+    spec:
+      containers:
+      - name: squid
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        env:
+        - name: TARGET_FQDN
+          value: "{{ .Values.squid.targetFqdn }}"
+        {{- if eq .Values.squid.mode "local" }}
+        - name: CACHE_PEER_HOST
+          value: "{{ .Values.squid.local.env }}-proxy.aliyun.cloud.{{ .Values.squid.local.region }}.local"
+        - name: CACHE_PEER_PORT
+          value: "3128"
+        {{- else if eq .Values.squid.mode "blue" }}
+        - name: CACHE_PEER_HOST
+          value: "{{ .Values.squid.blue.host }}"
+        - name: CACHE_PEER_PORT
+          value: "{{ .Values.squid.blue.port }}"
+        {{- end }}
+```
+
+### 4. 部署流程图
+
+```mermaid
+graph TD
+    A[开始部署] --> B[读取 values.yaml]
+    B --> C{检查 squid.mode}
+    C -->|local| D[设置 Local 模式变量]
+    C -->|blue| E[设置 Blue 模式变量]
+    D --> F[生成环境变量]
+    E --> F
+    F --> G[创建 Deployment]
+    G --> H[Pod 启动]
+    H --> I[替换 squid.conf 变量]
+    I --> J[Squid 服务启动]
+    J --> K[部署完成]
+```
+
+### 5. 使用示例
+
+**Local 模式部署：**
+
+```bash
+helm upgrade squid-proxy ./squid-chart \
+  --set squid.mode=local \
+  --set squid.local.env=prod \
+  --set squid.local.region=us-central1 \
+  --set squid.targetFqdn=example.com
+```
+
+**Blue 模式部署：**
+
+```bash
+helm upgrade squid-proxy ./squid-chart \
+  --set squid.mode=blue \
+  --set squid.blue.host=my_local.proxy.aibang \
+  --set squid.blue.port=8080 \
+  --set squid.targetFqdn=example.com
+```
+
+### 6. 配置对照表
+
+|模式|CACHE_PEER_HOST|CACHE_PEER_PORT|实际配置|
+|---|---|---|---|
+|local|`${ENV}-proxy.aliyun.cloud.${REGION}.local`|`3128`|`prod-proxy.aliyun.cloud.us-central1.local parent 3128 0`|
+|blue|`my_local.proxy.aibang`|`8080`|`my_local.proxy.aibang parent 8080 0`|
+
+## 注意事项
+
+1. **配置验证**：部署前确认 `squid.mode` 值只能为 `local` 或 `blue`
+2. **环境变量检查**：验证所有必需的环境变量都已正确设置
+3. **网络连通性**：确保 Pod 能够访问对应的 cache_peer 地址
+4. **配置热更新**：修改配置后需要重启 Pod 使变更生效
+
+## 最佳实践
+
+- 在 values.yaml 中为每种模式设置合理的默认值
+- 添加配置验证逻辑，防止无效的模式参数
+- 使用 Helm hooks 在部署前进行配置检查
+- 考虑添加健康检查确保 Squid 服务正常运行
+
+通过这种方案，您可以用最小的改动实现两种配置模式的切换，只需修改 squid.conf 中的变量名称和 Helm 模板配置即可。
