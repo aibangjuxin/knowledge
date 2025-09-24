@@ -13,6 +13,7 @@ GCP 默认提供了 Cloud Build Attestations 和 gcloud container binauthz attes
 
 - 必须以 GAR 中的 Digest 为准签名
 - GCP 默认提供了 **Cloud Build Attestations** 和 gcloud container binauthz attestations create，完全可以不用 cosign。
+- Binary Authorization 必须用非对称密钥
 -
 
 # ChatGPT
