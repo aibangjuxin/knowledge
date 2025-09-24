@@ -1,0 +1,1 @@
+https://cypherpunksamurai.github.io/vsix-downloader-webui/
