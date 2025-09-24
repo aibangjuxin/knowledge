@@ -1,15 +1,16 @@
-
 API flow
 Ingress → Service → Pod → ReplicaSet → Deployment → readinessProbe）
 
-我现在想写这样一个脚本 传参就是Namespace的名字比如
+我现在想写这样一个脚本 传参就是 Namespace 的名字比如
 verify-e2e.sh -n mynamespace
 
-然后呢,获取到里面所有对应的资源 然后就包括我的这个follow的流程 然后我想拿到我所有的 e2e 的测试的URL 
-然后进行一个简单的curl请求
+然后呢,获取到里面所有对应的资源 然后就包括我的这个 follow 的流程 然后我想拿到我所有的 e2e 的测试的 URL
+然后进行一个简单的 curl 请求
 
-因为我们知道Ingress里面比如说有host,然后deploy最终的readiness里面有具体的url,所以说我能拿到一些对应的信息。
+因为我们知道 Ingress 里面比如说有 host,然后 deploy 最终的 readiness 里面有具体的 url,所以说我能拿到一些对应的信息。
+
 - enhance
+
 ```bash
 #!/bin/bash
 
@@ -98,24 +99,24 @@ echo "=================================================="
 # Function to extract URLs from Ingress
 get_ingress_urls() {
     print_info "Extracting URLs from Ingress resources..."
-    
+
     local ingress_urls=()
     local ingresses=$(kubectl get ingress -n "$NAMESPACE" -o json)
-    
+
     if [ "$(echo "$ingresses" | jq '.items | length')" -eq 0 ]; then
         print_warning "No Ingress resources found in namespace $NAMESPACE"
         return
     fi
-    
+
     # Extract hosts and paths from ingress
     while IFS= read -r line; do
         if [ -n "$line" ]; then
             ingress_urls+=("$line")
         fi
-    done < <(echo "$ingresses" | jq -r '.items[] | 
-        .spec.rules[]? | 
+    done < <(echo "$ingresses" | jq -r '.items[] |
+        .spec.rules[]? |
         "https://" + .host + (.http.paths[]?.path // "")')
-    
+
     printf '%s\n' "${ingress_urls[@]}"
 }
 
@@ -158,10 +159,10 @@ show_pod_status() {
 main() {
     # Show resource summary
     show_resource_summary
-    
+
     # Show pod status
     show_pod_status
-    
+
     local ingress_urls=$(get_ingress_urls)
     local readiness_urls=$(get_readiness_urls)
 
@@ -198,7 +199,7 @@ main() {
     if [ $failed_count -gt 0 ]; then
         print_error "Failed: $failed_count/$total_count"
     fi
-    
+
     echo "=================================================="
 
     if [ $success_count -eq $total_count ]; then
@@ -212,21 +213,21 @@ main() {
 # Function to get readiness probe URLs by combining Ingress hosts with readiness paths
 get_readiness_urls() {
     print_info "Extracting readiness probe URLs from Deployments and matching with Ingress hosts..."
-    
+
     local readiness_urls=()
     local deployments=$(kubectl get deployments -n "$NAMESPACE" -o json)
     local ingresses=$(kubectl get ingress -n "$NAMESPACE" -o json)
-    
+
     if [ "$(echo "$deployments" | jq '.items | length')" -eq 0 ]; then
         print_warning "No Deployment resources found in namespace $NAMESPACE"
         return
     fi
-    
+
     if [ "$(echo "$ingresses" | jq '.items | length')" -eq 0 ]; then
         print_warning "No Ingress resources found in namespace $NAMESPACE"
         return
     fi
-    
+
     # Get all ingress hosts
     local ingress_hosts=()
     while IFS= read -r host; do
@@ -234,17 +235,17 @@ get_readiness_urls() {
             ingress_hosts+=("$host")
         fi
     done < <(echo "$ingresses" | jq -r '.items[].spec.rules[]?.host')
-    
+
     if [ ${#ingress_hosts[@]} -eq 0 ]; then
         print_warning "No hosts found in Ingress resources"
         return
     fi
-    
+
     # Extract readiness probe paths from deployments
     while IFS='|' read -r dep_name readiness_path; do
         if [ -n "$dep_name" ] && [ -n "$readiness_path" ]; then
             print_info "Found readiness probe: $dep_name -> $readiness_path"
-            
+
             # Combine each ingress host with the readiness path
             for host in "${ingress_hosts[@]}"; do
                 local full_url="https://$host$readiness_path"
@@ -253,12 +254,12 @@ get_readiness_urls() {
             done
         fi
     done < <(echo "$deployments" | jq -r '
-        .items[] | 
+        .items[] |
         .metadata.name as $dep_name |
-        .spec.template.spec.containers[]? | 
-        select(.readinessProbe.httpGet) | 
+        .spec.template.spec.containers[]? |
+        select(.readinessProbe.httpGet) |
         $dep_name + "|" + (.readinessProbe.httpGet.path // "/")')
-    
+
     printf '%s\n' "${readiness_urls[@]}"
 }
 
@@ -363,24 +364,24 @@ echo "=================================================="
 # Function to extract URLs from Ingress
 get_ingress_urls() {
     print_info "Extracting URLs from Ingress resources..."
-    
+
     local ingress_urls=()
     local ingresses=$(kubectl get ingress -n "$NAMESPACE" -o json)
-    
+
     if [ "$(echo "$ingresses" | jq '.items | length')" -eq 0 ]; then
         print_warning "No Ingress resources found in namespace $NAMESPACE"
         return
     fi
-    
+
     # Extract hosts and paths from ingress
     while IFS= read -r line; do
         if [ -n "$line" ]; then
             ingress_urls+=("$line")
         fi
-    done < <(echo "$ingresses" | jq -r '.items[] | 
-        .spec.rules[]? | 
+    done < <(echo "$ingresses" | jq -r '.items[] |
+        .spec.rules[]? |
         "https://" + .host + (.http.paths[]?.path // "")')
-    
+
     printf '%s\n' "${ingress_urls[@]}"
 }
 
@@ -439,7 +440,7 @@ main() {
     if [ $failed_count -gt 0 ]; then
         print_error "Failed: $failed_count/$total_count"
     fi
-    
+
     echo "=================================================="
 
     if [ $success_count -eq $total_count ]; then
@@ -453,41 +454,41 @@ main() {
 # Enhanced function to get readiness URLs with port-forwarding
 get_readiness_urls_with_portforward() {
     print_info "Extracting readiness probe URLs from Deployments with port-forwarding..."
-    
+
     local readiness_urls=()
     local deployments=$(kubectl get deployments -n "$NAMESPACE" -o json)
-    
+
     if [ "$(echo "$deployments" | jq '.items | length')" -eq 0 ]; then
         print_warning "No Deployment resources found in namespace $NAMESPACE"
         return
     fi
-    
+
     local port_counter=8080
-    
+
     # Extract deployment info and setup port-forwarding
     while IFS='|' read -r dep_name container_port readiness_path; do
         if [ -n "$dep_name" ] && [ -n "$container_port" ] && [ -n "$readiness_path" ]; then
             local local_port=$((port_counter++))
             print_info "Found readiness probe: $dep_name -> $container_port$readiness_path"
-            
+
             # Setup port-forward in background
             kubectl port-forward -n "$NAMESPACE" "deployment/$dep_name" "$local_port:$container_port" >/dev/null 2>&1 &
             local pf_pid=$!
             sleep 1
-            
+
             # Add URL to test list
             readiness_urls+=("http://localhost:$local_port$readiness_path")
-            
+
             # Store PID for cleanup
             echo "$pf_pid" >> /tmp/verify-e2e-pids.tmp
         fi
     done < <(echo "$deployments" | jq -r '
-        .items[] | 
+        .items[] |
         .metadata.name as $dep_name |
-        .spec.template.spec.containers[]? | 
-        select(.readinessProbe.httpGet) | 
+        .spec.template.spec.containers[]? |
+        select(.readinessProbe.httpGet) |
         $dep_name + "|" + (.readinessProbe.httpGet.port | tostring) + "|" + (.readinessProbe.httpGet.path // "/")')
-    
+
     printf '%s\n' "${readiness_urls[@]}"
 }
 

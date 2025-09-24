@@ -109,16 +109,14 @@ get_ingress_urls() {
 # Function to test a single URL
 test_url() {
     local url="$1"
-    print_info "Testing URL: $url"
-    # Using --insecure for self-signed certs often found in k8s
-    # Added --show-error to see curl errors, and redirect stdout/stderr to /dev/null
-    if curl --silent --head --fail --show-error --insecure --timeout "$TIMEOUT" "$url" > /dev/null 2>&1; then
-        print_success "OK"
+    printf "Testing %-50s ... " "$url"
+    
+    # Simple curl test with timeout, suppress all error output
+    if curl --silent --head --fail --insecure --connect-timeout "$TIMEOUT" --max-time "$TIMEOUT" "$url" >/dev/null 2>&1; then
+        print_success "✓ OK"
         return 0
     else
-        # Capturing exit code for better error message
-        local exit_code=$?
-        print_error "FAIL (curl exit code: $exit_code)"
+        print_error "✗ FAIL"
         return 1
     fi
 }
@@ -176,7 +174,6 @@ main() {
         else
             ((failed_count++))
         fi
-        echo
     done
 
     echo "=================================================="
