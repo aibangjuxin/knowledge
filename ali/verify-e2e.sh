@@ -123,10 +123,34 @@ test_url() {
     fi
 }
 
+# Function to show resource summary
+show_resource_summary() {
+    print_info "Resource summary for namespace $NAMESPACE:"
+    echo "Ingresses: $(kubectl get ingress -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)"
+    echo "Services: $(kubectl get services -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)"
+    echo "Deployments: $(kubectl get deployments -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)"
+    echo "Pods: $(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)"
+    echo "ReplicaSets: $(kubectl get replicasets -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)"
+    echo
+}
+
+# Function to show pod status
+show_pod_status() {
+    print_info "Pod status in namespace $NAMESPACE:"
+    kubectl get pods -n "$NAMESPACE" -o wide 2>/dev/null || print_warning "Could not get pod status"
+    echo
+}
+
 # Main logic
 main() {
+    # Show resource summary
+    show_resource_summary
+    
+    # Show pod status
+    show_pod_status
+    
     local ingress_urls=$(get_ingress_urls)
-    local readiness_urls=$(get_readiness_urls_with_portforward)
+    local readiness_urls=$(get_readiness_urls)
 
     local all_urls=()
     # read urls into array
@@ -172,58 +196,63 @@ main() {
     fi
 }
 
-# Enhanced function to get readiness URLs with port-forwarding
-get_readiness_urls_with_portforward() {
-    print_info "Extracting readiness probe URLs from Deployments with port-forwarding..."
+# Function to get readiness probe URLs by combining Ingress hosts with readiness paths
+get_readiness_urls() {
+    print_info "Extracting readiness probe URLs from Deployments and matching with Ingress hosts..."
     
     local readiness_urls=()
     local deployments=$(kubectl get deployments -n "$NAMESPACE" -o json)
+    local ingresses=$(kubectl get ingress -n "$NAMESPACE" -o json)
     
     if [ "$(echo "$deployments" | jq '.items | length')" -eq 0 ]; then
         print_warning "No Deployment resources found in namespace $NAMESPACE"
         return
     fi
     
-    local port_counter=8080
+    if [ "$(echo "$ingresses" | jq '.items | length')" -eq 0 ]; then
+        print_warning "No Ingress resources found in namespace $NAMESPACE"
+        return
+    fi
     
-    # Extract deployment info and setup port-forwarding
-    while IFS='|' read -r dep_name container_port readiness_path; do
-        if [ -n "$dep_name" ] && [ -n "$container_port" ] && [ -n "$readiness_path" ]; then
-            local local_port=$((port_counter++))
-            print_info "Found readiness probe: $dep_name -> $container_port$readiness_path"
+    # Get all ingress hosts
+    local ingress_hosts=()
+    while IFS= read -r host; do
+        if [ -n "$host" ] && [ "$host" != "null" ]; then
+            ingress_hosts+=("$host")
+        fi
+    done < <(echo "$ingresses" | jq -r '.items[].spec.rules[]?.host')
+    
+    if [ ${#ingress_hosts[@]} -eq 0 ]; then
+        print_warning "No hosts found in Ingress resources"
+        return
+    fi
+    
+    # Extract readiness probe paths from deployments
+    while IFS='|' read -r dep_name readiness_path; do
+        if [ -n "$dep_name" ] && [ -n "$readiness_path" ]; then
+            print_info "Found readiness probe: $dep_name -> $readiness_path"
             
-            # Setup port-forward in background
-            kubectl port-forward -n "$NAMESPACE" "deployment/$dep_name" "$local_port:$container_port" >/dev/null 2>&1 &
-            local pf_pid=$!
-            sleep 1
-            
-            # Add URL to test list
-            readiness_urls+=("http://localhost:$local_port$readiness_path")
-            
-            # Store PID for cleanup
-            echo "$pf_pid" >> /tmp/verify-e2e-pids.tmp
+            # Combine each ingress host with the readiness path
+            for host in "${ingress_hosts[@]}"; do
+                local full_url="https://$host$readiness_path"
+                readiness_urls+=("$full_url")
+                print_info "Generated readiness URL: $full_url"
+            done
         fi
     done < <(echo "$deployments" | jq -r '
         .items[] | 
         .metadata.name as $dep_name |
         .spec.template.spec.containers[]? | 
         select(.readinessProbe.httpGet) | 
-        $dep_name + "|" + (.readinessProbe.httpGet.port | tostring) + "|" + (.readinessProbe.httpGet.path // "/")')
+        $dep_name + "|" + (.readinessProbe.httpGet.path // "/")')
     
     printf '%s\n' "${readiness_urls[@]}"
 }
 
-# Cleanup function
+# Cleanup function (simplified since we're not using port-forwarding)
 cleanup() {
-    print_info "Cleaning up port-forwards..."
-    if [ -f /tmp/verify-e2e-pids.tmp ]; then
-        while read -r pid; do
-            if [ -n "$pid" ]; then
-                kill "$pid" 2>/dev/null || true
-            fi
-        done < /tmp/verify-e2e-pids.tmp
-        rm -f /tmp/verify-e2e-pids.tmp
-    fi
+    # Clean up any temporary files if needed
+    rm -f /tmp/verify-e2e-*.tmp 2>/dev/null || true
 }
 
 # Set trap for cleanup
