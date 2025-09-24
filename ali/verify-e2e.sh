@@ -85,38 +85,40 @@ echo "=================================================="
 # Function to extract URLs from Ingress
 get_ingress_urls() {
     print_info "Extracting URLs from Ingress resources..."
-    
+
     local ingress_urls=()
     local ingresses=$(kubectl get ingress -n "$NAMESPACE" -o json)
-    
+
     if [ "$(echo "$ingresses" | jq '.items | length')" -eq 0 ]; then
         print_warning "No Ingress resources found in namespace $NAMESPACE"
         return
     fi
-    
+
     # Extract hosts and paths from ingress
     while IFS= read -r line; do
         if [ -n "$line" ]; then
             ingress_urls+=("$line")
         fi
-    done < <(echo "$ingresses" | jq -r '.items[] | 
-        .spec.rules[]? | 
+    done < <(echo "$ingresses" | jq -r '.items[] |
+        .spec.rules[]? |
         "https://" + .host + (.http.paths[]?.path // "")')
-    
+
     printf '%s\n' "${ingress_urls[@]}"
 }
 
 # Function to test a single URL
 test_url() {
     local url="$1"
-    printf "Testing %-50s ... " "$url"
-    
-    # Simple curl test with timeout, suppress all error output
-    if curl --silent --head --fail --insecure --connect-timeout "$TIMEOUT" --max-time "$TIMEOUT" "$url" >/dev/null 2>&1; then
-        print_success "✓ OK"
+    print_info "Testing URL: $url"
+    # Using --insecure for self-signed certs often found in k8s
+    # Added --show-error to see curl errors, and redirect stdout/stderr to /dev/null
+    if curl --silent --head --fail --show-error --insecure --timeout "$TIMEOUT" "$url" > /dev/null 2>&1; then
+        print_success "OK"
         return 0
     else
-        print_error "✗ FAIL"
+        # Capturing exit code for better error message
+        local exit_code=$?
+        print_error "FAIL (curl exit code: $exit_code)"
         return 1
     fi
 }
@@ -143,10 +145,10 @@ show_pod_status() {
 main() {
     # Show resource summary
     show_resource_summary
-    
+
     # Show pod status
     show_pod_status
-    
+
     local ingress_urls=$(get_ingress_urls)
     local readiness_urls=$(get_readiness_urls)
 
@@ -182,7 +184,7 @@ main() {
     if [ $failed_count -gt 0 ]; then
         print_error "Failed: $failed_count/$total_count"
     fi
-    
+
     echo "=================================================="
 
     if [ $success_count -eq $total_count ]; then
@@ -196,21 +198,21 @@ main() {
 # Function to get readiness probe URLs by combining Ingress hosts with readiness paths
 get_readiness_urls() {
     print_info "Extracting readiness probe URLs from Deployments and matching with Ingress hosts..."
-    
+
     local readiness_urls=()
     local deployments=$(kubectl get deployments -n "$NAMESPACE" -o json)
     local ingresses=$(kubectl get ingress -n "$NAMESPACE" -o json)
-    
+
     if [ "$(echo "$deployments" | jq '.items | length')" -eq 0 ]; then
         print_warning "No Deployment resources found in namespace $NAMESPACE"
         return
     fi
-    
+
     if [ "$(echo "$ingresses" | jq '.items | length')" -eq 0 ]; then
         print_warning "No Ingress resources found in namespace $NAMESPACE"
         return
     fi
-    
+
     # Get all ingress hosts
     local ingress_hosts=()
     while IFS= read -r host; do
@@ -218,31 +220,28 @@ get_readiness_urls() {
             ingress_hosts+=("$host")
         fi
     done < <(echo "$ingresses" | jq -r '.items[].spec.rules[]?.host')
-    
+
     if [ ${#ingress_hosts[@]} -eq 0 ]; then
         print_warning "No hosts found in Ingress resources"
         return
     fi
-    
+
     # Extract readiness probe paths from deployments
     while IFS='|' read -r dep_name readiness_path; do
         if [ -n "$dep_name" ] && [ -n "$readiness_path" ]; then
-            print_info "Found readiness probe: $dep_name -> $readiness_path"
-            
             # Combine each ingress host with the readiness path
             for host in "${ingress_hosts[@]}"; do
                 local full_url="https://$host$readiness_path"
                 readiness_urls+=("$full_url")
-                print_info "Generated readiness URL: $full_url"
             done
         fi
     done < <(echo "$deployments" | jq -r '
-        .items[] | 
+        .items[] |
         .metadata.name as $dep_name |
-        .spec.template.spec.containers[]? | 
-        select(.readinessProbe.httpGet) | 
+        .spec.template.spec.containers[]? |
+        select(.readinessProbe.httpGet) |
         $dep_name + "|" + (.readinessProbe.httpGet.path // "/")')
-    
+
     printf '%s\n' "${readiness_urls[@]}"
 }
 
