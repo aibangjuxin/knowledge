@@ -119,50 +119,70 @@ get_ingress_urls() {
     printf '%s\n' "${ingress_urls[@]}"
 }
 
-# Function to extract readiness probe URLs from Deployments
-get_readiness_urls() {
-    print_info "Extracting readiness probe URLs from Deployments..."
-    
-    local readiness_urls=()
-    local deployments=$(kubectl get deployments -n "$NAMESPACE" -o json)
-    
-    if [ "$(echo "$deployments" | jq '.items | length')" -eq 0 ]; then
-        print_warning RLs
+# Function to test a single URL
+test_url() {
+    local url="$1"
+    print_info "Testing URL: $url"
+    # Using --insecure for self-signed certs often found in k8s
+    # Added --show-error to see curl errors, and redirect stdout/stderr to /dev/null
+    if curl --silent --head --fail --show-error --insecure --timeout "$TIMEOUT" "$url" > /dev/null 2>&1; then
+        print_success "OK"
+        return 0
+    else
+        # Capturing exit code for better error message
+        local exit_code=$?
+        print_error "FAIL (curl exit code: $exit_code)"
+        return 1
+    fi
+}
+
+# Main logic
+main() {
+    local ingress_urls=$(get_ingress_urls)
+    local readiness_urls=$(get_readiness_urls_with_portforward)
+
+    local all_urls=()
+    # read urls into array
+    while IFS= read -r url; do [ -n "$url" ] && all_urls+=("$url"); done <<< "$ingress_urls"
+    while IFS= read -r url; do [ -n "$url" ] && all_urls+=("$url"); done <<< "$readiness_urls"
+
+    if [ ${#all_urls[@]} -eq 0 ]; then
+        print_warning "No URLs found to test."
+        exit 0
+    fi
+
+    print_info "Collected URLs to test:"
+    printf -- "- %s\n" "${all_urls[@]}"
+    echo
 
     local success_count=0
+    local failed_count=0
     local total_count=${#all_urls[@]}
-    
+
     for url in "${all_urls[@]}"; do
         if test_url "$url"; then
             ((success_count++))
+        else
+            ((failed_count++))
         fi
         echo
     done
-    
+
     echo "=================================================="
     print_info "Test Results Summary:"
     print_success "Successful: $success_count/$total_count"
+    if [ $failed_count -gt 0 ]; then
+        print_error "Failed: $failed_count/$total_count"
+    fi
     
+    echo "=================================================="
+
     if [ $success_count -eq $total_count ]; then
         print_success "All E2E tests passed! 🎉"
-        exit 0
     else
         print_warning "Some tests failed. Check the logs above for details."
         exit 1
     fi
-}
-
-# Function to port-forward for readiness probe testing
-setup_port_forward() {
-    local deployment="$1"
-    local port="$2"
-    local local_port="$3"
-    
-    print_info "Setting up port-forward for $deployment:$port -> localhost:$local_port"
-    kubectl port-forward -n "$NAMESPACE" "deployment/$deployment" "$local_port:$port" &
-    local pf_pid=$!
-    sleep 2
-    echo $pf_pid
 }
 
 # Enhanced function to get readiness URLs with port-forwarding
