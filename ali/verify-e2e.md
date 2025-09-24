@@ -10,13 +10,14 @@ verify-e2e.sh -n mynamespace
 因为我们知道 Ingress 里面比如说有 host,然后 deploy 最终的 readiness 里面有具体的 url,所以说我能拿到一些对应的信息。
 
 - enhance
+
 ```bash
 #!/bin/bash
 
 # E2E Verification Script for Kubernetes Resources
 # Usage: ./verify-e2e.sh -n <namespace>
 
-set -e
+# set -e  # Commented out to prevent script from exiting on non-critical errors
 
 # Colors for output
 RED='\033[0;31m'
@@ -100,38 +101,47 @@ get_ingress_urls() {
     print_info "Extracting URLs from Ingress resources..."
 
     local ingress_urls=()
-    local ingresses=$(kubectl get ingress -n "$NAMESPACE" -o json)
+    local ingresses
 
-    if [ "$(echo "$ingresses" | jq '.items | length')" -eq 0 ]; then
+    # Get ingresses with error handling
+    if ! ingresses=$(kubectl get ingress -n "$NAMESPACE" -o json 2>/dev/null); then
+        print_warning "Failed to get Ingress resources from namespace $NAMESPACE"
+        return
+    fi
+
+    local ingress_count=$(echo "$ingresses" | jq '.items | length' 2>/dev/null || echo "0")
+    if [ "$ingress_count" -eq 0 ]; then
         print_warning "No Ingress resources found in namespace $NAMESPACE"
         return
     fi
 
-    # Extract hosts and paths from ingress
+    print_info "Found $ingress_count Ingress resources"
+
+    # Extract hosts and paths from ingress with better error handling
     while IFS= read -r line; do
-        if [ -n "$line" ]; then
+        if [ -n "$line" ] && [ "$line" != "null" ]; then
             ingress_urls+=("$line")
         fi
     done < <(echo "$ingresses" | jq -r '.items[] |
         .spec.rules[]? |
-        "https://" + .host + (.http.paths[]?.path // "")')
+        select(.host != null) |
+        "https://" + .host + (.http.paths[]?.path // "")' 2>/dev/null || true)
 
+    print_info "Extracted ${#ingress_urls[@]} URLs from Ingress resources"
     printf '%s\n' "${ingress_urls[@]}"
 }
 
 # Function to test a single URL
 test_url() {
     local url="$1"
-    print_info "Testing URL: $url"
-    # Using --insecure for self-signed certs often found in k8s
-    # Added --show-error to see curl errors, and redirect stdout/stderr to /dev/null
-    if curl --silent --head --fail --show-error --insecure --timeout "$TIMEOUT" "$url" > /dev/null 2>&1; then
-        print_success "OK"
+    printf "Testing %-50s ... " "$url"
+
+    # Simple curl test with timeout, suppress all error output
+    if curl --silent --head --fail --insecure --connect-timeout "$TIMEOUT" --max-time "$TIMEOUT" "$url" >/dev/null 2>&1; then
+        print_success "✓ OK"
         return 0
     else
-        # Capturing exit code for better error message
-        local exit_code=$?
-        print_error "FAIL (curl exit code: $exit_code)"
+        print_error "✗ FAIL"
         return 1
     fi
 }
@@ -213,15 +223,30 @@ get_readiness_urls() {
     print_info "Extracting readiness probe URLs from Deployments and matching with Ingress hosts..."
 
     local readiness_urls=()
-    local deployments=$(kubectl get deployments -n "$NAMESPACE" -o json)
-    local ingresses=$(kubectl get ingress -n "$NAMESPACE" -o json)
+    local deployments
+    local ingresses
 
-    if [ "$(echo "$deployments" | jq '.items | length')" -eq 0 ]; then
+    # Get deployments with error handling
+    if ! deployments=$(kubectl get deployments -n "$NAMESPACE" -o json 2>/dev/null); then
+        print_warning "Failed to get Deployment resources from namespace $NAMESPACE"
+        return
+    fi
+
+    # Get ingresses with error handling
+    if ! ingresses=$(kubectl get ingress -n "$NAMESPACE" -o json 2>/dev/null); then
+        print_warning "Failed to get Ingress resources from namespace $NAMESPACE"
+        return
+    fi
+
+    local deployment_count=$(echo "$deployments" | jq '.items | length' 2>/dev/null || echo "0")
+    local ingress_count=$(echo "$ingresses" | jq '.items | length' 2>/dev/null || echo "0")
+
+    if [ "$deployment_count" -eq 0 ]; then
         print_warning "No Deployment resources found in namespace $NAMESPACE"
         return
     fi
 
-    if [ "$(echo "$ingresses" | jq '.items | length')" -eq 0 ]; then
+    if [ "$ingress_count" -eq 0 ]; then
         print_warning "No Ingress resources found in namespace $NAMESPACE"
         return
     fi
@@ -232,7 +257,7 @@ get_readiness_urls() {
         if [ -n "$host" ] && [ "$host" != "null" ]; then
             ingress_hosts+=("$host")
         fi
-    done < <(echo "$ingresses" | jq -r '.items[].spec.rules[]?.host')
+    done < <(echo "$ingresses" | jq -r '.items[].spec.rules[]?.host' 2>/dev/null || true)
 
     if [ ${#ingress_hosts[@]} -eq 0 ]; then
         print_warning "No hosts found in Ingress resources"
@@ -240,21 +265,27 @@ get_readiness_urls() {
     fi
 
     # Extract readiness probe paths from deployments
+    local readiness_paths=()
     while IFS='|' read -r dep_name readiness_path; do
         if [ -n "$dep_name" ] && [ -n "$readiness_path" ]; then
-            # Combine each ingress host with the readiness path
-            for host in "${ingress_hosts[@]}"; do
-                local full_url="https://$host$readiness_path"
-                readiness_urls+=("$full_url")
-            done
+            readiness_paths+=("$readiness_path")
         fi
     done < <(echo "$deployments" | jq -r '
         .items[] |
         .metadata.name as $dep_name |
         .spec.template.spec.containers[]? |
         select(.readinessProbe.httpGet) |
-        $dep_name + "|" + (.readinessProbe.httpGet.path // "/")')
+        $dep_name + "|" + (.readinessProbe.httpGet.path // "/")' 2>/dev/null || true)
 
+    # Combine hosts with readiness paths
+    for host in "${ingress_hosts[@]}"; do
+        for path in "${readiness_paths[@]}"; do
+            local full_url="https://$host$path"
+            readiness_urls+=("$full_url")
+        done
+    done
+
+    print_info "Generated ${#readiness_urls[@]} readiness probe URLs"
     printf '%s\n' "${readiness_urls[@]}"
 }
 
