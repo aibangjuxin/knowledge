@@ -1,3 +1,5 @@
+- get project 
+```bash
 #!/bin/bash
 
 # Binary Authorization 配置脚本 - 使用 Shared 工程 KMS 密钥
@@ -392,3 +394,4 @@ main() {
 
 # 执行主函数
 main "$@"
+```
