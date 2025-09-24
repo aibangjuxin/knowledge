@@ -122,12 +122,19 @@ test_url() {
     local url="$1"
     printf "Testing %-50s ... " "$url"
     
-    # Simple curl test with timeout, suppress all error output
-    if curl --silent --head --fail --insecure --connect-timeout "$TIMEOUT" --max-time "$TIMEOUT" "$url" >/dev/null 2>&1; then
-        print_success "✓ OK"
-        return 0
+    # Get HTTP status code
+    local status_code
+    if status_code=$(curl --silent --head --insecure --connect-timeout "$TIMEOUT" --max-time "$TIMEOUT" --write-out "%{http_code}" --output /dev/null "$url" 2>/dev/null); then
+        # Consider 5xx as failure, everything else as success
+        if [[ "$status_code" =~ ^5[0-9][0-9]$ ]]; then
+            print_error "✗ $status_code"
+            return 1
+        else
+            print_success "✓ $status_code"
+            return 0
+        fi
     else
-        print_error "✗ FAIL"
+        print_error "✗ TIMEOUT/ERROR"
         return 1
     fi
 }
@@ -165,6 +172,15 @@ main() {
     # read urls into array
     while IFS= read -r url; do [ -n "$url" ] && all_urls+=("$url"); done <<< "$ingress_urls"
     while IFS= read -r url; do [ -n "$url" ] && all_urls+=("$url"); done <<< "$readiness_urls"
+    
+    # Remove duplicates by sorting and using uniq
+    if [ ${#all_urls[@]} -gt 0 ]; then
+        local unique_urls=()
+        while IFS= read -r url; do
+            unique_urls+=("$url")
+        done < <(printf '%s\n' "${all_urls[@]}" | sort -u)
+        all_urls=("${unique_urls[@]}")
+    fi
 
     if [ ${#all_urls[@]} -eq 0 ]; then
         print_warning "No URLs found to test."
@@ -204,9 +220,9 @@ main() {
     fi
 }
 
-# Function to get readiness probe URLs by combining Ingress hosts with readiness paths
+# Function to get readiness probe URLs (simplified approach)
 get_readiness_urls() {
-    print_info "Extracting readiness probe URLs from Deployments and matching with Ingress hosts..."
+    print_info "Extracting readiness probe URLs from Deployments..."
 
     local readiness_urls=()
     local deployments
@@ -237,41 +253,44 @@ get_readiness_urls() {
         return
     fi
 
-    # Get all ingress hosts
-    local ingress_hosts=()
-    while IFS= read -r host; do
-        if [ -n "$host" ] && [ "$host" != "null" ]; then
-            ingress_hosts+=("$host")
-        fi
-    done < <(echo "$ingresses" | jq -r '.items[].spec.rules[]?.host' 2>/dev/null || true)
-
-    if [ ${#ingress_hosts[@]} -eq 0 ]; then
-        print_warning "No hosts found in Ingress resources"
+    # Get the first ingress host as primary host
+    local primary_host
+    primary_host=$(echo "$ingresses" | jq -r '.items[0].spec.rules[0]?.host' 2>/dev/null || echo "")
+    
+    if [ -z "$primary_host" ] || [ "$primary_host" = "null" ]; then
+        print_warning "No valid host found in Ingress resources"
         return
     fi
 
-    # Extract readiness probe paths from deployments
-    local readiness_paths=()
-    while IFS='|' read -r dep_name readiness_path; do
-        if [ -n "$dep_name" ] && [ -n "$readiness_path" ]; then
-            readiness_paths+=("$readiness_path")
+    # Extract unique readiness probe paths from deployments
+    local unique_paths=()
+    while IFS= read -r readiness_path; do
+        if [ -n "$readiness_path" ] && [ "$readiness_path" != "/" ]; then
+            # Check if path already exists
+            local path_exists=false
+            for existing_path in "${unique_paths[@]}"; do
+                if [ "$existing_path" = "$readiness_path" ]; then
+                    path_exists=true
+                    break
+                fi
+            done
+            if [ "$path_exists" = false ]; then
+                unique_paths+=("$readiness_path")
+            fi
         fi
     done < <(echo "$deployments" | jq -r '
         .items[] |
-        .metadata.name as $dep_name |
         .spec.template.spec.containers[]? |
         select(.readinessProbe.httpGet) |
-        $dep_name + "|" + (.readinessProbe.httpGet.path // "/")' 2>/dev/null || true)
+        .readinessProbe.httpGet.path // "/"' 2>/dev/null || true)
 
-    # Combine hosts with readiness paths
-    for host in "${ingress_hosts[@]}"; do
-        for path in "${readiness_paths[@]}"; do
-            local full_url="https://$host$path"
-            readiness_urls+=("$full_url")
-        done
+    # Generate URLs using primary host and unique paths
+    for path in "${unique_paths[@]}"; do
+        local full_url="https://$primary_host$path"
+        readiness_urls+=("$full_url")
     done
 
-    print_info "Generated ${#readiness_urls[@]} readiness probe URLs"
+    print_info "Generated ${#readiness_urls[@]} readiness probe URLs using host: $primary_host"
     printf '%s\n' "${readiness_urls[@]}"
 }
 
