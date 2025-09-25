@@ -3,8 +3,6 @@
 # E2E Verification Script for Kubernetes Resources
 # Usage: ./verify-e2e.sh -n <namespace>
 
-# set -e  # Commented out to prevent script from exiting on non-critical errors
-
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -85,11 +83,8 @@ echo "=================================================="
 # Function to extract URLs from Ingress
 get_ingress_urls() {
     print_info "Extracting URLs from Ingress resources..."
-
-    local ingress_urls=()
-    local ingresses
     
-    # Get ingresses with error handling
+    local ingresses
     if ! ingresses=$(kubectl get ingress -n "$NAMESPACE" -o json 2>/dev/null); then
         print_warning "Failed to get Ingress resources from namespace $NAMESPACE"
         return
@@ -104,17 +99,67 @@ get_ingress_urls() {
     print_info "Found $ingress_count Ingress resources"
 
     # Extract hosts and paths from ingress with better error handling
-    while IFS= read -r line; do
-        if [ -n "$line" ] && [ "$line" != "null" ]; then
-            ingress_urls+=("$line")
-        fi
-    done < <(echo "$ingresses" | jq -r '.items[] |
+    echo "$ingresses" | jq -r '.items[] |
         .spec.rules[]? |
         select(.host != null) |
-        "https://" + .host + (.http.paths[]?.path // "")' 2>/dev/null || true)
+        .http.paths[]? |
+        "https://" + .host + (.path // "")' 2>/dev/null | grep -v "null" || true
+}
 
-    print_info "Extracted ${#ingress_urls[@]} URLs from Ingress resources"
-    printf '%s\n' "${ingress_urls[@]}"
+# Function to get readiness probe URLs (simplified approach)
+get_readiness_urls() {
+    print_info "Extracting readiness probe URLs from Deployments..."
+
+    local deployments
+    local ingresses
+    
+    # Get deployments with error handling
+    if ! deployments=$(kubectl get deployments -n "$NAMESPACE" -o json 2>/dev/null); then
+        print_warning "Failed to get Deployment resources from namespace $NAMESPACE"
+        return
+    fi
+
+    # Get ingresses with error handling
+    if ! ingresses=$(kubectl get ingress -n "$NAMESPACE" -o json 2>/dev/null); then
+        print_warning "Failed to get Ingress resources from namespace $NAMESPACE"
+        return
+    fi
+
+    local deployment_count=$(echo "$deployments" | jq '.items | length' 2>/dev/null || echo "0")
+    local ingress_count=$(echo "$ingresses" | jq '.items | length' 2>/dev/null || echo "0")
+
+    if [ "$deployment_count" -eq 0 ]; then
+        print_warning "No Deployment resources found in namespace $NAMESPACE"
+        return
+    fi
+
+    if [ "$ingress_count" -eq 0 ]; then
+        print_warning "No Ingress resources found in namespace $NAMESPACE"
+        return
+    fi
+
+    # Get the first ingress host as primary host
+    local primary_host
+    primary_host=$(echo "$ingresses" | jq -r '.items[0].spec.rules[0]?.host' 2>/dev/null || echo "")
+    
+    if [ -z "$primary_host" ] || [ "$primary_host" = "null" ]; then
+        print_warning "No valid host found in Ingress resources"
+        return
+    fi
+
+    print_info "Using primary host: $primary_host"
+
+    # Extract unique readiness probe paths from deployments
+    echo "$deployments" | jq -r '
+        .items[] |
+        .spec.template.spec.containers[]? |
+        select(.readinessProbe.httpGet) |
+        .readinessProbe.httpGet.path // "/"' 2>/dev/null | \
+    sort -u | while IFS= read -r readiness_path; do
+        if [ -n "$readiness_path" ] && [ "$readiness_path" != "/" ]; then
+            echo "https://$primary_host$readiness_path"
+        fi
+    done
 }
 
 # Function to test a single URL
@@ -157,40 +202,52 @@ show_pod_status() {
     echo
 }
 
-# Main logic
+# Cleanup function
+cleanup() {
+    # Clean up any temporary files if needed
+    rm -f /tmp/verify-e2e-*.tmp 2>/dev/null || true
+}
+
+# Set trap for cleanup
+trap cleanup EXIT
+
+# Main execution
 main() {
     # Show resource summary
     show_resource_summary
-
+    
     # Show pod status
     show_pod_status
-
-    local ingress_urls=$(get_ingress_urls)
-    local readiness_urls=$(get_readiness_urls)
-
-    local all_urls=()
-    # read urls into array
-    while IFS= read -r url; do [ -n "$url" ] && all_urls+=("$url"); done <<< "$ingress_urls"
-    while IFS= read -r url; do [ -n "$url" ] && all_urls+=("$url"); done <<< "$readiness_urls"
     
-    # Remove duplicates by sorting and using uniq
-    if [ ${#all_urls[@]} -gt 0 ]; then
-        local unique_urls=()
-        while IFS= read -r url; do
-            unique_urls+=("$url")
-        done < <(printf '%s\n' "${all_urls[@]}" | sort -u)
-        all_urls=("${unique_urls[@]}")
-    fi
+    # Collect URLs
+    local temp_ingress_file="/tmp/verify-e2e-ingress-$$"
+    local temp_readiness_file="/tmp/verify-e2e-readiness-$$"
+    
+    get_ingress_urls > "$temp_ingress_file"
+    get_readiness_urls > "$temp_readiness_file"
+    
+    # Combine and deduplicate URLs
+    local all_urls_file="/tmp/verify-e2e-all-$$"
+    cat "$temp_ingress_file" "$temp_readiness_file" 2>/dev/null | sort -u > "$all_urls_file"
+    
+    # Read URLs into array
+    local all_urls=()
+    while IFS= read -r url; do
+        if [ -n "$url" ]; then
+            all_urls+=("$url")
+        fi
+    done < "$all_urls_file"
 
     if [ ${#all_urls[@]} -eq 0 ]; then
         print_warning "No URLs found to test."
         exit 0
     fi
 
-    print_info "Collected URLs to test:"
+    print_info "Collected URLs to test (${#all_urls[@]} unique URLs):"
     printf -- "- %s\n" "${all_urls[@]}"
     echo
 
+    # Test all URLs
     local success_count=0
     local failed_count=0
     local total_count=${#all_urls[@]}
@@ -209,99 +266,17 @@ main() {
     if [ $failed_count -gt 0 ]; then
         print_error "Failed: $failed_count/$total_count"
     fi
-
+    
     echo "=================================================="
 
     if [ $success_count -eq $total_count ]; then
         print_success "All E2E tests passed! 🎉"
+        exit 0
     else
         print_warning "Some tests failed. Check the logs above for details."
         exit 1
     fi
 }
-
-# Function to get readiness probe URLs (simplified approach)
-get_readiness_urls() {
-    print_info "Extracting readiness probe URLs from Deployments..."
-
-    local readiness_urls=()
-    local deployments
-    local ingresses
-    
-    # Get deployments with error handling
-    if ! deployments=$(kubectl get deployments -n "$NAMESPACE" -o json 2>/dev/null); then
-        print_warning "Failed to get Deployment resources from namespace $NAMESPACE"
-        return
-    fi
-
-    # Get ingresses with error handling
-    if ! ingresses=$(kubectl get ingress -n "$NAMESPACE" -o json 2>/dev/null); then
-        print_warning "Failed to get Ingress resources from namespace $NAMESPACE"
-        return
-    fi
-
-    local deployment_count=$(echo "$deployments" | jq '.items | length' 2>/dev/null || echo "0")
-    local ingress_count=$(echo "$ingresses" | jq '.items | length' 2>/dev/null || echo "0")
-
-    if [ "$deployment_count" -eq 0 ]; then
-        print_warning "No Deployment resources found in namespace $NAMESPACE"
-        return
-    fi
-
-    if [ "$ingress_count" -eq 0 ]; then
-        print_warning "No Ingress resources found in namespace $NAMESPACE"
-        return
-    fi
-
-    # Get the first ingress host as primary host
-    local primary_host
-    primary_host=$(echo "$ingresses" | jq -r '.items[0].spec.rules[0]?.host' 2>/dev/null || echo "")
-    
-    if [ -z "$primary_host" ] || [ "$primary_host" = "null" ]; then
-        print_warning "No valid host found in Ingress resources"
-        return
-    fi
-
-    # Extract unique readiness probe paths from deployments
-    local unique_paths=()
-    while IFS= read -r readiness_path; do
-        if [ -n "$readiness_path" ] && [ "$readiness_path" != "/" ]; then
-            # Check if path already exists
-            local path_exists=false
-            for existing_path in "${unique_paths[@]}"; do
-                if [ "$existing_path" = "$readiness_path" ]; then
-                    path_exists=true
-                    break
-                fi
-            done
-            if [ "$path_exists" = false ]; then
-                unique_paths+=("$readiness_path")
-            fi
-        fi
-    done < <(echo "$deployments" | jq -r '
-        .items[] |
-        .spec.template.spec.containers[]? |
-        select(.readinessProbe.httpGet) |
-        .readinessProbe.httpGet.path // "/"' 2>/dev/null || true)
-
-    # Generate URLs using primary host and unique paths
-    for path in "${unique_paths[@]}"; do
-        local full_url="https://$primary_host$path"
-        readiness_urls+=("$full_url")
-    done
-
-    print_info "Generated ${#readiness_urls[@]} readiness probe URLs using host: $primary_host"
-    printf '%s\n' "${readiness_urls[@]}"
-}
-
-# Cleanup function (simplified since we're not using port-forwarding)
-cleanup() {
-    # Clean up any temporary files if needed
-    rm -f /tmp/verify-e2e-*.tmp 2>/dev/null || true
-}
-
-# Set trap for cleanup
-trap cleanup EXIT
 
 # Run main function
 main
