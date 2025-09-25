@@ -122,9 +122,129 @@ get_ingress_urls() {
     printf '%s\n' "${ingress_urls[@]}"
 }
 
+# Function to build and display resource relationships (no URL testing)
+show_resource_relationships_detailed() {
+    print_info "Building detailed resource relationship map..."
+
+    # Create temporary files for data processing
+    local temp_dir="/tmp/verify-e2e-$$"
+    mkdir -p "$temp_dir"
+    local ingress_data="$temp_dir/ingress.json"
+    local service_data="$temp_dir/services.json"
+    local deployment_data="$temp_dir/deployments.json"
+    local relationship_output="$temp_dir/relationships.txt"
+
+    # Fetch all resources with error handling
+    if ! kubectl get ingress -n "$NAMESPACE" -o json > "$ingress_data" 2>/dev/null; then
+        print_warning "Failed to fetch ingress data"
+        rm -rf "$temp_dir"
+        return
+    fi
+
+    if ! kubectl get services -n "$NAMESPACE" -o json > "$service_data" 2>/dev/null; then
+        print_warning "Failed to fetch service data"
+        rm -rf "$temp_dir"
+        return
+    fi
+
+    if ! kubectl get deployments -n "$NAMESPACE" -o json > "$deployment_data" 2>/dev/null; then
+        print_warning "Failed to fetch deployment data"
+        rm -rf "$temp_dir"
+        return
+    fi
+
+    # Check if we have any ingresses
+    local ingress_count=$(jq '.items | length' "$ingress_data" 2>/dev/null || echo "0")
+    if [ "$ingress_count" -eq 0 ]; then
+        print_warning "No Ingress resources found in namespace $NAMESPACE"
+        rm -rf "$temp_dir"
+        return
+    fi
+
+    print_info "Processing $ingress_count Ingress resources for relationship mapping..."
+
+    # Build resource relationship map using jq (only for relationship display, no URL generation)
+    jq -r --slurpfile services "$service_data" --slurpfile deployments "$deployment_data" '
+    .items[] as $ingress |
+    $ingress.metadata.name as $ingress_name |
+    
+    $ingress.spec.rules[]? as $rule |
+    $rule.host as $host |
+    
+    if ($host and $host != null) then
+        $rule.http.paths[]? as $path |
+        
+        ($path.path // "/") as $ingress_path |
+        ($path.backend.service.name // $path.backend.serviceName // empty) as $service_name |
+        ($path.backend.service.port.number // $path.backend.servicePort // empty) as $service_port |
+        
+        if ($service_name and $service_name != null) then
+            # Find matching service
+            $services[0].items[] | select(.metadata.name == $service_name) as $service |
+            
+            if ($service) then
+                $service.spec.selector as $selector |
+                
+                if ($selector and ($selector | length > 0)) then
+                    # Find matching deployments
+                    $deployments[0].items[] as $deployment |
+                    $deployment.metadata.name as $deployment_name |
+                    $deployment.spec.template.metadata.labels as $deploy_labels |
+                    
+                    if ($deploy_labels) then
+                        # Check if deployment labels match service selector
+                        ([$selector | to_entries[] as $sel_entry | 
+                         $deploy_labels[$sel_entry.key] == $sel_entry.value] | all) as $labels_match |
+                        
+                        if ($labels_match) then
+                            # Show relationship mapping
+                            "✓ \($ingress_name) (\($host)\($ingress_path)) -> \($service_name):\($service_port) -> \($deployment_name)"
+                        else 
+                            "⚠ \($ingress_name) (\($host)\($ingress_path)) -> \($service_name):\($service_port) -> [NO MATCHING DEPLOYMENT]"
+                        end
+                    else 
+                        "⚠ \($ingress_name) (\($host)\($ingress_path)) -> \($service_name):\($service_port) -> [DEPLOYMENT HAS NO LABELS]"
+                    end
+                else 
+                    "⚠ \($ingress_name) (\($host)\($ingress_path)) -> \($service_name):\($service_port) -> [SERVICE HAS NO SELECTOR]"
+                end
+            else 
+                "✗ \($ingress_name) (\($host)\($ingress_path)) -> \($service_name) [SERVICE NOT FOUND]"
+            end
+        else 
+            "✗ \($ingress_name) (\($host)\($ingress_path)) -> [NO SERVICE SPECIFIED]"
+        end
+    else 
+        "✗ \($ingress_name) [NO HOST SPECIFIED]"
+    end
+    ' "$ingress_data" > "$relationship_output" 2>/dev/null
+
+    # Display the relationships
+    echo
+    print_info "Resource Relationship Map:"
+    echo "=================================================="
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then
+            if [[ "$line" == ✓* ]]; then
+                print_success "$line"
+            elif [[ "$line" == ⚠* ]]; then
+                print_warning "$line"
+            elif [[ "$line" == ✗* ]]; then
+                print_error "$line"
+            else
+                echo "$line"
+            fi
+        fi
+    done < "$relationship_output"
+    echo "=================================================="
+
+    # Clean up temporary files
+    rm -rf "$temp_dir"
+}
+
 # Enhanced function to get readiness probe URLs based on actual resource relationships
 get_readiness_urls() {
-    print_info "Building resource relationship map and extracting readiness URLs..."
+    print_info "Extracting readiness probe URLs from deployments..."
 
     local readiness_urls=()
     
@@ -165,7 +285,7 @@ get_readiness_urls() {
 
     print_info "Processing $ingress_count Ingress resources for readiness probe URLs..."
 
-    # Build resource relationship map using jq
+    # Build readiness probe URLs using jq
     jq -r --slurpfile services "$service_data" --slurpfile deployments "$deployment_data" '
     .items[] as $ingress |
     $ingress.metadata.name as $ingress_name |
@@ -207,39 +327,22 @@ get_readiness_urls() {
                                 ($container.readinessProbe.httpGet.port // 80) as $probe_port |
                                 
                                 if ($probe_path and $probe_path != "/" and $probe_path != null) then
-                                    "# Ingress: \($ingress_name) -> Service: \($service_name) -> Deployment: \($deployment_name)",
                                     "https://\($host)\($probe_path)"
                                 else empty end
                             else empty end
                         else empty end
                     else empty end
-                else 
-                    "# Warning: Service \($service_name) has no selector"
-                end
-            else 
-                "# Warning: Service \($service_name) not found"
-            end
+                else empty end
+            else empty end
         else empty end
     else empty end
     ' "$ingress_data" > "$url_output" 2>/dev/null
 
     # Process the output
-    local current_mapping=""
     while IFS= read -r line; do
         if [ -n "$line" ]; then
-            if [[ "$line" == \#* ]]; then
-                # This is a comment/mapping info
-                current_mapping="$line"
-                if [[ "$line" == *"Warning:"* ]]; then
-                    print_warning "${line#\# }"
-                else
-                    print_info "${line#\# }"
-                fi
-            else
-                # This is a URL
-                readiness_urls+=("$line")
-                print_success "Generated readiness URL: $line"
-            fi
+            readiness_urls+=("$line")
+            print_success "Generated readiness URL: $line"
         fi
     done < "$url_output"
 
@@ -257,7 +360,7 @@ get_readiness_urls() {
         readiness_urls=("${unique_readiness_urls[@]}")
     fi
 
-    print_info "Generated ${#readiness_urls[@]} unique readiness probe URLs based on resource relationships"
+    print_info "Generated ${#readiness_urls[@]} unique readiness probe URLs"
     printf '%s\n' "${readiness_urls[@]}"
 }
 
@@ -316,9 +419,9 @@ show_pod_status() {
     echo
 }
 
-# Function to show detailed resource relationships
+# Function to show basic resource relationships (simple version)
 show_resource_relationships() {
-    print_info "Analyzing resource relationships in namespace $NAMESPACE:"
+    print_info "Basic resource relationships in namespace $NAMESPACE:"
     
     # Get ingress to service mappings
     kubectl get ingress -n "$NAMESPACE" -o json 2>/dev/null | jq -r '
@@ -340,8 +443,11 @@ main() {
     # Show resource summary
     show_resource_summary
 
-    # Show resource relationships
+    # Show basic resource relationships
     show_resource_relationships
+
+    # Show detailed resource relationships (no testing, just mapping)
+    show_resource_relationships_detailed
 
     # Show pod status
     show_pod_status

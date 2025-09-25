@@ -20,6 +20,9 @@ verify-e2e.sh -n mynamespace
 潜在问题
 在 get_readiness_urls() 函数中，URL 拼接逻辑还可以进一步优化，特别是路径组合的边界情况处理。
 - v3.sh
+- 脚本执行是可以的
+我现在需要优化几个地方 1 Process ingress resoucres URL 这个没有问题保留
+ingress对应的Service然后对应的Deployment这个关系 是不需要进行Testing测试的.仅仅是获取关系而已.
 ```bash
 #!/bin/bash
 # E2E Verification Script for Kubernetes Resources
