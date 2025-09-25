@@ -1,3 +1,5 @@
+- enhance the output format
+```bash
 #!/bin/bash
 # Kubernetes Resources Script - Get CPU and Memory limits/requests for Deployments
 # Usage: ./k8s-resources.sh -n <namespace>
@@ -419,3 +421,4 @@ main() {
 
 # Run main function
 main
+```
