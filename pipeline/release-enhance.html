@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Release Dashboard - Enhanced</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <style>
+    .timeline-connector {
+      position: relative;
+    }
+    .timeline-connector::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 100%;
+      width: 40px;
+      height: 2px;
+      background: #e5e7eb;
+      transform: translateY(-50%);
+    }
+    .timeline-connector.active::after {
+      background: #10.721;
+    }
+    .fade-in {
+      animation: fadeIn 0.5s ease-in;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
+  <!-- Header -->
+  <header class="bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg">
+    <div class="max-w-7xl mx-auto px-6 py-4">
+      <div class="flex justify-between items-center">
+        <div>
+          <h1 class="text-2xl font-bold">API Release Dashboard</h1>
+          <p class="text-blue-100 text-sm mt-1">Order-Service v1.2.3 Release Management</p>
+        </div>
+        <div class="flex space-x-2">
+          <button class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors">
+            <i data-lucide="refresh-cw" class="w-4 h-4 inline mr-2"></i>Refresh
+          </button>
+          <button class="px-4 py-2 bg-white text-blue-600 rounded-lg hover:bg-gray-50 transition-colors">
+            <i data-lucide="download" class="w-4 h-4 inline mr-2"></i>Export
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-8 space-y-8">
+    <!-- Release Overview -->
+    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 fade-in">
+      <div class="flex items-center mb-4">
+        <i data-lucide="info" class="w-5 h-5 text-blue-600 mr-2"></i>
+        <h2 class="text-xl font-semibold text-gray-800">Release Overview</h2>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="bg-gray-50 p-4 rounded-lg">
+          <p class="text-sm text-gray-600 mb-1">Release Branch</p>
+          <p class="font-semibold text-gray-800">release/2025-09</p>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-lg">
+          <p class="text-sm text-gray-600 mb-1">Commit ID</p>
+          <p class="font-mono text-sm text-gray-800">a1b2c3d4e5f6</p>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-lg">
+          <p class="text-sm text-gray-600 mb-1">CICD Parameters</p>
+          <p class="text-sm text-gray-800">region=asia, env=dev</p>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-lg">
+          <p class="text-sm text-gray-600 mb-1">Release Reason</p>
+          <p class="text-sm text-gray-800">User Request - Feature Enhancement</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Lifecycle Timeline -->
+    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 fade-in">
+      <div class="flex items-center mb-6">
+        <i data-lucide="git-branch" class="w-5 h-5 text-blue-600 mr-2"></i>
+        <h2 class="text-xl font-semibold text-gray-800">Deployment Lifecycle</h2>
+      </div>
+      <div class="flex items-center justify-between relative">
+        <!-- CI Stage -->
+        <div class="flex flex-col items-center timeline-connector active">
+          <div class="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center text-white shadow-lg">
+            <i data-lucide="check" class="w-6 h-6"></i>
+          </div>
+          <p class="mt-3 text-sm font-medium text-gray-700">CI Build</p>
+          <p class="text-xs text-gray-500">Completed</p>
+        </div>
+        
+        <!-- Push Stage -->
+        <div class="flex flex-col items-center timeline-connector active">
+          <div class="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center text-white shadow-lg">
+            <i data-lucide="upload" class="w-6 h-6"></i>
+          </div>
+          <p class="mt-3 text-sm font-medium text-gray-700">Push</p>
+          <p class="text-xs text-gray-500">Completed</p>
+        </div>
+        
+        <!-- Dev Stage -->
+        <div class="flex flex-col items-center timeline-connector">
+          <div class="w-12 h-12 bg-yellow-500 rounded-full flex items-center justify-center text-white shadow-lg">
+            <i data-lucide="play" class="w-6 h-6"></i>
+          </div>
+          <p class="mt-3 text-sm font-medium text-gray-700">Dev</p>
+          <p class="text-xs text-gray-500">In Progress</p>
+        </div>
+        
+        <!-- SIT Stage -->
+        <div class="flex flex-col items-center timeline-connector">
+          <div class="w-12 h-12 bg-gray-400 rounded-full flex items-center justify-center text-white shadow-lg">
+            <i data-lucide="clock" class="w-6 h-6"></i>
+          </div>
+          <p class="mt-3 text-sm font-medium text-gray-700">SIT</p>
+          <p class="text-xs text-gray-500">Pending</p>
+        </div>
+        
+        <!-- PRD Stage -->
+        <div class="flex flex-col items-center">
+          <div class="w-12 h-12 bg-gray-400 rounded-full flex items-center justify-center text-white shadow-lg">
+            <i data-lucide="server" class="w-6 h-6"></i>
+          </div>
+          <p class="mt-3 text-sm font-medium text-gray-700">Production</p>
+          <p class="text-xs text-gray-500">Pending</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Region Status -->
+    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 fade-in">
+      <div class="flex items-center mb-4">
+        <i data-lucide="globe" class="w-5 h-5 text-blue-600 mr-2"></i>
+        <h2 class="text-xl font-semibold text-gray-800">Regional Deployment Status</h2>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="border border-green-200 bg-green-50 p-4 rounded-lg">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-medium text-green-800">Asia Pacific</h3>
+            <span class="px-2 py-1 bg-green-200 text-green-800 text-xs rounded-full">Active</span>
+          </div>
+          <p class="text-sm text-green-700">CR: CR-2025-001</p>
+          <p class="text-sm text-green-700">IC Link: Available</p>
+        </div>
+        <div class="border border-gray-200 bg-gray-50 p-4 rounded-lg">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-medium text-gray-600">Europe</h3>
+            <span class="px-2 py-1 bg-gray-200 text-gray-600 text-xs rounded-full">Pending</span>
+          </div>
+          <p class="text-sm text-gray-500">CR: Not Created</p>
+          <p class="text-sm text-gray-500">IC Link: Pending</p>
+        </div>
+        <div class="border border-gray-200 bg-gray-50 p-4 rounded-lg">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-medium text-gray-600">North America</h3>
+            <span class="px-2 py-1 bg-gray-200 text-gray-600 text-xs rounded-full">Pending</span>
+          </div>
+          <p class="text-sm text-gray-500">CR: Not Created</p>
+          <p class="text-sm text-gray-500">IC Link: Pending</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Scan Report -->
+    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center">
+          <i data-lucide="shield-check" class="w-5 h-5 text-blue-600 mr-2"></i>
+          <h2 class="text-xl font-semibold text-gray-800">Security Scan Report</h2>
+        </div>
+        <span class="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full">
+          <i data-lucide="check-circle" class="w-4 h-4 inline mr-1"></i>Completed
+        </span>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <p class="text-sm text-gray-600 mb-2">Scan Status</p>
+          <p class="text-lg font-semibold text-green-600">✅ All Checks Passed</p>
+        </div>
+        <div>
+          <p class="text-sm text-gray-600 mb-2">Deployment Type</p>
+          <p class="text-lg font-semibold text-blue-600">PaaS</p>
+        </div>
+      </div>
+      <div class="mt-4 pt-4 border-t border-gray-200">
+        <button class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <i data-lucide="external-link" class="w-4 h-4 inline mr-2"></i>View Detailed Report
+        </button>
+      </div>
+    </section>
+
+    <!-- Document Records -->
+    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 fade-in">
+      <div class="flex items-center mb-4">
+        <i data-lucide="file-text" class="w-5 h-5 text-blue-600 mr-2"></i>
+        <h2 class="text-xl font-semibold text-gray-800">Execution Records</h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left">
+          <thead>
+            <tr class="border-b border-gray-200">
+              <th class="pb-3 text-sm font-medium text-gray-600">Executor</th>
+              <th class="pb-3 text-sm font-medium text-gray-600">Timestamp</th>
+              <th class="pb-3 text-sm font-medium text-gray-600">Job Link</th>
+              <th class="pb-3 text-sm font-medium text-gray-600">Region</th>
+              <th class="pb-3 text-sm font-medium text-gray-600">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <tr class="hover:bg-gray-50">
+              <td class="py-3 text-sm text-gray-800">Alice Chen</td>
+              <td class="py-3 text-sm text-gray-600">2025-09-29 10:12:34</td>
+              <td class="py-3">
+                <a href="#" class="text-blue-600 hover:text-blue-800 text-sm">
+                  <i data-lucide="external-link" class="w-3 h-3 inline mr-1"></i>Job #12345
+                </a>
+              </td>
+              <td class="py-3 text-sm text-gray-600">Asia Pacific</td>
+              <td class="py-3">
+                <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Success</span>
+              </td>
+            </tr>
+            <tr class="hover:bg-gray-50">
+              <td class="py-3 text-sm text-gray-800">Bob Wilson</td>
+              <td class="py-3 text-sm text-gray-600">2025-09-29 09:45:12</td>
+              <td class="py-3">
+                <a href="#" class="text-blue-600 hover:text-blue-800 text-sm">
+                  <i data-lucide="external-link" class="w-3 h-3 inline mr-1"></i>Job #12344
+                </a>
+              </td>
+              <td class="py-3 text-sm text-gray-600">Asia Pacific</td>
+              <td class="py-3">
+                <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Success</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- File Upload & Attachments -->
+    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 fade-in">
+      <div class="flex items-center mb-4">
+        <i data-lucide="paperclip" class="w-5 h-5 text-blue-600 mr-2"></i>
+        <h2 class="text-xl font-semibold text-gray-800">Documents & Attachments</h2>
+      </div>
+      
+      <!-- Upload Area -->
+      <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 mb-6 text-center hover:border-blue-400 transition-colors">
+        <i data-lucide="upload-cloud" class="w-12 h-12 text-gray-400 mx-auto mb-4"></i>
+        <p class="text-gray-600 mb-2">Drag and drop files here, or click to browse</p>
+        <input type="file" id="fileUpload" multiple class="hidden" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png">
+        <button onclick="document.getElementById('fileUpload').click()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          <i data-lucide="folder-open" class="w-4 h-4 inline mr-2"></i>Choose Files
+        </button>
+      </div>
+
+      <!-- Existing Files -->
+      <div class="space-y-3">
+        <h3 class="font-medium text-gray-700 mb-3">Uploaded Documents</h3>
+        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div class="flex items-center">
+            <i data-lucide="file-image" class="w-5 h-5 text-blue-600 mr-3"></i>
+            <div>
+              <p class="text-sm font-medium text-gray-800">deployment-screenshot.png</p>
+              <p class="text-xs text-gray-500">Uploaded 2 hours ago • 1.2 MB</p>
+            </div>
+          </div>
+          <div class="flex space-x-2">
+            <button class="p-1 text-gray-400 hover:text-blue-600">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+            <button class="p-1 text-gray-400 hover:text-green-600">
+              <i data-lucide="download" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div class="flex items-center">
+            <i data-lucide="file-text" class="w-5 h-5 text-red-600 mr-3"></i>
+            <div>
+              <p class="text-sm font-medium text-gray-800">release-notes.pdf</p>
+              <p class="text-xs text-gray-500">Uploaded 1 day ago • 856 KB</p>
+            </div>
+          </div>
+          <div class="flex space-x-2">
+            <button class="p-1 text-gray-400 hover:text-blue-600">
+              <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+            <button class="p-1 text-gray-400 hover:text-green-600">
+              <i data-lucide="download" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Release Features & Steps -->
+    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 fade-in">
+      <div class="flex items-center mb-4">
+        <i data-lucide="list-checks" class="w-5 h-5 text-blue-600 mr-2"></i>
+        <h2 class="text-xl font-semibold text-gray-800">Release Steps & Features</h2>
+      </div>
+      
+      <details class="group">
+        <summary class="cursor-pointer text-blue-600 hover:text-blue-800 font-medium flex items-center">
+          <i data-lucide="chevron-right" class="w-4 h-4 mr-2 group-open:rotate-90 transition-transform"></i>
+          View Detailed Release Steps
+        </summary>
+        <div class="mt-4 pl-6 space-y-4">
+          <div class="flex items-start space-x-3">
+            <div class="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white text-xs font-bold mt-0.5">1</div>
+            <div>
+              <h4 class="font-medium text-gray-800">CI Pipeline Triggered</h4>
+              <p class="text-sm text-gray-600">Automated build and test execution completed successfully</p>
+            </div>
+          </div>
+          <div class="flex items-start space-x-3">
+            <div class="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white text-xs font-bold mt-0.5">2</div>
+            <div>
+              <h4 class="font-medium text-gray-800">Build Artifacts Generated</h4>
+              <p class="text-sm text-gray-600">Docker images built and pushed to registry</p>
+            </div>
+          </div>
+          <div class="flex items-start space-x-3">
+            <div class="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center text-white text-xs font-bold mt-0.5">3</div>
+            <div>
+              <h4 class="font-medium text-gray-800">Deploy to Development</h4>
+              <p class="text-sm text-gray-600">Currently in progress - ETA 15 minutes</p>
+            </div>
+          </div>
+          <div class="flex items-start space-x-3">
+            <div class="w-6 h-6 bg-gray-400 rounded-full flex items-center justify-center text-white text-xs font-bold mt-0.5">4</div>
+            <div>
+              <h4 class="font-medium text-gray-600">Deploy to SIT</h4>
+              <p class="text-sm text-gray-500">Pending development deployment completion</p>
+            </div>
+          </div>
+          <div class="flex items-start space-x-3">
+            <div class="w-6 h-6 bg-gray-400 rounded-full flex items-center justify-center text-white text-xs font-bold mt-0.5">5</div>
+            <div>
+              <h4 class="font-medium text-gray-600">Production Deployment</h4>
+              <p class="text-sm text-gray-500">Requires CR approval and IC link validation</p>
+            </div>
+          </div>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-gray-200 mt-12">
+    <div class="max-w-7xl mx-auto px-6 py-4">
+      <div class="flex justify-between items-center text-sm text-gray-600">
+        <p>© 2025 API Release Management System</p>
+        <p>Last updated: <span id="lastUpdated">2025-09-29 10:30:45</span></p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+    
+    // Auto-refresh timestamp
+    function updateTimestamp() {
+      const now = new Date();
+      const timestamp = now.toISOString().slice(0, 19).replace('T', ' ');
+      document.getElementById('lastUpdated').textContent = timestamp;
+    }
+    
+    // Update every 30 seconds
+    setInterval(updateTimestamp, 30000);
+    
+    // File upload handling
+    document.getElementById('fileUpload').addEventListener('change', function(e) {
+      const files = e.target.files;
+      if (files.length > 0) {
+        alert(`Selected ${files.length} file(s) for upload`);
+        // Here you would implement actual file upload logic
+      }
+    });
+    
+    // Add fade-in animation to sections as they come into view
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px'
+    };
+    
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('fade-in');
+        }
+      });
+    }, observerOptions);
+    
+    document.querySelectorAll('section').forEach(section => {
+      observer.observe(section);
+    });
+  </script>
+</body>
+</html>

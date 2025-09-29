@@ -239,6 +239,12 @@ if [ -f /workspace/aliases.sh ]; then
     source /workspace/aliases.sh
 fi
 
+# 加载挂载配置（如果存在）
+if [ -f /opt/share/mount-config.sh ]; then
+    echo "🔧 检测到挂载配置，正在加载..."
+    source /opt/share/mount-config.sh
+fi
+
 # 加载本地配置（如果存在）
 if [ -f ~/.zshrc.local ]; then
     source ~/.zshrc.local
