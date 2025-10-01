@@ -151,3 +151,63 @@ jq '.timeline.stages[2].status = "completed"' data.json > temp.json && mv temp.j
 ## 许可证
 
 此项目基于原有的设计和功能进行改造，保持所有原始特性和样式。
+
+1. Audit and back-up existing file
+• Review release-enhance-claude4-5.html, list all CSS/JS dependencies and component IDs/classes.  
+• Create a secure copy in /Users/lex/git/knowledge/pipeline/backup before any changes.
+2. Define visual design system
+Create a Figma/hand-off spec that includes:  
+  - Gradient palette and glassmorphism surface styles  
+  - Modern Google-font stack and typographic scale  
+  - Spacing, shadow, and border-radius tokens  
+  - Light & dark mode color variables
+3. Set up global CSS architecture
+• Add root CSS variables for colors, spacing, fonts, z-layers.  
+• Implement CSS reset + smooth-scroll behavior.  
+• Include keyframes for fade, slide, pulse, skeleton shimmer.  
+• Import fonts and Chart.js CSS.
+4. Build responsive layout foundation
+• Replace legacy layout with CSS Grid / Flexbox utility classes.  
+• Add sticky, glassy header (+blur on scroll) and footer.  
+• Implement side navigation drawer that activates under 992 px.  
+• Ensure 12-column responsive grid and mobile breakpoints.
+5. Implement core UI components
+Create reusable components:  
+  - Card with soft shadow, hover lift, and glass effect  
+  - Floating action button with ripple animation  
+  - Toast container + slide-in notifications  
+  - Progress bar with gradient fill  
+  - Tooltip directive (CSS + small JS)
+6. Add animated and loading visuals
+• Integrate particles.js or CSS canvas for animated background.  
+• Build loading skeletons for cards, tables, charts.  
+• Provide spinner & progress indicators during async calls.
+7. Enhance existing functional modules
+• Timeline: add step icons, connecting gradient line, reveal-on-scroll.  
+• Region cards: embed mini map via Leaflet or static SVG.  
+• Execution table: add DataTables.js for sorting, pagination, search.  
+• File upload: drag-and-drop area with preview thumbnail & progress.  
+• Scan reports: render with Chart.js donuts/bars.
+8. Introduce new interactive features
+• Dark-mode toggle storing preference in localStorage.  
+• Animated number counters for KPIs.  
+• Real-time status updates via mocked WebSocket & CSS pulse.  
+• Global search & filter for tables/lists.
+9. Create new dashboard sections
+Add pages/sections:  
+  - Quick actions card grid  
+  - Real-time notifications panel (slideover)  
+  - Performance metrics dashboard with multiple Chart.js graphs  
+  - Team collaboration chat stub  
+  - Live activity feed with auto-append items
+10. Optimize mobile and accessibility
+• Test on iOS & Android viewports, tweak hit-targets and font sizes.  
+• Ensure keyboard navigation, ARIA labels, prefers-reduced-motion support.  
+• Lazy-load heavy assets and compress images/SVGs.
+11. QA, cross-browser and performance testing
+Run Lighthouse, Axe, and BrowserStack suites; fix regressions.  
+Check memory leaks and FPS during animations.
+12. Finalize and deploy warp.html
+• Merge all changes into new file warp.html in /Users/lex/git/knowledge/pipeline/.  
+• Verify legacy functionality parity.  
+• Update README with build instructions and component docs.
