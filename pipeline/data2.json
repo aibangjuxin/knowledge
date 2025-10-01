@@ -1,0 +1,79 @@
+{
+    "header": {
+        "apiName": "User Service API",
+        "version": "v2.1.0",
+        "branch": "release/v2.1.0"
+    },
+    "overview": {
+        "commitId": "a1b2c3d4",
+        "triggeredBy": "张三",
+        "triggerTime": "2024-10-01 14:30:00",
+        "releaseReason": "修复关键安全漏洞，优化性能",
+        "status": {
+            "type": "success",
+            "icon": "✅",
+            "text": "部署成功"
+        }
+    },
+    "timeline": {
+        "stages": [
+            {
+                "id": "build",
+                "name": "构建",
+                "status": "completed",
+                "statusText": "构建完成",
+                "icon": "🔨",
+                "timestamp": "14:35:00"
+            },
+            {
+                "id": "test",
+                "name": "测试",
+                "status": "completed",
+                "statusText": "所有测试通过",
+                "icon": "🧪",
+                "timestamp": "14:45:00"
+            },
+            {
+                "id": "deploy",
+                "name": "部署",
+                "status": "active",
+                "statusText": "正在部署到生产环境",
+                "icon": "🚀",
+                "timestamp": "14:50:00"
+            }
+        ]
+    },
+    "regions": [
+        {
+            "name": "亚太区",
+            "location": "ap-southeast-1",
+            "deployed": true,
+            "status": "运行正常，响应时间 < 100ms",
+            "changeRequest": "CR-2024-001",
+            "icLink": "https://incident.company.com/ic-001"
+        }
+    ],
+    "scans": [
+        {
+            "name": "安全扫描",
+            "description": "检查已知漏洞和安全配置",
+            "status": "passed",
+            "metrics": ["0个高危漏洞", "2个中危漏洞已修复"],
+            "reportLink": "https://security.company.com/report/001"
+        }
+    ],
+    "executionRecords": [
+        {
+            "executor": {
+                "name": "张三"
+            },
+            "action": "部署",
+            "environment": "production",
+            "region": "ap-southeast-1",
+            "timestamp": "2024-10-01 14:50:00",
+            "status": "success",
+            "jobId": "job-12345",
+            "jobLink": "https://ci.company.com/job/12345"
+        }
+    ]
+}

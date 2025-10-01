@@ -16,6 +16,12 @@ GCP 默认提供了 Cloud Build Attestations 和 gcloud container binauthz attes
 - Binary Authorization 必须用非对称密钥
 - 需要定义一个签名的账户比如邮箱
 
+
+```bash
+gpg --list-secret-keys
+gpg: directory '/Users/lex/.gnupg' created
+gpg: /Users/lex/.gnupg/trustdb.gpg: trustdb created
+```
 # ChatGPT
 
 好的，这个问题本质上是 **Binary Authorization（BinAuthz）在 Cloud Run 中的镜像签名和验证流程**。我来分步骤说明：
