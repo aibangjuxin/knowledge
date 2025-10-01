@@ -3,7 +3,7 @@
 #!/bin/bash
 
 # Cloud Run Binary Authorization with OpenPGP Signing Script
-# Author: Kiro AI Assistant
+# Author: Kiro Assistant
 # Purpose: Sign and deploy Cloud Run images using OpenPGP keys
 
 set -e
