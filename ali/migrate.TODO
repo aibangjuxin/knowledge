@@ -28,6 +28,7 @@
 
 ### 2. 流量切换准备 (Traffic Switch Preparation)
 - [ ] **DNS 准备**
+  - [ ] PRD apply dns API ?
   - [ ] 准备 DNS 记录更新脚本 (基于 ali-dns/ 目录)
   - [ ] 降低 DNS TTL 到最小值 (如 60s)
   - [ ] 准备回滚 DNS 配置
