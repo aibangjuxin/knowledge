@@ -1,5 +1,33 @@
 这个问题很典型，你遇到的是大文件上传与Token认证时效性冲突的问题。让我帮你分析整个请求流和解决方案。
 
+
+
+# Summary 
+- Token timeout setting nginx and squid
+
+- nginx.conf 
+```bash
+    proxy_request_buffering off;
+    proxy_buffering off;
+```
+- squid config 
+```bash
+https://www.squid-cache.org/Doc/config/client_request_buffer_max_size/
+This specifies the maximum buffer size of a client request.
+	It prevents squid eating too much memory when somebody uploads
+	a large file.
+	这指定了客户端请求的最大缓冲区大小。它可以防止有人上传大文件时，Squid占用过多内存。
+    Default Value:	client_request_buffer_max_size 512 KB
+- 如果緩衝值設置過大,應該會引起校驗延遲,導致Token過期。 所以我這裡最終在我們的環境裡面走了默認值,也就是說刪除了這個配置。 以前有錯誤的配置值是50MB。
+- 如果设置为了50M,那会大文件上传50M内都会先缓存如内存,再处理==> timeout 
+
+- 支持大文件上传 request_body_max_size 100 MB 
+- https://www.squid-cache.org/Doc/config/request_body_max_size/ Default Value:	No limit.
+- 这个值官方是没有配置的,也就是说都没有做任何限制,所以说基于我的实际情况来说,我这个文件大小的上传限制在我的前端nginx,所以说这里我不需要再另行配置,这样也能保证我整个流程中的最简化配置,只需要在入口做上传限制就可以了。
+- 
+
+```
+
 ## 请求流分析
 
 ```mermaid
