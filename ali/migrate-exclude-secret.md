@@ -369,4 +369,11 @@ tr ' ' '\n' | \
 grep -vE "^default-token-|^sh\.helm\.release" | \
 xargs -I {} kubectl get secret {} -n lex -o json | \
 jq -s '{apiVersion: "v1", kind: "List", items: map(del(.metadata.creationTimestamp, .metadata.resourceVersion, .metadata.uid, .metadata.selfLink, .status))}' |jq 
+
+
+kubectl get secrets -n lex -o jsonpath='{.items[*].metadata.name}' | \
+tr ' ' '\n' | \
+grep -vE "^default-token-|^sh\.helm\.release" | \
+xargs -I {} kubectl get secret {} -n lex -o json | \
+jq -s '{apiVersion: "v1", kind: "List", items: map(del(.metadata.creationTimestamp, .metadata.resourceVersion, .metadata.uid, .metadata.selfLink, .status))}' |jq
 ```
