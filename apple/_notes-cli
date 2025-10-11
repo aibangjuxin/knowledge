@@ -1,0 +1,81 @@
+#compdef notes-cli
+
+# notes-cli 自动补全脚本
+_notes-cli() {
+    local context state line
+    typeset -A opt_args
+
+    _arguments -C \
+        '1: :_notes_commands' \
+        '*::arg:->args'
+
+    case $state in
+        args)
+            case $line[1] in
+                search|s)
+                    _message 'search query'
+                    ;;
+                create|c)
+                    _message 'note title and content'
+                    ;;
+                create-from-file|cf)
+                    _arguments \
+                        '1:note title:' \
+                        '2:file path:_files'
+                    ;;
+                export|e)
+                    _arguments \
+                        '1:note title:_notes_list' \
+                        '2:output file:_files'
+                    ;;
+                edit)
+                    _arguments \
+                        '1:note title:_notes_list' \
+                        '2:new content:'
+                    ;;
+                get|g)
+                    _arguments '1:note title:_notes_list'
+                    ;;
+                delete|d)
+                    _arguments '1:note title:_notes_list'
+                    ;;
+                list|l)
+                    _message 'limit (optional number)'
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_notes_commands() {
+    local commands
+    commands=(
+        'search:Search notes by title or content'
+        's:Search notes (short)'
+        'create:Create a new note'
+        'c:Create a new note (short)'
+        'create-from-file:Create note from file'
+        'cf:Create note from file (short)'
+        'export:Export note to file'
+        'e:Export note to file (short)'
+        'edit:Edit existing note'
+        'list:List notes'
+        'l:List notes (short)'
+        'get:Get content of specific note'
+        'g:Get content of specific note (short)'
+        'delete:Delete a note'
+        'd:Delete a note (short)'
+    )
+    _describe 'commands' commands
+}
+
+# 获取笔记列表的函数（可选，需要时启用）
+_notes_list() {
+    local notes
+    # 这里可以调用 notes-cli 来获取笔记列表，但可能会比较慢
+    # notes=($(notes-cli list 2>/dev/null | grep -E '^[0-9]+\.' | sed 's/^[0-9]*\. //'))
+    # _describe 'notes' notes
+    _message 'note title'
+}
+
+_notes-cli "$@"
