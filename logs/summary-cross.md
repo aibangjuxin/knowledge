@@ -1,5 +1,11 @@
 - [summary](#summary)
     - [2. 组件层级关系](#2-组件层级关系)
+    - simple concept 
+	    - interconnect_name ==> 专线路
+	    - `gcloud compute interconnects describe ` 查询interconnect 资源
+	    - `gcloud compute interconnects attachments descirbe`获取Root子链接
+		    - 获取Root名称变量
+		- `gcloud compute interconnects attachments list ` 列出所有VLAN attachments
 
 # summary 
 - describe 
