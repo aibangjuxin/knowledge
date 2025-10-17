@@ -271,7 +271,7 @@ ubuntu-security-status | grep pam
 
 ## **📜 流程图（当前阶段）**
 
-```
+```mermaid
 graph TD
     A[检测到 CVE-2025-8941] --> B{官方是否发布补丁?}
     B -->|否| C[状态: fix deferred]
