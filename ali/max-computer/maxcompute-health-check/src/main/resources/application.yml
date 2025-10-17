@@ -1,0 +1,35 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: maxcompute-health-check
+
+# MaxCompute 配置 (可通过环境变量覆盖)
+maxcompute:
+  access:
+    id: ${ODPS_ACCESS_ID:}
+    key: ${ODPS_ACCESS_KEY:}
+  project: ${ODPS_PROJECT:}
+  endpoint: ${ODPS_ENDPOINT:http://service.cn-hangzhou.maxcompute.aliyun.com/api}
+  timeout: 30000  # 30秒超时
+
+# 日志配置
+logging:
+  level:
+    com.company.maxcompute: INFO
+    com.aliyun.odps: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Actuator 配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
