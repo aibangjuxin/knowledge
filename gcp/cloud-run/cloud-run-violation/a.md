@@ -1,0 +1,2 @@
+First, I sought help from GCS to see if there is a standard mode to encrypt our Images. Currently, they haven't provided us with the corresponding documents. There is also no corresponding Pattern. The following are several methods I've explored, but haven't implemented them specifically yet.
+If we adopt the openPGP method, then the problem is whether the corresponding keys should be stored in a standard place or how we should store them. [This method can be understood as being similar to private signing.]
