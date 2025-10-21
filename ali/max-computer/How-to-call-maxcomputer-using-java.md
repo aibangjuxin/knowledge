@@ -154,7 +154,7 @@ public class MaxComputeHealthController {
 ```mermaid
 graph TD
     A[HTTP GET /api/health/maxcompute] --> B[MaxComputeHealthController];
-    B --> C[调用 MaxComputeConnector.checkConnectivity()];
+    B --> C["调用 MaxComputeConnector.checkConnectivity()"];
     C --> D[读取环境变量配置];
     D --> E[创建 Odps 实例];
     E --> F[通过网络连接到 MaxCompute Endpoint];
