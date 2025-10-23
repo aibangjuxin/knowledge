@@ -155,7 +155,7 @@ server {
 ⸻
 
 流程图（Mermaid）—— 单一 GLB 按 Path 分流到两组 Backend Instances，然后由 Edge-Nginx 进一步路由
-
+``` mermaid
 flowchart TD
     %% ==== 外部入口 ====
     A["Client (User / API Consumer)"] -->|"HTTPS Request (api.example.com)| B[/"Google Cloud Load Balancer (GLB)"/]
@@ -202,7 +202,7 @@ flowchart TD
     style KONGNOTE fill:#e8f5e9,stroke:#2e7d32,stroke-width:1px,stroke-dasharray: 3
     style K8SNOTE fill:#e8eaf6,stroke:#3949ab,stroke-width:1px,stroke-dasharray: 3
 
-
+``` 
 ⸻
 
 验证与测试建议（上线前）
