@@ -13,7 +13,7 @@
 🧩 一、请求流程结构分析
 
   
-
+```mermaid
 sequenceDiagram
 
     participant Client as Client
@@ -39,7 +39,7 @@ sequenceDiagram
     Kong-->>Client: 返回401/403错误
 
     Note over Kong,GKERuntime: 请求未到达GKE Runtime
-
+```
   
 
   
@@ -92,14 +92,14 @@ sequenceDiagram
 6.   
     
 
-  
+```json
 
 {
 
   "message": "Unauthorized"
 
 }
-
+```
   
 
 2.   
@@ -111,13 +111,11 @@ sequenceDiagram
     
 
   
-
+```json
 {
-
   "message": "Authentication service unavailable"
-
 }
-
+```
   
 
 2.   
@@ -128,23 +126,14 @@ sequenceDiagram
 -   
     
 
-  
-
+```json
 {
-
   "message": "Invalid credentials"
-
 }
-
-  
-
+```
 2.   
-    
-
 - 返回 403 Forbidden
 -   
-    
-
 4. 认证成功后流程才继续到Runtime  
     
 
@@ -153,16 +142,6 @@ sequenceDiagram
 
 6.   
     
-
-  
-
-  
-
-  
-
-  
-
-  
 
 🧩 四、示例日志参考（定位用）
 
@@ -181,13 +160,6 @@ sequenceDiagram
 |GKE Pod|container log|正常业务日志|无日志表示未触发到应用|
 
   
-
-  
-
-  
-
-  
-
 🧭 五、总结与建议
 
   
@@ -214,13 +186,6 @@ sequenceDiagram
 3. 对 Auth 服务调用设置合理的 timeout 和 retries，避免认证慢导致整体卡顿。
 4. 在 GKE Runtime 层面，可通过 header 判断请求来源是否合法（例如 X-Authenticated-User）。
 
-  
-
-  
-
-  
-
-  
 
 是否希望我帮你画出一个包含 错误处理分支（Kong 插件认证失败 / 成功） 的完整 Mermaid 请求流程图？这样你可以放入内部文档或监控设计里。
 
@@ -229,12 +194,7 @@ sequenceDiagram
 
 以下是完整的 请求流程 + 错误分支 的 Mermaid 流程图（可直接复制到你的文档中使用，例如 .md 文件或监控设计文档中）。
 
-  
-
-  
-
-  
-
+```mermaid
 flowchart TD
 
     A[Client 请求] --> B[Nginx L7 入口]
@@ -280,17 +240,10 @@ flowchart TD
     H1 --> Z
 
     H2 --> Z
-
-  
-
-  
-
-  
-
+```
   
 
 🔍 图解说明
-
   
 
 |   |   |   |   |
@@ -302,18 +255,7 @@ flowchart TD
 |GKE Runtime|应用层执行逻辑|200 / 500|✅ 是|
 
   
-
-  
-
-  
-
-  
-
 🧠 补充建议
-
-  
-
-  
 
 1. 日志追踪建议  
     
@@ -332,15 +274,6 @@ flowchart TD
 
 6.   
     
-
-  
-
-  
-
-  
-
-  
-
 是否希望我再帮你补充一份 针对每个错误分支的日志定位示例表（包含 Nginx、Kong、GKE 三层的关键字段和典型日志样本）？这会非常适合你们排查“卡在哪一层”的问题。
 
 # Claude 
