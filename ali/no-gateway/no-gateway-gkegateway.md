@@ -47,7 +47,217 @@ graph TD
     classDef control fill:#cce5ff,stroke:#004c99,color:#000,stroke-dasharray: 3 3
 ```
 
+
+enhance 
+```mermaid
+graph TB
+    %% ==================== Client Layer ====================
+    A["🌐 Client<br/>(User / API Consumer)"]:::client
+    %% ==================== External Load Balancer ====================
+    A -->|"HTTPS Request<br/>https:\/\/www\.aibang\.com"| B["☁️ Google Cloud Load Balancer<br/>(External GLB)<br/>Public IP: 34.x.x.x"]:::glb
+    %% ==================== Security Layer ====================
+    B -->|"TLS Termination<br/>Cloud Armor WAF<br/>DDoS Protection"| B1["🛡️ Security Layer"]:::security
+    %% ==================== Nginx Reverse Proxy Layer ====================
+    B -->|"Forward to Nginx L7"| C["🔄 Nginx L7 Reverse Proxy<br/>(Path-based Router)<br/>GCE/GKE Instance"]:::nginx
+    %% ==================== Path Routing Decision ====================
+    C -->|"Path Analysis /<br/>Header Injection"| C1{"📋 Routing Decision<br/>Based on Path"}:::decision
+    %% ==================== Kong Gateway Path ====================
+    C1 -->|"Path: /teamA/*<br/>X-Gateway-Mode: 'kong'<br/>Inject Headers"| D["🦍 Kong Gateway<br/>(API Gateway Layer)<br/>Rate Limit / Auth / Transform"]:::kong
+    D -->|"Apply Policies"| D3["⚙️ Kong Plugins<br/>• Authentication<br/>• Rate Limiting<br/>• Logging<br/>• Transform"]:::policy
+    D -->|"Route to Backend"| D1["🔗 Kong Upstream Service"]:::kong
+    D1 -->|"Forward Request"| D2["🚀 GKE Runtime<br/>Kong Backend Pods<br/>(Various Namespaces)"]:::runtime
+    %% ==================== GKE Gateway Path ====================
+    C1 -->|"Path: /teamB/*<br/>X-Gateway-Mode: 'nogateway'<br/>proxy_pass https://10.100.0.50/"| E["🌉 GKE Gateway<br/>(Internal ILB)<br/>IP: 10.100.0.50<br/>Listener: 443"]:::gke
+    %% ==================== HTTPRoute Layer ====================
+    E -->|"Path Match<br/>/api1_name1_health1/*"| F["📍 HTTPRoute<br/>Tenant A<br/>(tenant-a ns)"]:::httproute
+    E -->|"Path Match<br/>/api2-name-health2/*"| G["📍 HTTPRoute<br/>Tenant B<br/>(tenant-b ns)"]:::httproute
+    %% ==================== Service Layer ====================
+    F -->|"Backend Ref<br/>Port 8443<br/>HTTPS"| H["🔐 Service<br/>api1-svc<br/>(ClusterIP)<br/>tenant-a"]:::service
+    G -->|"Backend Ref<br/>Port 8443<br/>HTTPS"| J["🔐 Service<br/>api2-svc<br/>(ClusterIP)<br/>tenant-b"]:::service
+    %% ==================== Runtime Pods ====================
+    H -->|"TLS Connection<br/>Port 8443"| I["🐳 Runtime Pods<br/>api1-app<br/>my-intra.gcp.uk.aibang.local:8443<br/>(tenant-a namespace)"]:::runtime
+    J -->|"TLS Connection<br/>Port 8443"| K["🐳 Runtime Pods<br/>api2-app<br/>my-intra.gcp.uk.aibang.local:8443<br/>(tenant-b namespace)"]:::runtime
+    %% ==================== Security Certificates ====================
+    I -.->|"Mount TLS Secret"| I1["🔒 Secret: api1-tls<br/>(Internal Certificate)"]:::secret
+    K -.->|"Mount TLS Secret"| K1["🔒 Secret: api2-tls<br/>(Internal Certificate)"]:::secret
+    %% ==================== Control Plane ====================
+    C -.->|"Security Policies"| S1["🛡️ Nginx Security Layer<br/>• Host/Path Validation<br/>• Header Injection<br/>• Request Filtering"]:::control
+    E -.->|"Traffic Management"| S2["⚡ GKE Gateway Control<br/>• HTTPRoute Binding<br/>• Path Routing<br/>• TLS Termination<br/>• Load Balancing"]:::control
+    D -.->|"Plugin Execution"| D3
+    %% ==================== Layer Grouping ====================
+    subgraph EXT["☁️ External Layer (Internet-Facing)"]
+        A
+        B
+        B1
+    end
+    
+    subgraph PROXY["🔄 Proxy & Routing Layer (VPC Internal)"]
+        C
+        C1
+        S1
+    end
+    
+    subgraph KONG_LAYER["🦍 Kong Gateway Layer (Optional Path)"]
+        D
+        D3
+        D1
+        D2
+    end
+    
+    subgraph GKE_LAYER["🌉 GKE Gateway Layer (Internal ILB)"]
+        E
+        S2
+        F
+        G
+    end
+    
+    subgraph TENANT_A["🏢 Tenant A (Namespace: tenant-a)"]
+        H
+        I
+        I1
+    end
+    
+    subgraph TENANT_B["🏢 Tenant B (Namespace: tenant-b)"]
+        J
+        K
+        K1
+    end
+    
+    %% ==================== Style Definitions ====================
+    classDef client fill:#e3f2fd,stroke:#1976d2,stroke-width:3px,color:#000,font-weight:bold
+    classDef glb fill:#f3e5f5,stroke:#7b1fa2,stroke-width:3px,color:#000,font-weight:bold
+    classDef security fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#000,stroke-dasharray: 5 5
+    classDef nginx fill:#fff3e0,stroke:#e65100,stroke-width:3px,color:#000,font-weight:bold
+    classDef decision fill:#fff9c4,stroke:#f57f17,stroke-width:3px,color:#000,font-weight:bold,shape:diamond
+    classDef kong fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px,color:#000,font-weight:bold
+    classDef policy fill:#c8e6c9,stroke:#388e3c,stroke-width:2px,color:#000,stroke-dasharray: 5 5
+    classDef gke fill:#e1f5fe,stroke:#0277bd,stroke-width:3px,color:#000,font-weight:bold
+    classDef httproute fill:#b3e5fc,stroke:#0288d1,stroke-width:2px,color:#000
+    classDef service fill:#b2dfdb,stroke:#00796b,stroke-width:2px,color:#000
+    classDef runtime fill:#c5cae9,stroke:#3f51b5,stroke-width:2px,color:#000
+    classDef secret fill:#ffccbc,stroke:#d84315,stroke-width:2px,color:#000,stroke-dasharray: 3 3
+    classDef control fill:#f0f4c3,stroke:#9e9d24,stroke-width:2px,color:#000,stroke-dasharray: 5 5
+    
+    %% ==================== Subgraph Styling ====================
+    style EXT fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,color:#000
+    style PROXY fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    style KONG_LAYER fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+    style GKE_LAYER fill:#e1f5fe,stroke:#0277bd,stroke-width:2px,color:#000
+    style TENANT_A fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000
+    style TENANT_B fill:#fce4ec,stroke:#c2185b,stroke-width:2px,color:#000
+```
 ---
+- enhance again
+- 垂直布局
+
+
+```mermaid
+graph TD
+    %% ==================== Top Layer: Client ====================
+    A["🌐 External Client<br/>━━━━━━━━━━━━━<br/>Browser / Mobile App / API Consumer"]:::client
+    
+    %% ==================== Layer 1: External Load Balancer ====================
+    A -->|"① HTTPS Request<br/>https:\/\/www\.aibang\.com/api1_name1_health1"| B["☁️ Google Cloud Load Balancer<br/>━━━━━━━━━━━━━<br/>Public IP: 34.120.x.x<br/>TLS Termination • Cloud Armor • DDoS Protection"]:::glb
+    
+    %% ==================== Layer 2: Nginx Reverse Proxy ====================
+    B -->|"② Forward<br/>TLS Re-encryption"| C["🔄 Nginx L7 Reverse Proxy<br/>━━━━━━━━━━━━━<br/>Path-based Router + Security Gateway<br/>Host Validation • Header Injection"]:::nginx
+    
+    %% ==================== Layer 3: Routing Decision ====================
+    C -->|"③ Analyze Path & Headers"| DECISION{"📋 Routing Decision<br/>━━━━━━━━━━━━━<br/>if path matches /teamA/* → Kong<br/>if path matches /teamB/* → GKE Gateway"}:::decision
+    
+    %% ==================== Path A: Kong Gateway ====================
+    DECISION -->|"Path: /teamA/*<br/>X-Gateway-Mode: 'kong'"| KONG_START["🦍 Kong Gateway Entry<br/>━━━━━━━━━━━━━<br/>API Management Layer"]:::kong
+    
+    KONG_START --> KONG_POLICY["⚙️ Kong Policy Execution<br/>━━━━━━━━━━━━━<br/>✓ Authentication<br/>✓ Rate Limiting<br/>✓ Request/Response Transform<br/>✓ Logging & Monitoring"]:::policy
+    
+    KONG_POLICY --> KONG_UPSTREAM["🔗 Kong Upstream<br/>━━━━━━━━━━━━━<br/>Load Balance to Backend Services"]:::kong
+    
+    KONG_UPSTREAM --> KONG_RUNTIME["🚀 Kong Backend Pods<br/>━━━━━━━━━━━━━<br/>GKE Runtime (Multiple Namespaces)<br/>HTTP/HTTPS Endpoints"]:::runtime
+    
+    %% ==================== Path B: GKE Gateway ====================
+    DECISION -->|"Path: /teamB/*<br/>proxy_pass https:\/\/10.100.0.50/<br/>Host: www\.aibang\.com"| GKE_GATEWAY["🌉 GKE Gateway (Internal ILB)<br/>━━━━━━━━━━━━━<br/>Internal IP: 10.100.0.50<br/>Listener: HTTPS/443<br/>GatewayClass: gke-l7-rilb"]:::gke
+    
+    %% ==================== Layer 4: HTTPRoute Routing ====================
+    GKE_GATEWAY -->|"④ Path Match<br/>/api1_name1_health1/*"| ROUTE_A["📍 HTTPRoute: api1-route<br/>━━━━━━━━━━━━━<br/>Namespace: tenant-a<br/>Match: PathPrefix"]:::httproute
+    
+    GKE_GATEWAY -->|"④ Path Match<br/>/api2-name-health2/*"| ROUTE_B["📍 HTTPRoute: api2-route<br/>━━━━━━━━━━━━━<br/>Namespace: tenant-b<br/>Match: PathPrefix"]:::httproute
+    
+    %% ==================== Layer 5: Service Layer ====================
+    ROUTE_A -->|"⑤ Backend Ref<br/>Port 8443 (HTTPS)"| SVC_A["🔐 Service: api1-svc<br/>━━━━━━━━━━━━━<br/>Type: ClusterIP<br/>Port: 8443<br/>Namespace: tenant-a"]:::service
+    
+    ROUTE_B -->|"⑤ Backend Ref<br/>Port 8443 (HTTPS)"| SVC_B["🔐 Service: api2-svc<br/>━━━━━━━━━━━━━<br/>Type: ClusterIP<br/>Port: 8443<br/>Namespace: tenant-b"]:::service
+    
+    %% ==================== Layer 6: Application Pods ====================
+    SVC_A -->|"⑥ TLS Connection<br/>HTTPS/8443"| POD_A["🐳 Pods: api1-app<br/>━━━━━━━━━━━━━<br/>Replicas: 2<br/>HTTPS Server: 8443<br/>Cert: my-intra.gcp.uk.aibang.local<br/>Namespace: tenant-a"]:::runtime
+    
+    SVC_B -->|"⑥ TLS Connection<br/>HTTPS/8443"| POD_B["🐳 Pods: api2-app<br/>━━━━━━━━━━━━━<br/>Replicas: 2<br/>HTTPS Server: 8443<br/>Cert: my-intra.gcp.uk.aibang.local<br/>Namespace: tenant-b"]:::runtime
+    
+    %% ==================== Security Certificates ====================
+    POD_A -.->|"Mount Volume<br/>/etc/tls/"| SECRET_A["🔒 Secret: api1-tls<br/>━━━━━━━━━━━━━<br/>Type: kubernetes.io/tls<br/>tls.crt + tls.key<br/>CA: Internal CA"]:::secret
+    
+    POD_B -.->|"Mount Volume<br/>/etc/tls/"| SECRET_B["🔒 Secret: api2-tls<br/>━━━━━━━━━━━━━<br/>Type: kubernetes.io/tls<br/>tls.crt + tls.key<br/>CA: Internal CA"]:::secret
+    
+    %% ==================== Control Plane (Side Annotations) ====================
+    C -.->|"Security Controls"| NGINX_CTRL["🛡️ Nginx Security<br/>━━━━━━━━━━━━━<br/>• Strict Host Check<br/>• Path Validation<br/>• Header Injection<br/>• Request Filtering"]:::control
+    
+    GKE_GATEWAY -.->|"Traffic Management"| GKE_CTRL["⚡ Gateway Controls<br/>━━━━━━━━━━━━━<br/>• HTTPRoute Binding<br/>• TLS Termination<br/>• Load Balancing<br/>• Health Checking"]:::control
+    
+    %% ==================== Style Definitions ====================
+    classDef client fill:#e3f2fd,stroke:#1976d2,stroke-width:4px,color:#000,font-weight:bold,font-size:14px
+    classDef glb fill:#f3e5f5,stroke:#7b1fa2,stroke-width:4px,color:#000,font-weight:bold
+    classDef nginx fill:#fff3e0,stroke:#e65100,stroke-width:4px,color:#000,font-weight:bold
+    classDef decision fill:#fff9c4,stroke:#f57f17,stroke-width:4px,color:#000,font-weight:bold
+    classDef kong fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px,color:#000,font-weight:bold
+    classDef policy fill:#c8e6c9,stroke:#388e3c,stroke-width:2px,color:#000,stroke-dasharray: 5 5
+    classDef gke fill:#e1f5fe,stroke:#0277bd,stroke-width:4px,color:#000,font-weight:bold
+    classDef httproute fill:#b3e5fc,stroke:#0288d1,stroke-width:3px,color:#000
+    classDef service fill:#b2dfdb,stroke:#00796b,stroke-width:3px,color:#000
+    classDef runtime fill:#c5cae9,stroke:#3f51b5,stroke-width:3px,color:#000
+    classDef secret fill:#ffccbc,stroke:#d84315,stroke-width:2px,color:#000,stroke-dasharray: 3 3
+    classDef control fill:#f0f4c3,stroke:#9e9d24,stroke-width:2px,color:#000,stroke-dasharray: 5 5
+```
+
+- simple
+```mermaid
+graph LR
+    %% ==================== Layers ====================
+    CLIENT["🌐<br/>Client"]:::client
+    GLB["☁️<br/>GLB<br/>(Public)"]:::glb
+    NGINX["🔄<br/>Nginx L7<br/>(Router)"]:::nginx
+    KONG["🦍<br/>Kong<br/>Gateway"]:::kong
+    GKE["🌉<br/>GKE Gateway<br/>(Internal)"]:::gke
+    
+    TENANT_A["🏢<br/>Tenant A<br/>(tenant-a)"]:::tenant
+    TENANT_B["🏢<br/>Tenant B<br/>(tenant-b)"]:::tenant
+    
+    %% ==================== Connections ====================
+    CLIENT -->|"HTTPS"| GLB
+    GLB -->|"TLS<br/>Terminate"| NGINX
+    
+    NGINX -->|"/teamA/*<br/>Kong Mode"| KONG
+    NGINX -->|"/teamB/*<br/>Direct Mode<br/>10.100.0.50"| GKE
+    
+    KONG --> TENANT_A
+    GKE --> TENANT_A
+    GKE --> TENANT_B
+    
+    %% ==================== Annotations ====================
+    NGINX -.->|"Security<br/>Headers"| SEC1["🛡️ WAF"]:::control
+    GKE -.->|"HTTPRoute<br/>Routing"| SEC2["⚡ L7 LB"]:::control
+    
+    TENANT_A -.->|"TLS 8443"| CERT1["🔒 TLS"]:::secret
+    TENANT_B -.->|"TLS 8443"| CERT2["🔒 TLS"]:::secret
+    
+    %% ==================== Styles ====================
+    classDef client fill:#e3f2fd,stroke:#1976d2,stroke-width:3px,color:#000
+    classDef glb fill:#f3e5f5,stroke:#7b1fa2,stroke-width:3px,color:#000
+    classDef nginx fill:#fff3e0,stroke:#e65100,stroke-width:3px,color:#000
+    classDef kong fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px,color:#000
+    classDef gke fill:#e1f5fe,stroke:#0277bd,stroke-width:3px,color:#000
+    classDef tenant fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#000
+    classDef control fill:#f0f4c3,stroke:#9e9d24,stroke-width:2px,color:#000,stroke-dasharray: 3 3
+    classDef secret fill:#ffccbc,stroke:#d84315,stroke-width:2px,color:#000,stroke-dasharray: 3 3
+```
 
 ## **🔍 流程简要说明**
 
@@ -645,8 +855,8 @@ curl -v -k https://10.100.0.50/api1_name1_health1/healthz \
   -H "Host: www.aibang.com"
 
 # 端到端测试（通过外部 GLB）
-curl -v https://www.aibang.com/api1_name1_health1/healthz
-curl -v https://www.aibang.com/api2-name-health2/healthz
+curl -v https:\/\/www.aibang.com/api1_name1_health1/healthz
+curl -v https:\/\/www.aibang.com/api2-name-health2/healthz
 ```
 
 ---
@@ -1318,7 +1528,7 @@ kubectl -n tenant-a describe httproute api1-httproute
 kubectl -n tenant-a get endpoints svc-api1
 
 # 从集群外用 curl（示例）:
-curl -vk https://www.aibang.com/api1_name1_health1/   # 走到 Gateway -> HTTPRoute -> svc-api1
+curl -vk https:\/\/www.aibang.com/api1_name1_health1/   # 走到 Gateway -> HTTPRoute -> svc-api1
 ```
 
 ---

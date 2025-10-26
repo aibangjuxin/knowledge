@@ -103,7 +103,7 @@ graph TD
         A["e.g., GCE VM"]
     end
 
-    subgraph "GCP - aibang.com (Private DNS Zone)"
+    subgraph "GCP - aibang\.com (Private DNS Zone)"
         A -- "HTTPS Request<br/>/api-name-health1/" --> B{"GKE Gateway (L7 RILB)<br/>Internal IP"}
         B -- "TLS Termination" --> C["Gateway Resource: 'internal-http'"]
         C -- "Host: www\.aibang\.com" --> D{"HTTPRoutes"}
