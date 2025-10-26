@@ -488,7 +488,7 @@ public class JavaVersionLogger {
 
 ```
 resource.type="k8s_container"
-resource.labels.jiqun_name="YOUR_CLUSTER_NAME"
+resource.labels.clusters_name="YOUR_CLUSTER_NAME"
 "JAVA_VERSION_INFO"
 ```
 
@@ -523,12 +523,12 @@ resource.labels.jiqun_name="YOUR_CLUSTER_NAME"
 ```python
 from google.cloud import logging_v2
 
-def generate_java_version_report(project_id, jiqun_name):
+def generate_java_version_report(project_id, clusters_name):
     client = logging_v2.Client(project=project_id)
 
     filter_str = f'''
     resource.type="k8s_container"
-    resource.labels.jiqun_name="{jiqun_name}"
+    resource.labels.clusters_name="{clusters_name}"
     "JAVA_VERSION_INFO"
     '''
 
@@ -981,11 +981,11 @@ chmod +x check_java_version.sh
 
 # 设置变量
 PROJECT_ID=$(gcloud config get-value project)
-CLUSTER_NAME="your-jiqun-name"
-CLUSTER_LOCATION="your-jiqun-location"
+CLUSTER_NAME="your-clusters-name"
+CLUSTER_LOCATION="your-clusters-location"
 
 # 确保已经连接到正确的集群
-gcloud container jiquns get-credentials $CLUSTER_NAME --zone $CLUSTER_LOCATION --project $PROJECT_ID
+gcloud container clusterss get-credentials $CLUSTER_NAME --zone $CLUSTER_LOCATION --project $PROJECT_ID
 
 # 获取所有 Deployment 的镜像信息
 echo "Collecting image information from all Deployments..."
@@ -1061,7 +1061,7 @@ echo "Image information collection completed."
 ```bash
 resource.type "k8s_container"
 resource.labels.project_id “aibang-google-project"
-resource.labels. location "europe-west2" resource.labels.jiqun_name “aibang”-myjiqun
+resource.labels. location "europe-west2" resource.labels.clusters_name “aibang”-myclusters
 textPayload: (“using Java" NOT "Using Java Agent Version")
 这个过滤条件没有问题,也能获取到我想要的日志我如果想要对这个日志进行深度分析.有什么好的办法?比如我更关注日志的textPayload部分,因为我想去分析这个部分.这个里面记录了我的Java的版本信息和API的名字
 比如关键字
@@ -1178,7 +1178,7 @@ analyze_logs('your_log_file.txt')
 resource.type="k8s_container"
 resource.labels.project_id="aibang-google-project"
 resource.labels.location="europe-west2"
-resource.labels.jiqun_name="aibang-myjiqun"
+resource.labels.clusters_name="aibang-myclusters"
 textPayload:"using Java" NOT "Using Java Agent Version"
 
 4. 创建导出规则：

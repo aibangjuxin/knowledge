@@ -742,7 +742,7 @@ resource.type="k8s_container"
 
 resource.labels.project_id="your-project-id"
 
-resource.labels.jiqun_name="your-jiqun-name"
+resource.labels.clusters_name="your-clusters-name"
 
 resource.labels.namespace_name="your-namespace"
 

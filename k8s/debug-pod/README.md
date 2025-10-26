@@ -104,6 +104,6 @@
 如果遇到问题，可以：
 
 1. 使用 `--verbose` 选项查看详细日志
-2. 检查 kubectl 连接: `kubectl jiqun-info`
+2. 检查 kubectl 连接: `kubectl clusters-info`
 3. 验证权限: `kubectl auth can-i create pods --namespace=<namespace>`
 4. 确认 deployment 存在: `kubectl get deployments -n <namespace>`

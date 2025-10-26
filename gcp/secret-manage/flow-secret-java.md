@@ -704,7 +704,7 @@ gcloud iam service-accounts create my-spring-app-gsa \
 Bash
 
 ```
-gcloud container jiquns update YOUR_CLUSTER_NAME \
+gcloud container clusterss update YOUR_CLUSTER_NAME \
     --region=YOUR_REGION \
     --workload-pool=$(gcloud config get-value project).svc.id.goog
 ```
@@ -721,7 +721,7 @@ Bash
 
 ```
 gcloud container node-pools update YOUR_NODE_POOL_NAME \
-    --jiqun=YOUR_CLUSTER_NAME \
+    --clusters=YOUR_CLUSTER_NAME \
     --region=YOUR_REGION \
     --workload-metadata=GKE_METADATA
 ```
@@ -1224,7 +1224,7 @@ Secret Manager的定价模型主要基于两个维度：活跃的密钥版本数
 |**2. KSA注解**|`kubectl get sa <ksa-name> -n <ns> -o yaml`|KSA的 `annotations` 中包含 `iam.gke.io/gcp-service-account`，且其值是正确的GSA电子邮件地址。|注解不存在、拼写错误或GSA地址不正确 17。|
 |**3. KSA-GSA绑定**|`gcloud iam service-accounts get-iam-policy <gsa-email>`|在返回的策略 `bindings` 中，找到 `role: roles/iam.workloadIdentityUser`，其 `members` 列表应包含 `serviceAccount:PROJECT_ID.svc.id.goog`。|绑定不存在，或 `member` 字符串中的项目ID、命名空间或KSA名称有误 17。|
 |**4. GSA密钥访问权限**|`gcloud secrets get-iam-policy <secret-id>`|在返回的策略 `bindings` 中，找到 `role: roles/secretmanager.secretAccessor`，其 `members` 列表应包含 `serviceAccount:<gsa-email>`。|GSA未被授予访问该特定密钥的权限，或权限被授予到了项目级别而未生效 18。|
-|**5. Workload Identity启用状态**|`gcloud container jiquns describe <jiqun-name> --region <region>`|输出中应包含 `workloadIdentityConfig.workloadPool` 字段，且值正确。同时检查节点池的 `workloadMetadataConfig.mode` 是否为 `GKE_METADATA`。|集群或节点池未启用Workload Identity 10。|
+|**5. Workload Identity启用状态**|`gcloud container clusterss describe <clusters-name> --region <region>`|输出中应包含 `workloadIdentityConfig.workloadPool` 字段，且值正确。同时检查节点池的 `workloadMetadataConfig.mode` 是否为 `GKE_METADATA`。|集群或节点池未启用Workload Identity 10。|
 |**6. 节点OAuth范围**|`gcloud compute instances describe <node-vm-name> --zone <zone>`|输出的 `serviceAccounts.scopes` 列表中应包含 `https.www.googleapis.com/auth/cloud-platform`。|节点创建时未指定正确的OAuth范围，导致API调用因范围不足而被拒绝 20。|
 |**7. 跨项目访问**|检查密钥所在项目的IAM策略。|如果密钥与GKE集群不在同一个GCP项目中，必须在密钥所在的项目中，将GKE项目中的GSA添加为具有 `secretAccessor` 角色的成员。|忘记在密钥所在项目进行跨项目授权 35。|
 

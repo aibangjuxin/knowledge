@@ -212,7 +212,7 @@ Sure, here are a few ways you can simulate an increase in memory usage:
 
 4. **Container with High Memory Usage**: Deploy a container that consumes a large amount of memory. You can find many container images designed for stress testing on Docker Hub or other container registries.
 
-Choose the method that best suits your needs and environment, and adjust the amount of memory consumed according to your testing requirements. Make sure to monitor your system's resource usage while performing these tests to avoid any negative impact on other applications or services running on the same jiqun.
+Choose the method that best suits your needs and environment, and adjust the amount of memory consumed according to your testing requirements. Make sure to monitor your system's resource usage while performing these tests to avoid any negative impact on other applications or services running on the same clusters.
 
 1. **使用压力测试工具**
 

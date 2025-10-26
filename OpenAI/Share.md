@@ -79,7 +79,7 @@ graph TD;
     B --> C[Deploy Application];
 
 - Before executing commands, ensure you have set up the necessary permissions and configurations.
-- Verify that there are no errors in the deployment YAML file before applying it to the GKE jiqun.
+- Verify that there are no errors in the deployment YAML file before applying it to the GKE clusters.
 
 If the output contains tables, they must be in Markdown table format. Each column in the table should be separated by a vertical line `|`, and make sure to add a separator line between the header and data rows to correctly display the Markdown table format.
 For example, column headers should include api_name, env, region, total_cpu_limit, and total_memory_limit. The table format should look like this:

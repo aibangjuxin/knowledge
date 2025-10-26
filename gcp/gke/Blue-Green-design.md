@@ -925,7 +925,7 @@ spec:
 - [GKE Gateway Traffic Management Documentation](https://cloud.google.com/kubernetes-engine/docs/concepts/traffic-management)
 - [HTTP Traffic Splitting with Gateway API](https://gateway-api.sigs.k8s.io/guides/traffic-splitting/)
 - [Kong Blue-Green Deployments Guide](https://docs.konghq.com/gateway/latest/production/blue-green/)
-- [Deploying Multi-Cluster Gateways in GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-multi-jiqun-gateways)
+- [Deploying Multi-Cluster Gateways in GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-multi-clusters-gateways)
 - [Customize GKE Gateway Traffic with Service Extensions](https://cloud.google.com/kubernetes-engine/docs/how-to/configure-gke-service-extensions)
 - [Deploying Gateways in GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/deploying-gateways)
 - [Best Practices for GKE Networking](https://cloud.google.com/kubernetes-engine/docs/best-practices/networking)

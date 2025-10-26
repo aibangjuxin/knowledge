@@ -91,7 +91,7 @@ GKE 自带的 Cluster Autoscaler 不仅可以自动扩缩节点池,还可以在 
   template:
     metadata:
       annotations:
-        jiqun-autoscaler.kubernetes.io/safe-to-evict: "true"
+        clusters-autoscaler.kubernetes.io/safe-to-evict: "true"
       creationTimestamp: null
       labels:
         app: woup-wcl-bblsmp-pa-woup-servicenow-1-1-16

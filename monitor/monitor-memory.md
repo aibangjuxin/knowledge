@@ -43,7 +43,7 @@ kubectl get --raw "/api/v1/nodes/<node-name>/proxy/metrics/cadvisor" | grep cont
 
 ```bash
 # 启用GKE监控
-gcloud container jiquns update <jiqun-name> \
+gcloud container clusterss update <clusters-name> \
     --enable-cloud-monitoring \
     --zone=<zone>
 ```
@@ -146,7 +146,7 @@ spec:
               name: appd-secret
               key: access-key
         - name: APPDYNAMICS_MACHINE_HIERARCHY_PATH
-          value: "GKE|<jiqun-name>|<node-name>"
+          value: "GKE|<clusters-name>|<node-name>"
         volumeMounts:
         - name: proc
           mountPath: /hostroot/proc

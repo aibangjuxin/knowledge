@@ -89,9 +89,9 @@ GCP的Workload Identity的主要作用是提供一种安全且高效的方式来
 
 Workload Identity in Google Kubernetes Engine (GKE) is a feature that allows individual pods to use a service account to authenticate to Google Cloud APIs. It is a modern way to provision keys for pods running on GKE and provides a secure way for workloads to access Google Cloud resources.
 
-The primary purpose of Workload Identity is to enhance the security of your cloud deployment by providing distinct, fine-grained identities and authorization for each application in your jiqun. It replaces the need to use Metadata concealment, which protects sensitive metadata by Workload Identity Federation for GKE.
+The primary purpose of Workload Identity is to enhance the security of your cloud deployment by providing distinct, fine-grained identities and authorization for each application in your clusters. It replaces the need to use Metadata concealment, which protects sensitive metadata by Workload Identity Federation for GKE.
 
-When you enable Workload Identity Federation for GKE on a jiqun, GKE creates a fixed workload identity pool for the jiqun's Google Cloud project, registers the GKE jiqun as an identity provider in the workload identity pool, and deploys the GKE metadata server on every node. This allows IAM to understand and trust Kubernetes credentials.
+When you enable Workload Identity Federation for GKE on a clusters, GKE creates a fixed workload identity pool for the clusters's Google Cloud project, registers the GKE clusters as an identity provider in the workload identity pool, and deploys the GKE metadata server on every node. This allows IAM to understand and trust Kubernetes credentials.
 
 To provide access with Workload Identity Federation for GKE, you create an IAM allow policy that grants access on a specific Google Cloud resource to a principal that corresponds to your application's identity. For example, you could give read permissions on a Cloud Storage bucket to all Pods that use the database-reader Kubernetes ServiceAccount.
 

@@ -182,7 +182,7 @@ from kubernetes import client, config
 
 ```python
 # 加载 Kubernetes 配置
-config.load_injiqun_config()
+config.load_inclusters_config()
 
 # 创建 Kubernetes API 客户端
 v1 = client.CoreV1Api()
@@ -216,10 +216,10 @@ for node in nodes:
 
 ```python
 # 获取集群信息
-jiqun = v1.read_jiqun()
-jiqun_info = {
-    'name': jiqun.metadata.name,
-    'version': jiqun.status.jiqun_version,
+clusters = v1.read_clusters()
+clusters_info = {
+    'name': clusters.metadata.name,
+    'version': clusters.status.clusters_version,
 }
 ```
 
@@ -238,10 +238,10 @@ def create_request_to_push():
         # ... 提取节点信息
 
     # 获取集群信息
-    jiqun = v1.read_jiqun()
-    jiqun_info = {
-        'name': jiqun.metadata.name,
-        'version': jiqun.status.jiqun_version,
+    clusters = v1.read_clusters()
+    clusters_info = {
+        'name': clusters.metadata.name,
+        'version': clusters.status.clusters_version,
     }
 
     # 将集群和节点信息存储到合适的位置

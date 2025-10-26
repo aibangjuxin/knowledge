@@ -48,7 +48,7 @@
   - [3. 评估现有集群资源容量](#3-评估现有集群资源容量)
     - [3.1. 分析当前节点资源占用](#31-分析当前节点资源占用)
     - [3.2. 识别可用资源](#32-识别可用资源)
-    - [3.3. 集群自动扩缩器 (Cluster Autoscaler) 与节点限制](#33-集群自动扩缩器-jiqun-autoscaler-与节点限制)
+    - [3.3. 集群自动扩缩器 (Cluster Autoscaler) 与节点限制](#33-集群自动扩缩器-clusters-autoscaler-与节点限制)
   - [4. 在不新建 Node Pool 的情况下支持高资源 API 的可行性分析](#4-在不新建-node-pool-的情况下支持高资源-api-的可行性分析)
     - [4.1. 单个新 API Pod 的资源需求](#41-单个新-api-pod-的资源需求)
     - [4.2. 评估单个 n1-standard-8 节点能承载的新 API Pod 数量](#42-评估单个-n1-standard-8-节点能承载的新-api-pod-数量)
@@ -60,7 +60,7 @@
     - [5.2. Pod 反亲和性策略](#52-pod-反亲和性策略)
     - [5.3. Pod 干扰预算 (Pod Disruption Budgets - PDB)](#53-pod-干扰预算-pod-disruption-budgets---pdb)
     - [5.4. 利用现有节点池的调度策略](#54-利用现有节点池的调度策略)
-    - [5.5. 集群自动扩缩器配置 (Cluster Autoscaler - CA)](#55-集群自动扩缩器配置-jiqun-autoscaler---ca)
+    - [5.5. 集群自动扩缩器配置 (Cluster Autoscaler - CA)](#55-集群自动扩缩器配置-clusters-autoscaler---ca)
     - [5.6. 持续监控与日志分析](#56-持续监控与日志分析)
   - [6. 长期策略：引入专用节点池](#6-长期策略引入专用节点池)
     - [6.1. 何时考虑专用节点池](#61-何时考虑专用节点池)
@@ -674,7 +674,7 @@ graph TD
 - **推荐方案**：
   ```bash
   gcloud container node-pools create highmem-pool \
-    --jiqun=your-jiqun \
+    --clusters=your-clusters \
     --machine-type=n1-highmem-8 \  # 8vCPU + 52GB 内存
     --num-nodes=2 \
     --node-labels=resourcetype=highmem
@@ -736,7 +736,7 @@ graph TD
 
 ## 3. 多Zone和节点扩展限制
 
-- 您的GKE集群默认配置3个Zone，每个Zone最多可扩展15个节点，总共最多45个节点[4](https://cloud.google.com/kubernetes-engine/docs/concepts/jiqun-autoscaler)。
+- 您的GKE集群默认配置3个Zone，每个Zone最多可扩展15个节点，总共最多45个节点[4](https://cloud.google.com/kubernetes-engine/docs/concepts/clusters-autoscaler)。
     
 - 当前运行30个节点，尚有15个节点扩容空间。
     
@@ -788,7 +788,7 @@ graph TD
 
 ## 5.2 预留容量与自动扩缩容
 
-- 使用GKE的Cluster Autoscaler和Node Pool自动扩缩容机制，根据Pod需求自动增加节点[4](https://cloud.google.com/kubernetes-engine/docs/concepts/jiqun-autoscaler)。
+- 使用GKE的Cluster Autoscaler和Node Pool自动扩缩容机制，根据Pod需求自动增加节点[4](https://cloud.google.com/kubernetes-engine/docs/concepts/clusters-autoscaler)。
     
 - 预留一定的计算容量（spare capacity provisioning），保证Pod快速调度启动，避免因节点启动延迟导致的性能瓶颈[5](https://cloud.google.com/kubernetes-engine/docs/how-to/capacity-provisioning)。
     
@@ -818,29 +818,29 @@ graph TD
 1. [https://kubernetes.io/docs/reference/kubectl/generated/kubectl_top/kubectl_top_node/](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_top/kubectl_top_node/)
 2. [https://learnk8s.io/allocatable-resources](https://learnk8s.io/allocatable-resources)
 3. [https://cloud.google.com/kubernetes-engine/docs/concepts/node-pools](https://cloud.google.com/kubernetes-engine/docs/concepts/node-pools)
-4. [https://cloud.google.com/kubernetes-engine/docs/concepts/jiqun-autoscaler](https://cloud.google.com/kubernetes-engine/docs/concepts/jiqun-autoscaler)
+4. [https://cloud.google.com/kubernetes-engine/docs/concepts/clusters-autoscaler](https://cloud.google.com/kubernetes-engine/docs/concepts/clusters-autoscaler)
 5. [https://cloud.google.com/kubernetes-engine/docs/how-to/capacity-provisioning](https://cloud.google.com/kubernetes-engine/docs/how-to/capacity-provisioning)
 6. [https://cloud.google.com/kubernetes-engine/docs/how-to/vertical-pod-autoscaling](https://cloud.google.com/kubernetes-engine/docs/how-to/vertical-pod-autoscaling)
 7. [https://zesty.co/finops-glossary/kubernetes-node-pools/](https://zesty.co/finops-glossary/kubernetes-node-pools/)
-8. [https://cloud.google.com/kubernetes-engine/docs/how-to/jiqun-usage-metering](https://cloud.google.com/kubernetes-engine/docs/how-to/jiqun-usage-metering)
+8. [https://cloud.google.com/kubernetes-engine/docs/how-to/clusters-usage-metering](https://cloud.google.com/kubernetes-engine/docs/how-to/clusters-usage-metering)
 9. [https://www.cloudzero.com/blog/gke-monitoring/](https://www.cloudzero.com/blog/gke-monitoring/)
-10. [https://serverfault.com/questions/1130618/how-to-find-the-maximum-number-of-nodes-in-a-gcp-kubernetes-jiqun](https://serverfault.com/questions/1130618/how-to-find-the-maximum-number-of-nodes-in-a-gcp-kubernetes-jiqun)
+10. [https://serverfault.com/questions/1130618/how-to-find-the-maximum-number-of-nodes-in-a-gcp-kubernetes-clusters](https://serverfault.com/questions/1130618/how-to-find-the-maximum-number-of-nodes-in-a-gcp-kubernetes-clusters)
 11. [https://last9.io/blog/kubectl-top/](https://last9.io/blog/kubectl-top/)
 12. [https://qiita.com/loftkun/items/35dc11ed9deba516adee](https://qiita.com/loftkun/items/35dc11ed9deba516adee)
 13. [https://github.com/kubernetes/kubernetes/issues/17512](https://github.com/kubernetes/kubernetes/issues/17512)
 14. [https://cloud.google.com/monitoring/api/metrics_kubernetes](https://cloud.google.com/monitoring/api/metrics_kubernetes)
 15. [https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_node_pool](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/container_node_pool)
-16. [https://stackoverflow.com/questions/58135974/is-there-a-way-to-resize-a-gke-jiqun-to-0-nodes-after-a-certain-amount-of-idle](https://stackoverflow.com/questions/58135974/is-there-a-way-to-resize-a-gke-jiqun-to-0-nodes-after-a-certain-amount-of-idle)
+16. [https://stackoverflow.com/questions/58135974/is-there-a-way-to-resize-a-gke-clusters-to-0-nodes-after-a-certain-amount-of-idle](https://stackoverflow.com/questions/58135974/is-there-a-way-to-resize-a-gke-clusters-to-0-nodes-after-a-certain-amount-of-idle)
 17. [https://cloud.google.com/kubernetes-engine/docs/concepts/autopilot-overview](https://cloud.google.com/kubernetes-engine/docs/concepts/autopilot-overview)
 18. [https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/)
 19. [https://spot.io/resources/kubernetes-architecture/kubernetes-limits-vs-requests-key-differences-and-how-they-work/](https://spot.io/resources/kubernetes-architecture/kubernetes-limits-vs-requests-key-differences-and-how-they-work/)
 20. [https://applifting.io/blog/memory-usage-in-google-kubernetes-engine](https://applifting.io/blog/memory-usage-in-google-kubernetes-engine)
 21. [https://stackoverflow.com/questions/59643585/monitor-percentage-of-cpu-and-memory-in-gke-nodes](https://stackoverflow.com/questions/59643585/monitor-percentage-of-cpu-and-memory-in-gke-nodes)
 22. [https://stackoverflow.com/questions/73787640/what-is-the-effect-of-setting-the-number-of-nodes-in-combination-with-autoscaler](https://stackoverflow.com/questions/73787640/what-is-the-effect-of-setting-the-number-of-nodes-in-combination-with-autoscaler)
-23. [https://www.blinkops.com/blog/how-to-enable-autoscaling-for-a-gke-jiqun](https://www.blinkops.com/blog/how-to-enable-autoscaling-for-a-gke-jiqun)
+23. [https://www.blinkops.com/blog/how-to-enable-autoscaling-for-a-gke-clusters](https://www.blinkops.com/blog/how-to-enable-autoscaling-for-a-gke-clusters)
 24. [https://cloud.google.com/kubernetes-engine/quotas](https://cloud.google.com/kubernetes-engine/quotas)
 25. [https://www.pulumi.com/registry/packages/gcp/api-docs/container/nodepool/](https://www.pulumi.com/registry/packages/gcp/api-docs/container/nodepool/)
-26. [https://cloud.google.com/kubernetes-engine/docs/concepts/regional-jiquns](https://cloud.google.com/kubernetes-engine/docs/concepts/regional-jiquns)
+26. [https://cloud.google.com/kubernetes-engine/docs/concepts/regional-clusterss](https://cloud.google.com/kubernetes-engine/docs/concepts/regional-clusterss)
 27. [https://discuss.kubernetes.io/t/gke-more-than-enough-host-resource-capacity-available-and-pods-becoming-unschedulable/5292](https://discuss.kubernetes.io/t/gke-more-than-enough-host-resource-capacity-available-and-pods-becoming-unschedulable/5292)
 28. [https://www.youtube.com/watch?v=xjpHggHKm78](https://www.youtube.com/watch?v=xjpHggHKm78)
 
@@ -1018,7 +1018,7 @@ echo "==========================================================================
 
     ```bash
     gcloud container node-pools create high-memory-pool \
-      --jiqun=your-jiqun-name \
+      --clusters=your-clusters-name \
       --zone=your-zone \
       --machine-type=e2-highmem-4 \
       --num-nodes=1 \
@@ -1090,15 +1090,15 @@ echo "==========================================================================
 
 ## 1. Introduction
 
-Currently, your company's Google Kubernetes Engine (GKE) jiqun environment utilizes n1-standard-8 nodes, each equipped with 8 CPU cores and 30GB of physical memory. In the production environment, Deployments are typically configured with a minimum of 2 Pods, and anti-affinity policies ensure these Pods are distributed across different Node. Most existing API Pods are configured with 1 Core CPU and a maximum of 4GB of memory.
+Currently, your company's Google Kubernetes Engine (GKE) clusters environment utilizes n1-standard-8 nodes, each equipped with 8 CPU cores and 30GB of physical memory. In the production environment, Deployments are typically configured with a minimum of 2 Pods, and anti-affinity policies ensure these Pods are distributed across different Node. Most existing API Pods are configured with 1 Core CPU and a maximum of 4GB of memory.
 
-The new requirement is to introduce one or more API services where a single Pod will need approximately 4 Core CPU and 16GB of memory. The core challenge is to assess, without adding a dedicated Node Pool, how many such high-resource API Pods the existing jiqun of 30 n1-standard-8 nodes can support. The jiqun is configured with 3 availability zones, each capable of scaling up to 15 nodes, allowing a maximum jiqun size of 45 nodes. This report also aims to explore the best practices to achieve this while ensuring resource scheduling is not adversely affected.
+The new requirement is to introduce one or more API services where a single Pod will need approximately 4 Core CPU and 16GB of memory. The core challenge is to assess, without adding a dedicated Node Pool, how many such high-resource API Pods the existing clusters of 30 n1-standard-8 nodes can support. The clusters is configured with 3 availability zones, each capable of scaling up to 15 nodes, allowing a maximum clusters size of 45 nodes. This report also aims to explore the best practices to achieve this while ensuring resource scheduling is not adversely affected.
 
-This report aims to conduct an in-depth analysis of the current GKE jiqun's resource capacity and evaluate the feasibility of supporting these high-resource APIs within the existing n1-standard-8 node pool. It will detail GKE's node resource reservation mechanisms and the calculation of allocatable resources, guide the analysis of current node resource utilization, and based on this, estimate the number of new API Pods that can be supported without altering the current node pool configuration. Furthermore, this report will provide a series of best practice recommendations, including the configuration of resource requests and limits, Pod anti-affinity strategies, the application of Pod Disruption Budgets (PDBs), and considerations for the jiqun autoscaler, to ensure the stable operation of new APIs and maximize resource utilization. Finally, the report will look at long-term strategies, discussing the introduction of dedicated Node Pools and Node Auto-Provisioning (NAP) as potential solutions for handling more complex or larger-scale high-resource demands in the future.
+This report aims to conduct an in-depth analysis of the current GKE clusters's resource capacity and evaluate the feasibility of supporting these high-resource APIs within the existing n1-standard-8 node pool. It will detail GKE's node resource reservation mechanisms and the calculation of allocatable resources, guide the analysis of current node resource utilization, and based on this, estimate the number of new API Pods that can be supported without altering the current node pool configuration. Furthermore, this report will provide a series of best practice recommendations, including the configuration of resource requests and limits, Pod anti-affinity strategies, the application of Pod Disruption Budgets (PDBs), and considerations for the clusters autoscaler, to ensure the stable operation of new APIs and maximize resource utilization. Finally, the report will look at long-term strategies, discussing the introduction of dedicated Node Pools and Node Auto-Provisioning (NAP) as potential solutions for handling more complex or larger-scale high-resource demands in the future.
 
 ## 2. GKE Node Resources and Allocatable Resource Calculation
 
-Before assessing jiqun capacity, it's crucial to accurately understand the total resources of a GKE node and the portion reserved by the Kubernetes system for its own operations. This allows for the calculation of the "allocatable resources" truly available for application Pods.
+Before assessing clusters capacity, it's crucial to accurately understand the total resources of a GKE node and the portion reserved by the Kubernetes system for its own operations. This allows for the calculation of the "allocatable resources" truly available for application Pods.
 
 ### 2.1. n1-standard-8 Node Specifications
 
@@ -1180,7 +1180,7 @@ These adjusted values will serve as the basis for subsequent capacity assessment
 
 ## 3. Assessing Existing Cluster Resource Capacity
 
-After understanding the allocatable resources of a single node, the next step is to evaluate the total available resources in the current jiqun and consider its auto-scaling capabilities.
+After understanding the allocatable resources of a single node, the next step is to evaluate the total available resources in the current clusters and consider its auto-scaling capabilities.
 
 ### 3.1. Analyzing Current Node Resource Utilization
 
@@ -1201,14 +1201,14 @@ Since the new API Pods have a significant memory requirement (16GB), memory will
 
 ### 3.3. Cluster Autoscaler and Node Limits
 
-According to the information provided, the current jiqun configuration is as follows:
+According to the information provided, the current clusters configuration is as follows:
 
 - Current number of nodes: 30 n1-standard-8 nodes.
 - Number of availability zones: 3.
 - Maximum nodes per availability zone: 15.
-- Therefore, the maximum jiqun node limit is: 3 zones×15 nodes/zone=45 nodes.10
+- Therefore, the maximum clusters node limit is: 3 zones×15 nodes/zone=45 nodes.10
 
-This means the jiqun has the potential to add new nodes via the Cluster Autoscaler:
+This means the clusters has the potential to add new nodes via the Cluster Autoscaler:
 
 - Number of additional nodes that can be scaled: 45 (max nodes)−30 (current nodes)=15 additional nodes.
 
@@ -1216,7 +1216,7 @@ When existing nodes cannot meet the resource requests of new Pods, the Cluster A
 
 ## 4. Feasibility Analysis of Supporting High-Resource APIs Without a New Node Pool
 
-This section will analyze how many such high-resource API Pods can be supported without creating a new Node Pool, considering the node's allocatable resources, the new API Pod's requirements, and the jiqun's current state and scaling capabilities.
+This section will analyze how many such high-resource API Pods can be supported without creating a new Node Pool, considering the node's allocatable resources, the new API Pod's requirements, and the clusters's current state and scaling capabilities.
 
 ### 4.1. Resource Requirements of a Single New API Pod
 
@@ -1243,11 +1243,11 @@ Theoretically, a completely idle n1-standard-8 node, not running any other Pods,
 
 ### 4.3. Assessing the Total Number of New API Pods the Existing 30 Nodes Can Host
 
-To evaluate how many new high-resource API Pods can be deployed in the current jiqun state (without triggering node scale-up), the following steps are required:
+To evaluate how many new high-resource API Pods can be deployed in the current clusters state (without triggering node scale-up), the following steps are required:
 
 1. Collect Current Available Resources for Each Node:
     
-    For each n1-standard-8 node in the jiqun, obtain its Allocatable CPU and memory via kubectl describe node <node-name>, and subtract the sum of Requests of all currently running Pods on that node. This yields the actual Available_CPU_for_Scheduling and Available_Memory_for_Scheduling for each node.
+    For each n1-standard-8 node in the clusters, obtain its Allocatable CPU and memory via kubectl describe node <node-name>, and subtract the sum of Requests of all currently running Pods on that node. This yields the actual Available_CPU_for_Scheduling and Available_Memory_for_Scheduling for each node.
     
 2. Check if Each Node Can Accommodate a New API Pod:
     
@@ -1257,38 +1257,38 @@ To evaluate how many new high-resource API Pods can be deployed in the current j
     - `Node_Available_Memory_for_Scheduling >= 16384MiB`?
 3. Count the Number of Qualifying "Slots":
     
-    Calculate the number of nodes in the jiqun that satisfy the above conditions. This number represents the maximum quantity of new high-resource API Pods that can be immediately deployed without triggering jiqun auto-scaling (assuming each Pod occupies one such "slot").
+    Calculate the number of nodes in the clusters that satisfy the above conditions. This number represents the maximum quantity of new high-resource API Pods that can be immediately deployed without triggering clusters auto-scaling (assuming each Pod occupies one such "slot").
     
 
-**Important Note**: This assessment provides a static analysis based on a current resource snapshot. The jiqun's actual load is dynamic; scaling of existing workloads, Pod migrations, or restarts can alter a node's available resources. Therefore, this number should be considered an initial theoretical upper limit. Continuous monitoring is crucial for understanding the true schedulable capacity in a dynamic environment.11 If other applications suddenly scale up, or some Pods are rescheduled, previously available "slots" might disappear.
+**Important Note**: This assessment provides a static analysis based on a current resource snapshot. The clusters's actual load is dynamic; scaling of existing workloads, Pod migrations, or restarts can alter a node's available resources. Therefore, this number should be considered an initial theoretical upper limit. Continuous monitoring is crucial for understanding the true schedulable capacity in a dynamic environment.11 If other applications suddenly scale up, or some Pods are rescheduled, previously available "slots" might disappear.
 
 ### 4.4. Assessing the Number of New API Pods After Cluster Auto-Scaling
 
-The jiqun currently has 30 nodes and can scale up to a maximum of 45 nodes, meaning the Cluster Autoscaler (CA) can add up to 15 new n1-standard-8 nodes on demand.
+The clusters currently has 30 nodes and can scale up to a maximum of 45 nodes, meaning the Cluster Autoscaler (CA) can add up to 15 new n1-standard-8 nodes on demand.
 
 - Each newly created n1-standard-8 node, under ideal conditions (i.e., no other Pods are scheduled on it first), can accommodate 1 new high-resource API Pod.
-- Therefore, through jiqun auto-scaling, an additional **15** new high-resource API Pods can theoretically be supported.
+- Therefore, through clusters auto-scaling, an additional **15** new high-resource API Pods can theoretically be supported.
 
-Combining the available slots on existing nodes (N_current from the analysis in Section 4.3) and the slots that CA can add (15), the total number of such Pods the jiqun can host without creating a new Node Pool is approximately `N_current + 15`.
+Combining the available slots on existing nodes (N_current from the analysis in Section 4.3) and the slots that CA can add (15), the total number of such Pods the clusters can host without creating a new Node Pool is approximately `N_current + 15`.
 
 Impact of Anti-Affinity Strategy:
 
 The user requirement mentions, "a Deployment has a minimum of 2 Pods with anti-affinity ensuring they are distributed on different Nodes." This means if D new high-resource API Deployments are to be deployed, 2 \times D Pod instances will be required. These 2 \times D Pods must be distributed across at least D pairs of different nodes.
 
 - For example, to deploy 1 new API Deployment (containing 2 Pods), 2 different nodes are needed, each with sufficient resources (4 Core CPU, 16GB Memory) to host 1 of the Pods.
-- Therefore, the number of deployable _Deployments_ will be limited by the number of node pairs in the jiqun that can simultaneously satisfy the anti-affinity constraint and have enough resources. If a total of `X` available Pod slots are calculated, at most `\lfloor X/2 \rfloor` such Deployments can be deployed, provided these slots are distributed across enough different nodes to meet anti-affinity.
+- Therefore, the number of deployable _Deployments_ will be limited by the number of node pairs in the clusters that can simultaneously satisfy the anti-affinity constraint and have enough resources. If a total of `X` available Pod slots are calculated, at most `\lfloor X/2 \rfloor` such Deployments can be deployed, provided these slots are distributed across enough different nodes to meet anti-affinity.
 
 ### 4.5. Resource Fragmentation and Scheduling Challenges
 
-Even if the total available resources in the jiqun (summed from the free resources of all nodes) appear sufficient, **resource fragmentation** can be a major obstacle to successfully scheduling large Pods.9
+Even if the total available resources in the clusters (summed from the free resources of all nodes) appear sufficient, **resource fragmentation** can be a major obstacle to successfully scheduling large Pods.9
 
 - **Definition and Impact**: When multiple Pods of different sizes run on a node, the remaining free resources may exist as non-contiguous small blocks. For example, one node might have 3 Core CPU and 10GB memory free, while another has 2 Core CPU and 20GB memory free. Although the sum exceeds the new API Pod's requirements, no single node can satisfy the full request of 4 Core CPU and 16GB memory.
-- **Challenges with n1-standard-8**: For n1-standard-8 nodes, after placing one 4 Core/16GB Pod, the remaining resources (approximately 3.71 Core CPU / 10.36GB memory) are substantial but insufficient to place another Pod of the same size. These remaining resources can only be utilized by smaller Pods. If the jiqun primarily consists of large Pods, these fragmented resources might remain idle long-term, leading to low node utilization and consequently, cost wastage.12
+- **Challenges with n1-standard-8**: For n1-standard-8 nodes, after placing one 4 Core/16GB Pod, the remaining resources (approximately 3.71 Core CPU / 10.36GB memory) are substantial but insufficient to place another Pod of the same size. These remaining resources can only be utilized by smaller Pods. If the clusters primarily consists of large Pods, these fragmented resources might remain idle long-term, leading to low node utilization and consequently, cost wastage.12
 
 **Initial Measures to Address Fragmentation**:
 
 - **Precise Resource Requests and Limits**: Set accurate resource requests and limits for all Pods (not just the new large APIs). This helps the scheduler perform bin-packing more effectively, reducing unnecessary resource reservation and waste.13
-- **Pod Priority and Preemption**: Higher priority can be set for the new high-resource API Pods. When jiqun resources are tight, if a high-priority Pod cannot be scheduled, the scheduler can evict (preempt) lower-priority Pods running on nodes to free up space for the high-priority Pod.15 However, this requires careful planning, as preemption can affect the service availability of the evicted applications.
+- **Pod Priority and Preemption**: Higher priority can be set for the new high-resource API Pods. When clusters resources are tight, if a high-priority Pod cannot be scheduled, the scheduler can evict (preempt) lower-priority Pods running on nodes to free up space for the high-priority Pod.15 However, this requires careful planning, as preemption can affect the service availability of the evicted applications.
 
 **Consideration for Dedicated Node Pools**: If scheduling failures due to resource fragmentation persist, or if running a few large Pods significantly reduces the average utilization of the entire n1-standard-8 node pool (because CA-expanded nodes have most of their space wasted), then from an operational efficiency and cost-effectiveness perspective, switching to a dedicated node pool more suitable for large Pods would be a more rational choice. This is not just a technical capacity issue but also involves balancing economic and management costs.17
 
@@ -1298,12 +1298,12 @@ To run the new high-resource APIs as efficiently and stably as possible within t
 
 ### 5.1. Precise Resource Requests and Limits
 
-Setting accurate resource requests and limits for Kubernetes Pods is fundamental to ensuring jiqun stability and resource utilization.
+Setting accurate resource requests and limits for Kubernetes Pods is fundamental to ensuring clusters stability and resource utilization.
 
 - **Requests**: The Kubernetes scheduler uses a Pod's resource requests to decide which node to schedule it on. If a node's available resources are less than the Pod's requests, the Pod will not be scheduled on that node.
 - **Limits**: The container runtime (e.g., Docker) enforces resource limits. If a container attempts to use more CPU than its limit, it will be throttled. If it tries to use more memory than its limit, it may be terminated by the OOMKiller.14
 
-For the new high-resource API Pods (4 Core CPU, 16GB Memory) and all other Pods in the jiqun:
+For the new high-resource API Pods (4 Core CPU, 16GB Memory) and all other Pods in the clusters:
 
 - **Set Values Matching Real Needs**: Determine the actual resource consumption of applications under various loads through stress testing, performance monitoring, or Vertical Pod Autoscaler (VPA) in recommendation mode 11, and set requests and limits accordingly.
 - **Requests = Limits for Critical Workloads**: For critical applications like APIs, it is recommended to set memory and CPU `requests` equal to their `limits`. This gives the Pods a Kubernetes `Guaranteed` QoS class, meaning they have the highest reservation priority during resource contention and are less likely to be evicted by the system due to resource shortages.14 This also helps the scheduler make more accurate placement decisions, reducing risks associated with resource over-commitment.
@@ -1359,7 +1359,7 @@ The user has already adopted an anti-affinity strategy to ensure at least two Po
 
 ### 5.3. Pod Disruption Budgets (PDB)
 
-For applications with a small number of replicas (like the minimum of 2 mentioned in the user scenario) and high availability requirements, configuring a PodDisruptionBudget (PDB) is crucial. A PDB limits the number of Pods of an application that can be simultaneously unavailable during voluntary disruptions (such as node maintenance, jiqun upgrades causing node drains, or jiqun scale-downs).20
+For applications with a small number of replicas (like the minimum of 2 mentioned in the user scenario) and high availability requirements, configuring a PodDisruptionBudget (PDB) is crucial. A PDB limits the number of Pods of an application that can be simultaneously unavailable during voluntary disruptions (such as node maintenance, clusters upgrades causing node drains, or clusters scale-downs).20
 
 - **`minAvailable`**: Specifies the number or percentage of Pods that must remain available at any time. For a Deployment with at least 2 replicas, setting `minAvailable` to `1` means that during a voluntary disruption, at least 1 Pod will remain running, thus preventing a complete service outage.
 - **Example Configuration**:
@@ -1379,7 +1379,7 @@ For applications with a small number of replicas (like the minimum of 2 mentione
           app: new-high-resource-api # Must match the labels of the Pods in the Deployment
     ```
     
-    (Adapted from 21) After applying this PDB, when a jiqun administrator executes a `kubectl drain`command to empty a node, or when the jiqun autoscaler attempts to scale down a node, the operation will be blocked or delayed if it would cause the number of available Pods for the `new-high-resource-api`application to fall below the value set by `minAvailable`, until the operation can be performed safely.22
+    (Adapted from 21) After applying this PDB, when a clusters administrator executes a `kubectl drain`command to empty a node, or when the clusters autoscaler attempts to scale down a node, the operation will be blocked or delayed if it would cause the number of available Pods for the `new-high-resource-api`application to fall below the value set by `minAvailable`, until the operation can be performed safely.22
 
 ### 5.4. Scheduling Strategies for the Existing Node Pool
 
@@ -1392,7 +1392,7 @@ Without creating a new dedicated node pool, the primary reliance is on the Kuber
 
 The Cluster Autoscaler is a key component for responding to load changes and automatically adjusting the number of nodes.
 
-- **Confirm Enablement and Configuration**: Ensure the jiqun's autoscaler is enabled for the n1-standard-8 node pool, and that `min-nodes` and `max-nodes` (whether per-zone or total) are set to cover the expected load range, allowing the jiqun to scale from the current 30 nodes up to a maximum of 45 nodes as needed.10
+- **Confirm Enablement and Configuration**: Ensure the clusters's autoscaler is enabled for the n1-standard-8 node pool, and that `min-nodes` and `max-nodes` (whether per-zone or total) are set to cover the expected load range, allowing the clusters to scale from the current 30 nodes up to a maximum of 45 nodes as needed.10
 - **Understand Scaling Behavior**:
     - **Scale-up**: When a Pod is in a `Pending` state due to insufficient resources, the CA evaluates if adding a new node to the node pool can resolve this. If so, and the maximum node limit has not been reached, the CA triggers node creation.22
     - **Scale-down**: When the CA detects that some nodes have been consistently underutilized and the Pods running on them can be safely rescheduled to other nodes, the CA will attempt to drain and delete these nodes until the node pool's minimum size limit is reached. The CA respects PDBs and will not violate the minimum available replicas set by a PDB due to a scale-down operation.22
@@ -1402,11 +1402,11 @@ The Cluster Autoscaler is a key component for responding to load changes and aut
 
 ### 5.6. Continuous Monitoring and Log Analysis
 
-Effective monitoring and log analysis are crucial for understanding jiqun behavior, diagnosing issues, and optimizing resources.
+Effective monitoring and log analysis are crucial for understanding clusters behavior, diagnosing issues, and optimizing resources.
 
-- **GKE Observability**: Utilize the GKE "Observability" tab in the Google Cloud Console to monitor CPU, memory utilization (requested and limit values), as well as disk and network usage at the jiqun, node pool, and node levels.7
+- **GKE Observability**: Utilize the GKE "Observability" tab in the Google Cloud Console to monitor CPU, memory utilization (requested and limit values), as well as disk and network usage at the clusters, node pool, and node levels.7
 - **Pod Scheduling Events**: Pay close attention to Kubernetes events, especially `FailedScheduling`events. These can be viewed using the command `kubectl get events --field-selector reason=FailedScheduling`. These events indicate why a Pod could not be scheduled, such as insufficient resources, unmet affinity rules, or no node tolerating its taints.
-- **Cluster Autoscaler Logs**: The CA's logs (typically found in the `jiqun-autoscaler` Pod in the `kube-system` namespace, or viewable via Cloud Logging) record its scale-up and scale-down decisions and reasons, which are invaluable for understanding why the jiqun did not scale as expected.22
+- **Cluster Autoscaler Logs**: The CA's logs (typically found in the `clusters-autoscaler` Pod in the `kube-system` namespace, or viewable via Cloud Logging) record its scale-up and scale-down decisions and reasons, which are invaluable for understanding why the clusters did not scale as expected.22
 - **Application Performance Monitoring (APM)**: Implement APM for the new high-resource API and other critical applications to monitor their own performance metrics (like latency, error rates) and resource consumption (actual CPU/memory usage). This helps verify if the configured resource requests and limits are accurate and to promptly identify potential performance bottlenecks or resource leaks.
 
 By implementing these best practices, you can more effectively support the new high-resource APIs within the existing n1-standard-8 node pool, while also laying a solid foundation for future expansion and optimization.
@@ -1419,8 +1419,8 @@ While it might be possible to accommodate high-resource API Pods in the existing
 
 The following situations suggest that creating a dedicated node pool for high-resource applications might be necessary:
 
-- **Severe Resource Fragmentation**: When the existing n1-standard-8 node pool, due to a mix of various-sized Pods, suffers from increasingly severe resource fragmentation, causing new high-resource Pods (requiring large contiguous blocks like 4 Core CPU and 16GB memory) to frequently fail scheduling due to no suitable node being found, even if the overall jiqun utilization is not high.
-- **Inefficient Cluster Scaling and Cost Wastage**: If, to run a few high-resource Pods, the jiqun autoscaler has to frequently add new n1-standard-8 nodes, but these new nodes, after placing one high-resource Pod, have most of their remaining resources (approx. 3.71 Core CPU and 10.36GB memory) underutilized because they cannot be effectively used by other large Pods and may not be fully filled by smaller Pods. This leads to low overall node utilization and unnecessary cloud resource costs.12
+- **Severe Resource Fragmentation**: When the existing n1-standard-8 node pool, due to a mix of various-sized Pods, suffers from increasingly severe resource fragmentation, causing new high-resource Pods (requiring large contiguous blocks like 4 Core CPU and 16GB memory) to frequently fail scheduling due to no suitable node being found, even if the overall clusters utilization is not high.
+- **Inefficient Cluster Scaling and Cost Wastage**: If, to run a few high-resource Pods, the clusters autoscaler has to frequently add new n1-standard-8 nodes, but these new nodes, after placing one high-resource Pod, have most of their remaining resources (approx. 3.71 Core CPU and 10.36GB memory) underutilized because they cannot be effectively used by other large Pods and may not be fully filled by smaller Pods. This leads to low overall node utilization and unnecessary cloud resource costs.12
 - **Isolation and Specific Hardware Needs**: When high-resource applications have stringent performance requirements, need to avoid "noisy neighbor" interference from other Pods, or require specific hardware configurations (such as faster CPUs, larger memory bandwidth, local SSDs 28, GPUs, etc.), a dedicated node pool can provide the necessary isolation and hardware support.30
 - **Increased Operational Management Complexity**: If, to meet the scheduling needs of both general Pods and high-resource Pods within a single universal node pool, increasingly complex node affinity/anti-affinity rules, taints, and toleration policies must be configured and maintained, leading to a significant increase in operational overhead and risk of errors.
 
@@ -1442,7 +1442,7 @@ Creating dedicated node pools for specific types of workloads (like high-resourc
     - By setting specific **node labels** (e.g., `workload-type=high-resource-api`) on nodes in the dedicated pool and specifying corresponding **nodeAffinity** rules in the high-resource API Pod's deployment configuration, these Pods can be precisely scheduled to the dedicated pool.30
     - Simultaneously, **taints** (e.g., `workload-type=high-resource-api:NoSchedule`) can be set on nodes in the dedicated pool, with corresponding **tolerations** added to the high-resource API Pods. This prevents other Pods without the toleration from being scheduled on these dedicated nodes, ensuring exclusive use of dedicated resources.23
 - **Potential Cost-Effectiveness**:
-    - Although dedicated nodes (especially high-memory or those with special hardware) might have a higher unit price than general-purpose nodes, "right-sizing" for different workloads can improve overall jiqun resource utilization. General-purpose Pods continue to run on lower-cost n1-standard-8 node pools, while high-resource Pods run on on-demand configured dedicated pools. This "mix-and-match" approach is often more economical than trying to satisfy all needs with one node type (which can lead to underutilized nodes).12
+    - Although dedicated nodes (especially high-memory or those with special hardware) might have a higher unit price than general-purpose nodes, "right-sizing" for different workloads can improve overall clusters resource utilization. General-purpose Pods continue to run on lower-cost n1-standard-8 node pools, while high-resource Pods run on on-demand configured dedicated pools. This "mix-and-match" approach is often more economical than trying to satisfy all needs with one node type (which can lead to underutilized nodes).12
     - Allows for finer control over the auto-scaling policies of each node pool, avoiding unnecessary scaling.
 - **Improved Predictability and Performance**:
     - Dedicated resources mean applications are less likely to encounter resource shortages due to sudden high loads from other applications.
@@ -1466,12 +1466,12 @@ If the decision is made to introduce a dedicated node pool, the following steps 
     
     ```
     gcloud container node-pools create high-mem-api-pool \
-      --jiqun <your-jiqun-name> \
+      --clusters <your-clusters-name> \
       --machine-type n2-highmem-8  # Or your chosen machine type \
       --num-nodes 1                # Initial number of nodes, can be autoscaled \
       --node-labels=workload-type=high-mem-api \
       --node-taints=workload-type=high-mem-api:NoSchedule \
-      --zone <your-zone> # Or --region for regional jiquns
+      --zone <your-zone> # Or --region for regional clusterss
     ```
     
     (36 provide commands for updating node pool labels and taints; creation is similar)
@@ -1519,7 +1519,7 @@ If the decision is made to introduce a dedicated node pool, the following steps 
     
     ```
     gcloud container node-pools update high-mem-api-pool \
-      --jiqun <your-jiqun-name> \
+      --clusters <your-clusters-name> \
       --enable-autoscaling --min-nodes 1 --max-nodes 5 \ # Adjust min/max as needed
       --zone <your-zone> # Or --region
     ```
@@ -1531,16 +1531,16 @@ If the decision is made to introduce a dedicated node pool, the following steps 
 
 ### 6.4. Node Auto-Provisioning (NAP)
 
-If the jiqun is expected to host more types of workloads with special resource needs in the future (e.g., different GPU types, varying memory/CPU ratios, specific regional requirements), consider enabling GKE's **Node Auto-Provisioning (NAP)** feature.27
+If the clusters is expected to host more types of workloads with special resource needs in the future (e.g., different GPU types, varying memory/CPU ratios, specific regional requirements), consider enabling GKE's **Node Auto-Provisioning (NAP)** feature.27
 
-- **How it Works**: NAP is an enhancement to the jiqun autoscaler. When a Pod cannot be scheduled due to insufficient resources or unmet specific scheduling constraints (like affinity, taint tolerations, GPU requirements), NAP doesn't just scale up existing node pools; it can **automatically create and configure a brand new node pool best suited for that Pod's needs**.27 NAP analyzes the pending Pod's CPU, memory, GPU requests, node selectors, affinity rules, taints, and tolerations, then selects or creates a node pool with a matching machine type, region, labels, and taints.27
+- **How it Works**: NAP is an enhancement to the clusters autoscaler. When a Pod cannot be scheduled due to insufficient resources or unmet specific scheduling constraints (like affinity, taint tolerations, GPU requirements), NAP doesn't just scale up existing node pools; it can **automatically create and configure a brand new node pool best suited for that Pod's needs**.27 NAP analyzes the pending Pod's CPU, memory, GPU requests, node selectors, affinity rules, taints, and tolerations, then selects or creates a node pool with a matching machine type, region, labels, and taints.27
 - **Advantages**:
     - **Simplified Operations**: Eliminates the need to manually create and manage multiple dedicated node pools; NAP handles it dynamically on demand.
     - **Optimized Resource Utilization**: NAP aims to create "just right" node pools, avoiding the over-provisioning or misconfiguration that can occur with manual node pool setup.
     - **Flexibility**: Better adapts to the needs of heterogeneous workloads.
-- **Configuration**: When enabling NAP, you can set resource limits for the entire jiqun (total CPU, total memory, maximum number of specific GPU types, etc.) to control the scope of node pools NAP can create.41
+- **Configuration**: When enabling NAP, you can set resource limits for the entire clusters (total CPU, total memory, maximum number of specific GPU types, etc.) to control the scope of node pools NAP can create.41
 
-For the current scenario, if the high-resource API is the only special requirement type in the jiqun, manually creating a dedicated node pool might be more straightforward and controllable. However, if more diverse needs are anticipated in the future, NAP is a powerful tool worth evaluating, as it can significantly reduce the complexity of managing multiple dedicated node pools.
+For the current scenario, if the high-resource API is the only special requirement type in the clusters, manually creating a dedicated node pool might be more straightforward and controllable. However, if more diverse needs are anticipated in the future, NAP is a powerful tool worth evaluating, as it can significantly reduce the complexity of managing multiple dedicated node pools.
 
 ## 7. Conclusion and Recommendations
 
@@ -1549,8 +1549,8 @@ Based on the analysis above, the following conclusions and recommendations are m
 ### 7.1. Short-Term Feasibility Summary
 
 - **Theoretically Feasible, but Capacity is Limited**: Without creating a new Node Pool, an existing n1-standard-8 node (with approximately 7.71 Core CPU and 26.36 GiB allocatable memory after adjustments) can host **at most 1** such new high-resource API Pod.
-- **Dependent on Current Actual Available Resources**: The total number of new API Pods that the current 30 jiqun nodes can support directly depends on whether the remaining available CPU and memory on each node (after deducting resources requested by existing scheduled Pods) simultaneously meet the new Pod's requirements (>= 4 Core, >= 16GB). This requires a detailed resource audit of each node using `kubectl describe node` and `kubectl top nodes`. Resource fragmentation may further limit the actual schedulable quantity.
-- **Contribution of Cluster Auto-Scaling**: The Cluster Autoscaler (CA) can add up to an additional 15 n1-standard-8 nodes on demand (bringing the jiqun total to the 45-node limit). Ideally, each of these 15 new nodes could also support 1 high-resource Pod, thus providing an additional 15 slots.
+- **Dependent on Current Actual Available Resources**: The total number of new API Pods that the current 30 clusters nodes can support directly depends on whether the remaining available CPU and memory on each node (after deducting resources requested by existing scheduled Pods) simultaneously meet the new Pod's requirements (>= 4 Core, >= 16GB). This requires a detailed resource audit of each node using `kubectl describe node` and `kubectl top nodes`. Resource fragmentation may further limit the actual schedulable quantity.
+- **Contribution of Cluster Auto-Scaling**: The Cluster Autoscaler (CA) can add up to an additional 15 n1-standard-8 nodes on demand (bringing the clusters total to the 45-node limit). Ideally, each of these 15 new nodes could also support 1 high-resource Pod, thus providing an additional 15 slots.
 - **Anti-Affinity as a Key Constraint**: Since each Deployment requires at least 2 Pods distributed across different nodes, the actual number of _Deployments_ that can be deployed will be half the number of available Pod slots (or fewer, depending on whether slots are evenly distributed across different nodes).
 
 ### 7.2. Immediate Actionable Recommendations
@@ -1564,7 +1564,7 @@ Based on the analysis above, the following conclusions and recommendations are m
 2. **Enforce Precise Resource Requests and Limits**:
     
     - For the new high-resource API Pods, explicitly set `spec.containers.resources.requests.cpu = "4"`, `spec.containers.resources.requests.memory = "16Gi"`, `spec.containers.resources.limits.cpu = "4"`, and `spec.containers.resources.limits.memory = "16Gi"` in their Deployment YAML.
-    - Review and ensure the accuracy of resource requests and limits for other existing workloads in the jiqun to reduce resource waste and fragmentation.
+    - Review and ensure the accuracy of resource requests and limits for other existing workloads in the clusters to reduce resource waste and fragmentation.
 3. **Configure PodDisruptionBudget (PDB)**:
     
     - Create a PDB for the new high-resource API Deployment, for example, setting `minAvailable: 1`, to ensure at least one instance of the application remains running during voluntary disruptions like node maintenance, thereby ensuring basic availability.
@@ -1574,7 +1574,7 @@ Based on the analysis above, the following conclusions and recommendations are m
     - Closely monitor the following metrics:
         - Scheduling status of new API Pods (`kubectl get pods -l <label-selector-for-new-api> -w`).
         - Kubernetes event logs, especially `FailedScheduling` events (`kubectl get events --field-selector reason=FailedScheduling`).
-        - CPU and memory utilization of each node and the entire jiqun (via GKE Observability Dashboard or `kubectl top nodes`).
+        - CPU and memory utilization of each node and the entire clusters (via GKE Observability Dashboard or `kubectl top nodes`).
         - Activity logs of the Cluster Autoscaler to observe if it scales up or down as expected.
 
 ### 7.3. Long-Term Strategic Recommendations
@@ -1589,13 +1589,13 @@ Based on the analysis above, the following conclusions and recommendations are m
     - Use node labels and taints on the new node pool, along with Pod node affinity and toleration policies, to achieve precise scheduling isolation.
 3. **Evaluate Node Auto-Provisioning (NAP)**:
     
-    - If the jiqun is expected to support more diverse workloads with different special resource needs in the future (e.g., various CPU/memory combinations, GPUs, TPUs), evaluate enabling GKE's Node Auto-Provisioning (NAP) feature. NAP can dynamically create and manage the most suitable node pools based on Pod-specific requirements, thereby simplifying operations and optimizing resource utilization.
+    - If the clusters is expected to support more diverse workloads with different special resource needs in the future (e.g., various CPU/memory combinations, GPUs, TPUs), evaluate enabling GKE's Node Auto-Provisioning (NAP) feature. NAP can dynamically create and manage the most suitable node pools based on Pod-specific requirements, thereby simplifying operations and optimizing resource utilization.
 
 ### 7.4. Final Considerations
 
-Although it might be technically possible to accommodate a certain number of new high-resource API Pods in the existing n1-standard-8 node pool through meticulous management and leveraging jiqun auto-scaling, this is often a stopgap measure. As the number of high-resource applications increases or as demands for performance and stability rise, issues like resource fragmentation, scheduling conflicts, and cost-effectiveness will gradually become more apparent.
+Although it might be technically possible to accommodate a certain number of new high-resource API Pods in the existing n1-standard-8 node pool through meticulous management and leveraging clusters auto-scaling, this is often a stopgap measure. As the number of high-resource applications increases or as demands for performance and stability rise, issues like resource fragmentation, scheduling conflicts, and cost-effectiveness will gradually become more apparent.
 
-In the long run, adopting **dedicated, optimized node pools** for workloads with significantly different resource profiles (e.g., general-purpose vs. high-memory) is the best practice for ensuring application performance, improving overall jiqun resource utilization, simplifying management, and ultimately controlling costs.12 Therefore, it is recommended to view the current strategy of supporting high-resource APIs in a single node pool as a transitional phase and to actively plan an evolution towards a more targeted multi-node-pool architecture.
+In the long run, adopting **dedicated, optimized node pools** for workloads with significantly different resource profiles (e.g., general-purpose vs. high-memory) is the best practice for ensuring application performance, improving overall clusters resource utilization, simplifying management, and ultimately controlling costs.12 Therefore, it is recommended to view the current strategy of supporting high-resource APIs in a single node pool as a transitional phase and to actively plan an evolution towards a more targeted multi-node-pool architecture.
 
 
 # Gemini Chinese
@@ -1919,7 +1919,7 @@ GKE 对内存和 CPU 的预留量是根据节点总资源动态计算的：
 
 - **GKE 可观测性**: 利用 Google Cloud 控制台提供的 GKE "可观测性" 标签页，监控集群级别、节点池级别和节点级别的 CPU、内存利用率（请求值和限制值），以及磁盘和网络使用情况 7。
 - **Pod 调度事件**: 密切关注 Kubernetes 事件，特别是 `FailedScheduling` 事件。可以通过 `kubectl get events --field-selector reason=FailedScheduling` 命令查看。这些事件会指明 Pod 为何无法被调度，例如资源不足、不满足亲和性规则或没有节点容忍其污点等。
-- **Cluster Autoscaler 日志**: CA 的日志（通常在 `kube-system` 命名空间下的 `jiqun-autoscaler` Pod 中，或通过 Cloud Logging 查看）记录了其扩容和缩容的决策过程和原因，对于理解为何集群没有按预期扩容或缩容非常有价值 22。
+- **Cluster Autoscaler 日志**: CA 的日志（通常在 `kube-system` 命名空间下的 `clusters-autoscaler` Pod 中，或通过 Cloud Logging 查看）记录了其扩容和缩容的决策过程和原因，对于理解为何集群没有按预期扩容或缩容非常有价值 22。
 - **应用性能监控 (APM)**: 对新的高资源 API 及其他关键应用实施 APM，监控其自身的性能指标（如延迟、错误率）和资源消耗（实际 CPU/内存使用），以验证为其配置的资源请求和限制是否准确，并及时发现潜在的性能瓶颈或资源泄漏。
 
 通过实施这些最佳实践，可以在现有 n1-standard-8 节点池中更有效地支持新的高资源 API，同时为未来的扩展和优化打下坚实基础。
@@ -1979,12 +1979,12 @@ GKE 对内存和 CPU 的预留量是根据节点总资源动态计算的：
     
     ```
     gcloud container node-pools create high-mem-api-pool \
-      --jiqun <your-jiqun-name> \
+      --clusters <your-clusters-name> \
       --machine-type n2-highmem-8  # Or your chosen machine type \
       --num-nodes 1                # Initial number of nodes, can be autoscaled \
       --node-labels=workload-type=high-mem-api \
       --node-taints=workload-type=high-mem-api:NoSchedule \
-      --zone <your-zone> # Or --region for regional jiquns
+      --zone <your-zone> # Or --region for regional clusterss
     ```
     
     (36 提供了更新节点池标签和污点的命令，创建时类似)
@@ -2032,7 +2032,7 @@ GKE 对内存和 CPU 的预留量是根据节点总资源动态计算的：
     
     ```
     gcloud container node-pools update high-mem-api-pool \
-      --jiqun <your-jiqun-name> \
+      --clusters <your-clusters-name> \
       --enable-autoscaling --min-nodes 1 --max-nodes 5 \ # Adjust min/max as needed
       --zone <your-zone> # Or --region
     ```
@@ -2535,7 +2535,7 @@ fi
 ```bash
 # 创建高内存节点池
 gcloud container node-pools create high-memory-pool \
-    --jiqun=your-jiqun-name \
+    --clusters=your-clusters-name \
     --zone=your-zone \
     --machine-type=n1-highmem-4 \  # 4 CPU, 26GB内存，更适合
     --num-nodes=4 \                 # 每个zone 4个节点

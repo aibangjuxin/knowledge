@@ -38,7 +38,7 @@ Personal goals for improving English proficiency:
 
 Personal goals for enhancing professional skills:
 * Learn Google GCP-related knowledge
-   Within a year, deepen understanding of Google products currently in use and learn new technologies suitable for platform development, such as multiple jiquns and asm, based on our current Google product usage.
+   Within a year, deepen understanding of Google products currently in use and learn new technologies suitable for platform development, such as multiple clusterss and asm, based on our current Google product usage.
 
 * Learn Pipeline-related knowledge
    Within a year, become proficient in using Pipeline and understand the workflow of most pipelines currently in use.

@@ -126,7 +126,7 @@
 
 为了论证 Cloud Run 的“快速简易”，我们简要看一下在 GKE 上实现相同部署需要做什么：
 
-1.  **创建 GKE 集群**: `gcloud container jiquns create ...`。这需要几分钟，并需要你决定机器类型、节点数量、网络配置等。
+1.  **创建 GKE 集群**: `gcloud container clusterss create ...`。这需要几分钟，并需要你决定机器类型、节点数量、网络配置等。
 2.  **编写 Kubernetes 配置文件 (YAML)**:
     - **`deployment.yaml`**: 定义如何运行你的容器，包括副本数、镜像地址、端口、资源请求（CPU/内存）等。
     - **`service.yaml`**: 在集群内部创建一个稳定的网络端点（Service），将流量导向你的 Deployment Pods。
@@ -584,7 +584,7 @@ Cloud Run 部署后，自动生成一个服务 URL（如 `https://my-stream-api-
 
 - **创建集群**：
     ```bash
-    gcloud container jiquns create my-jiqun --region us-central1 --num-nodes 3
+    gcloud container clusterss create my-clusters --region us-central1 --num-nodes 3
     ```
 - **部署应用**：
     - 创建 Deployment：
@@ -1702,7 +1702,7 @@ gcloud run deploy stream-events \
 
 ```bash
 # 1. 创建集群
-gcloud container jiquns create-auto stream-jiqun \
+gcloud container clusterss create-auto stream-clusters \
   --region=$REGION --project=$PROJECT_ID
 
 # 2. 部署
@@ -1864,7 +1864,7 @@ docker push REGION-docker.pkg.dev/PROJECT_ID/REPO/IMAGE:TAG
 
 **5. GKE** **部署流式事件** **API** **的简要流程**
 
-1. **创建** **GKE** **集群\*\***gcloud container jiquns create CLUSTER_NAME --region=REGION\*\*
+1. **创建** **GKE** **集群\*\***gcloud container clusterss create CLUSTER_NAME --region=REGION\*\*
 
 2. **编写** **Deployment** **和** **Service**
 

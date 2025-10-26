@@ -38,7 +38,7 @@
 # Fetch pods data from gke master and send to bucket
 def create_request_to_push():
     log.info("inside create_request_to_push")
-    config.load_injiqun_config()
+    config.load_inclusters_config()
     log.info("after config load")
     log.info("Retrieving pods data")
     core_v1 = client.CoreV1Api()

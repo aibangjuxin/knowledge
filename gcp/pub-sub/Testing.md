@@ -92,7 +92,7 @@ sequenceDiagram
     - auth 或内部 token
         
     
-- Backend 若部署在 GKE，可通过内部 DNS 如 http://api1.default.svc.jiqun.local 来访问
+- Backend 若部署在 GKE，可通过内部 DNS 如 http://api1.default.svc.clusters.local 来访问
     
 
 ---
@@ -348,7 +348,7 @@ done
 
 ```
 {
-  "url": "http://backend-service.default.svc.jiqun.local/health",
+  "url": "http://backend-service.default.svc.clusters.local/health",
   "method": "GET",
   "team": "team-a",
   "api": "health-check"
@@ -365,7 +365,7 @@ done
 PROJECT_ID="your-gcp-project-id"
 REGION="asia-east1"
 TOPIC="aibang-lex-eg-job-topic"
-URL="http://backend-service.default.svc.jiqun.local/health"
+URL="http://backend-service.default.svc.clusters.local/health"
 
 for i in $(seq -w 1 100); do
   JOB_NAME="job-health-check-${i}"
@@ -425,7 +425,7 @@ kubectl expose deployment health-api --port=80 --target-port=80 --name=health-ap
 然后 Schedule Service 的 URL 就是：
 
 ```
-http://health-api.default.svc.jiqun.local/
+http://health-api.default.svc.clusters.local/
 ```
 
 或者你在容器里跑个返回 200 OK 的简单 Spring Boot 或 Flask /health 接口。
@@ -557,7 +557,7 @@ Google 推荐的最佳实践是使用**GKE Workload Identity**。它允许您将
     Bash
 
     ```
-    gcloud container jiquns update CLUSTER_NAME \
+    gcloud container clusterss update CLUSTER_NAME \
         --workload-pool=PROJECT_ID.svc.id.goog
     ```
 
@@ -937,7 +937,7 @@ fetch pubsub_subscription
 
 | metric 'kubernetes.io/container/restart_count'
 
-| filter (resource.jiqun_name == 'your-jiqun' && resource.namespace_name == 'your-namespace' && resource.pod_name =~ 'backend-service-.*')
+| filter (resource.clusters_name == 'your-clusters' && resource.namespace_name == 'your-namespace' && resource.pod_name =~ 'backend-service-.*')
 
 | align delta(10m)
 

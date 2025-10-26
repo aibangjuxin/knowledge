@@ -215,7 +215,7 @@ gcloud logging buckets update _Default \
 当您运行以下命令时：
 
 ```bash
-gcloud container jiquns describe "$CLUSTER_NAME" --location "$LOCATION" \
+gcloud container clusterss describe "$CLUSTER_NAME" --location "$LOCATION" \
   --format="value(loggingConfig.enableComponents)"
 ```
 
@@ -248,7 +248,7 @@ loggingConfig:
 ### 示例：只启用 Workload 和 System Logs
 
 ```bash
-gcloud container jiquns update "$CLUSTER_NAME" \
+gcloud container clusterss update "$CLUSTER_NAME" \
   --location "$LOCATION" \
   --logging=SYSTEM_COMPONENTS,WORKLOADS
 ```
@@ -256,7 +256,7 @@ gcloud container jiquns update "$CLUSTER_NAME" \
 ### 示例：完全禁用 GKE Logging（仅适合测试/非生产环境）
 
 ```bash
-gcloud container jiquns update "$CLUSTER_NAME" \
+gcloud container clusterss update "$CLUSTER_NAME" \
   --location "$LOCATION" \
   --logging=NONE
 ```

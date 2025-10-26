@@ -141,7 +141,7 @@ echo "🚀 Max Deployment (each 2 Pods, spread across nodes): $((total_pods / 2)
     *   在GKE控制台或使用 `gcloud` 命令创建新的节点池。
         ```bash
         gcloud container node-pools create <new-pool-name> \
-            --jiqun <your-jiqun-name> \
+            --clusters <your-clusters-name> \
             --machine-type <chosen-machine-type> \ # 例如 e2-standard-8 或 n2-standard-16
             --num-nodes 1 \ # 初始节点数，可以设为1，然后配置自动伸缩
             --enable-autoscaling --min-nodes 1 --max-nodes <max-desired-nodes> \ # 强烈建议启用自动伸缩
@@ -312,7 +312,7 @@ echo "🚀 Max Deployment (each 2 Pods, spread across nodes): $((total_pods / 2)
 
 gcloud container node-pools create high-mem-pool \
 
-  --jiqun=[your-jiqun-name] \
+  --clusters=[your-clusters-name] \
 
   --machine-type=n2-highmem-8 \
 

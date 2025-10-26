@@ -174,19 +174,19 @@ audit_exclusions() {
 }
 
 # 审计 GKE 集群配置
-audit_gke_jiquns() {
+audit_gke_clusterss() {
     log_info "=== 审计 GKE 集群日志配置 ==="
     
     # 获取 GKE 集群列表
-    jiquns=$(gcloud container jiquns list --project="$PROJECT_ID" --format="value(name,location)" 2>/dev/null)
+    clusterss=$(gcloud container clusterss list --project="$PROJECT_ID" --format="value(name,location)" 2>/dev/null)
     
-    if [ $? -eq 0 ] && [ -n "$jiquns" ]; then
-        while IFS=$'\t' read -r jiqun_name location; do
-            if [ -n "$jiqun_name" ] && [ -n "$location" ]; then
-                log_info "检查集群: $jiqun_name (位置: $location)"
+    if [ $? -eq 0 ] && [ -n "$clusterss" ]; then
+        while IFS=$'\t' read -r clusters_name location; do
+            if [ -n "$clusters_name" ] && [ -n "$location" ]; then
+                log_info "检查集群: $clusters_name (位置: $location)"
                 
                 # 获取集群日志配置
-                logging_config=$(gcloud container jiquns describe "$jiqun_name" \
+                logging_config=$(gcloud container clusterss describe "$clusters_name" \
                     --location="$location" \
                     --project="$PROJECT_ID" \
                     --format="value(loggingConfig.componentConfig.enableComponents)" 2>/dev/null)
@@ -206,7 +206,7 @@ audit_gke_jiquns() {
                 fi
                 
                 # 检查集群监控配置
-                monitoring_config=$(gcloud container jiquns describe "$jiqun_name" \
+                monitoring_config=$(gcloud container clusterss describe "$clusters_name" \
                     --location="$location" \
                     --project="$PROJECT_ID" \
                     --format="value(monitoringConfig.componentConfig.enableComponents)" 2>/dev/null)
@@ -217,7 +217,7 @@ audit_gke_jiquns() {
                 
                 echo ""
             fi
-        done <<< "$jiquns"
+        done <<< "$clusterss"
     else
         log_info "项目中未发现 GKE 集群"
     fi
@@ -441,7 +441,7 @@ main() {
     audit_log_buckets
     audit_log_sinks
     # audit_exclusions need re-debug this one   
-    audit_gke_jiquns
+    audit_gke_clusterss
     audit_audit_logs
     
     # 生成建议和脚本

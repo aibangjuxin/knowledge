@@ -46,7 +46,7 @@ cp policy.yaml policy.yaml.backup
 
 ```yaml
 admissionWhitelistPatterns: []
-jiqunAdmissionRules: {}
+clustersAdmissionRules: {}
 defaultAdmissionRule:
   enforcementMode: ENFORCED_BLOCK_AND_AUDIT_LOG
   evaluationMode: ALWAYS_ALLOW
@@ -61,7 +61,7 @@ updateTime: [timestamp]
 
 ```yaml
 admissionWhitelistPatterns: []
-jiqunAdmissionRules: {}
+clustersAdmissionRules: {}
 defaultAdmissionRule:
   enforcementMode: ENFORCED_BLOCK_AND_AUDIT_LOG
   evaluationMode: ALWAYS_DENY
@@ -80,7 +80,7 @@ admissionWhitelistPatterns:
 - namePattern: "us.gcr.io/[PROJECT-ID]/*"
 - namePattern: "asia.gcr.io/[PROJECT-ID]/*"
 - namePattern: "eu.gcr.io/[PROJECT-ID]/*"
-jiqunAdmissionRules: {}
+clustersAdmissionRules: {}
 defaultAdmissionRule:
   enforcementMode: ENFORCED_BLOCK_AND_AUDIT_LOG
   evaluationMode: ALWAYS_DENY ==> need Change to ALWAYS_ALLOW
@@ -158,7 +158,7 @@ admissionWhitelistPatterns:
 - namePattern: "gcr.io/[YOUR-PROJECT-ID]/*"
 - namePattern: "asia.gcr.io/[YOUR-PROJECT-ID]/*"
 - namePattern: "docker.io/library/*"  # 如果需要公共镜像
-jiqunAdmissionRules: {}
+clustersAdmissionRules: {}
 defaultAdmissionRule:
   enforcementMode: ENFORCED_BLOCK_AND_AUDIT_LOG
   evaluationMode: REQUIRE_ATTESTATION

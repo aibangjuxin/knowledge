@@ -70,7 +70,7 @@ https://alm-aibang.os.aaaaa.aibang/sp-api-platform/aib-infra-gcp/blob/APICLOUD-8
   template:
     metadata:
       annotations:
-        jiqun-autoscaler.kubernetes.io/safe-to-evict: "true"
+        clusters-autoscaler.kubernetes.io/safe-to-evict: "true"
       creationTimestamp: null
       labels:
         app: woup-wcl-bblsmp-pa-woup-servicenow-1-1-16
@@ -406,7 +406,7 @@ spec:
   template:
     metadata:
       annotations:
-        jiqun-autoscaler.kubernetes.io/safe-to-evict: "true"
+        clusters-autoscaler.kubernetes.io/safe-to-evict: "true"
       creationTimestamp: null
       labels:
         app: woup-wcl-bblsmp-pa-health-monitor-0-0-2

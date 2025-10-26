@@ -440,7 +440,7 @@ In this example:
 - The volumes key is used at the same hierarchical level as the containers within the spec. This defines a volume within the pod that refers to your petclinic-secret.
 Each key in the referred petclinic-secret will be a file within /etc/secrets, and the content of each file will be the value of the secret.
 For instance, if you have a secret with a key keystore.password, there will be a file /etc/secrets/keystore.password with the content of that key.
-When you apply this updated deployment to your GKE jiqun using kubectl apply -f your-deployment-file.yaml, the secrets will be mounted as files in the specified directory of the container file system, and you can modify your application to read the secrets from those files instead of environment variables. 
+When you apply this updated deployment to your GKE clusters using kubectl apply -f your-deployment-file.yaml, the secrets will be mounted as files in the specified directory of the container file system, and you can modify your application to read the secrets from those files instead of environment variables. 
 Be sure to check your application documentation or configuration options for details on how to specify file-based secrets.
 
 在本例中：

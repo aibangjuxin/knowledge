@@ -130,7 +130,7 @@ from kubernetes import client, config
 
 # 从环境变量获取配置
 GCP_PROJECT_ID = os.environ.get('GCP_PROJECT_ID')
-GKE_CLUSTERS = os.environ.get('GKE_CLUSTERS', '').split(',') # e.g., "jiqun-1:zone-1,jiqun-2:zone-2"
+GKE_CLUSTERS = os.environ.get('GKE_CLUSTERS', '').split(',') # e.g., "clusters-1:zone-1,clusters-2:zone-2"
 
 def discover_and_scan(event, context):
     """
@@ -140,14 +140,14 @@ def discover_and_scan(event, context):
     running_images = set()
 
     # 1. 遍历所有配置的 GKE 集群
-    for jiqun_info in GKE_CLUSTERS:
+    for clusters_info in GKE_CLUSTERS:
         try:
-            jiqun_name, location = jiqun_info.split(':')
-            print(f"正在连接到集群: {jiqun_name} in {location}...")
+            clusters_name, location = clusters_info.split(':')
+            print(f"正在连接到集群: {clusters_name} in {location}...")
             
             # 配置 Kubernetes 客户端
             subprocess.run(
-                ["gcloud", "container", "jiquns", "get-credentials", jiqun_name, f"--zone={location}", f"--project={GCP_PROJECT_ID}"],
+                ["gcloud", "container", "clusterss", "get-credentials", clusters_name, f"--zone={location}", f"--project={GCP_PROJECT_ID}"],
                 check=True,
             )
             config.load_kube_config()
@@ -162,7 +162,7 @@ def discover_and_scan(event, context):
                         image_uri = container_status.image_id.split('://', 1)[1]
                         running_images.add(image_uri)
         except Exception as e:
-            print(f"错误：处理集群 {jiqun_info} 失败。 {e}")
+            print(f"错误：处理集群 {clusters_info} 失败。 {e}")
             continue
 
     print(f"在所有集群中发现 {len(running_images)} 个正在运行的唯一镜像。")

@@ -546,7 +546,7 @@ done
 
 ```json
 {
-  "url": "http://backend-service.default.svc.jiqun.local/health",
+  "url": "http://backend-service.default.svc.clusters.local/health",
   "method": "GET",
   "team": "team-a",
   "api": "health-check"
@@ -563,7 +563,7 @@ done
 PROJECT_ID="your-gcp-project-id"
 REGION="asia-east1"
 TOPIC="aibang-lex-eg-job-topic"
-URL="http://backend-service.default.svc.jiqun.local/health"
+URL="http://backend-service.default.svc.clusters.local/health"
 
 for i in $(seq -w 1 100); do
   JOB_NAME="job-health-check-${i}"
@@ -623,7 +623,7 @@ kubectl expose deployment health-api --port=80 --target-port=80 --name=health-ap
 然后 Schedule Service 的 URL 就是：
 
 ```
-http://health-api.default.svc.jiqun.local/
+http://health-api.default.svc.clusters.local/
 ```
 
 或者你在容器里跑个返回 200 OK 的简单 Spring Boot 或 Flask /health 接口。

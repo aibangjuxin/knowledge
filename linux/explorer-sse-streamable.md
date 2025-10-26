@@ -845,7 +845,7 @@ config:
   minute: 100
   hour: 2000
   policy: redis
-  redis_host: redis-jiqun
+  redis_host: redis-clusters
   redis_port: 6379
 ```
 
@@ -1199,7 +1199,7 @@ spec:
         - containerPort: 8080
         env:
         - name: REDIS_HOST
-          value: "redis-jiqun"
+          value: "redis-clusters"
         - name: REDIS_PORT
           value: "6379"
         - name: MAX_CONNECTIONS

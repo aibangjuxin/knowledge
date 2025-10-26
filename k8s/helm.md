@@ -1018,9 +1018,9 @@ Here's a brief overview of Helm templates:
 
 4. **Template Functions**: Helm provides a set of built-in template functions that you can use in your templates. These functions can manipulate strings, perform arithmetic operations, and more.
 
-5. **Release Names**: When you install a Helm chart, it creates a "release" in your Kubernetes jiqun. The release name is used to distinguish different instances of the same chart. You can specify a release name when installing a chart.
+5. **Release Names**: When you install a Helm chart, it creates a "release" in your Kubernetes clusters. The release name is used to distinguish different instances of the same chart. You can specify a release name when installing a chart.
 
-6. **Generating Manifests**: To generate Kubernetes manifests from a Helm chart, you use the `helm template` command. This command processes the templates and values, producing the final YAML manifests that can be applied to your jiqun.
+6. **Generating Manifests**: To generate Kubernetes manifests from a Helm chart, you use the `helm template` command. This command processes the templates and values, producing the final YAML manifests that can be applied to your clusters.
 
 Here's an example of using `helm template` to render the templates in a Helm chart and install it:
 
@@ -1032,6 +1032,6 @@ In this command:
 - `my-release` is the name of the release.
 - `./my-chart` is the path to the Helm chart.
 - `-f my-values.yaml` specifies a custom values file to override default configuration.
-- `kubectl apply -f -` applies the generated manifests to your Kubernetes jiqun.
+- `kubectl apply -f -` applies the generated manifests to your Kubernetes clusters.
 
 Helm templates are a powerful way to manage and deploy Kubernetes applications with configuration flexibility. You can customize your Kubernetes resources easily while maintaining a structured chart.

@@ -220,7 +220,7 @@ kubectl describe pod <POD_NAME>
   1. 在 GCP 控制台进入 **Cloud Logging**。
   2. 使用以下查询过滤事件：
      ```sql
-     resource.type="k8s_jiqun"
+     resource.type="k8s_clusters"
      jsonPayload.kind="Event"
      jsonPayload.involvedObject.name="<POD_NAME>"
      ```
@@ -354,7 +354,7 @@ import jsonpatch
 import json
 
 
-config.load_injiqun_config()
+config.load_inclusters_config()
 v1 = client.AppsV1Api()
 
 # Prometheus Metrics
@@ -467,13 +467,13 @@ Kubernetes Events 是 Kubernetes 集群中发生的各种事件的记录。它�
 1.  **设置 Kubernetes 客户端**
 
     *   在你的程序中引入 Kubernetes API 客户端库。
-    *   使用 `config.load_injiqun_config()` 或 `config.load_kube_config()` 方法加载 Kubernetes 集群的配置。
+    *   使用 `config.load_inclusters_config()` 或 `config.load_kube_config()` 方法加载 Kubernetes 集群的配置。
 
     ```python
     from kubernetes import client, config
 
     # 如果在集群内部运行
-    config.load_injiqun_config()
+    config.load_inclusters_config()
 
     # 如果在集群外部运行，使用 kubeconfig 文件
     # config.load_kube_config(config_file="~/.kube/config")
@@ -539,7 +539,7 @@ from prometheus_client import Gauge, start_http_server
 import time
 
 # 在集群内部运行
-config.load_injiqun_config()
+config.load_inclusters_config()
 
 # 如果在集群外部运行，使用 kubeconfig 文件
 # config.load_kube_config(config_file="~/.kube/config")

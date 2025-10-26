@@ -1,4 +1,4 @@
-我用gcloud container node-pools describe np-name --jiqun my-jiqun --region europe-west2 能获取下面信息
+我用gcloud container node-pools describe np-name --clusters my-clusters --region europe-west2 能获取下面信息
 status: RUNNING
 upgradeSettings:
     maxSurge: 1
@@ -9,7 +9,7 @@ version: 1.30.8-GKE .1128001
 
 ```bash
 gcloud container node-pools describe np-name \
-    --jiqun my-jiqun \
+    --clusters my-clusters \
     --region europe-west2 \
     --format="yaml(upgradeSettings)"
 ```
@@ -23,11 +23,11 @@ upgradeSettings:
 使用以下命令查看当前集群的 autoscaling-profile 配置：
 ```bash
 gcloud container node-pools describe np-name \
-    --jiqun my-jiqun \
+    --clusters my-clusters \
     --region europe-west2 \
     --format="yaml(autoscaling)"
 ```
-https://cloud.google.com/kubernetes-engine/docs/concepts/jiqun-autoscaler?hl=zh-cn
+https://cloud.google.com/kubernetes-engine/docs/concepts/clusters-autoscaler?hl=zh-cn
 
 The result 
 ```bash
@@ -41,7 +41,7 @@ autoscaling:
 
 让我为你解释这个GKE节点池的配置信息：
 
-1. 第一行显示这是使用gcloud命令查询特定区域(europe-west2)中特定集群(my-jiqun)下的节点池(np-name)的详细信息
+1. 第一行显示这是使用gcloud命令查询特定区域(europe-west2)中特定集群(my-clusters)下的节点池(np-name)的详细信息
 2. status: RUNNING 表示该节点池当前处于运行状态
 3. upgradeSettings部分定义了节点池升级的配置：
    - maxSurge: 1 表示升级过程中最多可以多创建1个节点
@@ -60,7 +60,7 @@ autoscaling:
 
 # chatgpt 
 
-你运行的 gcloud container node-pools describe np-name --jiqun my-jiqun --region europe-west2 命令返回的节点池 (node pool) 信息如下：
+你运行的 gcloud container node-pools describe np-name --clusters my-clusters --region europe-west2 命令返回的节点池 (node pool) 信息如下：
 
 status: RUNNING
 upgradeSettings:
@@ -137,13 +137,13 @@ strategy: SURGE
 
 	•	如果当前 version 不是最新的，可以考虑手动升级：
 
-`gcloud container jiquns upgrade my-jiqun --node-pool np-name --region europe-west2`
+`gcloud container clusterss upgrade my-clusters --node-pool np-name --region europe-west2`
 
 
 	•	也可以开启 自动升级：
 ```bash
 gcloud container node-pools update np-name \
-    --jiqun=my-jiqun \
+    --clusters=my-clusters \
     --region=europe-west2 \
     --enable-autoupgrade
 ```
@@ -234,7 +234,7 @@ kubectl drain NodeA --ignore-daemonsets --delete-emptydir-data --force
 示例：
 
 gcloud container node-pools update np-name \
-    --jiqun=my-jiqun \
+    --clusters=my-clusters \
     --region=europe-west2 \
     --max-surge-upgrade=2 \
     --max-unavailable-upgrade=2
@@ -264,7 +264,7 @@ spec:
 	•	如果 --enable-autoupgrade 开启，则 GKE 会在非高峰时段自动执行滚动升级。
 	•	如果是手动升级，你可以运行：
 
-gcloud container jiquns upgrade my-jiqun --node-pool np-name --region europe-west2
+gcloud container clusterss upgrade my-clusters --node-pool np-name --region europe-west2
 
 
 	•	你可以 在控制台（Cloud Console）监控升级进度。
@@ -298,14 +298,14 @@ gcloud container jiquns upgrade my-jiqun --node-pool np-name --region europe-wes
 你可以使用以下命令来获取 maxUnavailable 的值：
 
 gcloud container node-pools describe np-name \
-    --jiqun my-jiqun \
+    --clusters my-clusters \
     --region europe-west2 \
     --format="yaml(upgradeSettings)"
 
 或者 JSON 格式：
 
 gcloud container node-pools describe np-name \
-    --jiqun my-jiqun \
+    --clusters my-clusters \
     --region europe-west2 \
     --format="json(upgradeSettings)"
 
@@ -333,7 +333,7 @@ upgradeSettings:
 如果 maxUnavailable 未显示，你可以手动设置它：
 
 gcloud container node-pools update np-name \
-    --jiqun my-jiqun \
+    --clusters my-clusters \
     --region europe-west2 \
     --max-unavailable=2
 
@@ -351,7 +351,7 @@ gcloud container node-pools update np-name \
 
 # Gemini
 
-是的，你的理解是正确的。从你提供的 `gcloud container node-pools describe` 命令的输出信息来看，你的 GKE 节点池 `np-name` 在集群 `my-jiqun` 中，位于 `europe-west2` 区域， **确实正在使用 SURGE 升级策略，并且配置为逐个 Node 替换的方式。**
+是的，你的理解是正确的。从你提供的 `gcloud container node-pools describe` 命令的输出信息来看，你的 GKE 节点池 `np-name` 在集群 `my-clusters` 中，位于 `europe-west2` 区域， **确实正在使用 SURGE 升级策略，并且配置为逐个 Node 替换的方式。**
 
 让我们详细解读一下输出信息，确认这一点：
 

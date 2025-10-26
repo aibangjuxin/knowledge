@@ -130,7 +130,7 @@ We acknowledge the risk and would like to provide an update on our mitigation st
 
 - We have adopted **Infrastructure as Code (IaC)** using GitOps workflows (ArgoCD/Kustomize/Helm) to ensure all Kubernetes configurations are version-controlled, reproducible, and auditable.
 - All deployments and configuration changes are made via Git repositories, ensuring traceability and rollback capability.
-- Our jiquns are configured to use **GKE Autopilot/Standard with auto-upgrade and auto-repair enabled**.
+- Our clusterss are configured to use **GKE Autopilot/Standard with auto-upgrade and auto-repair enabled**.
 
 ---
 
@@ -189,7 +189,7 @@ Best regards,
 |--------------------------|------------------------------------------------------------------------------|-------------|--------------------------------------------------------|
 | **Cluster Configuration**| Auto-upgrade enabled                                                         | ✅ Enabled   | GKE Autopilot / Standard auto-upgrade setting          |
 |                          | Auto-repair enabled                                                          | ✅ Enabled   | GKE node auto-repair configuration                     |
-|                          | Private jiqun enabled                                                      | ✅ Yes       | Master authorized networks configured                  |
+|                          | Private clusters enabled                                                      | ✅ Yes       | Master authorized networks configured                  |
 |                          | Shielded GKE nodes                                                           | ✅ Enabled   | Enabled via node pool configuration                    |
 |                          | Workload Identity enabled                                                    | ✅ Yes       | ServiceAccount mapping configured                      |
 | **Networking**           | Network Policy enforced                                                      | ✅ Yes       | Applied to restrict pod-to-pod traffic                 |
@@ -292,7 +292,7 @@ graph TD;
 
 - **工具支持**：
   - 使用 GCP 的 **Security Command Center (SCC)** 扫描 GKE 集群，识别配置问题和安全风险。
-  - 使用 `gcloud container jiquns describe <jiqun-name>` 检查当前配置，确保符合安全要求。
+  - 使用 `gcloud container clusterss describe <clusters-name>` 检查当前配置，确保符合安全要求。
 
 #### **2. 文档：建立和完善 GKE 配置和变更管理文档**
 
@@ -304,7 +304,7 @@ graph TD;
      - 示例模板：
        ```
        GKE Cluster Configuration
-       - Cluster Name: my-gke-jiqun
+       - Cluster Name: my-gke-clusters
        - Region: us-central1
        - Version: 1.27.x
        - Node Pool: default-pool (3 nodes, e2-medium)
@@ -320,7 +320,7 @@ graph TD;
        ```
        Access Control Policies
        - Role: Cluster Admin
-         - Permissions: Full control over jiqun
+         - Permissions: Full control over clusters
          - Assigned to: devops-team@company.com
        - Role: Viewer
          - Permissions: Read-only access
@@ -355,7 +355,7 @@ graph TD;
      - 示例回复：
        ```
        Dear Security Team,
-       Thank you for identifying the outstanding issue regarding GKE configuration management and documentation. We are actively working on reviewing and optimizing our GKE jiqun configurations and creating detailed documentation to mitigate the risk of breaches. We will provide a detailed update and relevant documentation by [date]. Please let us know if there are specific areas or standards we should prioritize.
+       Thank you for identifying the outstanding issue regarding GKE configuration management and documentation. We are actively working on reviewing and optimizing our GKE clusters configurations and creating detailed documentation to mitigate the risk of breaches. We will provide a detailed update and relevant documentation by [date]. Please let us know if there are specific areas or standards we should prioritize.
        Best regards,
        [Your Name]
        ```
@@ -411,7 +411,7 @@ graph TD;
 1. **检查 GKE 配置**：
    使用 `gcloud` 命令查看当前集群配置：
    ```bash
-   gcloud container jiquns describe my-gke-jiqun --region us-central1
+   gcloud container clusterss describe my-gke-clusters --region us-central1
    ```
    检查是否启用 Workload Identity、私有集群等功能。
 
@@ -449,7 +449,7 @@ graph TD;
    ```
    # GKE Security Configuration
    ## Cluster Details
-   - Name: my-gke-jiqun
+   - Name: my-gke-clusters
    - Region: us-central1
    ## Security Settings
    - Workload Identity: Enabled

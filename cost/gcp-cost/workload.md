@@ -1,18 +1,18 @@
 ```bash
 # 审计 GKE 集群配置
-audit_gke_jiquns() {
+audit_gke_clusterss() {
     log_info "=== 审计 GKE 集群日志配置 ==="
 
     # 获取 GKE 集群列表
-    jiquns=$(gcloud container jiquns list --project="$PROJECT_ID" --format="value(name,location)" 2>/dev/null)
+    clusterss=$(gcloud container clusterss list --project="$PROJECT_ID" --format="value(name,location)" 2>/dev/null)
 
-    if [ $? -eq 0 ] && [ -n "$jiquns" ]; then
-        while IFS=$'\t' read -r jiqun_name location; do
-            if [ -n "$jiqun_name" ] && [ -n "$location" ]; then
-                log_info "检查集群: $jiqun_name (位置: $location)"
+    if [ $? -eq 0 ] && [ -n "$clusterss" ]; then
+        while IFS=$'\t' read -r clusters_name location; do
+            if [ -n "$clusters_name" ] && [ -n "$location" ]; then
+                log_info "检查集群: $clusters_name (位置: $location)"
 
                 # 获取集群日志配置
-                logging_config=$(gcloud container jiquns describe "$jiqun_name" \
+                logging_config=$(gcloud container clusterss describe "$clusters_name" \
                     --location="$location" \
                     --project="$PROJECT_ID" \
                     --format="value(loggingConfig.componentConfig.enableComponents)" 2>/dev/null)
@@ -32,7 +32,7 @@ audit_gke_jiquns() {
                 fi
 
                 # 检查集群监控配置
-                monitoring_config=$(gcloud container jiquns describe "$jiqun_name" \
+                monitoring_config=$(gcloud container clusterss describe "$clusters_name" \
                     --location="$location" \
                     --project="$PROJECT_ID" \
                     --format="value(monitoringConfig.componentConfig.enableComponents)" 2>/dev/null)
@@ -43,7 +43,7 @@ audit_gke_jiquns() {
 
                 echo ""
             fi
-        done <<< "$jiquns"
+        done <<< "$clusterss"
     else
         log_info "项目中未发现 GKE 集群"
     fi
@@ -75,7 +75,7 @@ audit_gke_jiquns() {
 ### **1. 更新已有集群：只保留系统日志**
 
 ```
-gcloud container jiquns update "$CLUSTER_NAME" \
+gcloud container clusterss update "$CLUSTER_NAME" \
   --location "$LOCATION" \
   --logging=SYSTEM_COMPONENTS \
   --project "$PROJECT_ID"
@@ -84,7 +84,7 @@ gcloud container jiquns update "$CLUSTER_NAME" \
 ### **2. 如果你想完全关闭日志收集（极端情况，不推荐）**
 
 ```
-gcloud container jiquns update "$CLUSTER_NAME" \
+gcloud container clusterss update "$CLUSTER_NAME" \
   --location "$LOCATION" \
   --logging=NONE \
   --project "$PROJECT_ID"
@@ -141,10 +141,10 @@ graph TD;
 
 ✅ **总结**
 
-- 你可以通过 gcloud container jiquns update ... --logging=SYSTEM_COMPONENTS 来禁用 WORKLOADS。
+- 你可以通过 gcloud container clusterss update ... --logging=SYSTEM_COMPONENTS 来禁用 WORKLOADS。
 - 禁用后，应用日志不再进 Cloud Logging，只能 kubectl logs 或接入其他日志系统。
 - 推荐：**非生产环境禁用 WORKLOADS，生产环境用日志路由减少费用**。
 
 ---
 
-要不要我帮你写一个 **脚本函数**（类似你写的 audit_gke_jiquns），可以自动把 **非生产项目的所有 GKE 集群**都更新成只保留 SYSTEM_COMPONENTS，并打印修改结果？
+要不要我帮你写一个 **脚本函数**（类似你写的 audit_gke_clusterss），可以自动把 **非生产项目的所有 GKE 集群**都更新成只保留 SYSTEM_COMPONENTS，并打印修改结果？

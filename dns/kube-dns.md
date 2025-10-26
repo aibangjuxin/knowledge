@@ -14,11 +14,11 @@ kubectl get configmap --namespace=kube-system kube-dns -o yaml > kube-dns.yaml
 ```yaml
 stubDomains: {
   "abc.com": ["1.2.3.4"],
-  "my.jiqun.local": ["10.0.0.5"]
+  "my.clusters.local": ["10.0.0.5"]
 }
 ```
 
-上面的配置将把所有指向abc.com的DNS查询重定向到1.2.3.4,而把所有指向my.jiqun.local的DNS查询重定向到10.0.0.5。
+上面的配置将把所有指向abc.com的DNS查询重定向到1.2.3.4,而把所有指向my.clusters.local的DNS查询重定向到10.0.0.5。
 
 3. 更新ConfigMap
 
@@ -72,7 +72,7 @@ Source: Conversation with Bing, 3/20/2024
 (4) Service discovery and DNS | Google Kubernetes Engine (GKE .... https://cloud.google.com/kubernetes-engine/docs/concepts/service-discovery.
 (5) Troubleshoot DNS in GKE | Google Kubernetes Engine (GKE .... https://cloud.google.com/kubernetes-engine/docs/troubleshooting/dns.
 (6) An Introduction to the Kubernetes DNS Service | DigitalOcean. https://www.digitalocean.com/community/tutorials/an-introduction-to-the-kubernetes-dns-service.
-(7) Debugging DNS Resolution | Kubernetes. https://kubernetes.io/docs/tasks/administer-jiqun/dns-debugging-resolution/.
+(7) Debugging DNS Resolution | Kubernetes. https://kubernetes.io/docs/tasks/administer-clusters/dns-debugging-resolution/.
 
 根据您提供的搜索结果，我将为您提供一个关于如何配置kube-dns的详细指南。这个指南将包括前提要求、安装步骤、配置存根域和上游DNS服务器的方法，以及如何调试DNS解析。
 
@@ -154,7 +154,7 @@ Source: Conversation with Bing, 3/20/2024
 
 ### 参考文档
 
-- [Kubernetes官方文档 - 自定义DNS服务](https://kubernetes.io/zh-cn/docs/tasks/administer-jiqun/dns-custom-nameservers/)
+- [Kubernetes官方文档 - 自定义DNS服务](https://kubernetes.io/zh-cn/docs/tasks/administer-clusters/dns-custom-nameservers/)
 - [Kubernetes官方文档 - Service与Pod的DNS](https://kubernetes.io/zh/docs/concepts/services-networking/dns-pod-service/)
 
 以上步骤和示例应该能够帮助您配置和调试kube-dns。如果您遇到任何问题，可以参考提供的参考文档或在Kubernetes社区寻求帮助。
