@@ -94,7 +94,8 @@ proxy_set_header X-Gateway-Mode "kong";
 推荐配置示例（关键片段）
 
 Nginx 路由示例（按 path 分发到 Kong 或 GKE）
-```server {
+```nginx.conf
+server {
 
 listen 443 ssl;
 
