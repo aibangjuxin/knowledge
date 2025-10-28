@@ -1,4 +1,30 @@
+- [summary](#summary)
+  - [Google Cloud VM n2-standard-8](#google-cloud-vm-n2-standard-8)
+  - [Google Cloud VM n2-standard-4](#google-cloud-vm-n2-standard-4)
+    - [1. 理解你的工作负载（Workload）](#1-理解你的工作负载workload)
+    - [2. GCP 主机类型家族解析](#2-gcp-主机类型家族解析)
+    - [3. 如何评估和选择？一个系统性方法](#3-如何评估和选择一个系统性方法)
+      - [**步骤一：基准分析 (Baseline Analysis)**](#步骤一基准分析-baseline-analysis)
+      - [**步骤二：建立测试环境 (Staging/Test Environment)**](#步骤二建立测试环境-stagingtest-environment)
+      - [**步骤三：进行压力测试 (Load Testing)**](#步骤三进行压力测试-load-testing)
+    - [4. 基于场景的具体建议](#4-基于场景的具体建议)
+      - [**首选推荐：高内存系列 (High-Memory)**](#首选推荐高内存系列-high-memory)
+      - [**次选推荐：N2D 系列 (AMD-based)**](#次选推荐n2d-系列-amd-based)
+      - [**对你当前选择的分析**](#对你当前选择的分析)
+    - [总结与行动计划](#总结与行动计划)
+    - [1. 理解你的工作负载（Workload）](#1-理解你的工作负载workload-1)
+    - [2. GCP 主机类型家族解析](#2-gcp-主机类型家族解析-1)
+    - [3. 如何评估和选择？一个系统性方法](#3-如何评估和选择一个系统性方法-1)
+      - [**步骤一：基准分析 (Baseline Analysis)**](#步骤一基准分析-baseline-analysis-1)
+      - [**步骤二：建立测试环境 (Staging/Test Environment)**](#步骤二建立测试环境-stagingtest-environment-1)
+      - [**步骤三：进行压力测试 (Load Testing)**](#步骤三进行压力测试-load-testing-1)
+    - [4. 基于场景的具体建议](#4-基于场景的具体建议-1)
+      - [**首选推荐：高内存系列 (High-Memory)**](#首选推荐高内存系列-high-memory-1)
+      - [**次选推荐：N2D 系列 (AMD-based)**](#次选推荐n2d-系列-amd-based-1)
+      - [**对你当前选择的分析**](#对你当前选择的分析-1)
+    - [总结与行动计划](#总结与行动计划-1)
 
+# summary
 n1-standard-8 ==> 8G ==> 32G 
 n2-standard-8`
 https://gcloud-compute.com/n2-standard-8.html
