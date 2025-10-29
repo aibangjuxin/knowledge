@@ -1,4 +1,4 @@
-# GCE Service Account 信息查询脚本
+ GCE Service Account 信息查询脚本
 
 ## 问题分析
 
