@@ -1,40 +1,45 @@
 #!/usr/bin/env bash
 # k8s-image-replace.sh
-# 用于替换 Kubernetes deployment 中的镜像
-# 使用方法: ./k8s-image-replace.sh -i <image-name:version> [-n namespace]
+# Replace images in Kubernetes deployments
+# Usage: ./k8s-image-replace.sh -i <search-keyword> [-n namespace]
+# Note: -i parameter is used to search matching images, actual replacement will prompt for complete target image name
 
 set -euo pipefail
 
-# 颜色输出
+# Color output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# 日志函数
+# Log functions
 log() { echo -e "${BLUE}[INFO]${NC} $*"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 success() { echo -e "${GREEN}[SUCCESS]${NC} $*"; }
 
-# 显示帮助
+# Show help
 show_help() {
     cat << EOF
-用法: $0 -i <image> [-n namespace] [-h]
+Usage: $0 -i <search-keyword> [-n namespace] [-h]
 
-参数:
-  -i, --image      目标镜像 (必需) 例如: myapp:v1.2.3
-  -n, --namespace  指定命名空间 (可选，默认搜索所有命名空间)
-  -h, --help       显示帮助信息
+Parameters:
+  -i, --image      Search keyword (required) e.g.: myapp or myapp:v1.2
+  -n, --namespace  Specify namespace (optional, default search all namespaces)
+  -h, --help       Show help information
 
-示例:
-  $0 -i myapp:v1.2.3
-  $0 -i registry.io/myorg/myapp:v2.0.0 -n production
+Description:
+  -i parameter is used to search matching image names, supports partial matching
+  During actual replacement, you will be prompted to enter complete target image name (with tag)
+
+Examples:
+  $0 -i myapp                    # Search images containing myapp
+  $0 -i myapp:v1.2 -n production # Search in production namespace
 EOF
 }
 
-# 解析参数
+# Parse arguments
 IMAGE=""
 NAMESPACE=""
 
@@ -53,76 +58,78 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         *)
-            error "未知参数: $1"
+            error "Unknown parameter: $1"
             show_help
             exit 1
             ;;
     esac
 done
 
-# 检查必需参数
+# Check required parameters
 if [[ -z "$IMAGE" ]]; then
-    error "镜像参数是必需的"
+    error "Search keyword parameter is required"
     show_help
     exit 1
 fi
 
-# 检查 kubectl 是否可用
+# Check if kubectl is available
 if ! command -v kubectl &> /dev/null; then
-    error "kubectl 未找到，请确保已安装并在 PATH 中"
+    error "kubectl not found, please ensure it's installed and in PATH"
     exit 1
 fi
 
-# 检查 kubectl 连接
+# Check kubectl connection
 if ! kubectl cluster-info &> /dev/null; then
-    error "无法连接到 Kubernetes 集群"
+    error "Unable to connect to Kubernetes cluster"
     exit 1
 fi
 
-# 提取镜像名称（不包含标签）
+# Extract image name (without tag)
 IMAGE_NAME="${IMAGE%:*}"
 IMAGE_TAG="${IMAGE##*:}"
 
-log "目标镜像: $IMAGE"
-log "镜像名称: $IMAGE_NAME"
-log "镜像标签: $IMAGE_TAG"
+log "Search keyword: $IMAGE"
+log "Image name part: $IMAGE_NAME"
+if [[ "$IMAGE" == *:* ]]; then
+    log "Tag part: $IMAGE_TAG"
+fi
 
-# 构建 kubectl 命令参数
+# Build kubectl command arguments
 if [[ -n "$NAMESPACE" ]]; then
     NS_ARG="-n $NAMESPACE"
-    log "搜索命名空间: $NAMESPACE"
+    log "Search namespace: $NAMESPACE"
 else
     NS_ARG="-A"
-    log "搜索所有命名空间"
+    log "Search all namespaces"
 fi
 
 echo
-log "正在搜索匹配的 deployments..."
+log "Searching for matching deployments..."
 
-# 获取所有 deployments 及其镜像信息
+# Get all deployments and their image information
 DEPLOYMENTS=$(kubectl get deployments $NS_ARG -o jsonpath='{range .items[*]}{.metadata.namespace}{"|"}{.metadata.name}{"|"}{range .spec.template.spec.containers[*]}{.name}{"="}{.image}{";"}{end}{"\n"}{end}' 2>/dev/null)
 
 if [[ -z "$DEPLOYMENTS" ]]; then
-    warn "未找到任何 deployments"
+    warn "No deployments found"
     exit 0
 fi
 
-# 查找匹配的 deployments
-declare -a MATCHED_NS
-declare -a MATCHED_DEPLOY
-declare -a MATCHED_CONTAINER
-declare -a MATCHED_IMAGE
+# Find matching deployments
+MATCHED_NS=()
+MATCHED_DEPLOY=()
+MATCHED_CONTAINER=()
+MATCHED_IMAGE=()
 
 while IFS= read -r line; do
     if [[ -z "$line" ]]; then continue; fi
     
-    # 解析行: namespace|deployment|container1=image1;container2=image2;
+    # Parse line: namespace|deployment|container1=image1;container2=image2;
     ns="${line%%|*}"
     rest="${line#*|}"
     deploy="${rest%%|*}"
     containers="${rest#*|}"
     
-    # 解析容器和镜像
+    # Parse containers and images
     IFS=';' read -ra container_pairs <<< "$containers"
     for pair in "${container_pairs[@]}"; do
         if [[ -z "$pair" ]]; then continue; fi
@@ -131,7 +138,7 @@ while IFS= read -r line; do
         image="${pair#*=}"
         current_image_name="${image%:*}"
         
-        # 检查镜像名称是否匹配（支持部分匹配）
+        # Check if image name matches (supports partial matching)
         if [[ "$current_image_name" == *"$IMAGE_NAME"* ]] || [[ "$IMAGE_NAME" == *"$current_image_name"* ]]; then
             MATCHED_NS+=("$ns")
             MATCHED_DEPLOY+=("$deploy")
@@ -141,45 +148,45 @@ while IFS= read -r line; do
     done
 done <<< "$DEPLOYMENTS"
 
-# 显示匹配结果
+# Display matching results
 if [[ ${#MATCHED_NS[@]} -eq 0 ]]; then
-    warn "未找到匹配的 deployments"
+    warn "No matching deployments found"
     exit 0
 fi
 
 echo
-success "找到 ${#MATCHED_NS[@]} 个匹配的 deployment(s):"
+success "Found ${#MATCHED_NS[@]} matching deployment(s):"
 echo
-printf "%-4s %-20s %-30s %-20s %-40s\n" "序号" "命名空间" "Deployment" "容器" "当前镜像"
-printf "%-4s %-20s %-30s %-20s %-40s\n" "----" "--------" "----------" "----" "--------"
+printf "%-4s %-20s %-30s %-20s %-40s\n" "No." "Namespace" "Deployment" "Container" "Current Image"
+printf "%-4s %-20s %-30s %-20s %-40s\n" "----" "---------" "----------" "---------" "-------------"
 
 for i in "${!MATCHED_NS[@]}"; do
     printf "%-4d %-20s %-30s %-20s %-40s\n" $((i+1)) "${MATCHED_NS[i]}" "${MATCHED_DEPLOY[i]}" "${MATCHED_CONTAINER[i]}" "${MATCHED_IMAGE[i]}"
 done
 
 echo
-echo "请选择要更新的 deployment:"
-echo "  输入序号 (例如: 1,3,5 或 1-3)"
-echo "  输入 'all' 选择全部"
-echo "  输入 'q' 退出"
+echo "Please select deployments to update:"
+echo "  Enter numbers (e.g.: 1,3,5 or 1-3)"
+echo "  Enter 'all' to select all"
+echo "  Enter 'q' to quit"
 echo
 
-read -p "请选择: " selection
+read -p "Please select: " selection
 
 case "$selection" in
     q|Q)
-        log "用户取消操作"
+        log "User cancelled operation"
         exit 0
         ;;
     all|ALL)
         SELECTED_INDICES=($(seq 0 $((${#MATCHED_NS[@]} - 1))))
         ;;
     *)
-        # 解析用户输入的序号
+        # Parse user input numbers
         SELECTED_INDICES=()
         IFS=',' read -ra selections <<< "$selection"
         for sel in "${selections[@]}"; do
-            # 处理范围 (例如 1-3)
+            # Handle range (e.g. 1-3)
             if [[ "$sel" == *-* ]]; then
                 start="${sel%-*}"
                 end="${sel#*-}"
@@ -189,7 +196,7 @@ case "$selection" in
                     fi
                 done
             else
-                # 单个数字
+                # Single number
                 if [[ "$sel" =~ ^[0-9]+$ ]] && [[ $sel -ge 1 && $sel -le ${#MATCHED_NS[@]} ]]; then
                     SELECTED_INDICES+=($((sel-1)))
                 fi
@@ -199,50 +206,131 @@ case "$selection" in
 esac
 
 if [[ ${#SELECTED_INDICES[@]} -eq 0 ]]; then
-    warn "未选择任何 deployment"
+    warn "No deployment selected"
     exit 0
 fi
 
-# 显示将要执行的操作
+# Display operations to be performed
 echo
-log "将要执行以下更新操作:"
+log "Will perform the following update operations:"
 for idx in "${SELECTED_INDICES[@]}"; do
-    echo "  ${MATCHED_NS[idx]}/${MATCHED_DEPLOY[idx]} (${MATCHED_CONTAINER[idx]}): ${MATCHED_IMAGE[idx]} -> $IMAGE"
+    echo "  ${MATCHED_NS[idx]}/${MATCHED_DEPLOY[idx]} (${MATCHED_CONTAINER[idx]}): ${MATCHED_IMAGE[idx]} -> ?"
 done
 
 echo
-read -p "确认执行? (y/N): " confirm
+log "Please enter complete target image name (with tag):"
+log "Hint: Current search keyword is: $IMAGE"
+echo
+read -p "Target image: " FINAL_IMAGE
+
+if [[ -z "$FINAL_IMAGE" ]]; then
+    error "Target image cannot be empty"
+    exit 1
+fi
+
+# Display final replacement plan
+echo
+log "Final replacement plan:"
+for idx in "${SELECTED_INDICES[@]}"; do
+    echo "  ${MATCHED_NS[idx]}/${MATCHED_DEPLOY[idx]} (${MATCHED_CONTAINER[idx]}): ${MATCHED_IMAGE[idx]} -> $FINAL_IMAGE"
+done
+
+echo
+read -p "Confirm execution? (y/N): " confirm
 if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-    log "用户取消操作"
+    log "User cancelled operation"
     exit 0
 fi
 
-# 执行更新
+# Execute update
 echo
-log "开始执行镜像更新..."
+log "Starting image update..."
 
 for idx in "${SELECTED_INDICES[@]}"; do
     ns="${MATCHED_NS[idx]}"
     deploy="${MATCHED_DEPLOY[idx]}"
     container="${MATCHED_CONTAINER[idx]}"
     
-    log "更新 $ns/$deploy 中的容器 $container..."
+    log "Updating container $container in $ns/$deploy..."
     
-    if kubectl set image deployment/"$deploy" "$container"="$IMAGE" -n "$ns" --record; then
-        success "✓ $ns/$deploy 更新成功"
+    if kubectl set image deployment/"$deploy" "$container"="$FINAL_IMAGE" -n "$ns" --record; then
+        success "✓ $ns/$deploy updated successfully"
         
-        # 等待 rollout 完成
-        log "等待 $ns/$deploy rollout 完成..."
-        if kubectl rollout status deployment/"$deploy" -n "$ns" --timeout=300s; then
-            success "✓ $ns/$deploy rollout 完成"
+        # Wait for rollout completion
+        log "Waiting for $ns/$deploy rollout to complete..."
+        if kubectl rollout status deployment/"$deploy" -n "$ns" --timeout=30s; then
+            success "✓ $ns/$deploy rollout completed"
         else
-            error "✗ $ns/$deploy rollout 超时或失败"
-            warn "如需回滚，请执行: kubectl rollout undo deployment/$deploy -n $ns"
+            error "✗ $ns/$deploy rollout timeout or failed"
+            warn "To rollback, execute: kubectl rollout undo deployment/$deploy -n $ns"
         fi
     else
-        error "✗ $ns/$deploy 更新失败"
+        error "✗ $ns/$deploy update failed"
     fi
     echo
 done
 
-success "镜像更新操作完成!"
+success "Image update operation completed!"
+
+# Display updated namespace image information
+echo
+log "Displaying updated image information..."
+
+# Collect all involved namespaces
+UPDATED_NAMESPACES=()
+for idx in "${SELECTED_INDICES[@]}"; do
+    ns="${MATCHED_NS[idx]}"
+    # Check if already in the list
+    if [[ ! " ${UPDATED_NAMESPACES[*]} " =~ " ${ns} " ]]; then
+        UPDATED_NAMESPACES+=("$ns")
+    fi
+done
+
+# Display all deployment image information for each namespace
+for ns in "${UPDATED_NAMESPACES[@]}"; do
+    echo
+    success "All Deployment image information in namespace '$ns':"
+    echo
+    
+    # Get all deployments and their images in this namespace
+    ALL_DEPLOYMENTS=$(kubectl get deployments -n "$ns" -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{range .spec.template.spec.containers[*]}{.name}{"="}{.image}{";"}{end}{"\n"}{end}' 2>/dev/null)
+    
+    if [[ -z "$ALL_DEPLOYMENTS" ]]; then
+        warn "No deployments found in namespace '$ns'"
+        continue
+    fi
+    
+    printf "  %-30s %-20s %-50s\n" "Deployment" "Container" "Image"
+    printf "  %-30s %-20s %-50s\n" "----------" "---------" "-----"
+    
+    while IFS= read -r line; do
+        if [[ -z "$line" ]]; then continue; fi
+        
+        # Parse line: deployment|container1=image1;container2=image2;
+        deploy="${line%%|*}"
+        containers="${line#*|}"
+        
+        # Parse containers and images
+        IFS=';' read -ra container_pairs <<< "$containers"
+        for pair in "${container_pairs[@]}"; do
+            if [[ -z "$pair" ]]; then continue; fi
+            
+            container="${pair%%=*}"
+            image="${pair#*=}"
+            
+            # Check if just updated
+            updated_marker=""
+            for idx in "${SELECTED_INDICES[@]}"; do
+                if [[ "${MATCHED_NS[idx]}" == "$ns" && "${MATCHED_DEPLOY[idx]}" == "$deploy" && "${MATCHED_CONTAINER[idx]}" == "$container" ]]; then
+                    updated_marker=" ✓ (just updated)"
+                    break
+                fi
+            done
+            
+            printf "  %-30s %-20s %-50s%s\n" "$deploy" "$container" "$image" "$updated_marker"
+        done
+    done <<< "$ALL_DEPLOYMENTS"
+done
+
+echo
+log "Image information display completed!"
