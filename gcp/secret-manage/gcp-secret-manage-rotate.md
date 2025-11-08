@@ -146,7 +146,10 @@ kubectl rollout restart deployment/my-deployment -n my-namespace
 
 # 或者通过更新模板字段来触发
 
+```bash
 kubectl patch deployment my-deployment -p '{"spec":{"template":{"metadata":{"annotations":{"restartedAt":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}}}}}'
+```
+
 
 4. 应用直接调用 Secret Manager API（在运行时拉取）
 
