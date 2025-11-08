@@ -24,15 +24,15 @@ CI/CD 系统 (包括我们的平台) 通常通过与代码托管平台 (如 GitH
 
 ```mermaid
 graph TD
-    subgraph "开发者 (Developer)"
+    subgraph "开发者 Developer"
         A["1. 创建或更新 Pull Request"]
     end
 
-    subgraph "代码托管平台 (GitHub / GitLab)"
-        B["2. 发送 Webhook 事件 (Event: pull_request)"]
+    subgraph "代码托管平台 GitHub/GitLab"
+        B["2. 发送 Webhook 事件 Event: pull_request"]
     end
 
-    subgraph "Pipeline 平台 (Our Platform)"
+    subgraph "Pipeline 平台 Our Platform"
         C["3. 接收并解析 Webhook 事件"]
         D["4. 根据预设规则匹配触发器 (Trigger)"]
         E["5. 启动对应的 CI Pipeline"]
