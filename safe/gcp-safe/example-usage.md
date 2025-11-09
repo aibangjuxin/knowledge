@@ -1,3 +1,5 @@
+
+```bash
 #!/bin/bash
 
 # GCP KMS 验证脚本使用示例
@@ -67,3 +69,4 @@ echo -e "\n\n示例 5: 跳过轮换检查"
   --location global \
   --service-accounts "env01-uk-encrypt-sa@aibang-1234567-ajx01-env.iam.gserviceaccount.com" \
   --skip-rotation-check
+```
