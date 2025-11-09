@@ -12,3 +12,4 @@
 | `gcp/secret-manage/verify-gcp-secretmanage.sh` | Verifies the permission chain for a GKE Deployment to access GCP Secret Manager, inspecting KSA, GSA, IAM roles, and Workload Identity bindings. |
 | `k8s/custom-liveness/deploy-and-verify.sh` | Deploys a Squid proxy with a custom health check and verifies the correctness of the deployment, including the ConfigMap, Pod status, and health check endpoint. |
 | `safe/cwe/verify.sh` | Checks the status of a specified CVE (Common Vulnerabilities and Exposures) ID in the Ubuntu security notices, retrieving the vulnerability description, severity, and fix status. |
+|`safe/gcp/safe/verify-kms-enhanced.md`| Checks the kms |

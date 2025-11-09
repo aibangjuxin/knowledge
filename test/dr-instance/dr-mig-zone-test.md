@@ -1,13 +1,10 @@
 你可以通过**手动更新 GCP 的 Managed Instance Group (MIG)** 的 **location policy（分布策略）或直接修改 instanceTemplate 并强制重新创建实例**来模拟一个 zone 故障并实现 DR Testing。以下是推荐的做法，适用于 **Regional MIG（即分布于多个 zone 的 MIG）**。
 
-
 很好，你的想法完全合理 ✅。下面我提供一个**通过“调整实例数量”模拟 Zone 故障自动扩容”的完整方案**，**不修改模板、也不更改 MIG 的 distribution policy**。
 
 ---
 
 ## **✅ 目标**
-
-  
 
 验证 **当某个 Zone 故障（或不可用）时，MIG 能否自动扩展实例到其他 Zone**。
 
@@ -16,38 +13,27 @@
 ## **✅ 前提假设**
 
 - 你的 Regional MIG 分布在 3 个 zone，例如：
-    
 
 ```
 europe-west2-a, europe-west2-b, europe-west2-c
 ```
 
 - 当前实例数：**2**
-    
 - 当前实例分布（示例）：
-    
     - europe-west2-a: 1 个实例
-        
     - europe-west2-b: 1 个实例
-        
-    
 
 ---
 
 ## **✅ 验证思路（不删除实例，不改模板）**
 
-  
-
 通过 **增加 MIG 实例数（scale up）** 来观察：
 
 - 新实例是否被调度到 **未使用的 zone（如 europe-west2-c）**
-    
 
 ---
 
 ## **✅ 操作方案**
-
-  
 
 ### **🔹 步骤 1：查看当前实例和分布情况**
 
@@ -60,8 +46,6 @@ gcloud compute instance-groups managed list-instances YOUR-MIG \
 ---
 
 ### **🔹 步骤 2：手动扩展 MIG 的实例数量（Scale Up）**
-
-  
 
 将实例数增加到 4（例如）
 
@@ -84,7 +68,6 @@ gcloud compute instance-groups managed list-instances YOUR-MIG \
 你应该看到：
 
 - 一些新实例被分配到了原本没有实例的 zone（如 europe-west2-c）
-    
 
 ---
 
@@ -101,8 +84,6 @@ gcloud compute instance-groups managed describe YOUR-MIG \
 ---
 
 ## **✅ 模拟 “zone 故障” 行为（可选）**
-
-  
 
 你可以删除特定 zone 的实例，再 resize 回目标数量，系统将尝试用其它 zone 填补：
 
@@ -138,11 +119,7 @@ graph TD;
 ## **✅ 最后建议**
 
 - 这种方式不改任何策略，**只通过“规模变化 + zone 观察”验证调度行为**，是实际生产 DR 测试中常用技巧。
-    
 - 如果你需要构建自动化脚本验证 zone 容灾能力，也可以基于这个流程扩展。
-    
-
-  
 
 如需 YAML 或脚本版本，也可以继续要我补充。
 
@@ -153,11 +130,8 @@ graph TD;
 ## **✅ 脚本功能**
 
 - 获取当前实例列表及所在 zone
-    
 - 执行 resize 扩容操作
-    
 - 再次获取实例分布，检查是否新实例分配到了未使用 zone（如模拟 DR 行为）
-    
 
 ---
 
@@ -216,9 +190,7 @@ fi
 ## **✅ 使用说明**
 
 1. 将 MIG_NAME 和 REGION 替换为你的实际值
-    
 2. 将脚本保存为 mig_zone_test.sh 并执行：
-    
 
 ```
 chmod +x mig_zone_test.sh
@@ -269,41 +241,32 @@ my-mig-def321     europe-west2-c
 ### **✅ 你的验证目标是：**
 
 - **原先实例只在 europe-west2-a 和 europe-west2-b**
-    
 - 你进行扩容操作（或模拟 a zone 故障）
-    
 - **观察是否有新实例出现在 europe-west2-c**
-    
 
 ---
 
 ### **✅ 如果观察到：**
 
-|**zone**|**实例数量**|
-|---|---|
-|europe-west2-a|1|
-|europe-west2-b|1|
-|europe-west2-c ✅|≥1|
+| **zone**          | **实例数量** |
+| ----------------- | ------------ |
+| europe-west2-a    | 1            |
+| europe-west2-b    | 1            |
+| europe-west2-c ✅ | ≥1           |
 
 这就证明：
 
 - 你的 **Regional MIG 分布策略确实生效**
-    
 - 一旦某个 zone（如 a）无法调度，**MIG 能自动 fallback 到其他 zone（如 c）**
-    
 - 说明你这个 MIG 实现了基本的 **Zone-level DR 自动恢复能力**
-    
 
 ---
 
 ### **✅ 延伸验证建议（可选）**
 
-  
-
 你还可以进一步测试：
 
 1. **强制删除某 zone 的实例（模拟 zone 故障）**
-    
 
 ```
 gcloud compute instance-groups managed delete-instances MIG_NAME \
@@ -312,7 +275,6 @@ gcloud compute instance-groups managed delete-instances MIG_NAME \
 ```
 
 2. **观察是否有新的实例在其他 zone 自动重建**
-    
 
 ---
 
@@ -323,17 +285,12 @@ gcloud compute instance-groups managed delete-instances MIG_NAME \
 ## **🎯 目标**
 
 - 当前 MIG 分布在 europe-west2-a 和 europe-west2-b
-    
 - 现在你想模拟 europe-west2-a zone 故障
-    
 - 实现目标：将所有实例仅分布到 europe-west2-b 和 europe-west2-c
-    
 
 ---
 
 ## **✅ 步骤说明（推荐方式）**
-
-  
 
 ### **步骤 1：更新 Regional MIG 的** 
 
@@ -346,15 +303,11 @@ gcloud compute instance-groups managed update [MIG_NAME] \
 ```
 
 - 这条命令会修改 MIG 的 zone 分布策略。
-    
 - ⚠️ **这不会自动迁移现有实例**，只会影响接下来被替换或扩展的实例位置。
-    
 
 ---
 
 ### **步骤 2：手动触发 Rolling Update（重新创建所有实例）**
-
-  
 
 为了强制现有实例按照新的 zone 策略进行重新部署，你需要触发一次 Rolling Update：
 
@@ -365,8 +318,6 @@ gcloud compute instance-groups managed rolling-action start-update [MIG_NAME] \
 ```
 
 > 这会根据新的 distributionPolicy 把旧实例逐一删除并在新 zone（b、c）中重建。
-
-  
 
 你也可以指定 --max-surge 和 --max-unavailable 控制切换的并发和风险，比如：
 
@@ -396,11 +347,7 @@ gcloud compute instance-groups managed rolling-action start-update my-api-mig \
 
 ## **📌 其他方案（仅适合测试）**
 
-  
-
 如果你只是想快速验证 DR，而不想更改分布策略，可以考虑：
-
-  
 
 ### **方法：逐个手动删除某个 zone 的实例（GCE 会自动重建）**
 
@@ -423,11 +370,11 @@ gcloud compute instance-groups managed delete-instances my-api-mig \
 
 ## **✅ 建议策略**
 
-|**操作方式**|**说明**|
-|---|---|
-|修改 distributionPolicy + rolling update|✅ 推荐方式，真实模拟 DR failover|
-|手动删除特定 zone 的实例|快速模拟，但不修改策略，适合演练|
-|修改 instanceTemplate + update|如果还需要修改镜像等可一并做|
+| **操作方式**                             | **说明**                          |
+| ---------------------------------------- | --------------------------------- |
+| 修改 distributionPolicy + rolling update | ✅ 推荐方式，真实模拟 DR failover |
+| 手动删除特定 zone 的实例                 | 快速模拟，但不修改策略，适合演练  |
+| 修改 instanceTemplate + update           | 如果还需要修改镜像等可一并做      |
 
 ---
 
@@ -444,18 +391,13 @@ graph TD;
 
 有任何 DR 测试自动化脚本需求也可以继续告诉我，我可以帮你写完整的 gcloud + bash 自动化流程。
 
-
 是的，只要你的 **MIG 是 Regional 类型**，并且设置了 **多个 zone（distribution policy zones）**，当你手动删除某个 zone（比如 europe-west2-a）下的实例后：
-
-  
 
 > ✅ **新建的实例会被调度到 policy 中的其他 zone**（比如 europe-west2-b、europe-west2-c），**而不会重新创建在已删除的那个 zone（如果它没有在当前策略里或 zone 有问题）**
 
 ---
 
 ## **📌 更具体的行为说明：**
-
-  
 
 ### **1.** 
 
@@ -485,11 +427,7 @@ distributionPolicy:
 
 ### **如何确保实例不再回到 europe-west2-a**
 
-  
-
 如果你**想确保重建后的实例绝对不会再回到 europe-west2-a**：
-
-  
 
 ✅ 最好先运行以下命令，**把该 zone 从 MIG 策略中移除**：
 
@@ -504,8 +442,6 @@ gcloud compute instance-groups managed update my-api-mig \
 ---
 
 ### **🧪 示例测试命令：**
-
-  
 
 #### **Step 1: 确认所有实例分布情况**
 
@@ -529,12 +465,12 @@ gcloud compute instance-groups managed delete-instances my-api-mig \
 
 ### **✅ 小结：**
 
-|**条件**|**是否会重建到其他 zone**|
-|---|---|
-|MIG 是 Regional 类型|✅ 会|
-|MIG policy 包含其他可用 zone|✅ 会|
-|MIG policy 仍包含删除 zone|⚠️ 有可能仍重建到该 zone|
-|删除实例前修改 MIG 的分布策略|✅ 可精确控制重建位置|
+| **条件**                      | **是否会重建到其他 zone** |
+| ----------------------------- | ------------------------- |
+| MIG 是 Regional 类型          | ✅ 会                     |
+| MIG policy 包含其他可用 zone  | ✅ 会                     |
+| MIG policy 仍包含删除 zone    | ⚠️ 有可能仍重建到该 zone  |
+| 删除实例前修改 MIG 的分布策略 | ✅ 可精确控制重建位置     |
 
 ---
 
@@ -543,20 +479,18 @@ gcloud compute instance-groups managed delete-instances my-api-mig \
 以下是一个自动化脚本，用于：
 
 1. 获取某个 MIG 中指定 Zone 的所有实例名称
-    
 2. 删除这些实例（MIG 会自动重建）
-    
 3. 可选：在删除前修改 MIG 的分布策略，确保新实例不会回到被删除的 Zone
-    
 
 ---
 
 ### **🛠 示例脚本（Bash +** gcloud
-**该脚本实现了Regional MIG的Zone级别实例迁移操作**：
 
-- **主要目的**：将MIG中特定Zone（europe-west2-a）的所有实例迁移到其他Zone（europe-west2-b,c）
-- **工作原理**：通过修改distribution policy排除目标zone，然后删除该zone中的实例，依靠MIG的自愈机制在剩余zone重建实例
-- **适用场景**：Zone维护、成本优化、故障规避等
+**该脚本实现了 Regional MIG 的 Zone 级别实例迁移操作**：
+
+- **主要目的**：将 MIG 中特定 Zone（europe-west2-a）的所有实例迁移到其他 Zone（europe-west2-b,c）
+- **工作原理**：通过修改 distribution policy 排除目标 zone，然后删除该 zone 中的实例，依靠 MIG 的自愈机制在剩余 zone 重建实例
+- **适用场景**：Zone 维护、成本优化、故障规避等
 
 ```bash
 #!/bin/bash
@@ -600,7 +534,6 @@ echo "✅ Done. MIG will now recreate instances in $REMAINING_ZONES."
 ### **📌 使用说明：**
 
 1. 把以下参数替换为你的实际值：
-    
 
 ```
 MIG_NAME="your-mig-name"
@@ -609,17 +542,14 @@ ZONE_TO_DRAIN="europe-west2-a"
 REMAINING_ZONES="europe-west2-b,europe-west2-c"
 ```
 
-1.   
-    
-2. 赋予执行权限并运行：
-    
+1.
+
+2.  赋予执行权限并运行：
 
 ```
 chmod +x mig-drain-zone.sh
 ./mig-drain-zone.sh
 ```
-
-  
 
 ---
 
@@ -634,8 +564,6 @@ chmod +x mig-drain-zone.sh
 ### **直接删除指定 zone 中的实例**
 
 ### **，观察 MIG 重建的位置。**
-
-  
 
 即：**不修改 policy**，仅做删除操作。GCE 会尝试在可用 Zone 重建实例，**但不保证一定避开原来的 zone**。
 
@@ -679,8 +607,6 @@ echo "  gcloud compute instances list --filter='name~$MIG_NAME' --format='table(
 
 ### **✅ 验证方法**
 
-  
-
 运行下面命令观察是否新建的实例落到了其他 zone（比如 b、c）：
 
 ```
@@ -694,16 +620,12 @@ gcloud compute instances list \
 ### **⚠️ 注意事项**
 
 - 如果 distribution policy 包含 europe-west2-a，GCE 仍可能调度新实例回到 europe-west2-a。
-    
 - 若该 zone 临时设置为不可用（模拟 DR 故障），则 GCE 会自动避开它（这可以通过故障注入或 Resource Contention 模拟）。
-    
 - 想更精准测试 DR 逻辑，建议搭配 GCP 的 [Fault Injection Testing (FIT)](https://cloud.google.com/architecture/dr-drills-fault-injection-gce) 工具。
-    
 
 ---
 
 如需我补充一个 Mermaid 流程图帮助理解上面 DR 删除验证流程，我也可以补上。是否需要？
-
 
 你说得完全正确 ✅。
 
@@ -714,8 +636,6 @@ gcloud compute instance-groups managed update **并不支持** --distribution-po
 ### **✅ 正确的方式：**
 
 ### **在创建 MIG 时指定分布策略**
-
-  
 
 在 GCP 中，如果你想设置多个 zone 的分布策略，需要在创建 **regional MIG** 时使用：
 
@@ -730,8 +650,6 @@ gcloud compute instance-groups managed create \
 
 ### **如果你要模拟某个 Zone 故障的 DR 测试：**
 
-  
-
 你有两个选项：
 
 ---
@@ -739,8 +657,6 @@ gcloud compute instance-groups managed create \
 #### **✅** 
 
 #### **方法 1（推荐）：直接删除该 Zone 的实例，观察调度行为**
-
-  
 
 如前所述，你可以用：
 
@@ -767,8 +683,6 @@ gcloud compute instance-groups managed delete-instances your-mig-name \
 
 #### **方法 2：临时 scale-down 并重新 scale-up 验证分布**
 
-  
-
 如果你想模拟切换 zone，也可以：
 
 ```
@@ -793,8 +707,6 @@ gcloud compute instances list --filter="name~'your-mig-name'" --format="table(na
 ---
 
 ### **🛠 如果你想强控 zone 分布：**
-
-  
 
 只能 **销毁旧的 MIG，重新用 --distribution-policy-zones 创建**：
 
