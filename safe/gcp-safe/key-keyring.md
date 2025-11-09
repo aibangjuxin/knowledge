@@ -4,6 +4,9 @@
 
 你问的是 GCP **Cloud KMS** 中 **Key** 与 **KeyRing** 的概念及它们之间的关系、生命周期、权限与常见操作。下面我按结构化方式（问题分析、解决方案/解释、命令示例、流程图、注意事项）给出完整且可复制的说明与操作示例（均为 Markdown 源码）。
 
+KeyRing 是一个逻辑容器，用于组织和管理位于特定区域的多个 CryptoKey，而 CryptoKey
+  则是实际的密钥实体，包含其用途和版本
+
 ---
 
 # **解决方案 / 核心概念说明**
@@ -187,14 +190,14 @@ resource "google_kms_crypto_key" "sym" {
 
 # **Mermaid 流程图（Key / KeyRing 生命周期与操作）**
 
-```
+```mermaid
 graph TD
     A[创建 Location] --> B[创建 KeyRing]
-    B --> C[创建 CryptoKey (Key) - 设置 purpose]
-    C --> D[生成 CryptoKeyVersion (版本)]
+    B --> C["创建 CryptoKey (Key) - 设置 purpose"]
+    C --> D["生成 CryptoKeyVersion (版本)"]
     D --> E{用途判断}
     E -->|ENCRYPT_DECRYPT| F[对称加解密: encrypt/decrypt]
-    E -->|ASYMMETRIC_SIGN| G[非对称签名: sign/verify (可导出公钥)]
+    E -->|ASYMMETRIC_SIGN| G["非对称签名: sign/verify (可导出公钥)"]
     E -->|ASYMMETRIC_DECRYPT| H[非对称解密: decrypt]
     D --> I[轮换/创建新版本]
     I --> J[设置版本状态: ENABLED / DISABLED / DESTROYED]
