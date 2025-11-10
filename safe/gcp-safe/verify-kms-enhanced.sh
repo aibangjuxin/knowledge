@@ -92,21 +92,21 @@ log_info() {
 # 打印成功
 log_success() {
     echo -e "${GREEN}[✓]${NC} $1" >&2
-    ((PASSED_CHECKS++))
+    PASSED_CHECKS=$((PASSED_CHECKS + 1))
     record_check "success" "$1"
 }
 
 # 打印警告
 log_warning() {
     echo -e "${YELLOW}[⚠]${NC} $1" >&2
-    ((WARNING_CHECKS++))
+    WARNING_CHECKS=$((WARNING_CHECKS + 1))
     record_check "warning" "$1"
 }
 
 # 打印错误
 log_error() {
     echo -e "${RED}[✗]${NC} $1" >&2
-    ((FAILED_CHECKS++))
+    FAILED_CHECKS=$((FAILED_CHECKS + 1))
     record_check "error" "$1"
 }
 
@@ -261,7 +261,7 @@ parse_arguments() {
 check_prerequisites() {
     print_separator
     log_info "检查前置条件..."
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     check_command "gcloud"
     check_command "jq"
@@ -283,7 +283,7 @@ check_prerequisites() {
 check_kms_project() {
     print_separator
     log_info "验证 KMS 项目: $KMS_PROJECT"
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     local project_info
     if project_info=$(gcloud projects describe "$KMS_PROJECT" --format=json 2>&1); then
@@ -306,7 +306,7 @@ check_kms_project() {
 check_business_project() {
     print_separator
     log_info "验证业务项目: $BUSINESS_PROJECT"
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     local project_info
     if project_info=$(gcloud projects describe "$BUSINESS_PROJECT" --format=json 2>&1); then
@@ -329,7 +329,7 @@ check_business_project() {
 check_keyring() {
     print_separator
     log_info "验证 Keyring: $KEYRING (位置: $LOCATION)"
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     local keyring_info
     if keyring_info=$(gcloud kms keyrings describe "$KEYRING" \
@@ -351,7 +351,7 @@ check_keyring() {
 check_crypto_key() {
     print_separator
     log_info "验证 CryptoKey: $CRYPTO_KEY"
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     local key_info
     if key_info=$(gcloud kms keys describe "$CRYPTO_KEY" \
@@ -426,7 +426,7 @@ check_service_account_permissions() {
     
     for sa in "${SA_ARRAY[@]}"; do
         sa=$(echo "$sa" | xargs)  # 去除空格
-        ((TOTAL_CHECKS++))
+        TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
         
         local has_encrypt=false
         local has_decrypt=false
@@ -482,7 +482,7 @@ check_rotation_policy() {
     
     print_separator
     log_info "检查密钥轮换策略..."
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     if [[ ! -f "$TEMP_DIR/key_info.json" ]]; then
         log_warning "密钥信息文件不存在，跳过轮换策略检查"
@@ -514,7 +514,7 @@ test_encryption() {
     
     print_separator
     log_info "执行加密功能测试..."
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     local plaintext_file="$TEMP_DIR/plaintext.txt"
     local ciphertext_file="$TEMP_DIR/ciphertext.enc"
@@ -556,7 +556,7 @@ test_decryption() {
     
     print_separator
     log_info "执行解密功能测试..."
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     local ciphertext_file="$TEMP_DIR/test_cipher.enc"
     local decrypted_file="$TEMP_DIR/decrypted.txt"

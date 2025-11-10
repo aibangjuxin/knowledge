@@ -4,6 +4,8 @@
 
 ### 1. 脚本在"检查前置条件"后立即退出
 
+**已修复的 Bug:** 如果你使用的是旧版本脚本，可能遇到 `((COUNTER++))` 在 `set -e` 模式下导致退出的问题。请使用最新版本的 `verify-kms-enhanced.sh`。详见 `BUG-FIX-EXPLANATION.md`。
+
 **可能原因:**
 
 #### A. gcloud 认证问题
