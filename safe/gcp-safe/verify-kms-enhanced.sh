@@ -326,23 +326,36 @@ check_business_project() {
 }
 
 # 4. 验证 Keyring 存在性
+# 这个逻辑有一点问题 ，因为我不能 descreep，但是我可以 get。 
 check_keyring() {
     print_separator
     log_info "验证 Keyring: $KEYRING (位置: $LOCATION)"
     TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
-    local keyring_info
-    if keyring_info=$(gcloud kms keyrings describe "$KEYRING" \
+    # 使用 list 命令验证 Keyring 是否存在（不需要 describe 权限）
+    local keyring_list
+    if keyring_list=$(gcloud kms keyrings list \
         --project="$KMS_PROJECT" \
         --location="$LOCATION" \
+        --filter="name:$KEYRING" \
         --format=json 2>&1); then
         
-        local keyring_name
-        keyring_name=$(echo "$keyring_info" | jq -r '.name // "unknown"')
-        log_success "Keyring 存在: $keyring_name"
+        # 检查是否找到匹配的 Keyring
+        local keyring_count
+        keyring_count=$(echo "$keyring_list" | jq '. | length')
+        
+        if [[ "$keyring_count" -gt 0 ]]; then
+            local keyring_name
+            keyring_name=$(echo "$keyring_list" | jq -r '.[0].name // "unknown"')
+            log_success "Keyring 存在: $keyring_name"
+        else
+            log_error "Keyring 不存在或无权限访问: $KEYRING"
+            [[ "$VERBOSE" == true ]] && echo "未找到匹配的 Keyring" >&2
+            exit 1
+        fi
     else
-        log_error "Keyring 不存在: $KEYRING"
-        [[ "$VERBOSE" == true ]] && echo "$keyring_info" >&2
+        log_error "无法列出 Keyring (可能缺少 cloudkms.keyRings.list 权限)"
+        [[ "$VERBOSE" == true ]] && echo "$keyring_list" >&2
         exit 1
     fi
 }
@@ -353,25 +366,39 @@ check_crypto_key() {
     log_info "验证 CryptoKey: $CRYPTO_KEY"
     TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
-    local key_info
-    if key_info=$(gcloud kms keys describe "$CRYPTO_KEY" \
+    # 使用 list 命令验证 CryptoKey 是否存在（不需要 describe 权限）
+    local key_list
+    if key_list=$(gcloud kms keys list \
         --project="$KMS_PROJECT" \
         --keyring="$KEYRING" \
         --location="$LOCATION" \
+        --filter="name:$CRYPTO_KEY" \
         --format=json 2>&1); then
         
-        local key_purpose
-        key_purpose=$(echo "$key_info" | jq -r '.purpose // "unknown"')
-        local key_state
-        key_state=$(echo "$key_info" | jq -r '.primary.state // "unknown"')
+        # 检查是否找到匹配的 CryptoKey
+        local key_count
+        key_count=$(echo "$key_list" | jq '. | length')
         
-        log_success "CryptoKey 存在 (用途: $key_purpose, 状态: $key_state)"
-        
-        # 保存密钥信息供后续使用
-        echo "$key_info" > "$TEMP_DIR/key_info.json"
+        if [[ "$key_count" -gt 0 ]]; then
+            local key_purpose
+            key_purpose=$(echo "$key_list" | jq -r '.[0].purpose // "unknown"')
+            local key_state
+            key_state=$(echo "$key_list" | jq -r '.[0].primary.state // "unknown"')
+            local key_name
+            key_name=$(echo "$key_list" | jq -r '.[0].name // "unknown"')
+            
+            log_success "CryptoKey 存在 (用途: $key_purpose, 状态: $key_state)"
+            
+            # 保存密钥信息供后续使用
+            echo "$key_list" | jq '.[0]' > "$TEMP_DIR/key_info.json"
+        else
+            log_error "CryptoKey 不存在或无权限访问: $CRYPTO_KEY"
+            [[ "$VERBOSE" == true ]] && echo "未找到匹配的 CryptoKey" >&2
+            exit 1
+        fi
     else
-        log_error "CryptoKey 不存在: $CRYPTO_KEY"
-        [[ "$VERBOSE" == true ]] && echo "$key_info" >&2
+        log_error "无法列出 CryptoKey (可能缺少 cloudkms.cryptoKeys.list 权限)"
+        [[ "$VERBOSE" == true ]] && echo "$key_list" >&2
         exit 1
     fi
 }

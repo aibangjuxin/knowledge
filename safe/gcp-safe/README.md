@@ -49,8 +49,10 @@ gcloud auth activate-service-account --key-file=path/to/key.json
 |------|------|
 | `verify-kms-enhanced.sh` | 主验证脚本 (增强版) |
 | `debug-test.sh` | 环境诊断工具 |
+| `test-permissions.sh` | 权限测试工具 |
 | `example-usage.sh` | 使用示例 |
 | `TROUBLESHOOTING.md` | 故障排查指南 |
+| `PERMISSIONS-GUIDE.md` | 权限配置指南 |
 | `IMPROVEMENTS.md` | 改进说明 |
 | `README.md` | 本文件 |
 
@@ -136,9 +138,9 @@ gcloud auth activate-service-account --key-file=path/to/key.json
 ## 权限要求
 
 ### 在 KMS 项目中
-- `cloudkms.keyRings.get`
-- `cloudkms.cryptoKeys.get`
-- `cloudkms.cryptoKeys.getIamPolicy`
+- `cloudkms.keyRings.list` (用于验证 Keyring 存在性)
+- `cloudkms.cryptoKeys.list` (用于验证 CryptoKey 存在性)
+- `cloudkms.cryptoKeys.getIamPolicy` (用于获取 IAM 策略)
 
 ### 在业务项目中
 - `resourcemanager.projects.get`

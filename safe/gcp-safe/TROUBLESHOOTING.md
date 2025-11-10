@@ -207,8 +207,8 @@ echo '{"test": "value"}' | jq -r '.test'
 
 ### 在 KMS 项目中:
 ```yaml
-- cloudkms.keyRings.get
-- cloudkms.cryptoKeys.get
+- cloudkms.keyRings.list
+- cloudkms.cryptoKeys.list
 - cloudkms.cryptoKeys.getIamPolicy
 ```
 

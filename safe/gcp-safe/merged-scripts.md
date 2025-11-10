@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2025-11-10 10:46:44
+Generated on: 2025-11-10 11:35:40
 Directory: /Users/lex/git/knowledge/safe/gcp-safe
 
 ## `debug-test.sh`
@@ -288,6 +288,172 @@ echo "方式 4 (: $((++))): COUNTER = $COUNTER"
 echo ""
 echo "结论: 在 set -e 模式下，((COUNTER++)) 可能导致脚本退出！"
 echo "推荐使用: COUNTER=\$((COUNTER + 1)) 或 : \$((COUNTER++))"
+
+```
+
+## `test-permissions.sh`
+
+```bash
+#!/bin/bash
+
+################################################################################
+# KMS 权限测试脚本
+# 用于测试 describe vs list 命令的权限要求
+################################################################################
+
+set -euo pipefail
+
+echo "=========================================="
+echo "KMS 权限测试：describe vs list"
+echo "=========================================="
+echo ""
+
+# 检查参数
+if [[ $# -lt 4 ]]; then
+    echo "使用方法: $0 KMS_PROJECT LOCATION KEYRING CRYPTO_KEY"
+    echo ""
+    echo "示例:"
+    echo "  $0 my-kms-project global my-keyring my-key"
+    exit 1
+fi
+
+KMS_PROJECT="$1"
+LOCATION="$2"
+KEYRING="$3"
+CRYPTO_KEY="$4"
+
+echo "测试配置:"
+echo "  KMS 项目: $KMS_PROJECT"
+echo "  位置: $LOCATION"
+echo "  Keyring: $KEYRING"
+echo "  CryptoKey: $CRYPTO_KEY"
+echo ""
+
+# ============================================================================
+# 测试 Keyring 访问
+# ============================================================================
+echo "1. 测试 Keyring 访问方法"
+echo "----------------------------------------"
+
+# 方法 1: describe (需要 cloudkms.keyRings.get 权限)
+echo "方法 1: gcloud kms keyrings describe"
+if gcloud kms keyrings describe "$KEYRING" \
+    --project="$KMS_PROJECT" \
+    --location="$LOCATION" \
+    --format=json &> /dev/null; then
+    echo "  ✓ describe 成功 (有 cloudkms.keyRings.get 权限)"
+else
+    echo "  ✗ describe 失败 (缺少 cloudkms.keyRings.get 权限)"
+fi
+echo ""
+
+# 方法 2: list (需要 cloudkms.keyRings.list 权限)
+echo "方法 2: gcloud kms keyrings list"
+keyring_list=$(gcloud kms keyrings list \
+    --project="$KMS_PROJECT" \
+    --location="$LOCATION" \
+    --filter="name:$KEYRING" \
+    --format=json 2>&1 || echo "[]")
+
+keyring_count=$(echo "$keyring_list" | jq '. | length' 2>/dev/null || echo "0")
+
+if [[ "$keyring_count" -gt 0 ]]; then
+    echo "  ✓ list 成功 (有 cloudkms.keyRings.list 权限)"
+    echo "  找到 Keyring: $(echo "$keyring_list" | jq -r '.[0].name')"
+else
+    echo "  ✗ list 失败或未找到 (缺少 cloudkms.keyRings.list 权限或 Keyring 不存在)"
+fi
+echo ""
+
+# ============================================================================
+# 测试 CryptoKey 访问
+# ============================================================================
+echo "2. 测试 CryptoKey 访问方法"
+echo "----------------------------------------"
+
+# 方法 1: describe (需要 cloudkms.cryptoKeys.get 权限)
+echo "方法 1: gcloud kms keys describe"
+if key_info=$(gcloud kms keys describe "$CRYPTO_KEY" \
+    --project="$KMS_PROJECT" \
+    --keyring="$KEYRING" \
+    --location="$LOCATION" \
+    --format=json 2>&1); then
+    echo "  ✓ describe 成功 (有 cloudkms.cryptoKeys.get 权限)"
+    key_purpose=$(echo "$key_info" | jq -r '.purpose // "unknown"')
+    key_state=$(echo "$key_info" | jq -r '.primary.state // "unknown"')
+    echo "  密钥用途: $key_purpose"
+    echo "  密钥状态: $key_state"
+else
+    echo "  ✗ describe 失败 (缺少 cloudkms.cryptoKeys.get 权限)"
+fi
+echo ""
+
+# 方法 2: list (需要 cloudkms.cryptoKeys.list 权限)
+echo "方法 2: gcloud kms keys list"
+key_list=$(gcloud kms keys list \
+    --project="$KMS_PROJECT" \
+    --keyring="$KEYRING" \
+    --location="$LOCATION" \
+    --filter="name:$CRYPTO_KEY" \
+    --format=json 2>&1 || echo "[]")
+
+key_count=$(echo "$key_list" | jq '. | length' 2>/dev/null || echo "0")
+
+if [[ "$key_count" -gt 0 ]]; then
+    echo "  ✓ list 成功 (有 cloudkms.cryptoKeys.list 权限)"
+    echo "  找到 CryptoKey: $(echo "$key_list" | jq -r '.[0].name')"
+    key_purpose=$(echo "$key_list" | jq -r '.[0].purpose // "unknown"')
+    key_state=$(echo "$key_list" | jq -r '.[0].primary.state // "unknown"')
+    echo "  密钥用途: $key_purpose"
+    echo "  密钥状态: $key_state"
+else
+    echo "  ✗ list 失败或未找到 (缺少 cloudkms.cryptoKeys.list 权限或 Key 不存在)"
+fi
+echo ""
+
+# ============================================================================
+# 测试 IAM 策略访问
+# ============================================================================
+echo "3. 测试 IAM 策略访问"
+echo "----------------------------------------"
+
+echo "gcloud kms keys get-iam-policy"
+if iam_policy=$(gcloud kms keys get-iam-policy "$CRYPTO_KEY" \
+    --project="$KMS_PROJECT" \
+    --keyring="$KEYRING" \
+    --location="$LOCATION" \
+    --format=json 2>&1); then
+    echo "  ✓ get-iam-policy 成功 (有 cloudkms.cryptoKeys.getIamPolicy 权限)"
+    bindings_count=$(echo "$iam_policy" | jq '.bindings | length // 0')
+    echo "  IAM 绑定数量: $bindings_count"
+else
+    echo "  ✗ get-iam-policy 失败 (缺少 cloudkms.cryptoKeys.getIamPolicy 权限)"
+fi
+echo ""
+
+# ============================================================================
+# 总结
+# ============================================================================
+echo "=========================================="
+echo "总结"
+echo "=========================================="
+echo ""
+echo "权限对比:"
+echo ""
+echo "describe 方法需要的权限:"
+echo "  - cloudkms.keyRings.get"
+echo "  - cloudkms.cryptoKeys.get"
+echo ""
+echo "list 方法需要的权限:"
+echo "  - cloudkms.keyRings.list"
+echo "  - cloudkms.cryptoKeys.list"
+echo ""
+echo "建议:"
+echo "  - 如果只有 list 权限，使用 list 方法（脚本已优化）"
+echo "  - 如果有 get 权限，describe 方法可以获取更详细的信息"
+echo "  - list 方法更适合最小权限原则"
+echo ""
+echo "当前脚本使用: list 方法 (v2.0.1+)"
 
 ```
 
@@ -622,23 +788,36 @@ check_business_project() {
 }
 
 # 4. 验证 Keyring 存在性
+# 这个逻辑有一点问题 ，因为我不能 descreep，但是我可以 get。 
 check_keyring() {
     print_separator
     log_info "验证 Keyring: $KEYRING (位置: $LOCATION)"
     TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
-    local keyring_info
-    if keyring_info=$(gcloud kms keyrings describe "$KEYRING" \
+    # 使用 list 命令验证 Keyring 是否存在（不需要 describe 权限）
+    local keyring_list
+    if keyring_list=$(gcloud kms keyrings list \
         --project="$KMS_PROJECT" \
         --location="$LOCATION" \
+        --filter="name:$KEYRING" \
         --format=json 2>&1); then
         
-        local keyring_name
-        keyring_name=$(echo "$keyring_info" | jq -r '.name // "unknown"')
-        log_success "Keyring 存在: $keyring_name"
+        # 检查是否找到匹配的 Keyring
+        local keyring_count
+        keyring_count=$(echo "$keyring_list" | jq '. | length')
+        
+        if [[ "$keyring_count" -gt 0 ]]; then
+            local keyring_name
+            keyring_name=$(echo "$keyring_list" | jq -r '.[0].name // "unknown"')
+            log_success "Keyring 存在: $keyring_name"
+        else
+            log_error "Keyring 不存在或无权限访问: $KEYRING"
+            [[ "$VERBOSE" == true ]] && echo "未找到匹配的 Keyring" >&2
+            exit 1
+        fi
     else
-        log_error "Keyring 不存在: $KEYRING"
-        [[ "$VERBOSE" == true ]] && echo "$keyring_info" >&2
+        log_error "无法列出 Keyring (可能缺少 cloudkms.keyRings.list 权限)"
+        [[ "$VERBOSE" == true ]] && echo "$keyring_list" >&2
         exit 1
     fi
 }
@@ -649,25 +828,39 @@ check_crypto_key() {
     log_info "验证 CryptoKey: $CRYPTO_KEY"
     TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
-    local key_info
-    if key_info=$(gcloud kms keys describe "$CRYPTO_KEY" \
+    # 使用 list 命令验证 CryptoKey 是否存在（不需要 describe 权限）
+    local key_list
+    if key_list=$(gcloud kms keys list \
         --project="$KMS_PROJECT" \
         --keyring="$KEYRING" \
         --location="$LOCATION" \
+        --filter="name:$CRYPTO_KEY" \
         --format=json 2>&1); then
         
-        local key_purpose
-        key_purpose=$(echo "$key_info" | jq -r '.purpose // "unknown"')
-        local key_state
-        key_state=$(echo "$key_info" | jq -r '.primary.state // "unknown"')
+        # 检查是否找到匹配的 CryptoKey
+        local key_count
+        key_count=$(echo "$key_list" | jq '. | length')
         
-        log_success "CryptoKey 存在 (用途: $key_purpose, 状态: $key_state)"
-        
-        # 保存密钥信息供后续使用
-        echo "$key_info" > "$TEMP_DIR/key_info.json"
+        if [[ "$key_count" -gt 0 ]]; then
+            local key_purpose
+            key_purpose=$(echo "$key_list" | jq -r '.[0].purpose // "unknown"')
+            local key_state
+            key_state=$(echo "$key_list" | jq -r '.[0].primary.state // "unknown"')
+            local key_name
+            key_name=$(echo "$key_list" | jq -r '.[0].name // "unknown"')
+            
+            log_success "CryptoKey 存在 (用途: $key_purpose, 状态: $key_state)"
+            
+            # 保存密钥信息供后续使用
+            echo "$key_list" | jq '.[0]' > "$TEMP_DIR/key_info.json"
+        else
+            log_error "CryptoKey 不存在或无权限访问: $CRYPTO_KEY"
+            [[ "$VERBOSE" == true ]] && echo "未找到匹配的 CryptoKey" >&2
+            exit 1
+        fi
     else
-        log_error "CryptoKey 不存在: $CRYPTO_KEY"
-        [[ "$VERBOSE" == true ]] && echo "$key_info" >&2
+        log_error "无法列出 CryptoKey (可能缺少 cloudkms.cryptoKeys.list 权限)"
+        [[ "$VERBOSE" == true ]] && echo "$key_list" >&2
         exit 1
     fi
 }
