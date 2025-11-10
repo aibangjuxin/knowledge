@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2025-11-10 09:41:12
+Generated on: 2025-11-10 10:46:44
 Directory: /Users/lex/git/knowledge/safe/gcp-safe
 
 ## `debug-test.sh`
@@ -123,6 +123,174 @@ echo "如果仍有问题，请提供以上输出信息"
 
 ```
 
+## `quick-test.sh`
+
+```bash
+#!/bin/bash
+
+################################################################################
+# 快速测试脚本 - 验证修复是否生效
+################################################################################
+
+echo "=========================================="
+echo "快速测试：验证计数器修复"
+echo "=========================================="
+echo ""
+
+# 模拟脚本的 set -euo pipefail 环境
+set -euo pipefail
+
+echo "1. 测试变量初始化"
+TOTAL_CHECKS=0
+PASSED_CHECKS=0
+FAILED_CHECKS=0
+WARNING_CHECKS=0
+echo "   ✓ 变量初始化成功"
+echo ""
+
+echo "2. 测试计数器递增（新方式）"
+TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
+echo "   TOTAL_CHECKS = $TOTAL_CHECKS"
+
+PASSED_CHECKS=$((PASSED_CHECKS + 1))
+echo "   PASSED_CHECKS = $PASSED_CHECKS"
+
+WARNING_CHECKS=$((WARNING_CHECKS + 1))
+echo "   WARNING_CHECKS = $WARNING_CHECKS"
+
+FAILED_CHECKS=$((FAILED_CHECKS + 1))
+echo "   FAILED_CHECKS = $FAILED_CHECKS"
+echo "   ✓ 所有计数器递增成功"
+echo ""
+
+echo "3. 测试多次递增"
+for i in {1..5}; do
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
+done
+echo "   TOTAL_CHECKS 经过 5 次递增 = $TOTAL_CHECKS"
+echo "   ✓ 循环递增成功"
+echo ""
+
+echo "4. 测试在函数中使用"
+test_function() {
+    local local_counter=0
+    local_counter=$((local_counter + 1))
+    echo "   函数内计数器 = $local_counter"
+}
+test_function
+echo "   ✓ 函数内递增成功"
+echo ""
+
+echo "5. 模拟实际使用场景"
+simulate_check() {
+    local check_name="$1"
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
+    
+    if [[ "$check_name" == "success" ]]; then
+        PASSED_CHECKS=$((PASSED_CHECKS + 1))
+        echo "   [✓] $check_name 检查"
+    elif [[ "$check_name" == "warning" ]]; then
+        WARNING_CHECKS=$((WARNING_CHECKS + 1))
+        echo "   [⚠] $check_name 检查"
+    else
+        FAILED_CHECKS=$((FAILED_CHECKS + 1))
+        echo "   [✗] $check_name 检查"
+    fi
+}
+
+simulate_check "success"
+simulate_check "warning"
+simulate_check "success"
+
+echo ""
+echo "   最终统计:"
+echo "   - 总检查: $TOTAL_CHECKS"
+echo "   - 通过: $PASSED_CHECKS"
+echo "   - 警告: $WARNING_CHECKS"
+echo "   - 失败: $FAILED_CHECKS"
+echo "   ✓ 实际场景模拟成功"
+echo ""
+
+echo "=========================================="
+echo "✅ 所有测试通过！"
+echo "=========================================="
+echo ""
+echo "修复已生效，脚本不会因为计数器递增而退出。"
+echo "现在可以安全地运行主脚本了。"
+
+```
+
+## `test-arithmetic.sh`
+
+```bash
+#!/bin/bash
+
+echo "测试 Bash 算术运算在 set -euo pipefail 下的行为"
+echo "================================================"
+echo ""
+
+# 测试 1: 不使用 set -e
+echo "测试 1: 正常模式"
+COUNTER=0
+((COUNTER++))
+echo "COUNTER = $COUNTER (成功)"
+echo ""
+
+# 测试 2: 使用 set -e
+echo "测试 2: set -e 模式"
+(
+    set -e
+    COUNTER=0
+    ((COUNTER++)) || true  # 需要 || true 来避免退出
+    echo "COUNTER = $COUNTER (成功)"
+)
+echo ""
+
+# 测试 3: 演示问题
+echo "测试 3: 演示 ((COUNTER++)) 的退出码"
+COUNTER=0
+((COUNTER++))
+echo "退出码: $?"
+echo "COUNTER = $COUNTER"
+echo ""
+
+# 测试 4: 当值为 0 时
+echo "测试 4: 当值为 0 时的退出码"
+COUNTER=0
+if ((COUNTER)); then
+    echo "COUNTER 为真"
+else
+    echo "COUNTER 为假 (退出码: $?)"
+fi
+echo ""
+
+# 测试 5: 安全的递增方式
+echo "测试 5: 安全的递增方式"
+set -euo pipefail
+COUNTER=0
+
+# 方式 1: 使用 let
+let COUNTER++ || true
+echo "方式 1 (let): COUNTER = $COUNTER"
+
+# 方式 2: 使用算术展开
+COUNTER=$((COUNTER + 1))
+echo "方式 2 (算术展开): COUNTER = $COUNTER"
+
+# 方式 3: 使用 (()) 但加 || true
+((COUNTER++)) || true
+echo "方式 3 ((++)) || true: COUNTER = $COUNTER"
+
+# 方式 4: 最安全的方式
+: $((COUNTER++))
+echo "方式 4 (: $((++))): COUNTER = $COUNTER"
+
+echo ""
+echo "结论: 在 set -e 模式下，((COUNTER++)) 可能导致脚本退出！"
+echo "推荐使用: COUNTER=\$((COUNTER + 1)) 或 : \$((COUNTER++))"
+
+```
+
 ## `verify-kms-enhanced.sh`
 
 ```bash
@@ -220,21 +388,21 @@ log_info() {
 # 打印成功
 log_success() {
     echo -e "${GREEN}[✓]${NC} $1" >&2
-    ((PASSED_CHECKS++))
+    PASSED_CHECKS=$((PASSED_CHECKS + 1))
     record_check "success" "$1"
 }
 
 # 打印警告
 log_warning() {
     echo -e "${YELLOW}[⚠]${NC} $1" >&2
-    ((WARNING_CHECKS++))
+    WARNING_CHECKS=$((WARNING_CHECKS + 1))
     record_check "warning" "$1"
 }
 
 # 打印错误
 log_error() {
     echo -e "${RED}[✗]${NC} $1" >&2
-    ((FAILED_CHECKS++))
+    FAILED_CHECKS=$((FAILED_CHECKS + 1))
     record_check "error" "$1"
 }
 
@@ -389,7 +557,7 @@ parse_arguments() {
 check_prerequisites() {
     print_separator
     log_info "检查前置条件..."
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     check_command "gcloud"
     check_command "jq"
@@ -411,7 +579,7 @@ check_prerequisites() {
 check_kms_project() {
     print_separator
     log_info "验证 KMS 项目: $KMS_PROJECT"
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     local project_info
     if project_info=$(gcloud projects describe "$KMS_PROJECT" --format=json 2>&1); then
@@ -434,7 +602,7 @@ check_kms_project() {
 check_business_project() {
     print_separator
     log_info "验证业务项目: $BUSINESS_PROJECT"
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     local project_info
     if project_info=$(gcloud projects describe "$BUSINESS_PROJECT" --format=json 2>&1); then
@@ -457,7 +625,7 @@ check_business_project() {
 check_keyring() {
     print_separator
     log_info "验证 Keyring: $KEYRING (位置: $LOCATION)"
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     local keyring_info
     if keyring_info=$(gcloud kms keyrings describe "$KEYRING" \
@@ -479,7 +647,7 @@ check_keyring() {
 check_crypto_key() {
     print_separator
     log_info "验证 CryptoKey: $CRYPTO_KEY"
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     local key_info
     if key_info=$(gcloud kms keys describe "$CRYPTO_KEY" \
@@ -554,7 +722,7 @@ check_service_account_permissions() {
     
     for sa in "${SA_ARRAY[@]}"; do
         sa=$(echo "$sa" | xargs)  # 去除空格
-        ((TOTAL_CHECKS++))
+        TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
         
         local has_encrypt=false
         local has_decrypt=false
@@ -610,7 +778,7 @@ check_rotation_policy() {
     
     print_separator
     log_info "检查密钥轮换策略..."
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     if [[ ! -f "$TEMP_DIR/key_info.json" ]]; then
         log_warning "密钥信息文件不存在，跳过轮换策略检查"
@@ -642,7 +810,7 @@ test_encryption() {
     
     print_separator
     log_info "执行加密功能测试..."
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     local plaintext_file="$TEMP_DIR/plaintext.txt"
     local ciphertext_file="$TEMP_DIR/ciphertext.enc"
@@ -684,7 +852,7 @@ test_decryption() {
     
     print_separator
     log_info "执行解密功能测试..."
-    ((TOTAL_CHECKS++))
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     
     local ciphertext_file="$TEMP_DIR/test_cipher.enc"
     local decrypted_file="$TEMP_DIR/decrypted.txt"
