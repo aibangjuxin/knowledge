@@ -1,7 +1,127 @@
 # Shell Scripts Collection
 
-Generated on: 2025-11-09 19:28:48
+Generated on: 2025-11-10 09:41:12
 Directory: /Users/lex/git/knowledge/safe/gcp-safe
+
+## `debug-test.sh`
+
+```bash
+#!/bin/bash
+
+################################################################################
+# KMS 验证脚本调试工具
+# 用于快速诊断环境问题
+################################################################################
+
+set -euo pipefail
+
+echo "=========================================="
+echo "KMS 验证脚本环境诊断"
+echo "=========================================="
+echo ""
+
+# 1. 检查 Shell 环境
+echo "1. Shell 环境:"
+echo "   Shell: $SHELL"
+echo "   Bash 版本: $BASH_VERSION"
+echo ""
+
+# 2. 检查必需命令
+echo "2. 检查必需命令:"
+if command -v gcloud &> /dev/null; then
+    echo "   ✓ gcloud: $(command -v gcloud)"
+    gcloud_version=$(gcloud version --format="value(core)" 2>&1 || echo "无法获取版本")
+    echo "     版本: $gcloud_version"
+else
+    echo "   ✗ gcloud: 未找到"
+fi
+
+if command -v jq &> /dev/null; then
+    echo "   ✓ jq: $(command -v jq)"
+    jq_version=$(jq --version 2>&1 || echo "无法获取版本")
+    echo "     版本: $jq_version"
+else
+    echo "   ✗ jq: 未找到"
+fi
+echo ""
+
+# 3. 检查 gcloud 认证
+echo "3. 检查 gcloud 认证:"
+if command -v gcloud &> /dev/null; then
+    echo "   尝试获取活动账号..."
+    
+    # 方法 1: 使用 filter
+    auth_account1=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>&1 || echo "ERROR")
+    echo "   方法1 (filter): $auth_account1"
+    
+    # 方法 2: 不使用 filter
+    auth_account2=$(gcloud auth list --format="value(account)" 2>&1 | head -1 || echo "ERROR")
+    echo "   方法2 (no filter): $auth_account2"
+    
+    # 方法 3: 使用 config
+    auth_account3=$(gcloud config get-value account 2>&1 || echo "ERROR")
+    echo "   方法3 (config): $auth_account3"
+    
+    # 显示完整的认证列表
+    echo ""
+    echo "   完整认证列表:"
+    gcloud auth list 2>&1 | sed 's/^/     /'
+else
+    echo "   跳过 (gcloud 未安装)"
+fi
+echo ""
+
+# 4. 检查临时目录权限
+echo "4. 检查临时目录:"
+TEMP_TEST_DIR="/tmp/kms-validator-test-$$"
+if mkdir -p "$TEMP_TEST_DIR" 2>&1; then
+    echo "   ✓ 可以创建临时目录: $TEMP_TEST_DIR"
+    if echo "test" > "$TEMP_TEST_DIR/test.txt" 2>&1; then
+        echo "   ✓ 可以写入文件"
+    else
+        echo "   ✗ 无法写入文件"
+    fi
+    rm -rf "$TEMP_TEST_DIR"
+else
+    echo "   ✗ 无法创建临时目录"
+fi
+echo ""
+
+# 5. 测试 set -euo pipefail 行为
+echo "5. 测试错误处理:"
+test_function() {
+    local result
+    result=$(false 2>&1 || true)
+    echo "   ✓ 使用 '|| true' 可以捕获错误"
+}
+test_function
+echo ""
+
+# 6. 测试 jq 解析
+echo "6. 测试 jq 解析:"
+if command -v jq &> /dev/null; then
+    test_json='{"test": "value", "number": 123}'
+    parsed=$(echo "$test_json" | jq -r '.test' 2>&1 || echo "ERROR")
+    if [[ "$parsed" == "value" ]]; then
+        echo "   ✓ jq 解析正常"
+    else
+        echo "   ✗ jq 解析失败: $parsed"
+    fi
+else
+    echo "   跳过 (jq 未安装)"
+fi
+echo ""
+
+echo "=========================================="
+echo "诊断完成"
+echo "=========================================="
+echo ""
+echo "如果所有检查都通过，请尝试运行:"
+echo "  ./verify-kms-enhanced.sh --verbose [其他参数]"
+echo ""
+echo "如果仍有问题，请提供以上输出信息"
+
+```
 
 ## `verify-kms-enhanced.sh`
 
@@ -16,6 +136,28 @@ Directory: /Users/lex/git/knowledge/safe/gcp-safe
 ################################################################################
 
 set -euo pipefail
+
+# 错误追踪函数
+error_handler() {
+    local line_no=$1
+    local bash_lineno=$2
+    local last_command=$3
+    local exit_code=$4
+    
+    echo "" >&2
+    echo "========================================================================" >&2
+    echo "脚本执行出错！" >&2
+    echo "  行号: $line_no" >&2
+    echo "  命令: $last_command" >&2
+    echo "  退出码: $exit_code" >&2
+    echo "========================================================================" >&2
+    
+    # 清理临时目录
+    cleanup_temp_dir
+}
+
+# 设置错误追踪
+trap 'error_handler ${LINENO} ${BASH_LINENO} "$BASH_COMMAND" $?' ERR
 
 # ============================================================================
 # 颜色配置
@@ -106,6 +248,18 @@ check_command() {
     local cmd="$1"
     if ! command -v "$cmd" &> /dev/null; then
         log_error "必需命令未找到: $cmd"
+        
+        case "$cmd" in
+            gcloud)
+                echo "请安装 Google Cloud SDK: https://cloud.google.com/sdk/docs/install" >&2
+                ;;
+            jq)
+                echo "请安装 jq: " >&2
+                echo "  - Ubuntu/Debian: sudo apt-get install jq" >&2
+                echo "  - CentOS/RHEL: sudo yum install jq" >&2
+                echo "  - macOS: brew install jq" >&2
+                ;;
+        esac
         exit 1
     fi
 }
@@ -241,12 +395,16 @@ check_prerequisites() {
     check_command "jq"
     
     # 验证 gcloud 已认证
-    if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" &> /dev/null; then
-        log_error "gcloud 未认证，请先运行: gcloud auth login"
+    local auth_account
+    auth_account=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>&1 || true)
+    
+    if [[ -z "$auth_account" ]]; then
+        log_error "gcloud 未认证或无活动账号，请先运行: gcloud auth login"
+        [[ "$VERBOSE" == true ]] && echo "认证检查输出: $auth_account" >&2
         exit 1
     fi
     
-    log_success "前置条件检查通过 (gcloud, jq)"
+    log_success "前置条件检查通过 (gcloud, jq) - 当前账号: ${auth_account%%$'\n'*}"
 }
 
 # 2. 验证 KMS 项目访问权限
@@ -755,6 +913,14 @@ EOF
     
     # 解析参数
     parse_arguments "$@"
+    
+    # 调试信息
+    if [[ "$VERBOSE" == true ]]; then
+        log_info "调试模式已启用"
+        log_info "临时目录: $TEMP_DIR"
+        log_info "Shell: $SHELL"
+        log_info "Bash 版本: $BASH_VERSION"
+    fi
     
     # 执行检查
     check_prerequisites

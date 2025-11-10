@@ -9,6 +9,28 @@
 
 set -euo pipefail
 
+# 错误追踪函数
+error_handler() {
+    local line_no=$1
+    local bash_lineno=$2
+    local last_command=$3
+    local exit_code=$4
+    
+    echo "" >&2
+    echo "========================================================================" >&2
+    echo "脚本执行出错！" >&2
+    echo "  行号: $line_no" >&2
+    echo "  命令: $last_command" >&2
+    echo "  退出码: $exit_code" >&2
+    echo "========================================================================" >&2
+    
+    # 清理临时目录
+    cleanup_temp_dir
+}
+
+# 设置错误追踪
+trap 'error_handler ${LINENO} ${BASH_LINENO} "$BASH_COMMAND" $?' ERR
+
 # ============================================================================
 # 颜色配置
 # ============================================================================
@@ -98,6 +120,18 @@ check_command() {
     local cmd="$1"
     if ! command -v "$cmd" &> /dev/null; then
         log_error "必需命令未找到: $cmd"
+        
+        case "$cmd" in
+            gcloud)
+                echo "请安装 Google Cloud SDK: https://cloud.google.com/sdk/docs/install" >&2
+                ;;
+            jq)
+                echo "请安装 jq: " >&2
+                echo "  - Ubuntu/Debian: sudo apt-get install jq" >&2
+                echo "  - CentOS/RHEL: sudo yum install jq" >&2
+                echo "  - macOS: brew install jq" >&2
+                ;;
+        esac
         exit 1
     fi
 }
@@ -233,12 +267,16 @@ check_prerequisites() {
     check_command "jq"
     
     # 验证 gcloud 已认证
-    if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" &> /dev/null; then
-        log_error "gcloud 未认证，请先运行: gcloud auth login"
+    local auth_account
+    auth_account=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>&1 || true)
+    
+    if [[ -z "$auth_account" ]]; then
+        log_error "gcloud 未认证或无活动账号，请先运行: gcloud auth login"
+        [[ "$VERBOSE" == true ]] && echo "认证检查输出: $auth_account" >&2
         exit 1
     fi
     
-    log_success "前置条件检查通过 (gcloud, jq)"
+    log_success "前置条件检查通过 (gcloud, jq) - 当前账号: ${auth_account%%$'\n'*}"
 }
 
 # 2. 验证 KMS 项目访问权限
@@ -747,6 +785,14 @@ EOF
     
     # 解析参数
     parse_arguments "$@"
+    
+    # 调试信息
+    if [[ "$VERBOSE" == true ]]; then
+        log_info "调试模式已启用"
+        log_info "临时目录: $TEMP_DIR"
+        log_info "Shell: $SHELL"
+        log_info "Bash 版本: $BASH_VERSION"
+    fi
     
     # 执行检查
     check_prerequisites
