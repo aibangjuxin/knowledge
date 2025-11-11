@@ -117,8 +117,6 @@ steps:
 
 是否希望我帮你补这一段？
 
-非常好，这个补充信息非常关键。
-结合你这句话可以明确：
 
 用户希望在 GitHub 上的 PR 被合并到 master 分支时，自动触发你们平台上的 Pipeline 执行 CI 任务。
 
@@ -142,15 +140,15 @@ steps:
 二、常规流程逻辑（标准实践）
 
 下面是标准的 CI 触发流程（以 GitHub → 你们的 Pipeline 为例）：
-
+```mermaid
 graph TD
     A[开发者 Merge PR 到 Master] --> B[GitHub 触发 push 事件]
     B --> C[GitHub Webhook 调用 Pipeline 接入服务]
-    C --> D[解析事件信息 (repo, branch, commit)]
+    C --> D[解析事件信息 repo, branch, commit]
     D --> E[启动对应的 Pipeline 执行 CI 任务]
     E --> F[CI 执行: 构建 / 测试 / 扫描]
-    F --> G[上报结果 (Dashboard 或 GitHub 状态)]
-
+    F --> G[上报结果 Dashboard 或 GitHub 状态]
+```
 
 ⸻
 
@@ -170,7 +168,7 @@ Pipeline 执行模块	调用内部 Pipeline Runner 执行任务	启动 CI 流程
 四、示例触发条件（GitHub Webhook Payload）
 
 GitHub 在 merge PR 后会发送 push 事件到 Webhook，payload 中包含：
-
+```yaml
 {
   "ref": "refs/heads/master",
   "repository": {
@@ -182,24 +180,24 @@ GitHub 在 merge PR 后会发送 push 事件到 Webhook，payload 中包含：
     "message": "Merge pull request #45"
   }
 }
-
+```
 你们平台的 webhook 接口可以通过判断：
-
+```bash
 if payload["ref"] == "refs/heads/master":
     trigger_pipeline(repo="org/user-service", branch="master")
-
+```
 
 ⸻
 
 五、你们 Pipeline 执行示意（CI 流程）
-
+```mermaid
 graph TD
-    A[GitHub Merge PR] --> B[Webhook to CAEP Pipeline API]
+    A[GitHub Merge PR] --> B[Webhook to AIBANG Pipeline API]
     B --> C[Event Parser: 判断branch=master]
-    C --> D[Trigger CI Pipeline (Build/Test/Scan)]
+    C --> D[Trigger CI Pipeline Build/Test/Scan]
     D --> E[结果写入 Pipeline Dashboard]
     E --> F[可选：回写状态到 GitHub Commit]
-
+```
 
 ⸻
 
@@ -244,15 +242,15 @@ trigger: on_push
 
 ⸻
 
-是否希望我帮你进一步写出一个示例结构，比如你们 CAEP 平台该如何定义这个触发器配置（YAML/JSON 格式），让用户能在配置文件里绑定 GitHub 仓库和触发条件？
+是否希望我帮你进一步写出一个示例结构，比如你们 AIBANG 平台该如何定义这个触发器配置（YAML/JSON 格式），让用户能在配置文件里绑定 GitHub 仓库和触发条件？
 
 好的 👍
-下面是一个适合你们 CAEP 平台（GCP-based internal Pipeline） 的标准化触发配置示例结构。
+下面是一个适合你们 AIBANG 平台（GCP-based internal Pipeline） 的标准化触发配置示例结构。
 目标是让用户在他们的服务仓库中，通过一个简单的 YAML 文件（例如 .caep-pipeline.yaml），声明 当 PR merge 到 master 时触发哪一个 Pipeline 来执行 CI 测试。
 
 ⸻
 
-一、CAEP Pipeline Trigger 配置示例
+一、AIBANG Pipeline Trigger 配置示例
 
 文件名建议放在仓库根目录，例如：
 
@@ -294,7 +292,7 @@ metadata.repo	对应的 GitHub 仓库地址	github.com/org/user-service
 spec.trigger.type	触发来源类型	github
 spec.trigger.events	监听事件类型	push, pull_request, merge
 spec.trigger.branches	触发分支	master
-spec.pipeline.name	要触发的 CAEP Pipeline 名称	ci-build
+spec.pipeline.name	要触发的 AIBANG Pipeline 名称	ci-build
 spec.pipeline.project	对应项目或 namespace	caep-api-platform
 spec.permissions.githubApp	授权 GitHub 应用	caep-ci-bot
 spec.permissions.serviceAccount	执行 Pipeline 的 GCP SA	caep-ci-runner@caep-prod.iam.gserviceaccount.com
@@ -304,23 +302,24 @@ spec.notifications	触发结果通知配置	email / slack 等
 ⸻
 
 三、触发逻辑流程（内部工作机制）
-
+```mermaid
 graph TD
     A[GitHub: Merge PR to master] --> B[GitHub Webhook 触发事件 push]
-    B --> C[CAEP Webhook 接收服务]
+    B --> C[AIBANG Webhook 接收服务]
     C --> D[解析 repo/branch 匹配 .caep-pipeline.yaml]
     D --> E[启动对应 Pipeline: ci-build]
-    E --> F[执行 CI 流程 (Build/Test/Scan)]
+    E --> F[执行 CI 流程 Build/Test/Scan]
     F --> G[通知结果: 邮件/Slack 或回写 GitHub 状态]
-
+```
 
 ⸻
 
 四、示例 Pipeline 定义（ci-build）
 
-这个 CI Pipeline 可以定义在你们 CAEP 平台中，例如：
+这个 CI Pipeline 可以定义在你们 AIBANG 平台中，例如：
 
 # ci-build.yaml
+```yaml
 apiVersion: caep.io/v1
 kind: Pipeline
 metadata:
@@ -339,7 +338,7 @@ spec:
   artifacts:
     - name: build-logs
       path: /workspace/logs
-
+```
 
 ⸻
 
@@ -347,9 +346,9 @@ spec:
 
 步骤	动作	说明
 1️⃣	用户在 GitHub 安装 caep-ci-bot App	用于 webhook 推送和状态写回
-2️⃣	平台管理员在 CAEP 控制台创建 ci-build Pipeline	定义 CI 流程
+2️⃣	平台管理员在 AIBANG 控制台创建 ci-build Pipeline	定义 CI 流程
 3️⃣	用户在仓库添加 .caep-pipeline.yaml	绑定仓库和触发规则
-4️⃣	系统检测到新 push（merge）事件后自动触发	调用 CAEP API 执行 Pipeline
+4️⃣	系统检测到新 push（merge）事件后自动触发	调用 AIBANG API 执行 Pipeline
 
 
 ⸻
@@ -375,10 +374,10 @@ spec:
 
 阶段	动作
 ① 用户提交 PR 并合并到 master	GitHub 产生 push 事件
-② GitHub Webhook → CAEP Webhook 接口	Webhook 事件推送到你们平台
-③ CAEP Webhook 服务解析事件	读取 .caep-pipeline.yaml，匹配分支/事件
-④ 启动 CI Pipeline	通过 CAEP Pipeline 执行构建、测试、镜像推送
-⑤ 返回执行结果	结果展示在 CAEP 平台并可回写 GitHub 状态
+② GitHub Webhook → AIBANG Webhook 接口	Webhook 事件推送到你们平台
+③ AIBANG Webhook 服务解析事件	读取 .caep-pipeline.yaml，匹配分支/事件
+④ 启动 CI Pipeline	通过 AIBANG Pipeline 执行构建、测试、镜像推送
+⑤ 返回执行结果	结果展示在 AIBANG 平台并可回写 GitHub 状态
 ⑥ 通知团队	通过邮件 / Slack 通知结果
 
 
