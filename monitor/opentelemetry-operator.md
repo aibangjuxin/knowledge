@@ -117,20 +117,13 @@ spec:
 三、流程图：平台 OTel 启用流程
 
 ```mermaid
-  graph TD
-
+graph TD
     A[用户提交 Deployment] --> B{含 annotation?}
-
     B -- 否 --> C[直接部署，无 Telemetry]
-
     B -- 是 --> D[Operator 注入 OTel Sidecar]
-
     D --> E[运行时采集数据]
-
     E --> F[Collector Gateway 聚合导出]
-
     F --> G[Cloud Monitoring / Jaeger / BigQuery]
-
 ```
 
 四、注意事项与最佳实践
@@ -265,7 +258,7 @@ graph TD
 
     C2 --> D1
    
-    ```
+```
 
 
 
@@ -319,10 +312,6 @@ sequenceDiagram
 
     Gateway->>Backend: 导出数据到 Cloud Monitoring / Jaeger / BigQuery
  ```
-
-
-
-
 
 
 
