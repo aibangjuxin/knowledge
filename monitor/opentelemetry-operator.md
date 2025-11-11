@@ -63,56 +63,32 @@ graph TD
 
 ```yaml
 apiVersion: apps/v1
-
 kind: Deployment
-
 metadata:
-
   name: sample-app
-
   annotations:
-
     otel.openplatform.io/enabled: "true"
-
 spec:
-
   template:
-
     spec:
-
       containers:
-
       - name: app
-
         image: sample/java-service:latest
-
         env:
-
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
-
           value: http://localhost:4317
-
       # 当 Operator 检测到 annotation=true 时自动注入以下 sidecar
-
       # - name: otel-collector
-
       #   image: otel/opentelemetry-collector:latest
-
       #   ports:
-
       #   - containerPort: 4317
- ```
+```
 
 这种模式的核心逻辑：
-
-
 
 - 平台定义好 OpenTelemetry Operator；
 - 用户只需在 Deployment 加一个 annotation；
 - Operator 自动完成注入、配置、回收。
-
-
-
 
 三、流程图：平台 OTel 启用流程
 
@@ -259,13 +235,7 @@ graph TD
     C2 --> D1
    
 ```
-
-
-
-
 ⚙️ 架构说明
-
-
 
 |   |   |   |
 |---|---|---|
@@ -275,13 +245,6 @@ graph TD
 |Pod 采集层|OTel Collector (sidecar)|采集当前 Pod 内的 telemetry 数据，转发至集群级 Collector|
 |集群网关层|OTel Collector Gateway|聚合、过滤、导出到后端系统|
 |平台后端层|Cloud Monitoring、Jaeger、BigQuery 等|数据存储与可视化分析|
-
-
-
-
-
-
-
 
 
 🧠 流程说明
@@ -311,15 +274,9 @@ sequenceDiagram
     Pod->>Gateway: Sidecar 转发 OTLP 数据
 
     Gateway->>Backend: 导出数据到 Cloud Monitoring / Jaeger / BigQuery
- ```
-
-
-
-
+```
 
 ✅ 平台实施要点
-
-
 
 |   |   |
 |---|---|
@@ -332,42 +289,24 @@ sequenceDiagram
 |可扩展性|Gateway 可横向扩展，支持流量分层聚合与分区导出|
 
 
-
-
-
-
-
-
-
 🚀 推荐落地路径
-
-
-
-
 
 1. 部署 OpenTelemetry Operator（官方 Helm Chart 支持 GKE）
 2. 平台统一配置一个或多个 OTel Collector Gateway
 3. 定义平台标准注解，例如：
 
 
-
+```bash
 otel.openplatform.io/enabled: "true"
 
 otel.openplatform.io/pipeline: "teamA"
-
+```
 
 
 3.
 
 4. Operator 根据注解自动注入 Sidecar 并关联对应 pipeline
 5. 后端统一接入 Cloud Monitoring + Jaeger + BigQuery 等服务
-
-
-
-
-
-
-
 
 
 是否希望我帮你输出一份完整的 GKE 平台 OTel 部署示例（含 Operator + Collector + Gateway YAML 样例）？
@@ -398,20 +337,12 @@ otel.openplatform.io/pipeline: "teamA"
 
 所有内容均可直接复制至 .yaml 文件中使用。
 
-
-
-
-
-
-
-
-
 🧩 一、部署 OpenTelemetry Operator
 
 
 
 # 推荐使用官方 Helm Chart 方式安装
-
+```bash
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
 
 helm repo update
@@ -423,7 +354,7 @@ helm install opentelemetry-operator open-telemetry/opentelemetry-operator \
   --namespace opentelemetry-system \
 
   --create-namespace
-
+```
 
 
 ✅ 验证安装
@@ -437,11 +368,6 @@ kubectl get pods -n opentelemetry-system
 NAME                                      READY   STATUS    AGE
 
 opentelemetry-operator-7f8c8d8bb4-xyz12   1/1     Running   1m
-
-
-
-
-
 
 
 
