@@ -166,7 +166,7 @@ mvn clean test -X
 
 ## **4️⃣ 推荐调试流程（Mermaid）**
 
-```
+```mermaid
 graph TD
     A[构建失败: wiremock 不存在] --> B[检查 pom.xml 依赖版本]
     B --> C{依赖声明存在吗?}
@@ -197,6 +197,161 @@ graph TD
 3. Pipeline 报错的完整日志（包含前后几行）。
 
 提供后我可以帮你直接 pinpoint 哪一步出问题。
+
+
+# 2Q
+我们作为一个平台,我们给用户提供一个Dockerfile 用户需要CI阶段通过Maven来build他们的包的话 如果Maven的build缺失的话,应该是用户层面source code的问题 现在还没有到我们Dockerfile这个层面. 因为在我们 dockerfile这个层面直接是拷贝用户的.Jar包到我们 里面对dockfile构建的Linux目录里面比如/opt/apps/
+
+
+# 2 A
+完全正确 ✅ — 你的判断是**非常精准的架构级划分**。
+
+我们可以从 CI/CD 的责任边界来验证这个结论。
+
+---
+
+## **🧭 问题层级划分分析**
+
+  
+
+整个构建链条可以抽象成以下流程：
+
+```mermaid
+graph TD
+    A[用户代码 & pom.xml] --> B[CI/CD: Maven Build 阶段]
+    B --> C[Dockerfile: 镜像构建阶段]
+    C --> D[平台运行时环境: GKE/Cloud Run 等]
+```
+
+|**层级**|**职责**|**常见问题**|**归属**|
+|---|---|---|---|
+|用户代码层|依赖声明（pom.xml）、版本管理|缺失依赖、版本不兼容|用户|
+|CI/CD 构建层（Marvin）|拉取依赖、执行 mvn package/test|仓库源配置、代理问题、settings.xml 缺失|用户|
+|Dockerfile 层|打包 JAR/镜像|基础镜像缺失、COPY 路径错误|平台|
+|平台运行时层|容器调度、运行|镜像Pull、环境变量|平台|
+
+---
+
+## **🧩 当前问题对应层级**
+
+  
+
+错误：
+
+```
+package com.github.tomakehurst.wiremock.client does not exist
+```
+
+这表示：
+
+- **Java 源码编译阶段**缺少依赖；
+    
+- 也就是在 mvn compile 阶段；
+    
+- 而这一阶段完全发生在 **CI 容器内部**；
+    
+- 与 Dockerfile 无关（Dockerfile 通常在 mvn package 成功后才介入）。
+    
+
+  
+
+> ✅ **结论：**
+
+> 这是“**Maven 构建层（Marvin 执行 mvn build）的问题**”，不是“平台 Dockerfile 层”的问题。
+
+> 所以它属于用户的构建逻辑问题，而非平台基础镜像或构建脚本的缺陷。
+
+---
+
+## **🔍 平台与用户责任边界（最佳实践）**
+
+|**阶段**|**平台（你们）**|**用户（API/服务开发者）**|
+|---|---|---|
+|基础镜像提供|提供带有 JDK + Maven 的标准构建镜像|使用该镜像进行构建|
+|依赖下载源|平台可预设默认 Nexus（可选）|在 ~/.m2/settings.xml 或 CI config 中覆盖|
+|构建命令|平台提供 mvn clean package 或入口脚本|用户定义项目的 pom.xml、依赖|
+|出错处理|输出诊断日志（方便定位）|修正 pom、依赖或仓库配置|
+
+---
+
+## **🧰 建议优化方向**
+
+  
+
+### **✅ 1. 平台责任：保证构建环境标准化**
+
+- 提供官方构建镜像，例如：
+    
+
+```
+FROM maven:3.9.8-eclipse-temurin-17
+COPY mvn_diagnose.sh /usr/local/bin/
+```
+
+-   
+    
+- 镜像中预装：
+    
+    - maven
+        
+    - curl, jq, ca-certificates
+        
+    - 可选：mvn_diagnose.sh 脚本，用于帮助用户自检
+        
+    
+
+  
+
+### **✅ 2. 用户责任：保证依赖可解析**
+
+- 在 CI job 中：
+    
+
+```
+mvn clean package -s .m2/settings.xml
+```
+
+-   
+    
+- 并确保 settings.xml 指向正确 Nexus；
+    
+- 或者在 pipeline YAML 中显式声明：
+    
+
+```
+steps:
+  - name: Build
+    script:
+      - mvn clean package -Dmaven.repo.local=.m2/repository
+```
+
+  
+
+---
+
+## **🧠 简单判断规则（是否属于平台问题）**
+
+|**判断项**|**结果**|**说明**|
+|---|---|---|
+|Dockerfile 构建阶段执行成功（未报错）|✅|平台正常|
+|Maven 下载失败或缺少包|⚠️|用户依赖层问题|
+|mvn package 成功后 Docker build 才开始|✅|问题在 CI，而非 Dockerfile|
+
+---
+
+## **📊 总结**
+
+|**维度**|**内容**|
+|---|---|
+|错误位置|Maven 编译阶段|
+|根因|依赖未正确下载（WireMock）|
+|归属层|用户 CI 构建层（Marvin）|
+|平台层面|不应负责修复，只需确保构建镜像环境正常|
+|最佳实践|平台提供 mvn_diagnose.sh 或 mvn-debug 工具辅助用户排查|
+
+---
+
+是否希望我帮你写一个 **标准化的Dockerfile模板**，用于作为平台统一提供给用户使用（内置JDK+Maven+诊断脚本），这样任何用户在CI阶段都能得到一致的构建环境？
 
 
 # claude 
@@ -610,3 +765,1381 @@ ls -la ~/.m2/repository/com/github/tomakehurst/ 2>/dev/null || echo "本地仓�
 5. **考虑父 POM 的影响**，使用 `dependency:tree` 查看实际版本
 6. **网络问题排查**：代理配置、防火墙规则、DNS 解析
 7. **Dockerfile 多阶段构建**：确保 settings.xml 在正确阶段可用
+
+
+# Claude Q2
+# Dockerfile 层面问题排查分析
+
+## 问题重新定义
+
+根据您的描述，整个构建流程分为两个独立阶段：
+
+```mermaid
+graph LR
+    A[用户源码] --> B[CI Pipeline]
+    B --> C[Maven Build]
+    C --> D[生成 JAR 包]
+    D --> E[平台 Dockerfile]
+    E --> F[COPY JAR 到 /opt/apps/]
+    F --> G[构建镜像]
+    
+    style C fill:#ff6b6b
+    style E fill:#4ecdc4
+    
+    subgraph 用户责任范围
+    A
+    B
+    C
+    D
+    end
+    
+    subgraph 平台责任范围
+    E
+    F
+    G
+    end
+```
+
+## 责任边界明确
+
+### 用户层面（CI 阶段）
+
+**用户负责：**
+
+- `pom.xml` 依赖配置
+- Maven `settings.xml` 配置
+- 源码正确性
+- 依赖仓库访问配置
+- 生成可用的 JAR 包
+
+**常见用户问题：**
+
+|问题类型|具体表现|用户解决方案|
+|---|---|---|
+|依赖缺失|`package does not exist`|在 `pom.xml` 添加依赖|
+|仓库不可达|`Could not transfer artifact`|配置 `settings.xml` Nexus 地址|
+|版本冲突|编译错误|使用 `dependencyManagement` 统一版本|
+|Scope 错误|运行时 `ClassNotFoundException`|修正依赖 scope 为 `compile`|
+|认证失败|`401 Unauthorized`|配置 Nexus 凭据|
+
+### 平台层面（Dockerfile 阶段）
+
+**平台 Dockerfile 示例：**
+
+```dockerfile
+# 平台提供的标准 Dockerfile
+FROM openjdk:11-jre-slim
+
+# 创建应用目录
+RUN mkdir -p /opt/apps
+
+# 从构建产物中拷贝 JAR（用户已完成 Maven build）
+COPY target/*.jar /opt/apps/app.jar
+
+# 运行配置
+WORKDIR /opt/apps
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "/opt/apps/app.jar"]
+```
+
+**平台负责：**
+
+- 基础镜像选择和维护
+- 运行时环境配置（JRE、系统库）
+- 文件系统目录结构
+- 容器启动命令
+- 安全加固和优化
+
+**平台不负责：**
+
+- ❌ Maven 依赖解析
+- ❌ 源码编译
+- ❌ JAR 包生成
+- ❌ 用户代码问题
+
+## 问题定位标准
+
+### 判断规则
+
+```mermaid
+graph TD
+    A[编译/打包失败] --> B{JAR 包是否生成?}
+    B -->|否| C[用户层面问题]
+    B -->|是| D{Dockerfile COPY 失败?}
+    D -->|是| E[检查路径配置]
+    D -->|否| F{运行时错误?}
+    F -->|是| G[检查依赖 scope/runtime]
+    F -->|否| H[平台层面问题]
+    
+    C --> C1[检查 pom.xml]
+    C --> C2[检查 settings.xml]
+    C --> C3[检查网络/Nexus]
+    
+    E --> E1[用户: 确认 JAR 输出路径]
+    E --> E2[平台: 确认 COPY 路径匹配]
+    
+    G --> G1[用户问题: scope=test]
+    
+    H --> H1[平台问题: 基础镜像]
+    H --> H2[平台问题: 系统依赖]
+    
+    style C fill:#ff6b6b
+    style H fill:#4ecdc4
+    style E fill:#ffd93d
+```
+
+### 当前问题分析
+
+**问题：** `package com.github.tomakehurst.wiremock.client does not exist`
+
+**判断依据：**
+
+```bash
+# 这是编译期错误，发生在 Maven 编译阶段
+# 错误信息特征：
+# - "package does not exist" - 编译器找不到类
+# - 发生在 CI Pipeline 的 Maven 阶段
+# - 本地可编译成功
+
+# 结论：用户层面问题
+```
+
+**不是平台 Dockerfile 问题的证据：**
+
+1. **Dockerfile 未参与编译过程**
+    
+    ```dockerfile
+    # 平台 Dockerfile 只做文件拷贝
+    COPY target/*.jar /opt/apps/app.jar  # 此时 JAR 已存在
+    ```
+    
+2. **错误发生在 COPY 之前**
+    
+    ```mermaid
+    graph LR
+        A[Maven compile] -->|失败| B[错误: package not exist]
+        B -.->|未到达| C[mvn package]
+        C -.->|未到达| D[生成 JAR]
+        D -.->|未到达| E[Dockerfile COPY]
+        
+        style B fill:#ff6b6b
+        style E fill:#ddd
+    ```
+    
+3. **本地与 CI 环境差异**
+    
+    - 本地：有 Maven 本地仓库缓存
+    - CI：可能没有缓存或 Nexus 配置不同
+
+## 用户排查指引文档
+
+### 提供给用户的标准排查流程
+
+```markdown
+# Maven 构建失败排查指南
+
+## 问题：package does not exist
+
+### 快速诊断
+
+1. **确认依赖已声明**
+   ```bash
+   # 检查 pom.xml
+   grep -i "wiremock" pom.xml
+```
+
+2. **验证本地构建**
+    
+    ```bash
+    # 清除缓存后本地重新构建
+    mvn clean package -U
+    ```
+    
+3. **对比 CI 和本地 Maven 配置**
+    
+    ```bash
+    # 本地
+    cat ~/.m2/settings.xml
+    
+    # CI（在 Pipeline 中添加调试步骤）
+    cat $HOME/.m2/settings.xml
+    mvn help:effective-settings
+    ```
+    
+
+### 解决方案
+
+#### 方案 1: 补充依赖声明
+
+```xml
+<!-- pom.xml -->
+<dependencies>
+    <dependency>
+        <groupId>com.github.tomakehurst</groupId>
+        <artifactId>wiremock-jre8</artifactId>
+        <version>2.35.0</version>
+        <scope>compile</scope>  <!-- 注意 scope -->
+    </dependency>
+</dependencies>
+```
+
+#### 方案 2: 配置 CI 的 settings.xml
+
+```yaml
+# .gitlab-ci.yml 或 Jenkinsfile
+build:
+  before_script:
+    - mkdir -p ~/.m2
+    - cp ci/settings.xml ~/.m2/settings.xml  # 使用项目提供的配置
+  script:
+    - mvn clean package
+```
+
+```xml
+<!-- ci/settings.xml -->
+<settings>
+    <mirrors>
+        <mirror>
+            <id>company-nexus</id>
+            <mirrorOf>*</mirrorOf>
+            <url>https://nexus.company.com/repository/maven-public/</url>
+        </mirror>
+    </mirrors>
+</settings>
+```
+
+#### 方案 3: 显式指定仓库
+
+```xml
+<!-- pom.xml -->
+<repositories>
+    <repository>
+        <id>maven-central</id>
+        <url>https://repo1.maven.org/maven2</url>
+    </repository>
+</repositories>
+```
+
+### 验证修复
+
+```bash
+# CI Pipeline 中添加验证步骤
+mvn dependency:tree | grep wiremock
+mvn clean package -X  # Debug 模式查看详细日志
+```
+
+````
+
+## 平台层面的支持措施
+
+### 1. 提供诊断工具
+
+```bash
+#!/bin/bash
+# platform-ci-check.sh - 平台提供的 CI 环境检查脚本
+
+echo "=== 平台 CI 环境信息 ==="
+echo "Maven version: $(mvn -v | head -1)"
+echo "Java version: $(java -version 2>&1 | head -1)"
+echo "User: $(whoami)"
+echo "Home: $HOME"
+
+echo -e "\n=== Maven 配置检查 ==="
+if [ -f ~/.m2/settings.xml ]; then
+    echo "✓ settings.xml 存在"
+    echo "Nexus 配置:"
+    grep -A 2 "<url>" ~/.m2/settings.xml | head -5
+else
+    echo "✗ settings.xml 不存在 - 请在 CI Pipeline 中配置"
+fi
+
+echo -e "\n=== 网络连通性 ==="
+curl -s -o /dev/null -w "Nexus Status: %{http_code}\n" \
+    "https://nexus.company.com/repository/maven-public/"
+
+echo -e "\n=== 本地仓库缓存 ==="
+du -sh ~/.m2/repository 2>/dev/null || echo "无缓存"
+
+echo -e "\n=== 建议 ==="
+echo "1. 确保 pom.xml 中声明了所有依赖"
+echo "2. 配置 settings.xml 指向公司 Nexus"
+echo "3. 使用 'mvn clean package -X' 查看详细日志"
+````
+
+### 2. 文档和示例
+
+**平台文档结构：**
+
+````markdown
+# 用户构建指南
+
+## CI Pipeline 配置
+
+### 必需配置项
+
+1. **Maven settings.xml**
+   - 位置: 项目根目录 `ci/settings.xml`
+   - 用途: 配置 Nexus 仓库地址和认证
+
+2. **pom.xml 依赖**
+   - 所有编译和运行时依赖必须声明
+   - 避免使用 `scope=system` 的依赖
+
+### 平台提供的基础配置
+
+```yaml
+# 平台预设的 CI 模板
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end"
+
+cache:
+  paths:
+    - .m2/repository/
+
+build:
+  stage: build
+  script:
+    - mvn $MAVEN_CLI_OPTS clean package
+  artifacts:
+    paths:
+      - target/*.jar
+    expire_in: 1 hour
+````
+
+### Dockerfile 使用说明
+
+**平台 Dockerfile 要求：**
+
+- 输入: `target/*.jar` (Maven 构建产物)
+- 输出: `/opt/apps/app.jar` (容器内路径)
+
+**不支持的场景：**
+
+- ✗ Dockerfile 内执行 Maven 构建
+- ✗ 多模块项目的特殊路径
+- ✓ 单一 JAR 包标准输出路径
+
+````
+
+### 3. 错误提示优化
+
+**平台 Pipeline 中添加预检查：**
+
+```yaml
+# .platform-ci-template.yml
+.pre-build-check:
+  stage: validate
+  script:
+    - |
+      echo "=== 平台预检查 ==="
+      
+      # 检查 JAR 是否存在（用于重新构建场景）
+      if [ -f target/*.jar ]; then
+        echo "✓ 发现已存在的 JAR 包"
+      fi
+      
+      # 检查 pom.xml
+      if [ ! -f pom.xml ]; then
+        echo "✗ 错误: 未找到 pom.xml"
+        echo "提示: 确保项目根目录包含 pom.xml"
+        exit 1
+      fi
+      
+      # 检查依赖声明
+      if ! grep -q "<dependencies>" pom.xml; then
+        echo "⚠ 警告: pom.xml 中未找到 <dependencies> 标签"
+      fi
+      
+      # 给出明确提示
+      echo ""
+      echo "注意: Maven 构建失败通常是以下原因:"
+      echo "1. pom.xml 缺少依赖声明"
+      echo "2. settings.xml 未配置或配置错误"
+      echo "3. 网络无法访问 Nexus 仓库"
+      echo ""
+      echo "请参考: https://docs.platform.com/ci-troubleshooting"
+
+build:
+  extends: .pre-build-check
+  stage: build
+  script:
+    - mvn clean package
+  after_script:
+    - |
+      if [ $CI_JOB_STATUS == 'failed' ]; then
+        echo ""
+        echo "=== 构建失败诊断 ==="
+        echo "最后 50 行日志:"
+        tail -50 build.log
+        echo ""
+        echo "常见错误处理: https://docs.platform.com/ci-errors"
+      fi
+````
+
+### 4. 边界情况处理
+
+```dockerfile
+# 平台 Dockerfile - 增强错误提示
+FROM openjdk:11-jre-slim
+
+RUN mkdir -p /opt/apps
+
+# 添加构建时校验
+COPY target/*.jar /opt/apps/ || \
+    (echo "错误: 未找到 target/*.jar" && \
+     echo "请确认 Maven 构建成功并生成了 JAR 包" && \
+     echo "检查 CI Pipeline 的 Maven 构建步骤" && \
+     exit 1)
+
+# 重命名为标准名称
+RUN mv /opt/apps/*.jar /opt/apps/app.jar 2>/dev/null || \
+    (echo "错误: JAR 包重命名失败" && \
+     echo "可能原因: target 目录包含多个 JAR 文件" && \
+     ls -la /opt/apps/ && \
+     exit 1)
+
+WORKDIR /opt/apps
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "/opt/apps/app.jar"]
+```
+
+## 平台监控和改进
+
+### 统计常见构建失败原因
+
+```bash
+# 平台运维脚本 - 分析用户构建失败模式
+#!/bin/bash
+
+echo "=== Top 10 构建失败错误 ==="
+grep -r "BUILD FAILURE" /var/log/ci-builds/ | \
+    grep -oP 'package .* does not exist|Could not resolve dependencies' | \
+    sort | uniq -c | sort -rn | head -10
+
+echo -e "\n=== 需要改进的用户文档 ==="
+# 识别高频错误，更新文档
+```
+
+### 主动通知
+
+```python
+# 平台告警系统
+def notify_user_build_failure(build_log):
+    """分析构建日志并给用户明确指引"""
+    
+    if "package does not exist" in build_log:
+        return {
+            "type": "USER_DEPENDENCY_ERROR",
+            "message": "Maven 依赖缺失",
+            "solution": "请检查 pom.xml 中是否声明了所有依赖",
+            "docs": "https://docs.platform.com/maven-dependencies",
+            "responsibility": "用户"
+        }
+    
+    elif "COPY failed" in build_log:
+        return {
+            "type": "PLATFORM_DOCKERFILE_ERROR",
+            "message": "Dockerfile 拷贝失败",
+            "solution": "请联系平台支持",
+            "responsibility": "平台"
+        }
+```
+
+## 总结
+
+### 责任清晰划分
+
+```mermaid
+graph TB
+    A[构建流程] --> B{失败阶段?}
+    
+    B -->|Maven compile| C[用户责任]
+    B -->|Maven package| C
+    B -->|Dockerfile COPY| D{JAR 存在?}
+    B -->|容器运行| E{错误类型?}
+    
+    D -->|否| C
+    D -->|是| F[平台责任]
+    
+    E -->|ClassNotFoundException| G[检查依赖 scope]
+    E -->|系统库缺失| F
+    
+    C --> C1[用户自查:<br/>pom.xml/settings.xml]
+    F --> F1[平台支持]
+    G --> G2[scope=test → compile]
+    
+    style C fill:#ff6b6b
+    style C1 fill:#ff6b6b
+    style F fill:#4ecdc4
+    style F1 fill:#4ecdc4
+```
+
+### 关键要点
+
+1. **`package does not exist` = 用户层面问题**
+    
+    - 发生在编译阶段
+    - Dockerfile 未参与
+    - 用户需检查依赖配置
+2. **平台提供支持但不负责修复**
+    
+    - 提供诊断工具和文档
+    - 明确错误提示和责任边界
+    - 帮助用户快速定位问题
+3. **改进用户体验**
+    
+    - 预检查脚本
+    - 详细的错误提示
+    - 完善的文档和示例
+4. **持续优化**
+    
+    - 收集常见错误模式
+    - 更新用户指南
+    - 提供 CI 模板
+
+
+
+# Claud feedback
+
+# Java CI Pipeline Dependency Issue Troubleshooting Guide
+
+## Problem Analysis
+
+`com.github.tomakehurst.wiremock.client` is a core package of the WireMock library, **primarily used for HTTP API mocking in tests**. This package provides client APIs for creating and configuring mock HTTP servers, commonly used for:
+
+- Mocking external HTTP services in unit and integration tests
+- Testing REST API calls without real backend services
+- Creating controlled test environments and data
+
+Typical usage:
+
+```java
+import com.github.tomakehurst.wiremock.client.WireMock;
+
+// Configure mock response
+WireMock.stubFor(WireMock.get("/api/user")
+    .willReturn(WireMock.aResponse()
+        .withStatus(200)
+        .withBody("{\"name\":\"test\"}")));
+```
+
+## Dependency Download Configuration Locations
+
+### Maven Project Dependency Configuration Hierarchy
+
+```mermaid
+graph TD
+    A[Dependency Download Config] --> B[pom.xml]
+    A --> C[settings.xml]
+    A --> D[Pipeline Config]
+    A --> E[Dockerfile]
+    
+    B --> B1[Project pom.xml]
+    B --> B2[Parent pom.xml]
+    
+    C --> C1[Local ~/.m2/settings.xml]
+    C --> C2[Global /etc/maven/settings.xml]
+    C --> C3[CI Environment settings.xml]
+    
+    D --> D1[Jenkins/GitLab CI Config]
+    D --> D2[Environment Variables]
+    
+    E --> E1[Maven Image Config]
+    E --> E2[Custom settings.xml]
+```
+
+### 1. **pom.xml - Project Dependency Declaration**
+
+```xml
+<!-- Dependency declaration -->
+<dependencies>
+    <dependency>
+        <groupId>com.github.tomakehurst</groupId>
+        <artifactId>wiremock-jre8</artifactId>
+        <version>2.35.0</version>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
+
+<!-- Repository configuration (optional) -->
+<repositories>
+    <repository>
+        <id>nexus-releases</id>
+        <url>https://your-nexus.com/repository/maven-releases/</url>
+    </repository>
+</repositories>
+```
+
+### 2. **settings.xml - Maven Repository Configuration**
+
+```xml
+<!-- Location: ~/.m2/settings.xml or CI environment specified path -->
+<settings>
+    <!-- Mirror configuration: redirect all requests to Nexus -->
+    <mirrors>
+        <mirror>
+            <id>nexus</id>
+            <mirrorOf>*</mirrorOf>
+            <url>https://your-nexus.com/repository/maven-public/</url>
+        </mirror>
+    </mirrors>
+    
+    <!-- Authentication configuration -->
+    <servers>
+        <server>
+            <id>nexus</id>
+            <username>${env.NEXUS_USER}</username>
+            <password>${env.NEXUS_PASSWORD}</password>
+        </server>
+    </servers>
+    
+    <!-- Repository configuration -->
+    <profiles>
+        <profile>
+            <id>nexus-profile</id>
+            <repositories>
+                <repository>
+                    <id>nexus-releases</id>
+                    <url>https://your-nexus.com/repository/maven-releases/</url>
+                    <releases><enabled>true</enabled></releases>
+                    <snapshots><enabled>false</enabled></snapshots>
+                </repository>
+            </repositories>
+        </profile>
+    </profiles>
+    
+    <activeProfiles>
+        <activeProfile>nexus-profile</activeProfile>
+    </activeProfiles>
+</settings>
+```
+
+### 3. **Pipeline Configuration Examples**
+
+```groovy
+// Jenkinsfile example
+pipeline {
+    agent any
+    
+    environment {
+        MAVEN_OPTS = '-Dmaven.repo.local=.m2/repository'
+        NEXUS_USER = credentials('nexus-user')
+        NEXUS_PASSWORD = credentials('nexus-password')
+    }
+    
+    stages {
+        stage('Build') {
+            steps {
+                sh '''
+                    mvn clean package \
+                        -s /path/to/settings.xml \
+                        -DskipTests=false \
+                        -X  # Debug mode
+                '''
+            }
+        }
+    }
+}
+```
+
+```yaml
+# GitLab CI example
+build:
+  image: maven:3.8-openjdk-11
+  variables:
+    MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  before_script:
+    - cp ci/settings.xml ~/.m2/settings.xml
+  script:
+    - mvn clean package -X
+  cache:
+    paths:
+      - .m2/repository/
+```
+
+## Problem Redefinition (Platform Perspective)
+
+Based on your description, the build process consists of two independent stages:
+
+```mermaid
+graph LR
+    A[User Source Code] --> B[CI Pipeline]
+    B --> C[Maven Build]
+    C --> D[Generate JAR]
+    D --> E[Platform Dockerfile]
+    E --> F[COPY JAR to /opt/apps/]
+    F --> G[Build Image]
+    
+    style C fill:#ff6b6b
+    style E fill:#4ecdc4
+    
+    subgraph User Responsibility
+    A
+    B
+    C
+    D
+    end
+    
+    subgraph Platform Responsibility
+    E
+    F
+    G
+    end
+```
+
+## Responsibility Boundary
+
+### User Layer (CI Stage)
+
+**User Responsibilities:**
+
+- `pom.xml` dependency configuration
+- Maven `settings.xml` configuration
+- Source code correctness
+- Dependency repository access configuration
+- Generating a valid JAR package
+
+**Common User Issues:**
+
+|Issue Type|Manifestation|User Solution|
+|---|---|---|
+|Missing Dependency|`package does not exist`|Add dependency in `pom.xml`|
+|Repository Unreachable|`Could not transfer artifact`|Configure Nexus address in `settings.xml`|
+|Version Conflict|Compilation error|Use `dependencyManagement` to unify versions|
+|Incorrect Scope|Runtime `ClassNotFoundException`|Fix dependency scope to `compile`|
+|Authentication Failure|`401 Unauthorized`|Configure Nexus credentials|
+
+### Platform Layer (Dockerfile Stage)
+
+**Platform-Provided Standard Dockerfile:**
+
+```dockerfile
+# Standard Dockerfile provided by platform
+FROM openjdk:11-jre-slim
+
+# Create application directory
+RUN mkdir -p /opt/apps
+
+# Copy JAR from build artifacts (Maven build already completed by user)
+COPY target/*.jar /opt/apps/app.jar
+
+# Runtime configuration
+WORKDIR /opt/apps
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "/opt/apps/app.jar"]
+```
+
+**Platform Responsibilities:**
+
+- Base image selection and maintenance
+- Runtime environment configuration (JRE, system libraries)
+- Filesystem directory structure
+- Container startup command
+- Security hardening and optimization
+
+**Platform Does NOT Handle:**
+
+- ❌ Maven dependency resolution
+- ❌ Source code compilation
+- ❌ JAR package generation
+- ❌ User code issues
+
+## Issue Identification Standards
+
+### Decision Rules
+
+```mermaid
+graph TD
+    A[Compilation/Packaging Failure] --> B{JAR Generated?}
+    B -->|No| C[User-Side Issue]
+    B -->|Yes| D{Dockerfile COPY Failed?}
+    D -->|Yes| E[Check Path Configuration]
+    D -->|No| F{Runtime Error?}
+    F -->|Yes| G[Check Dependency Scope/Runtime]
+    F -->|No| H[Platform-Side Issue]
+    
+    C --> C1[Check pom.xml]
+    C --> C2[Check settings.xml]
+    C --> C3[Check Network/Nexus]
+    
+    E --> E1[User: Verify JAR Output Path]
+    E --> E2[Platform: Verify COPY Path Match]
+    
+    G --> G1[User Issue: scope=test]
+    
+    H --> H1[Platform Issue: Base Image]
+    H --> H2[Platform Issue: System Dependencies]
+    
+    style C fill:#ff6b6b
+    style H fill:#4ecdc4
+    style E fill:#ffd93d
+```
+
+### Current Problem Analysis
+
+**Issue:** `package com.github.tomakehurst.wiremock.client does not exist`
+
+**Decision Basis:**
+
+```bash
+# This is a compile-time error occurring during Maven compilation
+# Error characteristics:
+# - "package does not exist" - compiler cannot find class
+# - Occurs during CI Pipeline's Maven stage
+# - Compiles successfully locally
+
+# Conclusion: User-side issue
+```
+
+**Evidence This Is NOT a Platform Dockerfile Issue:**
+
+1. **Dockerfile Does Not Participate in Compilation**
+    
+    ```dockerfile
+    # Platform Dockerfile only does file copying
+    COPY target/*.jar /opt/apps/app.jar  # JAR already exists at this point
+    ```
+    
+2. **Error Occurs Before COPY**
+    
+    ```mermaid
+    graph LR
+        A[Maven compile] -->|Failed| B[Error: package not exist]
+        B -.->|Never Reached| C[mvn package]
+        C -.->|Never Reached| D[Generate JAR]
+        D -.->|Never Reached| E[Dockerfile COPY]
+        
+        style B fill:#ff6b6b
+        style E fill:#ddd
+    ```
+    
+3. **Local vs CI Environment Differences**
+    
+    - Local: Has Maven local repository cache
+    - CI: May lack cache or have different Nexus configuration
+
+## User Troubleshooting Guide
+
+### Standard Troubleshooting Process for Users
+
+```markdown
+# Maven Build Failure Troubleshooting Guide
+
+## Issue: package does not exist
+
+### Quick Diagnosis
+
+1. **Confirm Dependency is Declared**
+   ```bash
+   # Check pom.xml
+   grep -i "wiremock" pom.xml
+```
+
+2. **Verify Local Build**
+    
+    ```bash
+    # Clear cache and rebuild locally
+    mvn clean package -U
+    ```
+    
+3. **Compare CI and Local Maven Configuration**
+    
+    ```bash
+    # Local
+    cat ~/.m2/settings.xml
+    
+    # CI (add debug step in Pipeline)
+    cat $HOME/.m2/settings.xml
+    mvn help:effective-settings
+    ```
+    
+
+### Solutions
+
+#### Solution 1: Add Missing Dependency Declaration
+
+```xml
+<!-- pom.xml -->
+<dependencies>
+    <dependency>
+        <groupId>com.github.tomakehurst</groupId>
+        <artifactId>wiremock-jre8</artifactId>
+        <version>2.35.0</version>
+        <scope>compile</scope>  <!-- Note the scope -->
+    </dependency>
+</dependencies>
+```
+
+#### Solution 2: Configure CI settings.xml
+
+```yaml
+# .gitlab-ci.yml or Jenkinsfile
+build:
+  before_script:
+    - mkdir -p ~/.m2
+    - cp ci/settings.xml ~/.m2/settings.xml  # Use project-provided config
+  script:
+    - mvn clean package
+```
+
+```xml
+<!-- ci/settings.xml -->
+<settings>
+    <mirrors>
+        <mirror>
+            <id>company-nexus</id>
+            <mirrorOf>*</mirrorOf>
+            <url>https://nexus.company.com/repository/maven-public/</url>
+        </mirror>
+    </mirrors>
+</settings>
+```
+
+#### Solution 3: Explicitly Specify Repository
+
+```xml
+<!-- pom.xml -->
+<repositories>
+    <repository>
+        <id>maven-central</id>
+        <url>https://repo1.maven.org/maven2</url>
+    </repository>
+</repositories>
+```
+
+### Verify Fix
+
+```bash
+# Add verification steps in CI Pipeline
+mvn dependency:tree | grep wiremock
+mvn clean package -X  # Debug mode for detailed logs
+```
+
+````
+
+## Response Template for User
+
+### Professional Response (Formal)
+
+```markdown
+Subject: RE: Maven Build Failure - Package Does Not Exist
+
+Hello [User Name],
+
+Thank you for reporting this build issue. After analyzing the error message:
+
+**Error:** `package com.github.tomakehurst.wiremock.client does not exist`
+
+**Root Cause Analysis:**
+
+This is a **compile-time dependency resolution issue** occurring during the Maven build phase, which is before our platform's Dockerfile stage. Here's the process breakdown:
+
+**Build Process Flow:**
+1. ✅ Your Source Code (User Responsibility)
+2. ✅ CI Pipeline Maven Build (User Responsibility) ← **Error occurs here**
+3. ❌ Generate JAR Package (Not reached)
+4. ❌ Platform Dockerfile COPY (Not reached)
+5. ❌ Container Image Build (Not reached)
+
+**Why This Is Not a Platform Issue:**
+
+Our platform Dockerfile only performs the following operation:
+```dockerfile
+COPY target/*.jar /opt/apps/app.jar
+````
+
+This step requires a successfully built JAR file from your Maven build. Since the error occurs during compilation, the Dockerfile stage is never reached.
+
+**Recommended Actions:**
+
+1. **Verify Dependency Declaration in pom.xml:**
+    
+    ```xml
+    <dependency>
+        <groupId>com.github.tomakehurst</groupId>
+        <artifactId>wiremock-jre8</artifactId>
+        <version>2.35.0</version>
+        <scope>compile</scope>
+    </dependency>
+    ```
+    
+2. **Check CI settings.xml Configuration:** Ensure your CI environment has proper Maven repository configuration pointing to your Nexus server.
+    
+3. **Compare Local vs CI Environment:**
+    
+    - Maven version
+    - settings.xml location and content
+    - Network connectivity to Nexus
+4. **Debug with Verbose Logging:**
+    
+    ```bash
+    mvn clean package -X
+    ```
+    
+
+**Reference Documentation:**
+
+- [Maven Dependency Troubleshooting Guide](https://claude.ai/chat/d13e6bbc-e580-4d61-9e26-75cc4340677e#)
+- [CI Environment Configuration](https://claude.ai/chat/d13e6bbc-e580-4d61-9e26-75cc4340677e#)
+
+If you've verified all dependency configurations and still encounter issues accessing your Nexus repository, please share:
+
+- Your pom.xml dependency section
+- CI environment Maven configuration
+- Detailed build logs with `-X` flag
+
+Best regards, [Your Name] Platform Support Team
+
+````
+
+### Concise Response (Quick Reply)
+
+```markdown
+Hi [User Name],
+
+The error `package com.github.tomakehurst.wiremock.client does not exist` indicates a **Maven dependency resolution issue during compilation**, which occurs before our platform's Dockerfile stage.
+
+**This is a user-side configuration issue** - our Dockerfile only copies the pre-built JAR file and doesn't participate in the Maven build process.
+
+**Quick Fixes:**
+
+1. Add the dependency to your `pom.xml`:
+   ```xml
+   <dependency>
+       <groupId>com.github.tomakehurst</groupId>
+       <artifactId>wiremock-jre8</artifactId>
+       <version>2.35.0</version>
+   </dependency>
+````
+
+2. Ensure your CI environment has a properly configured `settings.xml` with Nexus repository settings.
+    
+3. Run `mvn clean package -X` locally to compare with CI behavior.
+    
+
+Since this works locally but fails in CI, the issue is likely a difference in Maven repository configuration between environments.
+
+Need help configuring your CI Maven settings? Check our [CI Configuration Guide](https://claude.ai/chat/d13e6bbc-e580-4d61-9e26-75cc4340677e#) or let me know if you need specific assistance.
+
+Best, [Your Name]
+
+````
+
+### Technical Deep-Dive Response (For Technical Users)
+
+```markdown
+## Technical Analysis: Maven Compilation Failure
+
+### Error Classification
+
+**Error Type:** Compile-time dependency resolution failure  
+**Error Location:** Maven compile phase  
+**Scope:** User build environment  
+**Platform Impact:** None (Dockerfile not reached)
+
+### Execution Flow Analysis
+
+````
+
+User Code → CI Pipeline → Maven Compile [FAILED] ⛔ ↓ "package does not exist"
+
+Maven Package → Generate JAR → Platform Dockerfile COPY [NOT REACHED] [NOT REACHED] [NOT REACHED]
+
+````
+
+### Root Cause Investigation
+
+**Why it works locally but fails in CI:**
+
+| Aspect | Local Environment | CI Environment | Impact |
+|--------|-------------------|----------------|---------|
+| Maven Cache | `~/.m2/repository` populated | May be empty or incomplete | Dependency availability |
+| settings.xml | Personal configuration | May be missing/different | Repository resolution |
+| Network | Direct internet access | May require proxy/Nexus | Download capability |
+| Maven Version | Your local version | CI image version | Dependency resolution algorithm |
+
+### Diagnostic Commands
+
+```bash
+# 1. Verify dependency tree
+mvn dependency:tree -Dverbose | grep wiremock
+
+# 2. Check effective settings
+mvn help:effective-settings | grep -A 10 "mirrors\|repositories"
+
+# 3. Test dependency download
+mvn dependency:get \
+  -Dartifact=com.github.tomakehurst:wiremock-jre8:2.35.0 \
+  -Dtransitive=false
+
+# 4. Debug build
+mvn clean compile -X 2>&1 | tee build-debug.log
+grep -i "downloading\|failed" build-debug.log | grep wiremock
+````
+
+### Resolution Strategies
+
+**Strategy 1: Dependency Declaration (Most Common)**
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>com.github.tomakehurst</groupId>
+        <artifactId>wiremock-jre8</artifactId>
+        <version>2.35.0</version>
+        <scope>compile</scope> <!-- ⚠️ Check scope -->
+    </dependency>
+</dependencies>
+```
+
+**Strategy 2: Repository Configuration**
+
+```xml
+<!-- In pom.xml or settings.xml -->
+<repositories>
+    <repository>
+        <id>central</id>
+        <url>https://repo1.maven.org/maven2</url>
+    </repository>
+    <repository>
+        <id>company-nexus</id>
+        <url>https://nexus.company.com/repository/maven-public/</url>
+    </repository>
+</repositories>
+```
+
+**Strategy 3: CI Pipeline Configuration**
+
+```yaml
+# .gitlab-ci.yml
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+
+before_script:
+  - mkdir -p ~/.m2
+  - cp ci/settings.xml ~/.m2/settings.xml
+
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - .m2/repository/
+```
+
+### Platform Dockerfile Context
+
+Our platform's Dockerfile operates at a **later stage** and expects a pre-built JAR:
+
+```dockerfile
+# Platform Dockerfile (simplified)
+FROM openjdk:11-jre-slim
+COPY target/*.jar /opt/apps/app.jar  # ← Requires successful Maven build
+ENTRYPOINT ["java", "-jar", "/opt/apps/app.jar"]
+```
+
+**Platform responsibilities:**
+
+- ✅ Runtime environment (JRE)
+- ✅ Container configuration
+- ✅ Application deployment structure
+
+**Platform does NOT handle:**
+
+- ❌ Source code compilation
+- ❌ Dependency resolution
+- ❌ Maven build execution
+
+### Next Steps
+
+1. Review your `pom.xml` for WireMock dependency
+2. Validate CI `settings.xml` configuration
+3. Run diagnostic commands above
+4. Compare local vs CI Maven effective-settings
+5. Share build logs if issue persists
+
+This is definitively a **build-time user configuration issue**, not a platform Dockerfile issue.
+
+Let me know if you need help interpreting the diagnostic output.
+
+````
+
+## Platform Support Measures
+
+### 1. Diagnostic Tool
+
+```bash
+#!/bin/bash
+# platform-ci-check.sh - Platform-provided CI environment check script
+
+echo "=== Platform CI Environment Information ==="
+echo "Maven version: $(mvn -v | head -1)"
+echo "Java version: $(java -version 2>&1 | head -1)"
+echo "User: $(whoami)"
+echo "Home: $HOME"
+
+echo -e "\n=== Maven Configuration Check ==="
+if [ -f ~/.m2/settings.xml ]; then
+    echo "✓ settings.xml exists"
+    echo "Nexus configuration:"
+    grep -A 2 "<url>" ~/.m2/settings.xml | head -5
+else
+    echo "✗ settings.xml does not exist - Please configure in CI Pipeline"
+fi
+
+echo -e "\n=== Network Connectivity ==="
+curl -s -o /dev/null -w "Nexus Status: %{http_code}\n" \
+    "https://nexus.company.com/repository/maven-public/"
+
+echo -e "\n=== Local Repository Cache ==="
+du -sh ~/.m2/repository 2>/dev/null || echo "No cache"
+
+echo -e "\n=== Recommendations ==="
+echo "1. Ensure all dependencies are declared in pom.xml"
+echo "2. Configure settings.xml pointing to company Nexus"
+echo "3. Use 'mvn clean package -X' for detailed logs"
+````
+
+### 2. Enhanced Error Messages in Platform Pipeline
+
+```yaml
+# .platform-ci-template.yml
+.pre-build-check:
+  stage: validate
+  script:
+    - |
+      echo "=== Platform Pre-Build Check ==="
+      
+      # Check if JAR already exists (for rebuild scenarios)
+      if [ -f target/*.jar ]; then
+        echo "✓ Found existing JAR package"
+      fi
+      
+      # Check pom.xml
+      if [ ! -f pom.xml ]; then
+        echo "✗ Error: pom.xml not found"
+        echo "Hint: Ensure pom.xml exists in project root"
+        exit 1
+      fi
+      
+      # Check dependency declarations
+      if ! grep -q "<dependencies>" pom.xml; then
+        echo "⚠ Warning: No <dependencies> tag found in pom.xml"
+      fi
+      
+      # Provide clear guidance
+      echo ""
+      echo "Note: Maven build failures are typically caused by:"
+      echo "1. Missing dependency declarations in pom.xml"
+      echo "2. Unconfigured or misconfigured settings.xml"
+      echo "3. Network unable to access Nexus repository"
+      echo ""
+      echo "Reference: https://docs.platform.com/ci-troubleshooting"
+
+build:
+  extends: .pre-build-check
+  stage: build
+  script:
+    - mvn clean package
+  after_script:
+    - |
+      if [ $CI_JOB_STATUS == 'failed' ]; then
+        echo ""
+        echo "=== Build Failure Diagnosis ==="
+        echo "Last 50 lines of log:"
+        tail -50 build.log
+        echo ""
+        echo "Common error handling: https://docs.platform.com/ci-errors"
+        echo ""
+        echo "⚠️ IMPORTANT: Compilation errors (e.g., 'package does not exist')"
+        echo "   indicate issues with your source code or Maven configuration,"
+        echo "   not with the platform Dockerfile."
+      fi
+```
+
+### 3. Enhanced Dockerfile with Better Error Messages
+
+```dockerfile
+# Platform Dockerfile - Enhanced error messages
+FROM openjdk:11-jre-slim
+
+RUN mkdir -p /opt/apps
+
+# Add build-time validation
+COPY target/*.jar /opt/apps/ || \
+    (echo "ERROR: target/*.jar not found" && \
+     echo "Please ensure Maven build succeeded and generated a JAR package" && \
+     echo "Check the Maven build step in your CI Pipeline" && \
+     echo "" && \
+     echo "Common causes:" && \
+     echo "- Maven compilation failed (check for 'package does not exist' errors)" && \
+     echo "- Maven package step was skipped" && \
+     echo "- JAR output directory differs from 'target/'" && \
+     exit 1)
+
+# Rename to standard name
+RUN mv /opt/apps/*.jar /opt/apps/app.jar 2>/dev/null || \
+    (echo "ERROR: JAR rename failed" && \
+     echo "Possible cause: Multiple JAR files in target directory" && \
+     ls -la /opt/apps/ && \
+     exit 1)
+
+WORKDIR /opt/apps
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "/opt/apps/app.jar"]
+```
+
+## Summary
+
+### Clear Responsibility Division
+
+```mermaid
+graph TB
+    A[Build Process] --> B{Failure Stage?}
+    
+    B -->|Maven compile| C[User Responsibility]
+    B -->|Maven package| C
+    B -->|Dockerfile COPY| D{JAR Exists?}
+    B -->|Container runtime| E{Error Type?}
+    
+    D -->|No| C
+    D -->|Yes| F[Platform Responsibility]
+    
+    E -->|ClassNotFoundException| G[Check dependency scope]
+    E -->|System library missing| F
+    
+    C --> C1[User Self-Check:<br/>pom.xml/settings.xml]
+    F --> F1[Platform Support]
+    G --> G2[scope=test → compile]
+    
+    style C fill:#ff6b6b
+    style C1 fill:#ff6b6b
+    style F fill:#4ecdc4
+    style F1 fill:#4ecdc4
+```
+
+### Key Points
+
+1. **`package does not exist` = User-Side Issue**
+    
+    - Occurs during compilation phase
+    - Dockerfile not involved
+    - User needs to check dependency configuration
+2. **Platform Provides Support But Not Resolution**
+    
+    - Provide diagnostic tools and documentation
+    - Clear error messages and responsibility boundaries
+    - Help users quickly identify issues
+3. **Professional Communication**
+    
+    - Be empathetic but firm about boundaries
+    - Provide actionable guidance
+    - Reference documentation and examples
+4. **Continuous Improvement**
+    
+    - Collect common error patterns
+    - Update user guides
+    - Enhance automated diagnostics
