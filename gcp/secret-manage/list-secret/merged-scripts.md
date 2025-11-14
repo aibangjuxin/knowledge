@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2025-11-14 20:17:39
+Generated on: 2025-11-14 20:28:24
 Directory: /Users/lex/git/knowledge/gcp/secret-manage/list-secret
 
 ## `auto-select-version.sh`
@@ -613,115 +613,129 @@ END_TIME=$(date +%s)
 ELAPSED=$((END_TIME - START_TIME))
 
 # 生成汇总报告
-{
-    echo "========================================="
-    echo "GCP Secret Manager 权限审计报告 (最优化版本)"
-    echo "========================================="
-    echo "项目 ID: ${PROJECT_ID}"
-    echo "生成时间: $(date)"
-    echo "Secret 总数: ${SECRET_COUNT}"
-    echo "处理耗时: ${ELAPSED} 秒"
-    echo "========================================="
-    echo ""
-    
-    echo "权限绑定统计:"
-    echo "  Groups: ${TOTAL_GROUPS}"
-    echo "  ServiceAccounts: ${TOTAL_SAS}"
-    echo "  Users: ${TOTAL_USERS}"
-    echo "  Others: ${TOTAL_OTHERS}"
-    echo ""
-    
-    echo "按角色统计:"
-    tail -n +2 "${OUTPUT_DIR}/secrets-permissions.csv" | cut -d',' -f2 | sort | uniq -c | sort -rn | while read count role; do
-        role_clean=$(echo "$role" | tr -d '"')
-        echo "  ${role_clean}: ${count}"
-    done
-    echo ""
-    
-    echo "所有 Groups 列表:"
-    jq -r '.[] | .bindings[]?.members[]? | select(.type == "Group") | .id' "${OUTPUT_DIR}/secrets-permissions.json" | sort -u | while read group; do
-        echo "  - ${group}"
-    done
-    echo ""
-    
-    echo "所有 ServiceAccounts 列表:"
-    jq -r '.[] | .bindings[]?.members[]? | select(.type == "ServiceAccount") | .id' "${OUTPUT_DIR}/secrets-permissions.json" | sort -u | while read sa; do
-        echo "  - ${sa}"
-    done
-    echo ""
-    
-    echo "性能统计:"
-    echo "  总耗时: ${ELAPSED} 秒"
-    echo "  平均每个 Secret: $(echo "scale=2; $ELAPSED / $SECRET_COUNT" | bc) 秒"
-    echo "  吞吐量: $(echo "scale=2; $SECRET_COUNT / $ELAPSED" | bc) Secret/秒"
-    echo ""
-    
-} | tee "${OUTPUT_DIR}/summary.txt"
+cat > "${OUTPUT_DIR}/summary.txt" << EOFSUM
+=========================================
+GCP Secret Manager 权限审计报告 (最优化版本)
+=========================================
+项目 ID: ${PROJECT_ID}
+生成时间: $(date)
+Secret 总数: ${SECRET_COUNT}
+处理耗时: ${ELAPSED} 秒
+=========================================
+
+权限绑定统计:
+  Groups: ${TOTAL_GROUPS}
+  ServiceAccounts: ${TOTAL_SAS}
+  Users: ${TOTAL_USERS}
+  Others: ${TOTAL_OTHERS}
+
+EOFSUM
+
+# 添加按角色统计
+echo "按角色统计:" >> "${OUTPUT_DIR}/summary.txt"
+tail -n +2 "${OUTPUT_DIR}/secrets-permissions.csv" | cut -d',' -f2 | sort | uniq -c | sort -rn | while read count role; do
+    role_clean=$(echo "$role" | tr -d '"')
+    echo "  ${role_clean}: ${count}" >> "${OUTPUT_DIR}/summary.txt"
+done
+echo "" >> "${OUTPUT_DIR}/summary.txt"
+
+# 添加 Groups 列表
+echo "所有 Groups 列表:" >> "${OUTPUT_DIR}/summary.txt"
+jq -r '.[] | .bindings[]?.members[]? | select(.type == "Group") | .id' "${OUTPUT_DIR}/secrets-permissions.json" | sort -u | while read group; do
+    echo "  - ${group}" >> "${OUTPUT_DIR}/summary.txt"
+done
+echo "" >> "${OUTPUT_DIR}/summary.txt"
+
+# 添加 ServiceAccounts 列表
+echo "所有 ServiceAccounts 列表:" >> "${OUTPUT_DIR}/summary.txt"
+jq -r '.[] | .bindings[]?.members[]? | select(.type == "ServiceAccount") | .id' "${OUTPUT_DIR}/secrets-permissions.json" | sort -u | while read sa; do
+    echo "  - ${sa}" >> "${OUTPUT_DIR}/summary.txt"
+done
+echo "" >> "${OUTPUT_DIR}/summary.txt"
+
+# 添加性能统计
+AVG_TIME=$(echo "scale=2; $ELAPSED / $SECRET_COUNT" | bc)
+THROUGHPUT=$(echo "scale=2; $SECRET_COUNT / $ELAPSED" | bc)
+cat >> "${OUTPUT_DIR}/summary.txt" << EOFPERF
+性能统计:
+  总耗时: ${ELAPSED} 秒
+  平均每个 Secret: ${AVG_TIME} 秒
+  吞吐量: ${THROUGHPUT} Secret/秒
+
+EOFPERF
+
+# 显示汇总报告
+cat "${OUTPUT_DIR}/summary.txt"
 
 # 生成 Markdown 报告
-{
-    echo "# GCP Secret Manager 权限审计报告 (最优化版本)"
-    echo ""
-    echo "**项目 ID:** \`${PROJECT_ID}\`  "
-    echo "**生成时间:** $(date)  "
-    echo "**Secret 总数:** ${SECRET_COUNT}  "
-    echo "**处理耗时:** ${ELAPSED} 秒"
-    echo ""
-    
-    echo "## 📊 权限绑定统计"
-    echo ""
-    echo "| 类型 | 数量 |"
-    echo "|------|------|"
-    echo "| Groups | ${TOTAL_GROUPS} |"
-    echo "| ServiceAccounts | ${TOTAL_SAS} |"
-    echo "| Users | ${TOTAL_USERS} |"
-    echo "| Others | ${TOTAL_OTHERS} |"
-    echo ""
-    
-    echo "## 🔑 按角色统计"
-    echo ""
-    echo "| 角色 | 绑定数量 |"
-    echo "|------|----------|"
-    tail -n +2 "${OUTPUT_DIR}/secrets-permissions.csv" | cut -d',' -f2 | sort | uniq -c | sort -rn | while read count role; do
-        role_clean=$(echo "$role" | tr -d '"')
-        echo "| \`${role_clean}\` | ${count} |"
+cat > "${OUTPUT_DIR}/report.md" << 'EOFMD'
+# GCP Secret Manager 权限审计报告 (最优化版本)
+
+EOFMD
+
+cat >> "${OUTPUT_DIR}/report.md" << EOFMD2
+**项目 ID:** \`${PROJECT_ID}\`  
+**生成时间:** $(date)  
+**Secret 总数:** ${SECRET_COUNT}  
+**处理耗时:** ${ELAPSED} 秒
+
+## 📊 权限绑定统计
+
+| 类型 | 数量 |
+|------|------|
+| Groups | ${TOTAL_GROUPS} |
+| ServiceAccounts | ${TOTAL_SAS} |
+| Users | ${TOTAL_USERS} |
+| Others | ${TOTAL_OTHERS} |
+
+## 🔑 按角色统计
+
+| 角色 | 绑定数量 |
+|------|----------|
+EOFMD2
+
+tail -n +2 "${OUTPUT_DIR}/secrets-permissions.csv" | cut -d',' -f2 | sort | uniq -c | sort -rn | while read count role; do
+    role_clean=$(echo "$role" | tr -d '"')
+    echo "| \`${role_clean}\` | ${count} |" >> "${OUTPUT_DIR}/report.md"
+done
+
+echo "" >> "${OUTPUT_DIR}/report.md"
+echo "## 👥 所有 Groups" >> "${OUTPUT_DIR}/report.md"
+echo "" >> "${OUTPUT_DIR}/report.md"
+
+GROUP_LIST=$(jq -r '.[] | .bindings[]?.members[]? | select(.type == "Group") | .id' "${OUTPUT_DIR}/secrets-permissions.json" | sort -u)
+if [ -n "$GROUP_LIST" ]; then
+    echo "$GROUP_LIST" | while read group; do
+        echo "- \`${group}\`" >> "${OUTPUT_DIR}/report.md"
     done
-    echo ""
-    
-    echo "## 👥 所有 Groups"
-    echo ""
-    GROUP_LIST=$(jq -r '.[] | .bindings[]?.members[]? | select(.type == "Group") | .id' "${OUTPUT_DIR}/secrets-permissions.json" | sort -u)
-    if [ -n "$GROUP_LIST" ]; then
-        echo "$GROUP_LIST" | while read group; do
-            echo "- \`${group}\`"
-        done
-    else
-        echo "*未找到 Groups*"
-    fi
-    echo ""
-    
-    echo "## 🤖 所有 ServiceAccounts"
-    echo ""
-    SA_LIST=$(jq -r '.[] | .bindings[]?.members[]? | select(.type == "ServiceAccount") | .id' "${OUTPUT_DIR}/secrets-permissions.json" | sort -u)
-    if [ -n "$SA_LIST" ]; then
-        echo "$SA_LIST" | while read sa; do
-            echo "- \`${sa}\`"
-        done
-    else
-        echo "*未找到 ServiceAccounts*"
-    fi
-    echo ""
-    
-    echo "## ⚡ 性能统计"
-    echo ""
-    echo "| 指标 | 值 |"
-    echo "|------|-----|"
-    echo "| 总耗时 | ${ELAPSED} 秒 |"
-    echo "| 平均每个 Secret | $(echo "scale=2; $ELAPSED / $SECRET_COUNT" | bc) 秒 |"
-    echo "| 吞吐量 | $(echo "scale=2; $SECRET_COUNT / $ELAPSED" | bc) Secret/秒 |"
-    echo ""
-    
-} > "${OUTPUT_DIR}/report.md"
+else
+    echo "*未找到 Groups*" >> "${OUTPUT_DIR}/report.md"
+fi
+
+echo "" >> "${OUTPUT_DIR}/report.md"
+echo "## 🤖 所有 ServiceAccounts" >> "${OUTPUT_DIR}/report.md"
+echo "" >> "${OUTPUT_DIR}/report.md"
+
+SA_LIST=$(jq -r '.[] | .bindings[]?.members[]? | select(.type == "ServiceAccount") | .id' "${OUTPUT_DIR}/secrets-permissions.json" | sort -u)
+if [ -n "$SA_LIST" ]; then
+    echo "$SA_LIST" | while read sa; do
+        echo "- \`${sa}\`" >> "${OUTPUT_DIR}/report.md"
+    done
+else
+    echo "*未找到 ServiceAccounts*" >> "${OUTPUT_DIR}/report.md"
+fi
+
+cat >> "${OUTPUT_DIR}/report.md" << EOFMD3
+
+## ⚡ 性能统计
+
+| 指标 | 值 |
+|------|-----|
+| 总耗时 | ${ELAPSED} 秒 |
+| 平均每个 Secret | ${AVG_TIME} 秒 |
+| 吞吐量 | ${THROUGHPUT} Secret/秒 |
+
+EOFMD3
 
 # 生成 HTML 报告
 {
