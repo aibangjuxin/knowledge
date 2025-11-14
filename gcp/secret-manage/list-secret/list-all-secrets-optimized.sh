@@ -100,74 +100,59 @@ echo -e "${GREEN}✓ IAM 策略获取完成${NC}"
 ################################################################################
 echo -e "\n${GREEN}[3/4] 处理和合并数据...${NC}"
 
+# 创建临时目录存储处理后的数据
+TEMP_PROCESSED="${OUTPUT_DIR}/processed"
+mkdir -p "${TEMP_PROCESSED}"
+
 # 处理每个 Secret 并合并数据
-jq -r '.[].name | split("/") | .[-1]' "${OUTPUT_DIR}/secrets-list.json" | while read SECRET_NAME; do
+jq -r '.[].name | split("/") | .[-1]' "${OUTPUT_DIR}/secrets-list.json" | while read -r SECRET_NAME; do
     # 获取 Secret 的基本信息
-    SECRET_INFO=$(jq --arg name "$SECRET_NAME" '
-        .[] | select(.name | endswith($name)) | {
-            secretName: (.name | split("/") | .[-1]),
-            fullName: .name,
-            createTime: .createTime
-        }
-    ' "${OUTPUT_DIR}/secrets-list.json")
+    jq --arg name "$SECRET_NAME" '.[] | select(.name | endswith($name))' "${OUTPUT_DIR}/secrets-list.json" > "${TEMP_PROCESSED}/${SECRET_NAME}-info.json"
     
     # 获取 IAM 策略
     IAM_FILE="${OUTPUT_DIR}/iam-${SECRET_NAME}.json"
     
     if [ -f "$IAM_FILE" ] && [ -s "$IAM_FILE" ]; then
-        IAM_DATA=$(cat "$IAM_FILE")
+        cp "$IAM_FILE" "${TEMP_PROCESSED}/${SECRET_NAME}-iam.json"
     else
-        IAM_DATA="{}"
+        echo '{}' > "${TEMP_PROCESSED}/${SECRET_NAME}-iam.json"
     fi
     
-    # 合并数据
-    echo "$SECRET_INFO" | jq --argjson iam "$IAM_DATA" '
-        . + {
-            bindings: (
-                if ($iam.bindings // []) | length > 0 then
-                    $iam.bindings | map({
-                        role: .role,
-                        members: .members | map({
-                            type: (
-                                if startswith("group:") then "Group"
-                                elif startswith("serviceAccount:") then "ServiceAccount"
-                                elif startswith("user:") then "User"
-                                elif startswith("domain:") then "Domain"
-                                else "Other"
-                                end
-                            ),
-                            id: (
-                                if startswith("group:") then .[6:]
-                                elif startswith("serviceAccount:") then .[15:]
-                                elif startswith("user:") then .[5:]
-                                elif startswith("domain:") then .[7:]
-                                else .
-                                end
-                            ),
+    # 使用 Python 风格的 jq 处理（更简单）
+    jq -s '
+        .[0] as $info |
+        .[1] as $iam |
+        {
+            secretName: ($info.name | split("/") | .[-1]),
+            fullName: $info.name,
+            createTime: $info.createTime,
+            bindings: [
+                $iam.bindings[]? | {
+                    role: .role,
+                    members: [
+                        .members[] | {
+                            type: (if startswith("group:") then "Group" elif startswith("serviceAccount:") then "ServiceAccount" elif startswith("user:") then "User" elif startswith("domain:") then "Domain" else "Other" end),
+                            id: (if startswith("group:") then .[6:] elif startswith("serviceAccount:") then .[15:] elif startswith("user:") then .[5:] elif startswith("domain:") then .[7:] else . end),
                             fullMember: .
-                        })
-                    })
-                else
-                    []
-                end
-            ),
-            summary: (
-                if ($iam.bindings // []) | length > 0 then
-                    {
-                        groups: ([$iam.bindings[].members[] | select(startswith("group:"))] | length),
-                        serviceAccounts: ([$iam.bindings[].members[] | select(startswith("serviceAccount:"))] | length),
-                        users: ([$iam.bindings[].members[] | select(startswith("user:"))] | length),
-                        others: ([$iam.bindings[].members[] | select(startswith("domain:") or (startswith("group:") or startswith("serviceAccount:") or startswith("user:")) | not)] | length)
-                    }
-                else
-                    {groups: 0, serviceAccounts: 0, users: 0, others: 0}
-                end
-            )
+                        }
+                    ]
+                }
+            ],
+            summary: {
+                groups: ([$iam.bindings[]?.members[]? | select(startswith("group:"))] | length),
+                serviceAccounts: ([$iam.bindings[]?.members[]? | select(startswith("serviceAccount:"))] | length),
+                users: ([$iam.bindings[]?.members[]? | select(startswith("user:"))] | length),
+                others: ([$iam.bindings[]?.members[]? | select(startswith("domain:") or (startswith("group:") or startswith("serviceAccount:") or startswith("user:")) | not)] | length)
+            }
         }
-    '
-done | jq -s '.' > "${OUTPUT_DIR}/secrets-permissions.json"
+    ' "${TEMP_PROCESSED}/${SECRET_NAME}-info.json" "${TEMP_PROCESSED}/${SECRET_NAME}-iam.json" > "${TEMP_PROCESSED}/${SECRET_NAME}-final.json"
+done
 
-# 清理临时 IAM 文件
+# 合并所有处理后的 JSON
+jq -s '.' "${TEMP_PROCESSED}"/*-final.json > "${OUTPUT_DIR}/secrets-permissions.json"
+
+# 清理临时文件
+rm -rf "${TEMP_PROCESSED}"
 rm -f "${OUTPUT_DIR}"/iam-*.json "${OUTPUT_DIR}/secret-names.txt
 
 ################################################################################
