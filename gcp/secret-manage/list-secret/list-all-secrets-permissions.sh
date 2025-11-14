@@ -170,31 +170,31 @@ EOF
                 MEMBER_TYPE="Group"
                 MEMBER_ID="${MEMBER#group:}"
                 echo -e "    ${GREEN}✓ Group:${NC} ${MEMBER_ID}"
-                ((GROUP_COUNT++))
+                GROUP_COUNT=$((GROUP_COUNT + 1))
                 
             elif [[ $MEMBER == serviceAccount:* ]]; then
                 MEMBER_TYPE="ServiceAccount"
                 MEMBER_ID="${MEMBER#serviceAccount:}"
                 echo -e "    ${BLUE}✓ ServiceAccount:${NC} ${MEMBER_ID}"
-                ((SA_COUNT++))
+                SA_COUNT=$((SA_COUNT + 1))
                 
             elif [[ $MEMBER == user:* ]]; then
                 MEMBER_TYPE="User"
                 MEMBER_ID="${MEMBER#user:}"
                 echo -e "    ${CYAN}✓ User:${NC} ${MEMBER_ID}"
-                ((USER_COUNT++))
+                USER_COUNT=$((USER_COUNT + 1))
                 
             elif [[ $MEMBER == domain:* ]]; then
                 MEMBER_TYPE="Domain"
                 MEMBER_ID="${MEMBER#domain:}"
                 echo -e "    ${YELLOW}✓ Domain:${NC} ${MEMBER_ID}"
-                ((OTHER_COUNT++))
+                OTHER_COUNT=$((OTHER_COUNT + 1))
                 
             else
                 MEMBER_TYPE="Other"
                 MEMBER_ID="${MEMBER}"
                 echo -e "    ${YELLOW}✓ Other:${NC} ${MEMBER_ID}"
-                ((OTHER_COUNT++))
+                OTHER_COUNT=$((OTHER_COUNT + 1))
             fi
             
             # 写入 CSV
@@ -525,7 +525,7 @@ HTML_FILE="${OUTPUT_DIR}/report.html"
             font-weight: 600;
         }
         .badge-group {
-            background-color: #10b981;
+            background-color: #10.721;
             color: white;
         }
         .badge-sa {

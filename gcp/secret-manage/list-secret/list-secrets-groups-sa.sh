@@ -86,7 +86,7 @@ while IFS= read -r SECRET_NAME; do
             echo "    - ${GROUP_EMAIL}"
             echo "      角色: ${ROLE}"
             echo "\"${SECRET_NAME}\",\"Group\",\"${GROUP_EMAIL}\",\"${ROLE}\"" >> "${CSV_FILE}"
-            ((TOTAL_GROUPS++))
+            TOTAL_GROUPS=$((TOTAL_GROUPS + 1))
         done <<< "$GROUPS"
         echo ""
     fi
@@ -102,14 +102,14 @@ while IFS= read -r SECRET_NAME; do
             echo "    - ${SA_EMAIL}"
             echo "      角色: ${ROLE}"
             echo "\"${SECRET_NAME}\",\"ServiceAccount\",\"${SA_EMAIL}\",\"${ROLE}\"" >> "${CSV_FILE}"
-            ((TOTAL_SAS++))
+            TOTAL_SAS=$((TOTAL_SAS + 1))
         done <<< "$SAS"
         echo ""
     fi
     
     # 更新统计
-    [ "$HAS_GROUP" = true ] && ((SECRETS_WITH_GROUPS++))
-    [ "$HAS_SA" = true ] && ((SECRETS_WITH_SAS++))
+    [ "$HAS_GROUP" = true ] && SECRETS_WITH_GROUPS=$((SECRETS_WITH_GROUPS + 1))
+    [ "$HAS_SA" = true ] && SECRETS_WITH_SAS=$((SECRETS_WITH_SAS + 1))
     
     # 如果既没有 Groups 也没有 ServiceAccounts
     if [ -z "$GROUPS" ] && [ -z "$SAS" ]; then
