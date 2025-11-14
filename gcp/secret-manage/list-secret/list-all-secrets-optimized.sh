@@ -118,34 +118,11 @@ jq -r '.[].name | split("/") | .[-1]' "${OUTPUT_DIR}/secrets-list.json" | while 
         echo '{}' > "${TEMP_PROCESSED}/${SECRET_NAME}-iam.json"
     fi
     
-    # 使用 Python 风格的 jq 处理（更简单）
-    jq -s '
-        .[0] as $info |
-        .[1] as $iam |
-        {
-            secretName: ($info.name | split("/") | .[-1]),
-            fullName: $info.name,
-            createTime: $info.createTime,
-            bindings: [
-                $iam.bindings[]? | {
-                    role: .role,
-                    members: [
-                        .members[] | {
-                            type: (if startswith("group:") then "Group" elif startswith("serviceAccount:") then "ServiceAccount" elif startswith("user:") then "User" elif startswith("domain:") then "Domain" else "Other" end),
-                            id: (if startswith("group:") then .[6:] elif startswith("serviceAccount:") then .[15:] elif startswith("user:") then .[5:] elif startswith("domain:") then .[7:] else . end),
-                            fullMember: .
-                        }
-                    ]
-                }
-            ],
-            summary: {
-                groups: ([$iam.bindings[]?.members[]? | select(startswith("group:"))] | length),
-                serviceAccounts: ([$iam.bindings[]?.members[]? | select(startswith("serviceAccount:"))] | length),
-                users: ([$iam.bindings[]?.members[]? | select(startswith("user:"))] | length),
-                others: ([$iam.bindings[]?.members[]? | select(startswith("domain:") or (startswith("group:") or startswith("serviceAccount:") or startswith("user:")) | not)] | length)
-            }
-        }
-    ' "${TEMP_PROCESSED}/${SECRET_NAME}-info.json" "${TEMP_PROCESSED}/${SECRET_NAME}-iam.json" > "${TEMP_PROCESSED}/${SECRET_NAME}-final.json"
+    # 使用外部 jq 脚本处理并合并数据
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    jq -s -f "${SCRIPT_DIR}/merge-secret-data.jq" \
+        "${TEMP_PROCESSED}/${SECRET_NAME}-info.json" \
+        "${TEMP_PROCESSED}/${SECRET_NAME}-iam.json" > "${TEMP_PROCESSED}/${SECRET_NAME}-final.json"
 done
 
 # 合并所有处理后的 JSON
