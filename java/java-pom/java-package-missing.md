@@ -7,7 +7,7 @@
 错误信息：
 
 ```
-package com.github.tomakehurst.wiremock.core does not exist
+package com.github.tomakehurst.wiremock.client does not exist
 ```
 
 说明构建时找不到 wiremock 的依赖包。

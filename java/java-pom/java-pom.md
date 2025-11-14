@@ -334,3 +334,160 @@ com.github.tomakehurst:wiremock:pom:3.0.1:test
 ---
 
 是否希望我帮你扩展这个脚本，让它在发现错误时自动打印出 ~/.m2/settings.xml 的摘要（仅输出 <repositories> 和 <mirrors> 段）方便调试？
+
+# Why
+
+基于你前面提供的全部线索，再结合 Java/Maven 实战经验，现在可以非常明确地锁定：
+
+# **🟢** 
+
+# **最大可能原因 = CI/CD 的 Maven 构建环境发生变化（仓库 / 缓存 / settings.xml）导致依赖无法解析**
+
+甚至可以更具体一点：
+
+> **CI 以前能从某个仓库（例如 Nexus / Maven Central）拉到 WireMock 所需依赖，现在拉不到了。**
+
+> **本地可以构建是因为本地已有依赖缓存（~/.m2 repository）。**
+
+下面我给你一个清晰的因果链，看完你一定会“恍然大悟”。
+
+---
+
+# **🧨 为什么之前可用？**
+
+因为：
+
+- 用户曾经成功构建 → CI 主机上 .m2 里 **已经缓存过 wiremock 的 jar**
+- Build 没爆，就是因为依赖已经在缓存里
+- 即使 pom.xml 写得不完整，只要 Maven 扫出来的依赖在缓存里就不会报错
+
+---
+
+# **🧨 为什么现在突然失败？（关键）**
+
+**因为 CI 构建环境发生变化：**
+
+### **✔ CI 主机重置 / 换 runner**
+
+新的 runner 没有之前的 .m2/repository 缓存。
+
+### **✔ CI 清空了 maven cache**
+
+例如：
+
+- 改了 pipeline 配置
+- 切换分支触发 clean cache
+- Infra 升级清理旧缓存
+- Docker layer 缓存失效
+
+### **✔ settings.xml / repository 失效**
+
+如果 WireMock 的 artifact 需要从 Maven Central 拉取，而你的 CI 环境 **强制走内网 Nexus**，可能出现：
+
+- Nexus 没有该 artifact（例如 wiremock-core, wiremock-jre8）
+- Nexus 代理 Maven Central 出现问题（公司内常见）
+- Nexus 最近被清理 / 权限变更 / SSL 证书问题
+
+### **✔ 依赖的 artifact 被 upstream 移除或变更**
+
+可能是 WireMock 版本 3.x 依赖结构调整（真实情况确实有变更）。
+
+---
+
+# **🧨 为什么本地没问题？**
+
+因为：
+
+### **🟢 本地的** 
+
+### **~/.m2/repository/\***
+
+###  **中有你所有构建所需的 jar**
+
+即使用户 POM 中引用的是一个 **pom 构件 (type=pom)**，本地构建仍然能成功，因为它 **已经缓存了所有实际需要的 transitive dependencies**，包括：
+
+- wiremock-core
+- wiremock-standalone
+- wiremock-jre8
+- 各种 Jackson / Jetty 依赖
+
+但 CI 机器没有这些缓存 → 依赖无法解析 → 构建失败。
+
+---
+
+# **🟢** 
+
+# **最关键的一句话总结：**
+
+> **这是典型的 “本地缓存导致假正常，而 CI 缓存缺失导致真实错误暴露出来” 的依赖解析问题。**
+
+>
+
+> 本质原因不是 Dockerfile，不是 Java 代码，而是 **CI 构建环境中缺失依赖源 /缓存 / repository 配置**。
+
+---
+
+# **🧭 如何验证？（100% 能复现）**
+
+在 CI 上跑：
+
+```
+mvn -X -Dmaven.repo.local=/tmp/empty_repo clean test
+```
+
+如果这样能复现你看到的缺包错误 → 直接确认 **本地缓存导致假正常**。
+
+---
+
+# **🛠 如何真正修复？**
+
+### **✔** 
+
+### **明确引入正确的依赖：建议使用 wiremock-jre8**
+
+```xml
+<dependency>
+    <groupId>com.github.tomakehurst</groupId>
+    <artifactId>wiremock-jre8</artifactId>
+    <version>3.0.1</version>
+    <scope>test</scope>
+</dependency>
+```
+
+### **✔ 确认 CI settings.xml 中是否允许访问 Maven Central**
+
+```xml
+<mirror>
+    <id>central</id>
+    <mirrorOf>*</mirrorOf>
+    <url>https://repo.maven.apache.org/maven2</url>
+</mirror>
+```
+
+若被 SQL/Nexus 覆盖，则需要添加真实可访问的代理仓。
+
+### **✔ 如果公司 Nexus 缺包 → 让管理员修复、重新同步**
+
+---
+
+# **🟢 最终结论（关键）**
+
+> **以前之所以可用，是因为 CI 的 maven cache 中存在 wiremock 的依赖。**
+
+> **而现在失败，是因为 CI 环境变更导致依赖 cache 不存在，且用户的 pom.xml 没有显式声明正确的 wiremock JAR（只声明了 type=pom）。**
+
+> **本地能构建是因为个人电脑里依赖已经缓存，所以表现正常。**
+
+这一类问题在 Java/Maven 体系中几乎是“经典病”。
+
+---
+
+如果你需要，我也可以：
+
+✅ 给你生成一个 CI 中的自动检测脚本（确认 repository / settings / missing deps）
+
+✅ 帮你写一个针对 Marvin 的自诊断步骤
+
+✅ 帮你写一个最小复现 demo，让你在 CI 一下子复现问题
+
+告诉我你需要哪一个？
