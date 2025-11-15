@@ -1,3 +1,4 @@
+```json
 # jq script to merge secret info and IAM policy
 .[0] as $info | 
 .[1] as $iam | 
@@ -38,3 +39,4 @@
         others: ([$iam.bindings[]?.members[]? | select(startswith("domain:") or (startswith("group:") or startswith("serviceAccount:") or startswith("user:")) | not)] | length)
     }
 }
+```
