@@ -33,6 +33,223 @@ graph TD
 
 ```bash
 #!/bin/bash
+# export_bucket_configs_enhanced.sh - 导出完整 Bucket 配置（含版本控制）
+
+set -e
+
+# 配置变量
+PROJECT_A="your-project-a-id"
+OUTPUT_DIR="./bucket_configs"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+# 创建输出目录
+mkdir -p "${OUTPUT_DIR}/lifecycle"
+mkdir -p "${OUTPUT_DIR}/iam"
+mkdir -p "${OUTPUT_DIR}/versioning"
+mkdir -p "${OUTPUT_DIR}/labels"
+mkdir -p "${OUTPUT_DIR}/cors"
+
+# 设置当前工程
+gcloud config set project "${PROJECT_A}"
+
+echo "=== 开始导出 ${PROJECT_A} 的 Bucket 完整配置 ==="
+
+# 获取所有 Buckets
+BUCKETS=$(gsutil ls)
+
+# 创建汇总文件
+SUMMARY_FILE="${OUTPUT_DIR}/buckets_summary_${TIMESTAMP}.csv"
+echo "Bucket名称,版本控制,存储类别,位置,创建时间" > "${SUMMARY_FILE}"
+
+for BUCKET in ${BUCKETS}; do
+    # 去掉 gs:// 前缀和末尾斜杠
+    BUCKET_NAME=$(echo ${BUCKET} | sed 's|gs://||g' | sed 's|/||g')
+    
+    echo ""
+    echo "========================================="
+    echo "处理 Bucket: ${BUCKET_NAME}"
+    echo "========================================="
+    
+    # 1. 导出 Lifecycle 配置
+    echo "  [1/6] 导出 Lifecycle 配置..."
+    if gsutil lifecycle get "gs://${BUCKET_NAME}" > "${OUTPUT_DIR}/lifecycle/${BUCKET_NAME}_lifecycle.json" 2>/dev/null; then
+        echo "    ✓ Lifecycle 配置已保存"
+    else
+        echo "    ✗ 该 Bucket 无 Lifecycle 配置"
+        echo "{}" > "${OUTPUT_DIR}/lifecycle/${BUCKET_NAME}_lifecycle.json"
+    fi
+    
+    # 2. 导出 IAM Policy
+    echo "  [2/6] 导出 IAM Policy..."
+    gsutil iam get "gs://${BUCKET_NAME}" > "${OUTPUT_DIR}/iam/${BUCKET_NAME}_iam.json"
+    
+    # 3. 导出版本控制状态
+    echo "  [3/6] 导出版本控制状态..."
+    VERSIONING_STATUS=$(gsutil versioning get "gs://${BUCKET_NAME}" | grep -oP '(?<=: )\w+')
+    echo "${VERSIONING_STATUS}" > "${OUTPUT_DIR}/versioning/${BUCKET_NAME}_versioning.txt"
+    echo "    ✓ 版本控制状态: ${VERSIONING_STATUS}"
+    
+    # 4. 导出 CORS 配置
+    echo "  [4/6] 导出 CORS 配置..."
+    if gsutil cors get "gs://${BUCKET_NAME}" > "${OUTPUT_DIR}/cors/${BUCKET_NAME}_cors.json" 2>/dev/null; then
+        # 检查是否为空配置
+        if [ -s "${OUTPUT_DIR}/cors/${BUCKET_NAME}_cors.json" ] && [ "$(cat ${OUTPUT_DIR}/cors/${BUCKET_NAME}_cors.json)" != "[]" ]; then
+            echo "    ✓ CORS 配置已保存"
+        else
+            echo "    ✗ 该 Bucket 无 CORS 配置"
+            echo "[]" > "${OUTPUT_DIR}/cors/${BUCKET_NAME}_cors.json"
+        fi
+    else
+        echo "    ✗ 该 Bucket 无 CORS 配置"
+        echo "[]" > "${OUTPUT_DIR}/cors/${BUCKET_NAME}_cors.json"
+    fi
+    
+    # 5. 导出 Bucket 标签
+    echo "  [5/6] 导出 Bucket 标签..."
+    gsutil label get "gs://${BUCKET_NAME}" > "${OUTPUT_DIR}/labels/${BUCKET_NAME}_labels.json" 2>/dev/null || echo "{}" > "${OUTPUT_DIR}/labels/${BUCKET_NAME}_labels.json"
+    
+    # 6. 获取 Bucket 元数据
+    echo "  [6/6] 获取 Bucket 元数据..."
+    BUCKET_INFO=$(gsutil ls -L -b "gs://${BUCKET_NAME}")
+    
+    # 提取关键信息
+    STORAGE_CLASS=$(echo "${BUCKET_INFO}" | grep "Storage class:" | awk '{print $3}')
+    LOCATION=$(echo "${BUCKET_INFO}" | grep "Location constraint:" | awk '{print $3}')
+    TIME_CREATED=$(echo "${BUCKET_INFO}" | grep "Time created:" | cut -d: -f2- | xargs)
+    
+    # 写入汇总 CSV
+    echo "${BUCKET_NAME},${VERSIONING_STATUS},${STORAGE_CLASS},${LOCATION},${TIME_CREATED}" >> "${SUMMARY_FILE}"
+    
+    # 生成详细配置文档
+    cat > "${OUTPUT_DIR}/versioning/${BUCKET_NAME}_config_detail.txt" <<EOF
+=== Bucket 配置详情 ===
+Bucket 名称: ${BUCKET_NAME}
+导出时间: ${TIMESTAMP}
+工程: ${PROJECT_A}
+
+【版本控制】
+状态: ${VERSIONING_STATUS}
+
+【存储信息】
+存储类别: ${STORAGE_CLASS}
+位置: ${LOCATION}
+创建时间: ${TIME_CREATED}
+
+【配置文件位置】
+- Lifecycle: lifecycle/${BUCKET_NAME}_lifecycle.json
+- IAM Policy: iam/${BUCKET_NAME}_iam.json
+- Versioning: versioning/${BUCKET_NAME}_versioning.txt
+- CORS: cors/${BUCKET_NAME}_cors.json
+- Labels: labels/${BUCKET_NAME}_labels.json
+
+【版本控制说明】
+- Enabled: 已启用，所有对象修改都会保留历史版本
+- Suspended: 已暂停，新修改不保留版本，但历史版本仍保留
+- 未设置: 默认为 Suspended
+
+【应用到 B 工程】
+如需在 B 工程启用版本控制:
+  gsutil versioning set on gs://target-bucket
+
+如需暂停版本控制:
+  gsutil versioning set off gs://target-bucket
+EOF
+    
+    # 生成可读的 IAM 绑定列表
+    cat > "${OUTPUT_DIR}/iam/${BUCKET_NAME}_iam_reference.txt" <<EOF
+Bucket: ${BUCKET_NAME}
+导出时间: ${TIMESTAMP}
+工程: ${PROJECT_A}
+
+=== IAM Policy 绑定 ===
+EOF
+    
+    gsutil iam get "gs://${BUCKET_NAME}" | \
+        jq -r '.bindings[] | "角色: \(.role)\n成员: \(.members | join(", "))\n"' \
+        >> "${OUTPUT_DIR}/iam/${BUCKET_NAME}_iam_reference.txt"
+    
+    echo "  ✓ ${BUCKET_NAME} 完整配置导出完成"
+done
+
+# 生成总体汇总报告
+cat > "${OUTPUT_DIR}/export_summary_${TIMESTAMP}.txt" <<EOF
+=== 配置导出汇总报告 ===
+工程: ${PROJECT_A}
+导出时间: ${TIMESTAMP}
+导出目录: ${OUTPUT_DIR}
+
+【导出内容】
+1. Lifecycle 配置: ${OUTPUT_DIR}/lifecycle/
+2. IAM Policy: ${OUTPUT_DIR}/iam/
+3. 版本控制状态: ${OUTPUT_DIR}/versioning/
+4. CORS 配置: ${OUTPUT_DIR}/cors/
+5. Bucket 标签: ${OUTPUT_DIR}/labels/
+6. 汇总数据: ${SUMMARY_FILE}
+
+【版本控制统计】
+EOF
+
+# 统计版本控制状态
+echo "启用版本控制的 Bucket:" >> "${OUTPUT_DIR}/export_summary_${TIMESTAMP}.txt"
+grep ",Enabled," "${SUMMARY_FILE}" | cut -d, -f1 >> "${OUTPUT_DIR}/export_summary_${TIMESTAMP}.txt" || echo "  无" >> "${OUTPUT_DIR}/export_summary_${TIMESTAMP}.txt"
+echo "" >> "${OUTPUT_DIR}/export_summary_${TIMESTAMP}.txt"
+
+echo "暂停版本控制的 Bucket:" >> "${OUTPUT_DIR}/export_summary_${TIMESTAMP}.txt"
+grep ",Suspended," "${SUMMARY_FILE}" | cut -d, -f1 >> "${OUTPUT_DIR}/export_summary_${TIMESTAMP}.txt" || echo "  无" >> "${OUTPUT_DIR}/export_summary_${TIMESTAMP}.txt"
+
+cat >> "${OUTPUT_DIR}/export_summary_${TIMESTAMP}.txt" <<EOF
+
+【下一步操作】
+1. 检查汇总文件: ${SUMMARY_FILE}
+2. 查看各项配置详情: ${OUTPUT_DIR}/versioning/*_config_detail.txt
+3. 参考 IAM 文档调整 B 工程绑定
+4. 使用 apply_bucket_configs_enhanced.sh 应用到 B 工程
+
+【注意事项】
+- 版本控制一旦启用，会增加存储成本
+- 历史版本需要手动清理或配置 Lifecycle 规则
+- IAM Policy 中的 Service Account 需要替换为 B 工程对应账户
+EOF
+
+echo ""
+echo "========================================="
+echo "=== 导出完成 ==="
+echo "========================================="
+cat "${OUTPUT_DIR}/export_summary_${TIMESTAMP}.txt"
+
+# 生成快速查看脚本
+cat > "${OUTPUT_DIR}/view_config.sh" <<'EOF'
+#!/bin/bash
+# 快速查看导出的配置
+
+if [ -z "$1" ]; then
+    echo "用法: ./view_config.sh <bucket-name>"
+    echo ""
+    echo "可用的 Buckets:"
+    ls -1 versioning/*_config_detail.txt | sed 's|versioning/||g' | sed 's|_config_detail.txt||g'
+    exit 1
+fi
+
+BUCKET_NAME=$1
+
+echo "=== Bucket 详细配置 ==="
+cat "versioning/${BUCKET_NAME}_config_detail.txt"
+echo ""
+echo "=== Lifecycle 规则 ==="
+cat "lifecycle/${BUCKET_NAME}_lifecycle.json" | jq .
+echo ""
+echo "=== IAM 绑定 ==="
+cat "iam/${BUCKET_NAME}_iam_reference.txt"
+EOF
+
+chmod +x "${OUTPUT_DIR}/view_config.sh"
+
+echo ""
+echo "快速查看工具已生成: ${OUTPUT_DIR}/view_config.sh"
+
+
+
+#!/bin/bash
 # export_bucket_configs.sh - 导出 A 工程 Bucket 配置
 
 set -e
@@ -115,6 +332,233 @@ cat "${OUTPUT_DIR}/export_summary_${TIMESTAMP}.txt"
 #### 2. 应用配置到 B 工程
 
 ```bash
+#!/bin/bash
+# apply_bucket_configs_enhanced.sh - 应用完整配置到 B 工程（含版本控制）
+
+set -e
+
+# 配置变量
+PROJECT_B="your-project-b-id"
+INPUT_DIR="./bucket_configs"
+LOG_FILE="./apply_log_$(date +%Y%m%d_%H%M%S).txt"
+
+# 设置当前工程
+gcloud config set project "${PROJECT_B}"
+
+echo "=== 开始应用配置到 ${PROJECT_B} ===" | tee -a "${LOG_FILE}"
+echo "日志文件: ${LOG_FILE}" | tee -a "${LOG_FILE}"
+echo "" | tee -a "${LOG_FILE}"
+
+# 检查输入目录
+for DIR in lifecycle versioning cors labels; do
+    if [ ! -d "${INPUT_DIR}/${DIR}" ]; then
+        echo "警告: 找不到 ${DIR} 配置目录" | tee -a "${LOG_FILE}"
+    fi
+done
+
+# 列出 B 工程的 Buckets
+BUCKETS_B=$(gsutil ls | sed 's|gs://||g' | sed 's|/||g')
+
+echo "B 工程现有 Buckets:" | tee -a "${LOG_FILE}"
+echo "${BUCKETS_B}" | tee -a "${LOG_FILE}"
+echo "" | tee -a "${LOG_FILE}"
+
+# 显示可用的配置源
+echo "可用的配置源 Buckets:" | tee -a "${LOG_FILE}"
+ls -1 "${INPUT_DIR}/versioning/"*_versioning.txt 2>/dev/null | \
+    sed 's|.*/||g' | sed 's|_versioning.txt||g' | tee -a "${LOG_FILE}"
+echo "" | tee -a "${LOG_FILE}"
+
+# 交互式选择模式
+echo "配置应用选项:"
+echo "1 = 全部应用（Lifecycle + Versioning + CORS + Labels）"
+echo "2 = 仅应用 Lifecycle"
+echo "3 = 仅应用版本控制"
+echo "4 = 选择性应用"
+read -p "选择模式: " MODE
+
+apply_lifecycle() {
+    local BUCKET_NAME=$1
+    local LIFECYCLE_FILE="${INPUT_DIR}/lifecycle/${BUCKET_NAME}_lifecycle.json"
+    
+    if [ -f "${LIFECYCLE_FILE}" ] && [ $(cat "${LIFECYCLE_FILE}" | jq '. | length' 2>/dev/null || echo 0) -gt 0 ]; then
+        echo "    [Lifecycle] 应用配置..." | tee -a "${LOG_FILE}"
+        if gsutil lifecycle set "${LIFECYCLE_FILE}" "gs://${BUCKET_NAME}" 2>&1 | tee -a "${LOG_FILE}"; then
+            echo "    ✓ Lifecycle 配置已应用" | tee -a "${LOG_FILE}"
+            return 0
+        else
+            echo "    ✗ Lifecycle 配置应用失败" | tee -a "${LOG_FILE}"
+            return 1
+        fi
+    else
+        echo "    - Lifecycle: 无配置或配置为空" | tee -a "${LOG_FILE}"
+        return 0
+    fi
+}
+
+apply_versioning() {
+    local BUCKET_NAME=$1
+    local SOURCE_BUCKET=${2:-$BUCKET_NAME}
+    local VERSIONING_FILE="${INPUT_DIR}/versioning/${SOURCE_BUCKET}_versioning.txt"
+    
+    if [ -f "${VERSIONING_FILE}" ]; then
+        local VERSIONING_STATUS=$(cat "${VERSIONING_FILE}")
+        echo "    [Versioning] 源状态: ${VERSIONING_STATUS}" | tee -a "${LOG_FILE}"
+        
+        # 获取当前状态
+        local CURRENT_STATUS=$(gsutil versioning get "gs://${BUCKET_NAME}" | grep -oP '(?<=: )\w+')
+        echo "    [Versioning] 当前状态: ${CURRENT_STATUS}" | tee -a "${LOG_FILE}"
+        
+        if [ "${VERSIONING_STATUS}" = "Enabled" ]; then
+            if [ "${CURRENT_STATUS}" != "Enabled" ]; then
+                echo "    [Versioning] 启用版本控制..." | tee -a "${LOG_FILE}"
+                if gsutil versioning set on "gs://${BUCKET_NAME}" 2>&1 | tee -a "${LOG_FILE}"; then
+                    echo "    ✓ 版本控制已启用" | tee -a "${LOG_FILE}"
+                    return 0
+                else
+                    echo "    ✗ 版本控制启用失败" | tee -a "${LOG_FILE}"
+                    return 1
+                fi
+            else
+                echo "    - Versioning: 已是启用状态" | tee -a "${LOG_FILE}"
+                return 0
+            fi
+        elif [ "${VERSIONING_STATUS}" = "Suspended" ]; then
+            if [ "${CURRENT_STATUS}" = "Enabled" ]; then
+                read -p "    警告: 源为 Suspended，当前为 Enabled。是否暂停? [y/N]: " CONFIRM
+                if [ "${CONFIRM}" = "y" ] || [ "${CONFIRM}" = "Y" ]; then
+                    gsutil versioning set off "gs://${BUCKET_NAME}" 2>&1 | tee -a "${LOG_FILE}"
+                    echo "    ✓ 版本控制已暂停" | tee -a "${LOG_FILE}"
+                else
+                    echo "    - Versioning: 保持 Enabled 状态" | tee -a "${LOG_FILE}"
+                fi
+            else
+                echo "    - Versioning: 保持 Suspended 状态" | tee -a "${LOG_FILE}"
+            fi
+            return 0
+        fi
+    else
+        echo "    - Versioning: 未找到配置文件" | tee -a "${LOG_FILE}"
+        return 0
+    fi
+}
+
+apply_cors() {
+    local BUCKET_NAME=$1
+    local CORS_FILE="${INPUT_DIR}/cors/${BUCKET_NAME}_cors.json"
+    
+    if [ -f "${CORS_FILE}" ] && [ "$(cat ${CORS_FILE})" != "[]" ]; then
+        echo "    [CORS] 应用配置..." | tee -a "${LOG_FILE}"
+        if gsutil cors set "${CORS_FILE}" "gs://${BUCKET_NAME}" 2>&1 | tee -a "${LOG_FILE}"; then
+            echo "    ✓ CORS 配置已应用" | tee -a "${LOG_FILE}"
+            return 0
+        else
+            echo "    ✗ CORS 配置应用失败" | tee -a "${LOG_FILE}"
+            return 1
+        fi
+    else
+        echo "    - CORS: 无配置" | tee -a "${LOG_FILE}"
+        return 0
+    fi
+}
+
+apply_labels() {
+    local BUCKET_NAME=$1
+    local LABELS_FILE="${INPUT_DIR}/labels/${BUCKET_NAME}_labels.json"
+    
+    if [ -f "${LABELS_FILE}" ] && [ $(cat "${LABELS_FILE}" | jq '. | length' 2>/dev/null || echo 0) -gt 0 ]; then
+        echo "    [Labels] 应用配置..." | tee -a "${LOG_FILE}"
+        if gsutil label set "${LABELS_FILE}" "gs://${BUCKET_NAME}" 2>&1 | tee -a "${LOG_FILE}"; then
+            echo "    ✓ Labels 配置已应用" | tee -a "${LOG_FILE}"
+            return 0
+        else
+            echo "    ✗ Labels 配置应用失败" | tee -a "${LOG_FILE}"
+            return 1
+        fi
+    else
+        echo "    - Labels: 无配置" | tee -a "${LOG_FILE}"
+        return 0
+    fi
+}
+
+# 主应用逻辑
+case ${MODE} in
+    1)
+        # 全部应用模式
+        for BUCKET_NAME in ${BUCKETS_B}; do
+            echo "" | tee -a "${LOG_FILE}"
+            echo "=========================================" | tee -a "${LOG_FILE}"
+            echo "处理 Bucket: ${BUCKET_NAME}" | tee -a "${LOG_FILE}"
+            echo "=========================================" | tee -a "${LOG_FILE}"
+            
+            apply_lifecycle "${BUCKET_NAME}"
+            apply_versioning "${BUCKET_NAME}"
+            apply_cors "${BUCKET_NAME}"
+            apply_labels "${BUCKET_NAME}"
+        done
+        ;;
+    2)
+        # 仅应用 Lifecycle
+        for BUCKET_NAME in ${BUCKETS_B}; do
+            echo "" | tee -a "${LOG_FILE}"
+            echo "处理 Bucket: ${BUCKET_NAME}" | tee -a "${LOG_FILE}"
+            apply_lifecycle "${BUCKET_NAME}"
+        done
+        ;;
+    3)
+        # 仅应用版本控制
+        for BUCKET_NAME in ${BUCKETS_B}; do
+            echo "" | tee -a "${LOG_FILE}"
+            echo "处理 Bucket: ${BUCKET_NAME}" | tee -a "${LOG_FILE}"
+            apply_versioning "${BUCKET_NAME}"
+        done
+        ;;
+    4)
+        # 选择性应用
+        for BUCKET_NAME in ${BUCKETS_B}; do
+            echo "" | tee -a "${LOG_FILE}"
+            echo "=========================================" | tee -a "${LOG_FILE}"
+            echo "Bucket: ${BUCKET_NAME}" | tee -a "${LOG_FILE}"
+            
+            read -p "应用到此 Bucket? [y/N]: " APPLY
+            if [ "${APPLY}" != "y" ] && [ "${APPLY}" != "Y" ]; then
+                echo "  跳过" | tee -a "${LOG_FILE}"
+                continue
+            fi
+            
+            # 如果源配置 Bucket 名称不同
+            read -p "使用不同的源配置? (留空使用相同名称): " SOURCE_BUCKET
+            SOURCE_BUCKET=${SOURCE_BUCKET:-$BUCKET_NAME}
+            
+            read -p "  应用 Lifecycle? [y/N]: " APPLY_LC
+            [ "${APPLY_LC}" = "y" ] && apply_lifecycle "${BUCKET_NAME}"
+            
+            read -p "  应用 Versioning? [y/N]: " APPLY_VER
+            [ "${APPLY_VER}" = "y" ] && apply_versioning "${BUCKET_NAME}" "${SOURCE_BUCKET}"
+            
+            read -p "  应用 CORS? [y/N]: " APPLY_CORS
+            [ "${APPLY_CORS}" = "y" ] && apply_cors "${BUCKET_NAME}"
+            
+            read -p "  应用 Labels? [y/N]: " APPLY_LABELS
+            [ "${APPLY_LABELS}" = "y" ] && apply_labels "${BUCKET_NAME}"
+        done
+        ;;
+    *)
+        echo "无效的选择" | tee -a "${LOG_FILE}"
+        exit 1
+        ;;
+esac
+
+echo "" | tee -a "${LOG_FILE}"
+echo "=========================================" | tee -a "${LOG_FILE}"
+echo "=== 应用完成 ===" | tee -a "${LOG_FILE}"
+echo "=========================================" | tee -a "${LOG_FILE}"
+echo "详细日志: ${LOG_FILE}"
+
+
+
+
+
 #!/bin/bash
 # apply_bucket_configs.sh - 应用配置到 B 工程
 
