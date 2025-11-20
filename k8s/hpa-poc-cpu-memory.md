@@ -111,7 +111,7 @@ spec:
      - `apiVersion`：引用资源的版本，这里是`apps/v1`。
      - `kind`：引用资源类型，这里是`Deployment`。
      - `name`：引用资源的名称，这里是`sprint-lex-hpa-memroy-cpu-1-0-0-deployment`。
-```
+
 # 为了增加两个 initContainers 至该 Deployment 配置，你需要修改 spec.template.spec 部分，包含两个 initContainers 定义，每个对应一个不同的目的。下面是一个例子，说明如何增加这两个 initContainers
 ```yaml
 apiVersion: apps/v1
@@ -262,7 +262,7 @@ spec:
 将上述YAML存储到文件service.yaml中，然后使用kubectl apply -f service.yaml命令来创建Service。
 HorizontalPodAutoscaler配置
 
-
+```yaml
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -288,7 +288,7 @@ spec:
       target:
         type: Utilization
         averageUtilization: 80 # 假设你希望内存平均利用率为80%
-
+```
 
 在这个配置中，HorizontalPodAutoscaler（HPA）根据CPU和内存的利用率调整Pod的数量。‘scaleTargetRef’指向你想要自动伸缩的Deployment。minReplicas和maxReplicas分别指定了Pod的最小和最大副本数量。
 metrics部分包含两个资源类型：cpu和memory。对于CPU和内存的每一个，你都可以指定averageUtilization，表示平均目标使用率（以百分比表示）。Kubernetes将会自动地增加或减少Pod的数量，以保持平均利用率在设定的目标数值。
