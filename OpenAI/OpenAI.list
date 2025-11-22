@@ -40,6 +40,9 @@ DOMAIN,cdn.usefathom.com
 DOMAIN-SUFFIX,anthropic.com
 DOMAIN-SUFFIX,claude.ai
 DOMAIN-SUFFIX,honeycomb.io
+DOMAIN-SUFFIX,jsdelivr.net
+DOMAIN-SUFFIX,gstatic.com
+DOMAIN-SUFFIX,googleapis.com
 DOMAIN-SUFFIX,stripe.com
 DOMAIN-SUFFIX,claudeusercontent.com
 # https://www.claudeusercontent.com
