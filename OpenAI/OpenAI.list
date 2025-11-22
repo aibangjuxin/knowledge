@@ -39,6 +39,7 @@ DOMAIN-KEYWORD,openai
 DOMAIN,cdn.usefathom.com
 DOMAIN-SUFFIX,anthropic.com
 DOMAIN-SUFFIX,claude.ai
+DOMAIN-SUFFIX,honeycomb.io
 DOMAIN-SUFFIX,stripe.com
 DOMAIN-SUFFIX,claudeusercontent.com
 # https://www.claudeusercontent.com
