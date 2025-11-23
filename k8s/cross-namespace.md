@@ -214,7 +214,7 @@ NetworkPolicy 就像是内网主机上的防火墙，它只看到最终到达的
 → 有些用户要 /live
 → 有些用户根本没有 HTTP 健康接
 所以我制定了下面的健康检查策略
-
+```yaml
 readinessProbe:
   tcpSocket:
     port: {{ port | default 8443 }}
@@ -234,6 +234,8 @@ startupProbe:
     port: {{ port | default 8443 }}
   periodSeconds: 10
   failureThreshold: 30
+
+```
 
 通过你上面的一个阐述，看起来我的用户的侦听的这个端口最好是要统一 比如我上面给的例子就是8443 如果是这样的话，我仅需要开通dp-namespace 到runtime-namespace 的 8443 这样我只添加一次网络规则就可以了 允许用户随意端口，那么可能就会需要增加一些负担，比如说要去创建对应的网络规则
 
