@@ -198,3 +198,127 @@ docker images   # 本地现在会出现该镜像
 ---
 
 如果你愿意，我可以直接给出适合你当前网络/权限的**一步一步可执行脚本**（例如：尝试创建 symlink，若失败打印错误并提示下一步），或者你把 `ssh admin@192.168.31.88 'echo $PATH; ls -l /usr/local/bin/docker'` 的输出贴上来，我可以基于真实输出给出精确命令。要我直接生成脚本吗？
+
+
+明白了，你的核心需求是：
+
+> 你本地 Mac 可以访问 Docker Hub，你的 NAS 上的 Docker 镜像存储在 NAS 上，但 NAS 自身不能登录 Docker Hub。你想把 NAS 上的镜像推送到 Docker Hub。
+
+换句话说，你需要**把 NAS 上的镜像搬到本地 Mac，再由 Mac push 到 Docker Hub**，而不依赖 NAS 登录 Docker Hub。
+
+---
+
+# 可行方案：通过 `docker save` + `docker load` 或 `scp` 流式传输
+
+### 方法 1：直接用 `docker save` 导出镜像，然后本地加载
+
+假设你的 NAS 有 `docker` 命令（在 `/share/CACHEDEV1_DATA/.qpkg/container-station/bin/docker`），你可以：
+
+1. **导出镜像为 tar**（在 NAS 上）：
+    
+
+```bash
+/share/CACHEDEV1_DATA/.qpkg/container-station/bin/docker save -o myimage.tar my-image:latest
+
+docker save -o jumpbox.tar aibangjuxin/kali-jumpbox:jumpbox
+```
+
+2. **把 tar 文件拷贝到本地 Mac**：
+    
+
+```bash
+scp admin@nas-ip:/share/CACHEDEV1_DATA/.qpkg/container-station/bin/myimage.tar ~/Downloads/
+
+```
+
+3. **在本地加载镜像**：
+    
+
+```bash
+docker load -i ~/Downloads/myimage.tar
+docker load -i ./jumpbox.tar
+Loaded image: aibangjuxin/kali-jumpbox:jumpbox
+docker images -a
+REPOSITORY                 TAG       IMAGE ID       CREATED       SIZE
+aibangjuxin/kali-jumpbox   jumpbox   46c0fb2e44dc   7 weeks ago   6.53GB
+```
+
+4. **打 tag 并推送到 Docker Hub**：
+    
+
+```bash
+docker tag my-image:latest yourhubuser/my-image:latest
+docker login
+docker push yourhubuser/my-image:latest
+docker push aibangjuxin/kali-jumpbox:jumpbox
+➜  Downloads docker push aibangjuxin/kali-jumpbox:jumpbox
+The push refers to repository [docker.io/aibangjuxin/kali-jumpbox]
+2e35e25a7f40: Pushing [========================>                          ]  48.23MB/97.02MB
+924415fa6fdb: Pushing [>                                                  ]  40.89MB/4.625GB
+c204c9f5ebc9: Pushing [===========>                                       ]  30.41MB/132MB
+9284158830f2: Pushing [=>                                                 ]  51.38MB/1.68GB
+```
+
+---
+
+### 方法 2：直接流式传输（不生成本地 tar 文件）
+
+如果 NAS 和 Mac 在同一网络，可以直接通过 SSH pipe：
+
+```bash
+ssh admin@nas-ip "/share/CACHEDEV1_DATA/.qpkg/container-station/bin/docker save my-image:latest" | docker load
+```
+
+这样 Mac 会直接把远端镜像流入本地 Docker，无需在本地保存 tar 文件。
+
+然后同样：
+
+```bash
+docker tag my-image:latest yourhubuser/my-image:latest
+docker login
+docker push yourhubuser/my-image:latest
+```
+
+---
+
+### 方法 3：使用 `docker context` + SSH（远程 Docker 执行 push）
+
+**前提**：NAS 必须能执行 docker CLI 并且能访问 Docker Hub。  
+你之前提到 NAS 无法登录 Docker Hub → 不适用。
+
+> ✅ 所以方案 1 或方案 2 是最稳妥的方法。
+
+---
+
+# 推荐方案
+
+- **如果 NAS 磁盘空间足够** → 方法 1（docker save → scp → docker load）
+    
+- **如果 NAS 空间有限** → 方法 2（ssh 流式传输）
+    
+
+这两种方案都不需要在 NAS 上登录 Docker Hub，也能把镜像推送到 Hub。
+
+---
+
+# 示例完整流程（流式传输方式）
+
+```bash
+# 从 NAS 流式拉镜像到本地
+ssh admin@nas-ip "/share/CACHEDEV1_DATA/.qpkg/container-station/bin/docker save my-image:latest" | docker load
+
+# 给镜像打 tag
+docker tag my-image:latest yourhubuser/my-image:latest
+
+# 登录 Docker Hub
+docker login
+
+# 推送到 Docker Hub
+docker push yourhubuser/my-image:latest
+```
+
+---
+
+如果你愿意，我可以帮你写一个 **一条命令就完成 NAS 镜像推送到 Docker Hub** 的自动化脚本，包括自动处理 tag 和登录，这样 Mac 上只需执行一次即可完成整个流程。
+
+你希望我帮你写吗？
