@@ -1,86 +1,22 @@
-# NAME: OpenAI
-# AUTHOR: blackmatrix7
-# REPO: https://github.com/blackmatrix7/ios_rule_script
-# UPDATED: 2023-07-20 23:25:18
-# DOMAIN-KEYWORD: 1
-# DOMAIN-SUFFIX: 12
-# TOTAL: 13
 DOMAIN-SUFFIX,ab.chatgpt.com
 DOMAIN-SUFFIX,ios.chat.openai.com
 DOMAIN-SUFFIX,ai.com
 DOMAIN-SUFFIX,bard.google.com
 DOMAIN-SUFFIX,auth0.com
-DOMAIN-SUFFIX,challenges.cloudflare.com
 DOMAIN-SUFFIX,client-api.arkoselabs.com
 DOMAIN-SUFFIX,events.statsigapi.net
 DOMAIN-SUFFIX,featuregates.org
 DOMAIN-SUFFIX,identrust.com
-DOMAIN-SUFFIX,intercom.io
-DOMAIN-SUFFIX,intercomcdn.com
-DOMAIN-SUFFIX,sentry.io
-DOMAIN-SUFFIX,stripe.com
 DOMAIN-SUFFIX,oaistatic.com
 DOMAIN-SUFFIX,oaiusercontent.com
 # https://help.openai.com/en/articles/9247338-network-recommendations-for-chatgpt-errors-on-web-and-apps
-# trae
 DOMAIN-SUFFIX,trae.ai
-DOMAIN-SUFFIX,mchost.guru
-DOMAIN-SUFFIX,byteoversea.com
-DOMAIN-SUFFIX,exp-tas.com
-DOMAIN-SUFFIX,open-vsx.org
 DOMAIN-SUFFIX,bytednsdoc.com
-# trae-api-sg.mchost.guru:443
 # poe
 DOMAIN-SUFFIX,poe.com
 DOMAIN-SUFFIX,quoracdn.net
 DOMAIN-SUFFIX,quora.com
 DOMAIN-KEYWORD,openai
-# Claude
-DOMAIN,cdn.usefathom.com
-DOMAIN-SUFFIX,anthropic.com
-DOMAIN-SUFFIX,cloudflare.com
-DOMAIN-SUFFIX,claude.ai
-DOMAIN-SUFFIX,honeycomb.io
-DOMAIN-SUFFIX,jsdelivr.net
-DOMAIN-SUFFIX,gstatic.com
-DOMAIN-SUFFIX,googleapis.com
-DOMAIN-SUFFIX,stripe.com
-DOMAIN-SUFFIX,claudeusercontent.com
-# Claude API / 后端服务
-DOMAIN-SUFFIX,api.anthropic.com,PROXY
-DOMAIN-SUFFIX,static.anthropic.com,PROXY
-
-# Cloudflare 核心域名（校验 / BOT 管理）
-DOMAIN-SUFFIX,cloudflare-dns.com
-DOMAIN-SUFFIX,cloudflareinsights.com
-DOMAIN-SUFFIX,cloudflarechallenge.com
-DOMAIN-SUFFIX,challenge.cloudflare.com
-DOMAIN-SUFFIX,challenges.cloudflare.com
-DOMAIN-SUFFIX,cf-ns.com
-
-# Cloudflare CDN / Edge 网络
-DOMAIN-SUFFIX,workers.dev
-DOMAIN-SUFFIX,pages.dev
-DOMAIN-SUFFIX,cfusercontent.com
-DOMAIN-SUFFIX,cfargotunnel.com
-DOMAIN-SUFFIX,cfapi.net
-
-# Cloudflare 性能与 Bot 检测脚本
-DOMAIN-SUFFIX,static.cloudflareinsights.com
-DOMAIN-SUFFIX,js.cloudflare.com
-
-# Claude 使用的第三方资源（防止加载失败）
-DOMAIN-SUFFIX,sentry.io
-DOMAIN-SUFFIX,intercom.io
-DOMAIN-SUFFIX,intercomcdn.com
-DOMAIN-SUFFIX,ingest.sentry.io
-DOMAIN-SUFFIX,cdn.segment.com
-
-# 建议兜底（可选，但强烈推荐）
-DOMAIN-KEYWORD,anthropic
-DOMAIN-KEYWORD,claude
-DOMAIN-KEYWORD,cloudflare
-# https://www.claudeusercontent.com
 # perplexity.ai
 DOMAIN-SUFFIX,perplexity.ai
 # groq
@@ -88,8 +24,6 @@ DOMAIN-SUFFIX,groq.com
 DOMAIN-SUFFIX,labs.google
 # server.codeium.com
 DOMAIN-SUFFIX,codeium.com
-# Grok 
+# Grok
 DOMAIN-SUFFIX,x.ai
 DOMAIN-SUFFIX,grok.com
-
-
