@@ -24,6 +24,9 @@ DOMAIN-SUFFIX,api.anthropic.com
 DOMAIN-SUFFIX,static.anthropic.com
 # Cloudflare 核心域名（校验 / BOT 管理）
 DOMAIN-SUFFIX,cloudflare-dns.com
+DOMAIN-SUFFIX,crfm.ai
+DOMAIN-SUFFIX,launchdarkly.com
+DOMAIN-SUFFIX,amplitude.com
 DOMAIN-SUFFIX,cloudflareinsights.com
 DOMAIN-SUFFIX,cloudflarechallenge.com
 DOMAIN-SUFFIX,challenge.cloudflare.com
