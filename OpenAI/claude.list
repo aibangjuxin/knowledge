@@ -22,26 +22,6 @@ DOMAIN-SUFFIX,stripe.com
 DOMAIN-SUFFIX,claudeusercontent.com
 DOMAIN-SUFFIX,api.anthropic.com
 DOMAIN-SUFFIX,static.anthropic.com
-# Cloudflare 核心域名（校验 / BOT 管理）
-DOMAIN-SUFFIX,cloudflare-dns.com
-DOMAIN-SUFFIX,crfm.ai
-DOMAIN-SUFFIX,launchdarkly.com
-DOMAIN-SUFFIX,amplitude.com
-DOMAIN-SUFFIX,cloudflareinsights.com
-DOMAIN-SUFFIX,cloudflarechallenge.com
-DOMAIN-SUFFIX,challenge.cloudflare.com
-DOMAIN-SUFFIX,challenges.cloudflare.com
-DOMAIN-SUFFIX,cf-ns.com
-# Cloudflare CDN / Edge 网络
-DOMAIN-SUFFIX,workers.dev
-DOMAIN-SUFFIX,pages.dev
-DOMAIN-SUFFIX,cfusercontent.com
-DOMAIN-SUFFIX,cfargotunnel.com
-DOMAIN-SUFFIX,cfapi.net
-# Cloudflare 性能与 Bot 检测脚本
-DOMAIN-SUFFIX,static.cloudflareinsights.com
-DOMAIN-SUFFIX,js.cloudflare.com
-# Claude 使用的第三方资源（防止加载失败）
 DOMAIN-SUFFIX,sentry.io
 DOMAIN-SUFFIX,intercom.io
 DOMAIN-SUFFIX,intercomcdn.com
@@ -50,5 +30,4 @@ DOMAIN-SUFFIX,cdn.segment.com
 # 建议兜底（可选，但强烈推荐）
 DOMAIN-KEYWORD,anthropic
 DOMAIN-KEYWORD,claude
-DOMAIN-KEYWORD,cloudflare
 # https://www.claudeusercontent.com
