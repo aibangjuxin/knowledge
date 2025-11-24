@@ -1,3 +1,4 @@
+
 关于阿里云的SLB,我们目前的架构是这样的 ，直接把对应的 SLB的请求转发到后面的 Ingress control了。然后 ingress control了再根据不同的用户请求转发到后面的 ingress上面 
 
 1 ingress是Kong DP 这一部分我们都是基于location/path来区分不同的用户的API的 把这种归类为有Gateway的 比如https://www.aibang.com/api_name_version/v1/
