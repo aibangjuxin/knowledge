@@ -1,5 +1,17 @@
 [Rule]
 
+# Cloudflare 自身不要代理（容易被反爬虫判断）所以 Cloudflare 域名必须直连
+
+DOMAIN-SUFFIX,cloudflare.com,DIRECT
+DOMAIN-SUFFIX,cloudflarechallenge.com,DIRECT
+DOMAIN-SUFFIX,challenges.cloudflare.com,DIRECT
+DOMAIN-SUFFIX,cloudflareinsights.com,DIRECT
+DOMAIN-SUFFIX,static.cloudflareinsights.com,DIRECT
+DOMAIN-SUFFIX,cf-ns.com,DIRECT
+DOMAIN-SUFFIX,cfapi.net,DIRECT
+DOMAIN-SUFFIX,cfargotunnel.com,DIRECT
+DOMAIN-SUFFIX,cfusercontent.com,DIRECT
+
 # Claude / Anthropic 主域名（必须）
 
 DOMAIN-SUFFIX,claude.ai,PROXY
