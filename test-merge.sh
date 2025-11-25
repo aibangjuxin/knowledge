@@ -61,3 +61,19 @@ echo "🚀 开始合并文件..."
 echo "✅ 合并完成！"
 echo "📄 输出文件: $output_file"
 echo "📊 合并了 $(ls -1 *.sh 2>/dev/null | wc -l | tr -d ' ') 个脚本文件"
+
+# 转换行尾为 LF
+echo "🔄 正在检查并转换行尾格式..."
+if command -v dos2unix >/dev/null 2>&1; then
+    dos2unix "$output_file"
+    echo "✅ 已使用 dos2unix 转换为 LF 格式"
+else
+    # Mac/BSD sed syntax
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' 's/\r$//' "$output_file"
+    else
+        # GNU sed syntax
+        sed -i 's/\r$//' "$output_file"
+    fi
+    echo "✅ 已使用 sed 转换为 LF 格式"
+fi
