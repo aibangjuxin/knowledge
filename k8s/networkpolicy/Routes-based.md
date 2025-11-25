@@ -4,13 +4,14 @@
 
 为什么在 Routes-based 模式下**不需要** Egress 到 Service IP Range 的规则。
 - 1 在 Routes-based 模式下，您**不需要**配置 Egress 到 Service IP Range 的规则，因为 NetworkPolicy 在检查时，Service IP 已经被 kube-proxy DNAT 转换成了 Pod IP。NetworkPolicy 从头到尾都看不到 Service IP！
-- 2 **最终答案**：不需要 Service IP 规则不代表不需要 Pod IP 规则，恰恰相反，**Pod IP 规则是唯一有效且必须的规则**，因为 NetworkPolicy 只能看到经过 DNAT 转换后的 Pod IP！但是一定要注意这个是可以通过namespaceSelector来配置而不是推荐使用IP Range来配置
-	- - ❌ **不需要**配置 `ipBlock: 100.64.0.0/14`
+- 2 **最终答案**：不需要 Service IP 规则不代表不需要 Pod IP 规则，恰恰相反，**Pod IP 规则是唯一有效且必须的规则**，因为 NetworkPolicy 只能看到经过 DNAT 转换后的 Pod IP！但是一定要注意这个是可以通过namespaceSelector来配置而不是推荐使用IP Range来配置### **NetworkPolicy 不推荐直接写 Pod IP CIDR（容易失效）；应该通过 namespaceSelector / podSelector 让 K8s 自动管理 Pod IP 变化**
+	-  ❌ **不需要**配置 `ipBlock: 100.64.0.0/14`
 	- ✅ **只需要**配置 `namespaceSelector: namespace-b`
 	- ✅ NetworkPolicy 会自动通过 K8s API 找到该 Namespace 的所有 Pod IP
 - 3 [另外不用单独配置类似这样一个namespace level的比如ingress from 192.168.64.0/19 8443这样的规则](./network-node-ip.md)
 	- 有基于A- B的 egress
 	- B ==> ingress A 
+	- 有上面对应的规则就可以了。 
 ```yaml
 # ============================================
 # Namespace A Egress - 完全正确的配置
