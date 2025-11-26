@@ -1,6 +1,7 @@
 我现在有一个临时的任务就是需要改造我们的 pipeline。然后让其CD部署资源到我的GKE  里面 . 我这个环境里边部署的 follow是这样的。 Ingress control + ingress + namespace Deployment 
-因为我们是平台每个用户可能对应的资源都不一样 ，我想创建一个 git repo. 然后里面针对每个不同的用户的 API创建子目录。里面给用户配置不同的资源比如service.yaml. Deployment.yaml 有一点需要注意的是Deployment里面的Images比如默认是在 nexus上。我需要拿到这个资源 ，然后推送到 GAR里边。然后需要把 deploy里面的定义切换到GAR  . 这里我需要调问一下 PMU做一次最简单的教验 ，然后直接 opply就可以了。 
+因为我们是平台每个用户可能对应的资源都不一样 ，我想创建一个 git repo. 然后里面针对每个不同的用户的 API创建子目录。里面给用户配置不同的资源比如service.yaml. Deployment.yaml 有一点需要注意的是Deployment里面的Images比如默认是在 nexus上。我需要拿到这个资源 ，然后推送到 GAR里边。然后需要把 deploy里面的定义切换到GAR  . 然后直接 opply就可以了。 
 上面是我的一个最基本的需求基于我这个需求你可以帮我探索一下有哪一些比较好的实现方法或者说这个思路里面还有不完善的地方。给我一下好的解决办法 ，其实我们的目的很简单 ，就是要快速的将用户的 API布署在平台里面,临时提供一个这样的 pipeline给用户 另外你也可以给我关注pipeline里面对应的传参, 比如git repo . ENV .
+首先需要澄清一点 ，我们的环境里面只有kubectl apply 所以你帮我探索一下这种方式的实现就可以了
 
 下面给你一份**完全基于 GKE 的平台化 CD Pipeline 设计方案**，严格按你描述的场景优化过：
 
