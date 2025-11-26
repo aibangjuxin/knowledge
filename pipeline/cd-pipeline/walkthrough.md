@@ -2,6 +2,19 @@
 
 I have refactored the CD Pipeline demo to remove Kustomize and use simple `envsubst` templating with `kubectl apply`.
 
+## 📊 Process Flow
+
+```mermaid
+graph TD
+    User[User Commit] -->|Trigger| CI[CI/CD Pipeline]
+    subgraph Pipeline
+        Sync[Sync Image] -->|Nexus -> GAR| Render[Render Manifests]
+        Render -->|envsubst| Validate[Validate YAML]
+        Validate -->|kubeconform| Deploy[Deploy to GKE]
+    end
+    Deploy -->|kubectl apply| GKE[GKE Namespace]
+```
+
 ## 📂 Directory Structure
 
 The structure is now simpler:
