@@ -76,6 +76,116 @@ _(注：名字通常包含 appd 或 agent，具体取决于你的注入规则命
 
 你需要我帮你写一段 K8s 的资源计算公式（针对 Init Container vs App Container），或者帮你检查一下如何在 AppD Cluster Agent 配置中覆盖这些限制吗？
 
+好的，这里为你详细展开这两部分内容。
+
+### 1. K8s 资源调度公式：Init Container 会“吃”多少资源？
+
+在 Kubernetes 中，Pod 的有效资源请求（Effective Requests/Limits）计算逻辑与其生命周期有关。因为 Init Container 是**顺序执行**且在应用容器**启动前结束**的，所以 K8s 调度器**不会**简单地将它们相加。
+
+**计算公式如下：**
+
+$$\text{Pod Effective Request} = \max \left( \max(\text{Init Containers}), \sum(\text{App Containers}) \right)$$
+
+这听起来有点绕，我们通过两个场景来直观理解：
+
+#### 场景 A：常规 Java 应用（最常见）
+
+- **Java App 容器**: Request `1000Mi` (1GB)
+    
+- **AppD Init 容器**: Request `50Mi`
+    
+
+计算逻辑:
+
+$$\max(50\text{Mi}, 1000\text{Mi}) = 1000\text{Mi}$$
+
+> **结论**：在这种情况下，**AppD Init Container 对 Pod 的调度资源需求为 0**。你的 Node 节点不需要为了这个 Init Container 预留任何额外内存。
+
+#### 场景 B：极小的微服务（Sidecar 模式或超轻量应用）
+
+- **Microservice 容器**: Request `30Mi`
+    
+- **AppD Init 容器**: Request `50Mi`
+    
+
+计算逻辑:
+
+$$\max(50\text{Mi}, 30\text{Mi}) = 50\text{Mi}$$
+
+> **结论**：在这种情况下，Pod 会按照 **50Mi** 进行调度。虽然应用只需要 30Mi，但为了让 Init Container 跑完，K8s 会按 50Mi 寻找节点。
+
+---
+
+### 2. 实战：如何在 AppD Cluster Agent 中修改 Init Container 资源
+
+如果你发现默认的 `50Mi/75Mi` 限制导致 Init Container 启动失败（比如被 OOMKilled，虽然极其罕见），或者你想压低这个值，你可以通过 **AppDynamics ClusterAgent CRD** 全局修改注入规则。
+
+以下是配置示例（通常在你的 `cluster-agent.yaml` 或 Helm `values.yaml` 中配置）：
+
+#### 修改 `ClusterAgent` CRD 配置
+
+YAML
+
+```
+apiVersion: cluster.appdynamics.com/v1alpha1
+kind: ClusterAgent
+metadata:
+  name: k8s-cluster-agent
+  namespace: appdynamics
+spec:
+  # ... 其他配置 ...
+  
+  # 重点在这里：Instrumentation 规则配置
+  instrumentationRules:
+    - namespaceRegex: my-java-apps-.* # 匹配你的命名空间
+      language: java
+      imageInfo:
+        image: "docker.io/appdynamics/java-agent:latest"
+        agentMountPath: /opt/appdynamics
+        
+      #在此处覆盖 Init Container 的资源限制
+      resources: 
+        limits:
+          cpu: "200m"     # 限制 CPU
+          memory: "100Mi" # 增加内存上限 (默认通常是 75Mi)
+        requests:
+          cpu: "50m"      # 降低请求
+          memory: "50Mi"  # 保持基础内存请求
+```
+
+**关键字段说明：**
+
+- `instrumentationRules`: 这里定义的规则决定了 Agent 如何注入。
+    
+- `resources`: 这个块直接控制生成的 Init Container 的 `resources` 字段。
+    
+- **注意**: 修改并 Apply 这个 CRD 后，**现有的 Pod 不会自动重启**。你需要手动重启（Rollout Restart）业务 Pod，新的资源限制才会生效。
+    
+
+---
+
+### 3. 特别提醒：不要忘了主容器
+
+虽然我们在讨论 Init Container，但我必须再次提醒，最容易出问题的其实是**主容器（Main Container）**。
+
+当你注入 AppD Java Agent 后，请务必更新主容器的资源限制：
+
+- **JVM 参数**: 不需要改 `-Xmx`（堆内存），但建议关注 `-XX:MaxMetaspaceSize`（元空间），因为 AppD 会加载大量额外的类，可能导致元空间溢出。
+    
+- K8s Limits:
+    
+    $$\text{New Limit} \approx \text{Old Limit} + 250\text{Mi}$$
+    
+    (AppD 建议预留 200-300MB 的 Overhead 给 Agent，以防止在高负载下发生 OOMKilled)。
+    
+
+### 下一步建议
+
+既然你已经了解了 Init Container 的资源模型，我们可以深入到**运行时监控**。
+
+**你是否需要我帮你写一个 Prometheus/Grafana 的查询语句 (PromQL)，用来监控这些注入了 AppD 的 Pod 的实际内存使用量与 Limit 的差距？** (这样你可以精准地调整 Request/Limit，而不必靠猜)。
+
+# other
 
 下面给你一份 **K8S / GKE 环境可直接用、可观测性最佳实践级别** 的回答，重点解决你提到的 3 个核心问题：
 
