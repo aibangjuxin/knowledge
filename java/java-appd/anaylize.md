@@ -100,12 +100,13 @@ nsenter 报错了 nsenter: operation not permitted
 Kubernetes 默认会丢弃容器的大部分 Linux Capabilities，而 nsenter 需要 SYS_ADMIN 或 SYS_PTRACE 权限才能“穿越”到另一个容器的 Namespace
 
 How to fix this 
+```yaml
 containers:
   - name: debug-sidecar
     securityContext:
       capabilities:
         add: ["SYS_PTRACE", "SYS_ADMIN"]  # 👈 必须加这个
-
+```
 
 方法 2：手动映射 Socket 文件（如果目标容器是 Distroless）
 如果目标容器里没有 jcmd 或 sh，你必须在 Sidecar 里运行 jcmd。你需要把目标容器的 Socket "借" 过来。
@@ -126,20 +127,20 @@ ln -s /proc/9/root/tmp/.java_pid9 /tmp/.java_pid9 也同样会报错啊。 canno
 
 方案 1：最简单的暴力解法（赋予 Sidecar Root 权限）
 让 Sidecar 以 Root 身份运行，通常就能通过 /proc 访问了
-
+```yaml
 containers:
   - name: debug-sidecar
     image: ...
     securityContext:
       runAsUser: 0  # 👈 强制使用 Root
       privileged: true # 👈 如果还不行，加上这个（慎用，权限全开）
-
+```
 方案 2：K8s 原生解法（共享 /tmp 目录）
 这是最标准、最安全的方法。既然 jcmd 靠 /tmp 下的文件通信，那就让两个容器共享这个目录。
 
 定义一个 emptyDir 卷
 挂载到两个容器的 /tmp
-
+```yaml
 spec:
   volumes:
     - name: tmp-dir
@@ -155,6 +156,7 @@ spec:
       volumeMounts:
         - name: tmp-dir
           mountPath: /tmp  # 👈 Sidecar 也挂载它
+```
 注意：使用方案 2 时，Sidecar 里的用户 UID 最好和 App 容器一致（例如都是 1000），否则 jcmd 可能会因为“用户不匹配”拒绝连接。
 
 总结： 现在的报错是因为你被关在“小黑屋”里，且没有钥匙。必须找管理员（修改 YAML）给你开门（共享目录）或者给你万能钥匙（Root/Privileged）。
