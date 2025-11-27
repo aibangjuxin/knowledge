@@ -1,3 +1,82 @@
+AppDynamics (AppD) 在 Kubernetes 环境中作为 **Init Container** 使用时，我们需要区分两个阶段的内存消耗：一是**Init Container 本身（短暂的）**，二是**注入后的 Java Agent（长期的）**。
+
+虽然你特别关注 Init Container，但通常对生产环境影响最大的是后者。以下是详细的资源探索和建议：
+
+### 1. Init Container 的内存占用 (短暂)
+
+AppD 的 Init Container 主要任务非常简单：**将 Agent 的 jar 包和配置文件拷贝（cp）到应用容器的共享 Volume 中**，然后就退出了。
+
+- **典型内存占用**: 极低，通常在 **50MiB - 100MiB** 之间。
+    
+- **默认资源限制 (Hardcoded/Defaults)**:
+    
+    - 在大多数 AppD Cluster Agent 版本中，自动注入的 Init Container 资源请求（Requests/Limits）是预设好的。
+        
+    - **Requests**: `cpu: 100m`, `memory: 50Mi` (约 50MB)
+        
+    - **Limits**: `cpu: 200m`, `memory: 75Mi` (或 100Mi，视版本而定)
+        
+- **对调度的影响**: Kubernetes 在调度 Pod 时，计算的资源请求是 `max(Init Container, App Container)`。
+    
+    - _场景 A_: 你的 Java 应用配置了 1G 内存。结果：Init Container (50M) < App (1G)，调度器只看 1G。**Init Container 不会增加 Pod 的调度门槛。**
+        
+    - _场景 B_: 你的应用非常小（比如 30M 内存的微服务）。结果：Init Container (50M) > App (30M)，调度器会按 50M 调度。
+        
+
+> **结论**: Init Container 只是“昙花一现”，占用极少，拷贝完文件就销毁了，不会占用运行时的内存。
+
+---
+
+### 2. Java Agent 的内存占用 (长期 & 关键)
+
+这是你真正需要“买单”的地方。Init Container 退出后，Java 应用启动并加载 `javaagent.jar`。这部分内存是**长期驻留**在你的应用容器内的。
+
+AppD Java Agent 会增加应用的 Heap（堆）和 Non-Heap（元空间）使用量：
+
+|**内存区域**|**预估增加量**|**说明**|
+|---|---|---|
+|**Heap Memory**|**+100MB ~ 250MB**|Agent 需要在堆中维护对象、指标缓存和快照数据。高负载应用建议预留 250MB。|
+|**Metaspace / PermGen**|**+20MB ~ 50MB**|Agent 会对类进行字节码增强（Instrumentation），导致加载更多的类定义。|
+|**CPU Overhead**|**0% - 2%**|通常很低，但在类加载初期（启动时）会有明显波峰。|
+
+配置建议:
+
+如果你原来的应用配置是 -Xmx1024m，引入 AppD 后，建议调整为 -Xmx1150m 或更高，并在 K8s 的 resources.limits.memory 中相应增加这部分 buffer，防止应用因为 Agent 的额外开销触发 OOMKilled。
+
+---
+
+### 3. 如何验证和调整
+
+#### 查看当前 Init Container 配置
+
+如果你已经部署了应用，可以通过以下命令查看 Init Container 实际被分配了多少资源：
+
+Bash
+
+```
+kubectl get pod <your-pod-name> -o jsonpath='{.spec.initContainers[?(@.name=="appd-agent-attach")].resources}'
+```
+
+_(注：名字通常包含 appd 或 agent，具体取决于你的注入规则命名)_
+
+#### 能够修改 Init Container 资源吗？
+
+- **旧版本**: 这些值通常是硬编码在 Cluster Agent 源码里的，很难修改。
+    
+- **新版本 (2024/2025+)**: AppDynamics 的 Cluster Agent 开始支持在 `InstrumentationRule` CRD 中自定义 Init Container 的资源。
+    
+    - 检查你的 `Instrumentation` 自定义资源 (CRD)，看是否支持 `resources` 字段来覆盖默认值。
+        
+
+### 总结
+
+你关注的 APPD **Init Container** 大概只会占用 **50-75MB** 的内存，且仅在启动时的几秒钟内存在。它对整体资源的压力几乎可以忽略不计。
+
+下一步建议：
+
+你需要我帮你写一段 K8s 的资源计算公式（针对 Init Container vs App Container），或者帮你检查一下如何在 AppD Cluster Agent 配置中覆盖这些限制吗？
+
+
 下面给你一份 **K8S / GKE 环境可直接用、可观测性最佳实践级别** 的回答，重点解决你提到的 3 个核心问题：
 
 1. **Java Spring + AppDynamics（AppD）混合场景下，如何准确区分两者的内存占用？**
