@@ -118,6 +118,48 @@ bash
 ln -s /proc/9/root/tmp/.java_pid9 /tmp/.java_pid9 也同样会报错啊。 cannot access '/proc/9/root/tmp/.java_pid9 ' Permission denied
 /tmp/.java_pid9 no such file or directory
 
+这说明你的环境安全限制非常严格（可能是非 Root 用户运行，或者有 AppArmor/SELinux 策略阻挡）。
+
+既然“偷渡”的方法（nsenter, /proc）都被权限墙挡住了，你需要修改 Deployment YAML 来显式授权。
+
+这里有两个方案，选一个即可：
+
+方案 1：最简单的暴力解法（赋予 Sidecar Root 权限）
+让 Sidecar 以 Root 身份运行，通常就能通过 /proc 访问了
+
+containers:
+  - name: debug-sidecar
+    image: ...
+    securityContext:
+      runAsUser: 0  # 👈 强制使用 Root
+      privileged: true # 👈 如果还不行，加上这个（慎用，权限全开）
+
+方案 2：K8s 原生解法（共享 /tmp 目录）
+这是最标准、最安全的方法。既然 jcmd 靠 /tmp 下的文件通信，那就让两个容器共享这个目录。
+
+定义一个 emptyDir 卷
+挂载到两个容器的 /tmp
+
+spec:
+  volumes:
+    - name: tmp-dir
+      emptyDir: {}  # 👈 创建一个临时卷
+
+  containers:
+    - name: app
+      volumeMounts:
+        - name: tmp-dir
+          mountPath: /tmp  # 👈 目标应用挂载它
+
+    - name: debug-sidecar
+      volumeMounts:
+        - name: tmp-dir
+          mountPath: /tmp  # 👈 Sidecar 也挂载它
+注意：使用方案 2 时，Sidecar 里的用户 UID 最好和 App 容器一致（例如都是 1000），否则 jcmd 可能会因为“用户不匹配”拒绝连接。
+
+总结： 现在的报错是因为你被关在“小黑屋”里，且没有钥匙。必须找管理员（修改 YAML）给你开门（共享目录）或者给你万能钥匙（Root/Privileged）。
+
+
 
 
 切换用户执行：JVM 要求调用者必须是同一个用户。如果 Java 进程是 app (uid 1000) 跑的，而你是 root，必须切换身份：
