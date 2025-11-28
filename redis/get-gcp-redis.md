@@ -87,6 +87,51 @@ for PROJECT_ID in "${PROJECTS[@]}"; do
 done
 
 echo -e "\n${GREEN}脚本执行完成${NC}"
+
+
+
+#!/bin/bash
+
+# 需要查询的 GCP Projects（可自行扩展）
+PROJECTS=("project-1" "project-2")
+
+for PROJECT_ID in "${PROJECTS[@]}"; do
+    echo "====================================="
+    echo "Processing Project: $PROJECT_ID"
+    echo "====================================="
+
+    # 获取集群位置（region 或 zone）
+    LOCATION=$(gcloud container clusters list \
+        --project "$PROJECT_ID" \
+        --format="value(location)" 2>/dev/null | head -n 1)
+
+    if [[ -z "$LOCATION" ]]; then
+        echo "❌ No GKE clusters found, cannot determine region."
+        echo "Skipping project..."
+        continue
+    fi
+
+    echo "Found location: $LOCATION"
+
+    # 判断 region 或 zone（zone 形如 asia-east1-b）
+    if [[ "$LOCATION" =~ -[a-z]$ ]]; then
+        REGION=${LOCATION%-*}
+        echo "Detected zone → region = $REGION"
+    else
+        REGION="$LOCATION"
+        echo "Detected region = $REGION"
+    fi
+
+    echo "Querying Redis in region: $REGION"
+
+    # 查询 Redis
+    gcloud redis instances list \
+        --project "$PROJECT_ID" \
+        --region "$REGION" \
+        --format="table(name,host,port,tier,memorySizeGb)"
+    
+    echo ""
+done
 ```
 
 ### 方案二：优化版本（仅扫描有资源的 Region）
