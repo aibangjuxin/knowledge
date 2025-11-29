@@ -61,6 +61,7 @@ Client -> [TLS Termination] -> [Rate Limiting] -> [JWT Validation]
 ### 2.2 Container：从 API 到应用的范式转变
 
 **核心区别**：
+
 | 维度 | Standard API | Container |
 |------|--------------|-----------|
 | 交付物 | API 规范 (OpenAPI) | 容器镜像 |
