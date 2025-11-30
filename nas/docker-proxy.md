@@ -58,6 +58,9 @@ docker ps -a
 CONTAINER ID   IMAGE                                           COMMAND                  CREATED          STATUS                       PORTS                                                                    NAMES
 40b5eb9cad24   rancher/k3s:v1.32.10-k3s1                       "/bin/k3s server"        33 seconds ago   Up 32 seconds                0.0.0.0:8888->80/tcp, 0.0.0.0:4433->443/tcp, 0.0.0.0:6444->6443/tcp      k3s-server
 3 重新导出 kubeconfig：然后修改侦听地址和 忽略证书
+docker exec k3s-server cat /etc/rancher/k3s/k3s.yaml > kubeconfig.yaml
+docker exec qnap-k3s cat /etc/rancher/k3s/k3s.yaml
+
 clusters:
 - cluster:
     insecure-skip-tls-verify: true
