@@ -1,5 +1,26 @@
 平台强制注入 Context-Path（Golang 版本）详解与最佳实践
 
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: ${namespace}
+  name: mycoat-common-sprint-conf
+data:
+  server-conf.properties: |
+    # 强制统一端口
+    server.port=8443
+    # 强制开启 SSL
+    server.ssl.enabled=true
+    server.ssl.key-store=/opt/keystore/mycoat-sbrt.p12
+    server.ssl.key-store-type=PKCS12
+    server.ssl.key-store-password=${KEY_STORE_PWD}
+    # 统一 Context Path (Servlet 栈)
+    server.servlet.context-path=/${apiName}/v${minorVersion}
+    # 统一 Base Path (WebFlux 栈)
+    sprint.webflux.base-path=/${apiName}/v${minorVersion}
+```
+
 1. 问题分析
 
 平台在部署服务时经常需要为所有 API 统一注入一个 context-path（如 /service-a/v1），以便：
@@ -23,7 +44,7 @@ Golang 中最推荐的方案：利用路由前缀统一挂载 (Router Group / Se
 平台在部署应用时固定下列环境变量：
 ```yaml
 APP_CONTEXT_PATH="/my-service/v1"
-APP_PORT=8080
+APP_PORT=8443
 ENABLE_TLS=true
 TLS_CERT_PATH="/etc/tls/tls.crt"
 TLS_KEY_PATH="/etc/tls/tls.key"
@@ -59,7 +80,7 @@ func main() {
     enableTLS := os.Getenv("ENABLE_TLS") == "true"
     port := os.Getenv("APP_PORT")
     if port == "" {
-        port = "8080"
+        port = "8443"
     }
 
     r := gin.Default()
@@ -110,7 +131,7 @@ graph TD
 
 环境变量	示例值	说明
 APP_CONTEXT_PATH	/user-api/v1	应用入口前缀
-APP_PORT	8080	服务监听端口
+APP_PORT	8443	服务监听端口
 ENABLE_TLS	true	是否启用 HTTPS
 TLS_CERT_PATH	/etc/tls/tls.crt	证书路径
 TLS_KEY_PATH	/etc/tls/tls.key	私钥路径
@@ -138,7 +159,7 @@ TLS_KEY_PATH	/etc/tls/tls.key	私钥路径
 readinessProbe:
   httpGet:
     path: /my-service/v1/health
-    port: 8080
+    port: 8443
 ```
 
 ⸻
