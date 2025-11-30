@@ -1,0 +1,480 @@
+<!DOCTYPE html><html><head>
+      <title>docker-proxy</title>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      
+      <link rel="stylesheet" href="file:////Users/lex/.antigravity/extensions/shd101wyy.markdown-preview-enhanced-0.8.20-universal/crossnote/dependencies/katex/katex.min.css">
+      
+      
+      <script type="text/javascript" src="file:////Users/lex/.antigravity/extensions/shd101wyy.markdown-preview-enhanced-0.8.20-universal/crossnote/dependencies/mermaid/mermaid.min.js" charset="UTF-8"></script>
+      
+      
+      <style>
+      code[class*=language-],pre[class*=language-]{color:#333;background:0 0;font-family:Consolas,"Liberation Mono",Menlo,Courier,monospace;text-align:left;white-space:pre;word-spacing:normal;word-break:normal;word-wrap:normal;line-height:1.4;-moz-tab-size:8;-o-tab-size:8;tab-size:8;-webkit-hyphens:none;-moz-hyphens:none;-ms-hyphens:none;hyphens:none}pre[class*=language-]{padding:.8em;overflow:auto;border-radius:3px;background:#f5f5f5}:not(pre)>code[class*=language-]{padding:.1em;border-radius:.3em;white-space:normal;background:#f5f5f5}.token.blockquote,.token.comment{color:#969896}.token.cdata{color:#183691}.token.doctype,.token.macro.property,.token.punctuation,.token.variable{color:#333}.token.builtin,.token.important,.token.keyword,.token.operator,.token.rule{color:#a71d5d}.token.attr-value,.token.regex,.token.string,.token.url{color:#183691}.token.atrule,.token.boolean,.token.code,.token.command,.token.constant,.token.entity,.token.number,.token.property,.token.symbol{color:#0086b3}.token.prolog,.token.selector,.token.tag{color:#63a35c}.token.attr-name,.token.class,.token.class-name,.token.function,.token.id,.token.namespace,.token.pseudo-class,.token.pseudo-element,.token.url-reference .token.variable{color:#795da3}.token.entity{cursor:help}.token.title,.token.title .token.punctuation{font-weight:700;color:#1d3e81}.token.list{color:#ed6a43}.token.inserted{background-color:#eaffea;color:#55a532}.token.deleted{background-color:#ffecec;color:#bd2c00}.token.bold{font-weight:700}.token.italic{font-style:italic}.language-json .token.property{color:#183691}.language-markup .token.tag .token.punctuation{color:#333}.language-css .token.function,code.language-css{color:#0086b3}.language-yaml .token.atrule{color:#63a35c}code.language-yaml{color:#183691}.language-ruby .token.function{color:#333}.language-markdown .token.url{color:#795da3}.language-makefile .token.symbol{color:#795da3}.language-makefile .token.variable{color:#183691}.language-makefile .token.builtin{color:#0086b3}.language-bash .token.keyword{color:#0086b3}pre[data-line]{position:relative;padding:1em 0 1em 3em}pre[data-line] .line-highlight-wrapper{position:absolute;top:0;left:0;background-color:transparent;display:block;width:100%}pre[data-line] .line-highlight{position:absolute;left:0;right:0;padding:inherit 0;margin-top:1em;background:hsla(24,20%,50%,.08);background:linear-gradient(to right,hsla(24,20%,50%,.1) 70%,hsla(24,20%,50%,0));pointer-events:none;line-height:inherit;white-space:pre}pre[data-line] .line-highlight:before,pre[data-line] .line-highlight[data-end]:after{content:attr(data-start);position:absolute;top:.4em;left:.6em;min-width:1em;padding:0 .5em;background-color:hsla(24,20%,50%,.4);color:#f4f1ef;font:bold 65%/1.5 sans-serif;text-align:center;vertical-align:.3em;border-radius:999px;text-shadow:none;box-shadow:0 1px #fff}pre[data-line] .line-highlight[data-end]:after{content:attr(data-end);top:auto;bottom:.4em}html body{font-family:'Helvetica Neue',Helvetica,'Segoe UI',Arial,freesans,sans-serif;font-size:16px;line-height:1.6;color:#333;background-color:#fff;overflow:initial;box-sizing:border-box;word-wrap:break-word}html body>:first-child{margin-top:0}html body h1,html body h2,html body h3,html body h4,html body h5,html body h6{line-height:1.2;margin-top:1em;margin-bottom:16px;color:#000}html body h1{font-size:2.25em;font-weight:300;padding-bottom:.3em}html body h2{font-size:1.75em;font-weight:400;padding-bottom:.3em}html body h3{font-size:1.5em;font-weight:500}html body h4{font-size:1.25em;font-weight:600}html body h5{font-size:1.1em;font-weight:600}html body h6{font-size:1em;font-weight:600}html body h1,html body h2,html body h3,html body h4,html body h5{font-weight:600}html body h5{font-size:1em}html body h6{color:#5c5c5c}html body strong{color:#000}html body del{color:#5c5c5c}html body a:not([href]){color:inherit;text-decoration:none}html body a{color:#08c;text-decoration:none}html body a:hover{color:#00a3f5;text-decoration:none}html body img{max-width:100%}html body>p{margin-top:0;margin-bottom:16px;word-wrap:break-word}html body>ol,html body>ul{margin-bottom:16px}html body ol,html body ul{padding-left:2em}html body ol.no-list,html body ul.no-list{padding:0;list-style-type:none}html body ol ol,html body ol ul,html body ul ol,html body ul ul{margin-top:0;margin-bottom:0}html body li{margin-bottom:0}html body li.task-list-item{list-style:none}html body li>p{margin-top:0;margin-bottom:0}html body .task-list-item-checkbox{margin:0 .2em .25em -1.8em;vertical-align:middle}html body .task-list-item-checkbox:hover{cursor:pointer}html body blockquote{margin:16px 0;font-size:inherit;padding:0 15px;color:#5c5c5c;background-color:#f0f0f0;border-left:4px solid #d6d6d6}html body blockquote>:first-child{margin-top:0}html body blockquote>:last-child{margin-bottom:0}html body hr{height:4px;margin:32px 0;background-color:#d6d6d6;border:0 none}html body table{margin:10px 0 15px 0;border-collapse:collapse;border-spacing:0;display:block;width:100%;overflow:auto;word-break:normal;word-break:keep-all}html body table th{font-weight:700;color:#000}html body table td,html body table th{border:1px solid #d6d6d6;padding:6px 13px}html body dl{padding:0}html body dl dt{padding:0;margin-top:16px;font-size:1em;font-style:italic;font-weight:700}html body dl dd{padding:0 16px;margin-bottom:16px}html body code{font-family:Menlo,Monaco,Consolas,'Courier New',monospace;font-size:.85em;color:#000;background-color:#f0f0f0;border-radius:3px;padding:.2em 0}html body code::after,html body code::before{letter-spacing:-.2em;content:'\00a0'}html body pre>code{padding:0;margin:0;word-break:normal;white-space:pre;background:0 0;border:0}html body .highlight{margin-bottom:16px}html body .highlight pre,html body pre{padding:1em;overflow:auto;line-height:1.45;border:#d6d6d6;border-radius:3px}html body .highlight pre{margin-bottom:0;word-break:normal}html body pre code,html body pre tt{display:inline;max-width:initial;padding:0;margin:0;overflow:initial;line-height:inherit;word-wrap:normal;background-color:transparent;border:0}html body pre code:after,html body pre code:before,html body pre tt:after,html body pre tt:before{content:normal}html body blockquote,html body dl,html body ol,html body p,html body pre,html body ul{margin-top:0;margin-bottom:16px}html body kbd{color:#000;border:1px solid #d6d6d6;border-bottom:2px solid #c7c7c7;padding:2px 4px;background-color:#f0f0f0;border-radius:3px}@media print{html body{background-color:#fff}html body h1,html body h2,html body h3,html body h4,html body h5,html body h6{color:#000;page-break-after:avoid}html body blockquote{color:#5c5c5c}html body pre{page-break-inside:avoid}html body table{display:table}html body img{display:block;max-width:100%;max-height:100%}html body code,html body pre{word-wrap:break-word;white-space:pre}}.markdown-preview{width:100%;height:100%;box-sizing:border-box}.markdown-preview ul{list-style:disc}.markdown-preview ul ul{list-style:circle}.markdown-preview ul ul ul{list-style:square}.markdown-preview ol{list-style:decimal}.markdown-preview ol ol,.markdown-preview ul ol{list-style-type:lower-roman}.markdown-preview ol ol ol,.markdown-preview ol ul ol,.markdown-preview ul ol ol,.markdown-preview ul ul ol{list-style-type:lower-alpha}.markdown-preview .newpage,.markdown-preview .pagebreak{page-break-before:always}.markdown-preview pre.line-numbers{position:relative;padding-left:3.8em;counter-reset:linenumber}.markdown-preview pre.line-numbers>code{position:relative}.markdown-preview pre.line-numbers .line-numbers-rows{position:absolute;pointer-events:none;top:1em;font-size:100%;left:0;width:3em;letter-spacing:-1px;border-right:1px solid #999;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none}.markdown-preview pre.line-numbers .line-numbers-rows>span{pointer-events:none;display:block;counter-increment:linenumber}.markdown-preview pre.line-numbers .line-numbers-rows>span:before{content:counter(linenumber);color:#999;display:block;padding-right:.8em;text-align:right}.markdown-preview .mathjax-exps .MathJax_Display{text-align:center!important}.markdown-preview:not([data-for=preview]) .code-chunk .code-chunk-btn-group{display:none}.markdown-preview:not([data-for=preview]) .code-chunk .status{display:none}.markdown-preview:not([data-for=preview]) .code-chunk .output-div{margin-bottom:16px}.markdown-preview .md-toc{padding:0}.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link{display:inline;padding:.25rem 0}.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link div,.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link p{display:inline}.markdown-preview .md-toc .md-toc-link-wrapper.highlighted .md-toc-link{font-weight:800}.scrollbar-style::-webkit-scrollbar{width:8px}.scrollbar-style::-webkit-scrollbar-track{border-radius:10px;background-color:transparent}.scrollbar-style::-webkit-scrollbar-thumb{border-radius:5px;background-color:rgba(150,150,150,.66);border:4px solid rgba(150,150,150,.66);background-clip:content-box}html body[for=html-export]:not([data-presentation-mode]){position:relative;width:100%;height:100%;top:0;left:0;margin:0;padding:0;overflow:auto}html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{position:relative;top:0;min-height:100vh}@media screen and (min-width:914px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{padding:2em calc(50% - 457px + 2em)}}@media screen and (max-width:914px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{padding:2em}}@media screen and (max-width:450px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{font-size:14px!important;padding:1em}}@media print{html body[for=html-export]:not([data-presentation-mode]) #sidebar-toc-btn{display:none}}html body[for=html-export]:not([data-presentation-mode]) #sidebar-toc-btn{position:fixed;bottom:8px;left:8px;font-size:28px;cursor:pointer;color:inherit;z-index:99;width:32px;text-align:center;opacity:.4}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] #sidebar-toc-btn{opacity:1}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc{position:fixed;top:0;left:0;width:300px;height:100%;padding:32px 0 48px 0;font-size:14px;box-shadow:0 0 4px rgba(150,150,150,.33);box-sizing:border-box;overflow:auto;background-color:inherit}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar{width:8px}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar-track{border-radius:10px;background-color:transparent}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar-thumb{border-radius:5px;background-color:rgba(150,150,150,.66);border:4px solid rgba(150,150,150,.66);background-clip:content-box}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc a{text-decoration:none}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc{padding:0 16px}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link{display:inline;padding:.25rem 0}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link div,html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link p{display:inline}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper.highlighted .md-toc-link{font-weight:800}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{left:300px;width:calc(100% - 300px);padding:2em calc(50% - 457px - 300px / 2);margin:0;box-sizing:border-box}@media screen and (max-width:1274px){html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{padding:2em}}@media screen and (max-width:450px){html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{width:100%}}html body[for=html-export]:not([data-presentation-mode]):not([html-show-sidebar-toc]) .markdown-preview{left:50%;transform:translateX(-50%)}html body[for=html-export]:not([data-presentation-mode]):not([html-show-sidebar-toc]) .md-sidebar-toc{display:none}
+/* Please visit the URL below for more information: */
+/*   https://shd101wyy.github.io/markdown-preview-enhanced/#/customize-css */
+
+      </style>
+      <!-- The content below will be included at the end of the <head> element. --><script type="text/javascript">
+  document.addEventListener("DOMContentLoaded", function () {
+    // your code here
+  });
+</script></head><body for="html-export">
+    
+    
+      <div class="crossnote markdown-preview  ">
+      
+<p>下面给你一个 <strong>在 NAS（QNAP / Synology / 任意 Linux）上让 Docker 走代理拉取镜像的完整可操作方案</strong>。</p>
+<p>方案4 success</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token punctuation">[</span>/share/CACHEDEV3_DATA/git/dashboard/hestia-core<span class="token punctuation">]</span> <span class="token comment"># docker pull nginx:alpine</span>
+alpine: Pulling from library/nginx
+2d35ebdb57d9: Pull complete
+8f6a6833e95d: Pull complete
+194fa24e147d: Pull complete
+3eaba6cd10a3: Pull complete
+df413d6ebdc8: Pull complete
+d9a55dab5954: Pull complete
+ff8a36d5502a: Pull complete
+bdabb0d44271: Pull complete
+Digest: sha256:b3c656d55d7ad751196f21b7fd2e8d4da9cb430e32f646adcf92441b72f82b14
+Status: Downloaded newer image <span class="token keyword keyword-for">for</span> nginx:alpine
+docker.io/library/nginx:alpine
+
+
+<span class="token number">1</span> 运行k3s reference Docker hub 这里因为端口占用 ，所以我重新启用新的端口。 
+<span class="token function">docker</span> run <span class="token parameter variable">-d</span> <span class="token parameter variable">--name</span> k3s-server <span class="token punctuation">\</span>
+  <span class="token parameter variable">--privileged</span> <span class="token punctuation">\</span>
+  <span class="token parameter variable">-p</span> <span class="token number">6444</span>:6443 <span class="token punctuation">\</span>
+  <span class="token parameter variable">-p</span> <span class="token number">8888</span>:80 <span class="token punctuation">\</span>
+  <span class="token parameter variable">-p</span> <span class="token number">4433</span>:443 <span class="token punctuation">\</span>
+  <span class="token parameter variable">-v</span> /var/lib/rancher/k3s:/var/lib/rancher/k3s <span class="token punctuation">\</span>
+  <span class="token parameter variable">-v</span> /var/lib/kubelet:/var/lib/kubelet <span class="token punctuation">\</span>
+  <span class="token parameter variable">-v</span> /var/run:/var/run <span class="token punctuation">\</span>
+  rancher/k3s:v1.32.10-k3s1 server
+<span class="token number">2</span>   
+<span class="token function">docker</span> <span class="token function">ps</span> <span class="token parameter variable">-a</span>
+CONTAINER ID   IMAGE                                           COMMAND                  CREATED          STATUS                       PORTS                                                                    NAMES
+40b5eb9cad24   rancher/k3s:v1.32.10-k3s1                       <span class="token string">"/bin/k3s server"</span>        <span class="token number">33</span> seconds ago   Up <span class="token number">32</span> seconds                <span class="token number">0.0</span>.0.0:8888-<span class="token operator">&gt;</span><span class="token number">80</span>/tcp, <span class="token number">0.0</span>.0.0:4433-<span class="token operator">&gt;</span><span class="token number">443</span>/tcp, <span class="token number">0.0</span>.0.0:6444-<span class="token operator">&gt;</span><span class="token number">6443</span>/tcp      k3s-server
+<span class="token number">3</span> 重新导出 kubeconfig：然后修改侦听地址和 忽略证书
+clusters:
+- cluster:
+    insecure-skip-tls-verify: <span class="token boolean">true</span>
+    server: https://192.168.31.88:6444
+  name: default
+<span class="token number">4</span> macOS上 
+<span class="token builtin class-name">export</span> <span class="token assign-left variable">KUBECONFIG</span><span class="token operator">=</span><span class="token variable"><span class="token variable">$(</span><span class="token builtin class-name">pwd</span><span class="token variable">)</span></span>/kubeconfig.yaml <span class="token operator">==</span><span class="token operator">&gt;</span> mac pro
+<span class="token builtin class-name">export</span> <span class="token assign-left variable">KUBECONFIG</span><span class="token operator">=</span>/Users/lex/nas-k3s.yaml <span class="token operator">==</span><span class="token operator">&gt;</span> na
+<span class="token number">5</span> 
+➜  ~ kubectl get nodes
+NAME           STATUS   ROLES                  AGE   VERSION
+40b5eb9cad24   Ready    control-plane,master   13m   v1.32.10+k3s1
+➜  ~ kubectl get pod <span class="token parameter variable">-A</span>
+NAMESPACE     NAME                                      READY   STATUS              RESTARTS   AGE
+kube-system   coredns-6d668d687-qlxkb                   <span class="token number">0</span>/1     ContainerCreating   <span class="token number">0</span>          13m
+kube-system   helm-install-traefik-crd-ggqq6            <span class="token number">0</span>/1     ContainerCreating   <span class="token number">0</span>          13m
+kube-system   helm-install-traefik-j7nn7                <span class="token number">0</span>/1     ContainerCreating   <span class="token number">0</span>          13m
+kube-system   local-path-provisioner-869c44bfbd-rhd5j   <span class="token number">0</span>/1     ContainerCreating   <span class="token number">0</span>          13m
+kube-system   metrics-server-7bfffcd44-zjq52            <span class="token number">0</span>/1     ContainerCreating   <span class="token number">0</span>          13m
+<span class="token number">6</span> manual pull images 
+<span class="token function">docker</span> pull rancher/mirrored-coredns-coredns:1.13.1
+rancher/local-path-provisioner:v0.0.32
+rancher/mirrored-metrics-server:v0.8.0
+
+</code></pre><p>全部内容均为 <strong>可直接复制使用的 Shell 命令</strong>，并按照你的网络结构（NAS 无法直连 <a href="http://docker.io">docker.io</a>，Mac 有代理）来设计。</p>
+<hr>
+<h1 id="问题分析"><strong>问题分析</strong> </h1>
+<p>你的 NAS 上无法直接从 <code>docker.io/library/nginx:alpine</code> 拉取镜像。<br>
+常见原因：</p>
+<ul>
+<li>
+<p>NAS 所在网络无法直连 Docker Hub（被墙 or 网络策略）</p>
+</li>
+<li>
+<p>NAS 默认 Docker <strong>不会读取 export 的代理变量</strong></p>
+</li>
+<li>
+<p>需要在 Docker daemon 级别配置代理，或者在 Docker CLI 层配置代理</p>
+</li>
+</ul>
+<hr>
+<h1 id="解决方案"><strong>解决方案</strong> </h1>
+<p>适合所有类型 NAS（QNAP/Synology/自建 Linux）</p>
+<hr>
+<h2 id="方案-1给-docker-daemon-配置代理推荐最稳定"><strong>方案 1：给 Docker Daemon 配置代理（推荐，最稳定）</strong> </h2>
+<h3 id="步骤-1创建-docker-daemon-代理配置"><strong>步骤 1：创建 Docker daemon 代理配置</strong> </h3>
+<p>在 NAS 上执行：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token function">sudo</span> <span class="token function">mkdir</span> <span class="token parameter variable">-p</span> /etc/systemd/system/docker.service.d
+</code></pre><p>创建配置文件：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token function">sudo</span> <span class="token function">tee</span> /etc/systemd/system/docker.service.d/http-proxy.conf <span class="token operator">&lt;&lt;</span><span class="token string">EOF
+[Service]
+Environment="HTTP_PROXY=http://192.168.31.198:7222"
+Environment="HTTPS_PROXY=http://192.168.31.198:7222"
+Environment="NO_PROXY=localhost,127.0.0.1"
+EOF</span>
+</code></pre><blockquote>
+<p>说明：<br>
+<code>192.168.31.198:7222</code> 是你 Mac 上的代理（如 Loon/Clash）。</p>
+</blockquote>
+<hr>
+<h3 id="步骤-2重载并重启-docker"><strong>步骤 2：重载并重启 Docker</strong> </h3>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token function">sudo</span> systemctl daemon-reload
+<span class="token function">sudo</span> systemctl restart <span class="token function">docker</span>
+</code></pre><hr>
+<h3 id="步骤-3测试是否生效"><strong>步骤 3：测试是否生效</strong> </h3>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token function">docker</span> pull nginx:alpine
+</code></pre><p>如果成功，那么 Daemon 代理已经启用。</p>
+<hr>
+<h2 id="方案-2cli-层使用代理临时使用"><strong>方案 2：CLI 层使用代理（临时使用）</strong> </h2>
+<p>如果 NAS 不支持 systemd 或你想快速测试：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token builtin class-name">export</span> <span class="token assign-left variable">HTTP_PROXY</span><span class="token operator">=</span>http://192.168.31.198:7222
+<span class="token builtin class-name">export</span> <span class="token assign-left variable">HTTPS_PROXY</span><span class="token operator">=</span>http://192.168.31.198:7222
+
+<span class="token function">docker</span> pull nginx:alpine
+</code></pre><p><strong>注意</strong>：<br>
+⚠️ Docker CLI 层的 proxy 通常 <strong>对 build 有效，但是对 pull 不一定生效</strong><br>
+因为 pull 是 Docker daemon 执行的。</p>
+<hr>
+<h2 id="方案-3为-docker-hub-配置镜像加速器辅助"><strong>方案 3：为 Docker Hub 配置镜像加速器（辅助）</strong> </h2>
+<p>你也可以加一个 registry mirror（不是代理，但能加速/绕路）</p>
+<h3 id="qnapsynology-可能需要修改">QNAP/Synology 可能需要修改： </h3>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token function">sudo</span> <span class="token function">tee</span> /etc/docker/daemon.json <span class="token operator">&lt;&lt;</span><span class="token string">EOF
+{
+  "registry-mirrors": [
+    "https://docker.1panel.live",
+    "https://dockerproxy.com"
+  ]
+}
+EOF</span>
+</code></pre><p>然后重启 Docker：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token function">sudo</span> systemctl restart <span class="token function">docker</span>
+</code></pre><hr>
+<h1 id="方案-4如果-nas-docker-是-qnap-container-station无-systemd"><strong>方案 4：如果 NAS Docker 是 QNAP Container Station（无 systemd）</strong> </h1>
+<p>QNAP 的 Docker 路径是：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>/share/CACHEDEV1_DATA/.qpkg/container-station/bin/docker
+</code></pre><p>你可以直接写环境变量文件：</p>
+<h3 id="创建配置目录">创建配置目录 </h3>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token function">mkdir</span> <span class="token parameter variable">-p</span> /share/CACHEDEV1_DATA/.qpkg/container-station/etc/systemd/system/docker.service.d/
+</code></pre><h3 id="创建代理文件">创建代理文件 </h3>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token function">tee</span> /share/CACHEDEV1_DATA/.qpkg/container-station/etc/systemd/system/docker.service.d/http-proxy.conf <span class="token operator">&lt;&lt;</span><span class="token string">EOF
+[Service]
+Environment="HTTP_PROXY=http://192.168.31.198:7222"
+Environment="HTTPS_PROXY=http://192.168.31.198:7222"
+Environment="NO_PROXY=localhost,127.0.0.1"
+EOF</span>
+</code></pre><p>然后重启 Container Station（不是 systemctl）：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code>/etc/init.d/container-station.sh restart
+</code></pre><hr>
+<h1 id="方案-5使用-mac-作为代理网关透明"><strong>方案 5：使用 Mac 作为「代理网关」(透明)</strong> </h1>
+<p>如果 NAS 无法配置 systemd，可以让 NAS 整个网络流量走你 Mac 的代理：</p>
+<p>在 Mac 的 Clash / Loon 设置：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>Allow LAN: true
+Mixin 开启 redir / tproxy
+</code></pre><p>NAS 上设置：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>默认网关指向 Mac 的 IP
+DNS 也改成 8.8.8.8 或 Cloudflare
+</code></pre><p>这样拉镜像不需要设置代理。</p>
+<hr>
+<h1 id="注意事项"><strong>注意事项</strong> </h1>
+<ul>
+<li>
+<p>Docker pull 的代理必须是 Docker daemon 层生效</p>
+</li>
+<li>
+<p>export 只能解决 <strong>docker build</strong>，不一定解决 <strong>docker pull</strong></p>
+</li>
+<li>
+<p>QNAP/Synology 没 systemd，需要使用它们自己的 Docker 服务脚本</p>
+</li>
+<li>
+<p>如果 Mac 的代理限制了 LAN，需要开启 <strong>Allow LAN</strong></p>
+</li>
+</ul>
+<hr>
+<h1 id="如果你告诉我"><strong>如果你告诉我：</strong> </h1>
+<p>👉 你的 NAS 是 <strong>QNAP / Synology / Linux（什么发行版）</strong><br>
+👉 Docker 路径（你已经提供：<code>/share/CACHEDEV1_DATA/.qpkg/container-station/bin/docker</code>）</p>
+<p>我可以帮你生成 <strong>完全匹配你系统的最终版本脚本</strong>。</p>
+<p>要不要我直接帮你做 <strong>NAS（QNAP）专用的完整配置文件 + 一键脚本？</strong></p>
+<p>下面我给你 <strong>基于你当前端口映射（8888/4433/6444）</strong> 的完整使用方法。</p>
+<p>你现在的 k3s 容器运行情况如下：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>Host:8888  -&gt; Container:80
+Host:4433 -&gt; Container:443
+Host:6444 -&gt; Container:6443  ← k3s API server
+</code></pre><p>因此 <strong>你的 Kubernetes API 入口地址变成：</strong></p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>https://&lt;NAS-IP&gt;:6444
+</code></pre><p>接下来需要 3 个步骤：</p>
+<hr>
+<h1 id="1-获取-kubeconfig最关键">1. 获取 kubeconfig（最关键） </h1>
+<p>k3s 的 kubeconfig 在容器内 <code>/etc/rancher/k3s/k3s.yaml</code><br>
+直接从容器中取出来：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token function">docker</span> <span class="token builtin class-name">exec</span> k3s-server <span class="token function">cat</span> /etc/rancher/k3s/k3s.yaml <span class="token operator">&gt;</span> kubeconfig.yaml
+</code></pre><p>然后修改其中的 API 地址：</p>
+<h3 id="打开-kubeconfigyaml">打开 kubeconfig.yaml </h3>
+<p>把里面的：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>server: https://127.0.0.1:6443
+</code></pre><p>改成：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>server: https://&lt;NAS-IP&gt;:6444
+</code></pre><p>例如：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>server: https://192.168.31.50:6444
+</code></pre><hr>
+<h1 id="2-使用-kubeconfig-操作-k3s">2. 使用 kubeconfig 操作 k3s </h1>
+<p>确保你本地装好了 kubectl（Mac 已有）。<br>
+然后执行：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token builtin class-name">export</span> <span class="token assign-left variable">KUBECONFIG</span><span class="token operator">=</span><span class="token variable"><span class="token variable">$(</span><span class="token builtin class-name">pwd</span><span class="token variable">)</span></span>/kubeconfig.yaml
+</code></pre><p>验证访问：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code>kubectl get nodes
+</code></pre><p>你应该看到类似：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>NAME         STATUS   ROLES                  AGE   VERSION
+k3s-server   Ready    control-plane,master   2m    v1.32.10+k3s1
+</code></pre><hr>
+<h1 id="3-部署一个测试应用验证端口映射">3. 部署一个测试应用验证端口映射 </h1>
+<p>因为你把容器内的 <strong>80 映射到 NAS 的 8888</strong>，所以我们部署一个 nginx：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code>kubectl create deployment web <span class="token parameter variable">--image</span><span class="token operator">=</span>nginx
+kubectl expose deployment web <span class="token parameter variable">--port</span><span class="token operator">=</span><span class="token number">80</span>
+</code></pre><p>然后创建 LoadBalancer（k3s 自带 servicelb）：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code>kubectl expose deployment web <span class="token parameter variable">--type</span><span class="token operator">=</span>LoadBalancer <span class="token parameter variable">--port</span><span class="token operator">=</span><span class="token number">80</span>
+</code></pre><p>获取端口：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code>kubectl get svc web
+</code></pre><p>输出示例：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>NAME   TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)
+web    LoadBalancer   10.43.120.45   192.168.31.50  80:31136/TCP
+</code></pre><p>访问方式：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>http://&lt;NAS-IP&gt;:31136
+</code></pre><p>如果想直接映射到你设置的 8888，请在 k3s 启动命令中：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>-p 8888:80
+</code></pre><p>你已经这么做了，所以访问：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>http://&lt;NAS-IP&gt;:8888
+</code></pre><p>你会看到 nginx 欢迎页。</p>
+<hr>
+<h1 id="4-检查-k3s-内部组件">4. 检查 k3s 内部组件 </h1>
+<p>查看 pods：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code>kubectl get pods <span class="token parameter variable">-A</span>
+</code></pre><p>你会看到：</p>
+<ul>
+<li>
+<p>traefik（ingress）</p>
+</li>
+<li>
+<p>coredns</p>
+</li>
+<li>
+<p>metrics-server</p>
+</li>
+<li>
+<p>local-path-provisioner</p>
+</li>
+<li>
+<p>servicelb</p>
+</li>
+</ul>
+<p>这些都是 k3s 自带的组件。</p>
+<hr>
+<h1 id="5-完整图示">5. 完整图示 </h1>
+<div class="mermaid">graph TD
+    A[Docker container k3s-server] --&gt; B[K3s API server 6443]
+    B --&gt; C[Mapped to NAS 6444]
+    C --&gt; D[kubectl via kubeconfig.yaml]
+
+    A --&gt; E[Ingress / ServiceLB / etc]
+    E --&gt; F[Nginx test app]
+    F --&gt; G[NAS 8888 -&gt; 80]
+</div><hr>
+<h1 id="6-你现在可以做的事">6. 你现在可以做的事 </h1>
+<p>你现在已经具备：</p>
+<table>
+<thead>
+<tr>
+<th>任务</th>
+<th>命令</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>查看集群状态</td>
+<td><code>kubectl get nodes</code></td>
+</tr>
+<tr>
+<td>查看所有组件</td>
+<td><code>kubectl get pods -A</code></td>
+</tr>
+<tr>
+<td>部署 app</td>
+<td><code>kubectl create deployment</code></td>
+</tr>
+<tr>
+<td>对外暴露服务</td>
+<td><code>kubectl expose</code></td>
+</tr>
+<tr>
+<td>进入 k3s 容器</td>
+<td><code>docker exec -it k3s-server sh</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h1 id="如果你希望我帮你生成一个自动化脚本"><strong>如果你希望我帮你生成一个自动化脚本：</strong> </h1>
+<ul>
+<li>
+<p>自动启动 k3s（含端口 8888/4433/6444）</p>
+</li>
+<li>
+<p>自动导出 kubeconfig</p>
+</li>
+<li>
+<p>自动替换 server 地址</p>
+</li>
+<li>
+<p>自动配置 kubectl</p>
+</li>
+</ul>
+<p>我可以给你一个 <strong>一键脚本（NAS 专用）</strong>。</p>
+<p>需要我帮你生成吗？</p>
+<p>你现在遇到的报错非常典型：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>tls: failed to verify certificate: x509: certificate is valid for 10.0.3.9, 10.43.0.1, 127.0.0.1, ::1, not 192.168.31.88
+</code></pre><p>也就是说：<br>
+<strong>你的 kubeconfig 指向了 <code>https://192.168.31.88:6444</code>，但是 k3s 内部生成的 APIServer 证书里并没有这个 IP，所以 TLS 校验失败。</strong></p>
+<hr>
+<h1 id="-解决方案有两种任选一种">✅ <strong>解决方案有两种（任选一种）</strong> </h1>
+<hr>
+<h1 id="方案-a推荐重新启动-k3s-时加入--tls-san让证书信任-1921683188"><strong>方案 A（推荐）：重新启动 k3s 时加入 --tls-san，让证书信任 192.168.31.88</strong> </h1>
+<p>k3s 原生支持加入 SAN (Subject Alternative Name)。</p>
+<p>你现在启动 k3s 的 docker run 命令应该是类似这样：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>docker run -d --name k3s-server \
+  --privileged \
+  -p 6444:6443 \
+  -p 8888:80 \
+  -p 4433:443 \
+  rancher/k3s:v1.32.10-k3s1 server
+</code></pre><p>你需要加上以下参数：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>--tls-san 192.168.31.88
+</code></pre><hr>
+<h2 id="-最终命令请重新启动-k3s-容器">📌 <strong>最终命令（请重新启动 k3s 容器）</strong> </h2>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token function">docker</span> <span class="token function">rm</span> <span class="token parameter variable">-f</span> k3s-server
+</code></pre><p>再启动：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token function">docker</span> run <span class="token parameter variable">-d</span> <span class="token parameter variable">--name</span> k3s-server <span class="token punctuation">\</span>
+  <span class="token parameter variable">--privileged</span> <span class="token punctuation">\</span>
+  <span class="token parameter variable">-p</span> <span class="token number">6444</span>:6443 <span class="token punctuation">\</span>
+  <span class="token parameter variable">-p</span> <span class="token number">8888</span>:80 <span class="token punctuation">\</span>
+  <span class="token parameter variable">-p</span> <span class="token number">4433</span>:443 <span class="token punctuation">\</span>
+  <span class="token parameter variable">-v</span> /var/lib/rancher/k3s:/var/lib/rancher/k3s <span class="token punctuation">\</span>
+  <span class="token parameter variable">-v</span> /var/lib/kubelet:/var/lib/kubelet <span class="token punctuation">\</span>
+  <span class="token parameter variable">-v</span> /var/run:/var/run <span class="token punctuation">\</span>
+  rancher/k3s:v1.32.10-k3s1 server <span class="token punctuation">\</span>
+  --tls-san <span class="token number">192.168</span>.31.88
+</code></pre><p>k3s 会重新生成证书，包含你的 NAS IP。</p>
+<hr>
+<h1 id="方案-b修改-kubeconfig让其忽略证书校验不推荐"><strong>方案 B：修改 kubeconfig，让其忽略证书校验（不推荐）</strong> </h1>
+<p>只需要在 kubeconfig.yaml 的 cluster 中加入：</p>
+<pre data-role="codeBlock" data-info="yaml" class="language-yaml yaml"><code><span class="token key atrule">insecure-skip-tls-verify</span><span class="token punctuation">:</span> <span class="token boolean important">true</span>
+</code></pre><p>例如：</p>
+<pre data-role="codeBlock" data-info="yaml" class="language-yaml yaml"><code><span class="token key atrule">clusters</span><span class="token punctuation">:</span>
+<span class="token punctuation">-</span> <span class="token key atrule">cluster</span><span class="token punctuation">:</span>
+    <span class="token key atrule">certificate-authority-data</span><span class="token punctuation">:</span> xxx
+    <span class="token key atrule">insecure-skip-tls-verify</span><span class="token punctuation">:</span> <span class="token boolean important">true</span>
+    <span class="token key atrule">server</span><span class="token punctuation">:</span> https<span class="token punctuation">:</span>//192.168.31.88<span class="token punctuation">:</span><span class="token number">6444</span>
+  <span class="token key atrule">name</span><span class="token punctuation">:</span> default
+</code></pre><p>缺点：</p>
+<ul>
+<li>
+<p>跳过 TLS 校验，不安全</p>
+</li>
+<li>
+<p>长期用不推荐</p>
+</li>
+</ul>
+<hr>
+<h1 id="-为什么-k3s-默认证书不包含-1921683188">🔍 <strong>为什么 k3s 默认证书不包含 192.168.31.88？</strong> </h1>
+<p>因为：</p>
+<ul>
+<li>
+<p>k3s 在容器内运行</p>
+</li>
+<li>
+<p>APIServer 默认用 container 内的网络 IP，例如 <code>10.0.3.9</code></p>
+</li>
+<li>
+<p>k3s 不会自动把 Host 的局域网 IP 加进去（除非用 --tls-san）</p>
+</li>
+</ul>
+<p>这属于正常设计。</p>
+<hr>
+<h1 id="-验证修复后的状态">🧪 <strong>验证修复后的状态</strong> </h1>
+<p>重新导出 kubeconfig：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token function">docker</span> <span class="token builtin class-name">exec</span> k3s-server <span class="token function">cat</span> /etc/rancher/k3s/k3s.yaml <span class="token operator">&gt;</span> kubeconfig.yaml
+</code></pre><p>修改里面的：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>server: https://192.168.31.88:6444
+</code></pre><p>然后执行：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token builtin class-name">export</span> <span class="token assign-left variable">KUBECONFIG</span><span class="token operator">=</span><span class="token variable"><span class="token variable">$(</span><span class="token builtin class-name">pwd</span><span class="token variable">)</span></span>/kubeconfig.yaml
+kubectl get nodes
+</code></pre><p>你应该看到：</p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>NAME         STATUS   ROLES                  AGE   VERSION
+k3s-server   Ready    control-plane,master   1m    v1.32.10+k3s1
+</code></pre><hr>
+<h1 id="-是否需要我帮你生成最终的一键脚本">🚀 <strong>是否需要我帮你生成最终的一键脚本？</strong> </h1>
+<p>内容包括：</p>
+<ul>
+<li>
+<p>自动启动 k3s（可自定义端口）</p>
+</li>
+<li>
+<p>自动加入 <code>--tls-san NAS_IP</code></p>
+</li>
+<li>
+<p>自动导出并修复 kubeconfig</p>
+</li>
+<li>
+<p>自动创建 <code>alias k=kubectl</code></p>
+</li>
+</ul>
+<p>你只需要告诉我：</p>
+<p>👉 你的 NAS IP（确认）<br>
+👉 你的端口是否固定：8888 / 4433 / 6444</p>
+<p>我即可生成完整自动化脚本。</p>
+
+      </div>
+      
+      
+    
+    
+    <script type="module">
+// TODO: If ZenUML gets integrated into mermaid in the future,
+//      we can remove the following lines.
+
+
+var MERMAID_CONFIG = ({"startOnLoad":false});
+if (typeof MERMAID_CONFIG !== 'undefined') {
+  MERMAID_CONFIG.startOnLoad = false
+  MERMAID_CONFIG.cloneCssStyles = false
+  MERMAID_CONFIG.theme = "default"
+}
+
+mermaid.initialize(MERMAID_CONFIG || {})
+if (typeof(window['Reveal']) !== 'undefined') {
+  function mermaidRevealHelper(event) {
+    var currentSlide = event.currentSlide
+    var diagrams = currentSlide.querySelectorAll('.mermaid')
+    for (var i = 0; i < diagrams.length; i++) {
+      var diagram = diagrams[i]
+      if (!diagram.hasAttribute('data-processed')) {
+        mermaid.init(null, diagram, ()=> {
+          Reveal.slide(event.indexh, event.indexv)
+        })
+      }
+    }
+  }
+  Reveal.addEventListener('slidetransitionend', mermaidRevealHelper)
+  Reveal.addEventListener('ready', mermaidRevealHelper)
+  await mermaid.run({
+    nodes: document.querySelectorAll('.mermaid')
+  })
+} else {
+  await mermaid.run({
+    nodes: document.querySelectorAll('.mermaid')
+  })
+}
+</script>
+    
+    
+    
+  
+    </body></html>
