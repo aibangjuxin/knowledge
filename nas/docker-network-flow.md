@@ -256,18 +256,18 @@ graph TB
         direction TB
         
         subgraph ContainerStation["Container Station"]
-            BinPath[/share/CACHEDEV1_DATA/.qpkg/<br/>container-station/bin/docker]
-            InitScript[/etc/init.d/<br/>container-station.sh]
+            BinPath["/share/CACHEDEV1_DATA/.qpkg/<br/>container-station/bin/docker"]
+            InitScript["/etc/init.d/<br/>container-station.sh"]
         end
         
         subgraph DockerConfig["Docker 配置"]
-            DaemonJSON[/etc/docker/daemon.json]
-            DockerSock[/var/run/docker.sock]
+            DaemonJSON["/etc/docker/daemon.json"]
+            DockerSock["/var/run/docker.sock"]
         end
         
         subgraph K3sConfig["K3s 配置"]
-            K3sRegistry[/etc/rancher/k3s/<br/>registries.yaml]
-            K3sData[/var/lib/rancher/k3s]
+            K3sRegistry["/etc/rancher/k3s/<br/>registries.yaml"]
+            K3sData["/var/lib/rancher/k3s"]
         end
     end
     
