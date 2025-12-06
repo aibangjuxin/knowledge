@@ -1,7 +1,12 @@
 # Kong Data Plane (DP) Status Troubleshooting Guide
 - [verify-dp-status-gemini.sh](verify-dp-status-gemini.sh)
 此文档旨在帮助你深入分析 Kong Data Plane (DP) 的运行状态，特别是验证 DP 是否成功连接到 Control Plane (CP)，以及在连接失败时如何进行多维度的排查。
-
+- Kubernetes Secret 证书信息提取流程
+- Using labels to filter out DP deployment and pods information
+- Using deployment get the CP service name and port
+- 
+- Using kubectl get pods -n kong -l app=kong-dp -o wide
+- 
 ## 核心诊断流程概览
 
 我们将从以下五个维度进行深度探测：
