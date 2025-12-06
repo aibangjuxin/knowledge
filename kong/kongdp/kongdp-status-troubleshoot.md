@@ -1,5 +1,5 @@
 # Kong Data Plane (DP) Status Troubleshooting Guide
-
+- [verify-dp-status-gemini.sh](verify-dp-status-gemini.sh)
 此文档旨在帮助你深入分析 Kong Data Plane (DP) 的运行状态，特别是验证 DP 是否成功连接到 Control Plane (CP)，以及在连接失败时如何进行多维度的排查。
 
 ## 核心诊断流程概览
