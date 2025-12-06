@@ -1,8 +1,17 @@
 #!/bin/bash
 
+#
+# verify-dp.sh
+#
+# This script is a combination of multiple scripts and markdown files
+# to provide a comprehensive verification of Kong DP status.
+#
+
+# --- Start of verify-dp-status-gemini.sh ---
+#!/bin/bash
+
 # Kong Data Plane Status Verification Script (Gemini Optimized)
 # Usage: ./verify-dp-status-gemini.sh [-n namespace] [-l label-selector] [-s secret-name]
-# ./verify-dp-status-gemini.sh -n lex -l app=nginx-deployment
 #
 # Optimization:
 # - Automatically detects CP address from DP Deployment env vars (KONG_CLUSTER_CONTROL_PLANE)
@@ -33,14 +42,14 @@ while getopts "n:l:s:h" opt; do
     n) NAMESPACE="$OPTARG" ;;
     l) LABEL_SELECTOR="$OPTARG" ;;
     s) SECRET_NAME="$OPTARG" ;;
-    h)
+    h) 
       echo "Usage: $0 [-n namespace] [-l label-selector] [-s secret-name]"
       echo "  -n: Kubernetes namespace (default: $NAMESPACE)"
       echo "  -l: DP Deployment label selector (default: $LABEL_SELECTOR)"
       echo "  -s: TLS secret name (default: $SECRET_NAME)"
       exit 0
       ;;
-    \?)
+    \?) 
       echo "Invalid option: -$OPTARG" >&2
       exit 1
       ;;
@@ -270,3 +279,4 @@ if [ -n "$DP_POD_NAME" ]; then
 fi
 
 echo -e "\n${GREEN}脚本执行完成!${NC}\n"
+
