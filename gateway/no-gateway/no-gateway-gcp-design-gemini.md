@@ -47,8 +47,8 @@ graph TD
 
     A -- "https://www.aibang.com/api-xxx/" --> B
 
-    B -- "location 匹配配置文件在 gtw 目录" --> |"注入 Header: X-Gateway-Mode: true"| C
-    B -- "location 匹配配置文件在 nogtw 目录" --> |"注入 Header: X-Gateway-Mode: false"| D
+    B -- "location 匹配配置文件在 gtw 目录 注入 Header: X-Gateway-Mode: true" --> C
+    B -- "location 匹配配置文件在 nogtw 目录 注入 Header: X-Gateway-Mode: false" --> D
 
     C -- "路由" --> E
     D -- "负载均衡" --> F
