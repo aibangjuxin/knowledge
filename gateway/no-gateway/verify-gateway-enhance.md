@@ -1,9 +1,24 @@
-# Shell Scripts Collection
+问题分析
 
-Generated on: 2025-12-07 10:54:06
-Directory: /Users/lex/git/knowledge/gateway/no-gateway
+你原始脚本逻辑清晰、覆盖面广，但在鲁棒性与失败处理方面存在若干问题（set -e 导致意外退出、未检查依赖、jsonpath 解析不稳、证书解析不够健壮、把 backend port 错当为对外 listener port 等）。为了真实环境可用，需保证即便某些 kubectl 查询失败也能继续检查其它项，并给出明确的 summary 与错误提示，同时遵守部署前检查权限与 YAML 验证的最佳实践。
 
-## `verify-gke-gateway-chatgpt.sh`
+⸻
+
+解决方案（要点）
+• 使用 set -euo pipefail 并对可能失败的命令显式捕获错误（|| true），避免非预期退出。
+• 依赖检查（kubectl, jq, openssl, curl）并在缺失时降级处理或提示。
+• 使用 kubectl -o json + jq 做安全解析；当 jq 不可用时回退到安全的 jsonpath / 原样输出并发出提示。
+• 证书处理：先判断 secret 类型，再 decode tls.crt，再用 openssl x509 解析（subject/issuer/dates/SAN）。
+• 获取外部访问端口优先读取 Gateway spec.listeners[].port（只有在能正确解析 listener 时），否则回退到常见端口（443/80）。
+• 所有“可能失败但不是致命”的命令都捕获并记录，最后输出 summary（errors/warnings）。
+• 在脚本顶部提醒用户检查权限与 kubeconfig，上线前建议 kubectl apply --dry-run=client -f <yaml> 验证。
+
+⸻
+
+增强后脚本（可直接复制到 .sh 并执行）
+
+使用说明：在执行前确认你有对集群读取权限，脚本会检查依赖并在能用 jq 时进行更准确的 JSON 处理。
+示例：./verify-gke-gateway-claude.sh -g gateway-ns -u app-ns
 
 ```bash
 #!/usr/bin/env bash
@@ -410,8 +425,8 @@ if [ -n "$HTR_JSON" ]; then
 
             # fallback if not found
             if [ -z "$LISTENER_PORT" ]; then
-                # Use 8443 by default for HTTPS; note: this is not guaranteed correct if listener uses non-standard port.
-                LISTENER_PORT=8443
+                # Use 443 by default for HTTPS; note: this is not guaranteed correct if listener uses non-standard port.
+                LISTENER_PORT=443
                 log_warn "Could not determine listener port for hostname ${hostname}; defaulting to ${LISTENER_PORT}. Validate Gateway listeners for accurate port."
             fi
 
@@ -467,518 +482,39 @@ else
 fi
 ```
 
-## `verify-gke-gateway-claude.sh`
+⸻
 
-```bash
-#!/bin/bash
+流程图（Mermaid）
 
-#==============================================================================
-# GKE Internal Gateway Verification Script
-# Purpose: Verify GKE Gateway API configuration and resource status
-# Author: Infrastructure Team
-# Version: 1.1
-#==============================================================================
-
-set -e
-
-# Color Output Definitions
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Logging Functions
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-print_section() {
-    echo ""
-    echo "========================================================================"
-    echo "$1"
-    echo "========================================================================"
-}
-
-# Show Usage Information
-show_usage() {
-    echo "Usage: $0 -g <gateway-namespace> -u <user-namespace>"
-    echo ""
-    echo "Options:"
-    echo "  -g    Gateway Namespace (Required)"
-    echo "  -u    User Namespace (Required)"
-    echo "  -h    Show help information"
-    echo ""
-    echo "Example:"
-    echo "  $0 -g gateway-ns -u application-ns"
-    exit 1
-}
-
-# Initialize Variables
-GATEWAY_NAMESPACE=""
-USER_NAMESPACE=""
-
-# Parse Command Line Arguments
-while getopts "g:u:h" opt; do
-    case $opt in
-        g)
-            GATEWAY_NAMESPACE="$OPTARG"
-            ;;
-        u)
-            USER_NAMESPACE="$OPTARG"
-            ;;
-        h)
-            show_usage
-            ;;
-        \?)
-            log_error "Invalid option: -$OPTARG"
-            show_usage
-            ;;
-        :)
-            log_error "Option -$OPTARG requires an argument"
-            show_usage
-            ;;
-    esac
-done
-
-# Check Arguments
-if [ -z "$GATEWAY_NAMESPACE" ] || [ -z "$USER_NAMESPACE" ]; then
-    log_error "Missing required arguments!"
-    show_usage
-fi
-
-log_info "Gateway Namespace: ${GATEWAY_NAMESPACE}"
-log_info "User Namespace: ${USER_NAMESPACE}"
-
-#==============================================================================
-# 1. Cluster Level Check
-#==============================================================================
-print_section "1. Cluster Level - GatewayClass Check"
-
-log_info "Checking GatewayClass resources..."
-if kubectl get gatewayclass &>/dev/null; then
-    kubectl get gatewayclass
-    log_success "GatewayClass check complete"
-else
-    log_error "GatewayClass resource not found, please confirm Gateway API is enabled"
-    exit 1
-fi
-
-# Check Gateway API CRDs
-log_info "Checking Gateway API CRDs..."
-REQUIRED_CRDS=("gateways.gateway.networking.k8s.io" "httproutes.gateway.networking.k8s.io" "gatewayclasses.gateway.networking.k8s.io")
-for crd in "${REQUIRED_CRDS[@]}"; do
-    if kubectl get crd "$crd" &>/dev/null; then
-        log_success "CRD $crd is installed"
-    else
-        log_error "CRD $crd is NOT installed"
-    fi
-done
-
-#==============================================================================
-# 2. Gateway Namespace Check
-#==============================================================================
-print_section "2. Gateway Namespace - ${GATEWAY_NAMESPACE}"
-
-# Check if Namespace Exists
-if ! kubectl get namespace "$GATEWAY_NAMESPACE" &>/dev/null; then
-    log_error "Namespace ${GATEWAY_NAMESPACE} does not exist"
-    exit 1
-fi
-
-# 2.1 Check Gateway IP Assignment
-log_info "Checking Gateway IP assignment..."
-GATEWAYS=$(kubectl get gateway -n "$GATEWAY_NAMESPACE" -o jsonpath='{.items[*].metadata.name}')
-
-if [ -z "$GATEWAYS" ]; then
-    log_warning "No Gateway resources found"
-else
-    for gw in $GATEWAYS; do
-        echo ""
-        log_info "Gateway: $gw"
-        
-        # Get Gateway Status
-        kubectl get gateway "$gw" -n "$GATEWAY_NAMESPACE" -o yaml | grep -A 10 "status:"
-        
-        # Get Assigned IP
-        GW_IP=$(kubectl get gateway "$gw" -n "$GATEWAY_NAMESPACE" -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
-        if [ -n "$GW_IP" ]; then
-            log_success "Gateway IP: $GW_IP"
-        else
-            log_warning "Gateway IP not yet assigned"
-        fi
-    done
-fi
-
-# 2.2 Print HealthCheckPolicy Information
-echo ""
-log_info "Checking HealthCheckPolicy..."
-if kubectl get healthcheckpolicy -n "$GATEWAY_NAMESPACE" &>/dev/null; then
-    kubectl get healthcheckpolicy -n "$GATEWAY_NAMESPACE" -o wide
-    
-    # Detailed Info
-    HCP_LIST=$(kubectl get healthcheckpolicy -n "$GATEWAY_NAMESPACE" -o jsonpath='{.items[*].metadata.name}')
-    for hcp in $HCP_LIST; do
-        echo ""
-        log_info "HealthCheckPolicy Details: $hcp"
-        kubectl get healthcheckpolicy "$hcp" -n "$GATEWAY_NAMESPACE" -o yaml
-    done
-else
-    log_warning "No HealthCheckPolicy resources found"
-fi
-
-# 2.3 Print NetworkPolicy
-echo ""
-log_info "Checking NetworkPolicy..."
-if kubectl get networkpolicy -n "$GATEWAY_NAMESPACE" &>/dev/null; then
-    kubectl get networkpolicy -n "$GATEWAY_NAMESPACE" -o wide
-    
-    # Detailed Info
-    NP_LIST=$(kubectl get networkpolicy -n "$GATEWAY_NAMESPACE" -o jsonpath='{.items[*].metadata.name}')
-    for np in $NP_LIST; do
-        echo ""
-        log_info "NetworkPolicy Details: $np"
-        kubectl get networkpolicy "$np" -n "$GATEWAY_NAMESPACE" -o yaml
-    done
-else
-    log_warning "No NetworkPolicy resources found"
-fi
-
-# 2.4 Get Gateway Resource Info and Certificates
-echo ""
-log_info "Checking Gateway resources and certificate information..."
-
-for gw in $GATEWAYS; do
-    echo ""
-    log_info "=== Gateway: $gw ==="
-    
-    # Get Gateway Details
-    kubectl get gateway "$gw" -n "$GATEWAY_NAMESPACE" -o yaml
-    
-    # Extract Hostname
-    HOSTNAMES=$(kubectl get gateway "$gw" -n "$GATEWAY_NAMESPACE" -o jsonpath='{.spec.listeners[*].hostname}')
-    if [ -n "$HOSTNAMES" ]; then
-        log_success "Gateway Hostnames: $HOSTNAMES"
-    fi
-    
-    # Check TLS Certificates
-    # Maybe need manual check the tls certificate 
-    log_info "Checking TLS Certificates..."
-    LISTENERS=$(kubectl get gateway "$gw" -n "$GATEWAY_NAMESPACE" -o jsonpath='{range .spec.listeners[*]}{.name}{"|"}{.tls.certificateRefs[0].name}{"\n"}{end}')
-    
-    while IFS='|' read -r listener_name secret_name; do
-        if [ -n "$secret_name" ]; then
-            log_info "Listener: $listener_name, Secret: $secret_name"
-            
-            # Get Certificate Subject and Expiry
-            CERT_DATA=$(kubectl get secret "$secret_name" -n "$GATEWAY_NAMESPACE" -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 -d)
-            
-            if [ -n "$CERT_DATA" ]; then
-                echo "$CERT_DATA" | openssl x509 -noout -subject -enddate
-                log_success "Certificate information extracted"
-            else
-                log_warning "Unable to retrieve certificate data: $secret_name"
-            fi
-        fi
-    done <<< "$LISTENERS"
-done
-
-#==============================================================================
-# 3. User Namespace Check
-#==============================================================================
-print_section "3. User Namespace - ${USER_NAMESPACE}"
-
-# Check if Namespace Exists
-if ! kubectl get namespace "$USER_NAMESPACE" &>/dev/null; then
-    log_error "Namespace ${USER_NAMESPACE} does not exist"
-    exit 1
-fi
-
-# 3.1 Verify HTTPRoute Binding
-log_info "Checking HTTPRoute resources..."
-HTTPROUTES=$(kubectl get httproute -n "$USER_NAMESPACE" -o jsonpath='{.items[*].metadata.name}')
-
-if [ -z "$HTTPROUTES" ]; then
-    log_warning "No HTTPRoute resources found"
-else
-    kubectl get httproute -n "$USER_NAMESPACE" -o wide
-    
-    # 3.2 Extract HTTPRoute Info and Generate URL
-    echo ""
-    log_info "HTTPRoute details and test URLs..."
-    
-    for route in $HTTPROUTES; do
-        echo ""
-        log_info "=== HTTPRoute: $route ==="
-        
-        # Get Full YAML
-        kubectl get httproute "$route" -n "$USER_NAMESPACE" -o yaml
-        
-        # Extract Key Info
-        HOSTNAMES=$(kubectl get httproute "$route" -n "$USER_NAMESPACE" -o jsonpath='{.spec.hostnames[*]}')
-        
-        # Extract parentRefs (Gateway Reference)
-        PARENT_REFS=$(kubectl get httproute "$route" -n "$USER_NAMESPACE" -o jsonpath='{.spec.parentRefs[*].name}')
-        log_info "Bound Gateway: $PARENT_REFS"
-        
-        # Iterate through hostnames
-        for hostname in $HOSTNAMES; do
-            # Get rules count
-            RULES_COUNT=$(kubectl get httproute "$route" -n "$USER_NAMESPACE" -o jsonpath='{.spec.rules}' | jq '. | length')
-            
-            for ((i=0; i<RULES_COUNT; i++)); do
-                # Get path
-                PATH_VALUE=$(kubectl get httproute "$route" -n "$USER_NAMESPACE" -o jsonpath="{.spec.rules[$i].matches[0].path.value}" 2>/dev/null)
-                if [ -z "$PATH_VALUE" ]; then
-                    PATH_VALUE="/"
-                fi
-                
-                # Get backend service port
-                BACKEND_PORT=$(kubectl get httproute "$route" -n "$USER_NAMESPACE" -o jsonpath="{.spec.rules[$i].backendRefs[0].port}" 2>/dev/null)
-                
-                # Default to 443 (HTTPS)
-                if [ -z "$BACKEND_PORT" ]; then
-                    BACKEND_PORT=443
-                fi
-                
-                # Generate Test URL
-                TEST_URL="https://${hostname}:${BACKEND_PORT}${PATH_VALUE}"
-                
-                echo ""
-                log_success "Test URL: $TEST_URL"
-                echo "  Hostname: $hostname"
-                echo "  Port: $BACKEND_PORT"
-                echo "  Path: $PATH_VALUE"
-                
-                # Optional: Connection Test
-                log_info "Executing connection test (Optional)..."
-                if command -v curl &>/dev/null; then
-                    echo "curl -k -I \"$TEST_URL\""
-                else
-                    log_warning "curl is not installed, skipping connection test"
-                fi
-            done
-        done
-    done
-fi
-
-#==============================================================================
-# 4. Summary Report
-#==============================================================================
-print_section "Verification Complete"
-
-log_success "GKE Internal Gateway verification script completed"
-echo ""
-echo "Verification Scope:"
-echo "  - Cluster Level: GatewayClass, CRDs"
-echo "  - Gateway Namespace (${GATEWAY_NAMESPACE}): Gateway, HealthCheckPolicy, NetworkPolicy, TLS Certificates"
-echo "  - User Namespace (${USER_NAMESPACE}): HTTPRoute, Bindings, Test URLs"
-echo ""
-log_info "Please review the output above to confirm configuration correctness"
+```mermaid
+graph TD
+    A[Start] --> B[Pre-flight: deps & kube connectivity]
+    B --> C[Cluster checks: GatewayClass & CRDs]
+    C --> D[Gateway Namespace Checks]
+    D --> D1[Enumerate Gateways]
+    D1 --> D2[Check status / addresses]
+    D2 --> D3[Parse listeners & cert refs]
+    D3 --> D4[Validate TLS secrets & openssl checks]
+    D --> E[HealthCheckPolicy & NetworkPolicy checks]
+    E --> F[User Namespace Checks]
+    F --> F1[Enumerate HTTPRoute]
+    F1 --> F2[Resolve parentRefs -> Gateway listeners]
+    F2 --> F3[Generate Test URLs & connectivity test (curl)]
+    F3 --> G[Summary and Exit]
 ```
 
-## `verify-gke-gateway.sh`
+注意：Mermaid 中节点标签避免使用 ()，若使用特殊字符请用 "" 包裹。
 
-```bash
-#!/bin/bash
+⸻
 
-# verify-gke-gateway.sh
-#
-# Verification script for GKE Gateway Configuration (User Request)
-#
-# Usage: ./verify-gke-gateway.sh -g <gateway-namespace> -u <user-namespace>
+注意事项与最佳实践 1. 权限：运行该脚本需要对目标 namespace 的 get 权限（至少只读）。在执行前请确认 kubectl auth can-i get gateway --namespace=${GATEWAY_NAMESPACE}。 2. 依赖：推荐安装 jq, curl, openssl 用于更准确解析与联网检测。
+• 安装示例（Debian/Ubuntu）：sudo apt-get update && sudo apt-get install -y jq curl openssl 3. YAML 验证：任何变更/应用前用 kubectl apply --dry-run=client -f <file.yaml> 或 kubectl apply --server-dry-run -f <file.yaml>（若集群支持）。 4. 证书：脚本使用 openssl 输出 subject, issuer, startdate, enddate。如需更多信息（OCSP/CRL），应额外检查。 5. 端口映射：HTTPRoute 的 backendRefs.port 表示服务内部目标端口 不是 Gateway listener port。脚本优先尝试读取 Gateway listener port；若无法推断，会默认 443（这只是便于测试连接，不代表真实暴露端口）。建议在 Gateway spec 中明确 listener.port，避免猜测。 6. 失败处理：脚本会尽量继续执行并在末尾汇总 Errors / Warnings，便于定位问题。 7. 可扩展性：如需把结果导出为 JSON/CSV/HTML 报告，可在脚本中追加 summary 收集并写出文件（我可以为你扩展）。
 
-set -e
+⸻
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+如果你希望，我可以下一步直接：
+• 把这个脚本 压缩为更小的版本（减少 jq 依赖，适配受限环境），或
+• 加入 HTML 报告导出 与更详细的证书字段（SAN 列表、issuer CN 等），或
+• 为你 把脚本转换成 Kubernetes Job（在集群内以 Pod 形式运行并上传结果到 GCS/Artifact）。
 
-G_NS=""
-U_NS=""
-
-while getopts "g:u:h" opt; do
-  case $opt in
-    g) G_NS="$OPTARG" ;;
-    u) U_NS="$OPTARG" ;;
-    h)
-      echo "Usage: $0 -g <gateway-namespace> -u <user-namespace>"
-      exit 0
-      ;;
-    \?)
-      echo "Invalid option: -$OPTARG" >&2
-      exit 1
-      ;;
-  esac
-done
-
-if [ -z "$G_NS" ] || [ -z "$U_NS" ]; then
-    echo "Usage: $0 -g <gateway-namespace> -u <user-namespace>"
-    exit 1
-fi
-
-log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-log_succ() { echo -e "${GREEN}[PASS]${NC} $1"; }
-log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-log_err() { echo -e "${RED}[FAIL]${NC} $1"; }
-
-echo "=================================================="
-echo "      GKE Gateway Verification Script"
-echo "=================================================="
-echo "Gateway Namespace: $G_NS"
-echo "User Namespace:    $U_NS"
-echo "=================================================="
-
-# --- Cluster Level Check ---
-log_info ">>> Checking Cluster Level Resources..."
-
-if kubectl get gatewayclass > /dev/null 2>&1; then
-    log_succ "Gateway API is enabled (GatewayClass resource found)."
-    echo "    Available GatewayClasses:"
-    kubectl get gatewayclass --no-headers | awk '{print "    - " $1 " (Controller: " $2 ")"}'
-else
-    log_err "Gateway API NOT enabled (GatewayClass resource not found)."
-    exit 1
-fi
-
-echo ""
-
-# --- Gateway Namespace Check ---
-log_info ">>> Checking Gateway Namespace: $G_NS"
-
-# 1. Gateway IP Assignment
-GW_NAME=$(kubectl get gateway -n "$G_NS" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
-
-if [ -n "$GW_NAME" ]; then
-    log_succ "Found Gateway: $GW_NAME"
-    
-    # Check IP
-    GW_ADDR=$(kubectl get gateway "$GW_NAME" -n "$G_NS" -o jsonpath='{.status.addresses[0].value}' 2>/dev/null || echo "")
-    if [ -n "$GW_ADDR" ]; then
-        log_succ "Gateway IP Assigned: $GW_ADDR"
-    else
-        log_warn "Gateway IP not found (status.addresses is empty)"
-    fi
-    
-    # Get Hostname (from listener)
-    GW_HOST=$(kubectl get gateway "$GW_NAME" -n "$G_NS" -o jsonpath='{.spec.listeners[0].hostname}' 2>/dev/null || echo "")
-    log_info "Gateway Listener Hostname: $GW_HOST"
-
-    # Get Cert Subject
-    CERT_SECRET=$(kubectl get gateway "$GW_NAME" -n "$G_NS" -o jsonpath='{.spec.listeners[0].tls.certificateRefs[0].name}' 2>/dev/null || echo "")
-    
-    if [ -n "$CERT_SECRET" ]; then
-        log_info "TLS Secret Ref: $CERT_SECRET"
-        if kubectl get secret "$CERT_SECRET" -n "$G_NS" >/dev/null 2>&1; then
-             CERT_ENDDATE=$(kubectl get secret "$CERT_SECRET" -n "$G_NS" -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 -d | openssl x509 -noout -enddate 2>/dev/null | sed 's/notAfter=//')
-             CERT_SUBJ=$(kubectl get secret "$CERT_SECRET" -n "$G_NS" -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 -d | openssl x509 -noout -subject 2>/dev/null | sed 's/subject=//')
-             log_succ "Cert Subject: $CERT_SUBJ"
-             log_info "Cert Expiry:  $CERT_ENDDATE"
-        else
-             log_err "Secret '$CERT_SECRET' not found in namespace '$G_NS'"
-        fi
-    else
-        log_warn "No TLS certificate ref found in first listener"
-    fi
-
-else
-    log_err "No Gateway resource found in namespace '$G_NS'"
-fi
-
-# 2. HealthCheckPolicy
-log_info "Checking HealthCheckPolicy..."
-HC_POLICIES=$(kubectl get healthcheckpolicy -n "$G_NS" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-if [ -n "$HC_POLICIES" ]; then
-    log_succ "Found HealthCheckPolicies: $HC_POLICIES"
-    kubectl get healthcheckpolicy -n "$G_NS"
-else
-    log_warn "No HealthCheckPolicy found in '$G_NS'"
-fi
-
-# 3. NetworkPolicy
-log_info "Checking NetworkPolicy..."
-NET_POLICIES=$(kubectl get networkpolicy -n "$G_NS" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-if [ -n "$NET_POLICIES" ]; then
-    log_succ "Found NetworkPolicies: $NET_POLICIES"
-    kubectl get networkpolicy -n "$G_NS"
-else
-    log_warn "No NetworkPolicy found in '$G_NS'"
-fi
-
-echo ""
-
-# --- User Namespace Check ---
-log_info ">>> Checking User Namespace: $U_NS"
-
-# 1. Verify HTTPRoute Binding
-http_routes=$(kubectl get httproute -n "$U_NS" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
-if [ -z "$http_routes" ]; then
-    log_err "No HTTPRoute found in namespace '$U_NS'"
-else
-    log_succ "Found HTTPRoutes: $http_routes"
-    
-    for route in $http_routes; do
-        echo "--------------------------------------------------"
-        echo "Analyzing Route: $route"
-        
-        # 2. Get Hostname, Path, Port
-        # Note: A route can have multiple hostnames and rules. We take the first for simplicity of "URL generation"
-        
-        # Hostname
-        R_HOST=$(kubectl get httproute "$route" -n "$U_NS" -o jsonpath='{.spec.hostnames[0]}' 2>/dev/null || echo "")
-        
-        # Rule 1 Match Path
-        # Assumes PathPrefix match
-        R_PATH=$(kubectl get httproute "$route" -n "$U_NS" -o jsonpath='{.spec.rules[0].matches[0].path.value}' 2>/dev/null || echo "/")
-        
-        # Backend Ref Port (Standard GKE Gateway usually terminates TLS and fwds to service)
-        # But for constructing the URL, we need the *Listener* port from the Gateway (usually 443 for HTTPS)
-        # The user request asks for "hostname path' value and port" and "https://$hostname:$port/$pathvalue"
-        # Assuming port 443 for HTTPS if proper Gateway is used.
-        
-        # Let's try to find parentRef port if specified, otherwise default to 443
-        PARENT_PORT=$(kubectl get httproute "$route" -n "$U_NS" -o jsonpath='{.spec.parentRefs[0].port}' 2>/dev/null || echo "443")
-        
-        # If hostname is empty in HTTPRoute, fall back to Gateway hostname
-        if [ -z "$R_HOST" ]; then
-             R_HOST="$GW_HOST"
-             echo "    (Using Gateway Hostname)"
-        fi
-        
-        if [ -z "$R_HOST" ]; then
-             R_HOST="<unknown-host>"
-        fi
-        
-        log_info "Hostname: $R_HOST"
-        log_info "Path:     $R_PATH"
-        log_info "Port:     $PARENT_PORT"
-        
-        # 3. Construct URL
-        URL="https://${R_HOST}:${PARENT_PORT}${R_PATH}"
-        log_succ "Generated URL: $URL"
-        
-    done
-fi
-
-echo ""
-echo "=================================================="
-echo "Verification Complete"
-echo "=================================================="
-
-```
-
+你要我继续做哪一步？
