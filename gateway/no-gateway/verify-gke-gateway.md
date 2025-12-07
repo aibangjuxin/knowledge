@@ -1,5 +1,5 @@
 # GKE Internal Gateway 验证脚本
-
+- `gcloud container clusters describe CLUSTER_NAME --format='yaml(gatewayConfig.enabled)'`
 ## 脚本说明
 
 此脚本用于验证 GKE Internal Gateway 的配置状态，包括集群级别、Gateway Namespace 和 User Namespace 的各项资源检查。

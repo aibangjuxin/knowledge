@@ -131,8 +131,8 @@ log_info "User Namespace   : ${USER_NAMESPACE}"
 print_section "1. Cluster Level - GatewayClass & CRDs"
 
 # GatewayClass
-if run_kubectl 0 -- get gatewayclass -o name; then
-    run_kubectl 0 -- get gatewayclass -o wide
+if run_kubectl 0 get gatewayclass -o name; then
+    run_kubectl 0 get gatewayclass -o wide
     log_success "GatewayClass resources present (at least one)"
 else
     log_error "No GatewayClass found. Ensure Gateway API is installed and CRDs are present."
