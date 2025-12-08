@@ -236,3 +236,197 @@ A: DNS不区分大小写，`Example.COM` 和 `example.com` 长度相同。
 | Wire Format | 255 octets | 包含长度字节和终止符 |
 | 标签层级 | 无硬性限制 | 受总长度约束，理论最多~127层 |
 | 有效字符 | a-z, A-Z, 0-9, `-` | 连字符不能在开头或结尾 |
+
+---
+
+## 可视化图表
+
+### 1. DNS域名结构和长度限制
+
+```mermaid
+graph TB
+    subgraph "DNS域名示例: www.example.com"
+        A["完整域名 FQDN"]
+        A --> B["标签1: www<br/>长度: 3字符"]
+        A --> C["标签2: example<br/>长度: 7字符"]
+        A --> D["标签3: com<br/>长度: 3字符"]
+        
+        B --> B1["✓ 最大63字符"]
+        C --> C1["✓ 最大63字符"]
+        D --> D1["✓ 最大63字符"]
+    end
+    
+    A --> E["总长度: 15字符<br/>3 + 1 + 7 + 1 + 3 = 15"]
+    E --> F["✓ 最大253字符"]
+    
+    style A fill:#e1f5fe
+    style B fill:#c8e6c9
+    style C fill:#c8e6c9
+    style D fill:#c8e6c9
+    style E fill:#fff9c4
+    style F fill:#a5d6a7
+```
+
+### 2. 长度限制规则
+
+```mermaid
+graph LR
+    subgraph "标签长度规则"
+        L1["单个标签"] --> L2{"长度检查"}
+        L2 -->|"≤ 63字符"| L3["✓ 合法"]
+        L2 -->|"> 63字符"| L4["✗ 非法"]
+    end
+    
+    subgraph "总长度规则"
+        T1["完整域名"] --> T2{"长度检查"}
+        T2 -->|"≤ 253字符"| T3["✓ 合法"]
+        T2 -->|"> 253字符"| T4["✗ 非法"]
+    end
+    
+    style L3 fill:#a5d6a7
+    style L4 fill:#ef9a9a
+    style T3 fill:#a5d6a7
+    style T4 fill:#ef9a9a
+```
+
+### 3. Wire Format vs Human-Readable Format
+
+```mermaid
+graph TB
+    subgraph "Human-Readable Format: www.example.com"
+        H1["www"] --> H2["."]
+        H2 --> H3["example"]
+        H3 --> H4["."]
+        H4 --> H5["com"]
+        H6["总计: 15字符"]
+    end
+    
+    subgraph "Wire Format 255 octets"
+        W1["长度字节<br/>3"] --> W2["www<br/>3 bytes"]
+        W2 --> W3["长度字节<br/>7"] --> W4["example<br/>7 bytes"]
+        W4 --> W5["长度字节<br/>3"] --> W6["com<br/>3 bytes"]
+        W6 --> W7["空终止符<br/>0"]
+        W8["总计: 1+3+1+7+1+3+1 = 17 bytes"]
+    end
+    
+    H1 -.对应.-> W2
+    H3 -.对应.-> W4
+    H5 -.对应.-> W6
+    
+    style H1 fill:#c8e6c9
+    style H3 fill:#c8e6c9
+    style H5 fill:#c8e6c9
+    style W2 fill:#bbdefb
+    style W4 fill:#bbdefb
+    style W6 fill:#bbdefb
+    style W7 fill:#ffccbc
+```
+
+### 4. 域名验证流程图
+
+```mermaid
+flowchart TD
+    Start["输入域名"] --> Split["按点分割成标签"]
+    Split --> CheckTotal{"总长度 ≤ 253?"}
+    
+    CheckTotal -->|否| Error1["❌ 错误:<br/>总长度超限"]
+    CheckTotal -->|是| LoopStart["遍历每个标签"]
+    
+    LoopStart --> CheckEmpty{"标签非空?"}
+    CheckEmpty -->|否| Error2["❌ 错误:<br/>空标签"]
+    CheckEmpty -->|是| CheckLen{"标签长度 ≤ 63?"}
+    
+    CheckLen -->|否| Error3["❌ 错误:<br/>标签超长"]
+    CheckLen -->|是| CheckChar{"有效字符?"}
+    
+    CheckChar -->|否| Error4["❌ 错误:<br/>非法字符"]
+    CheckChar -->|是| HasMore{"还有标签?"}
+    
+    HasMore -->|是| LoopStart
+    HasMore -->|否| Success["✓ 域名合法"]
+    
+    style Start fill:#e1f5fe
+    style Success fill:#a5d6a7
+    style Error1 fill:#ef9a9a
+    style Error2 fill:#ef9a9a
+    style Error3 fill:#ef9a9a
+    style Error4 fill:#ef9a9a
+```
+
+### 5. 实际示例对比
+
+```mermaid
+graph TB
+    subgraph "合法示例"
+        V1["f.a.b.c.com<br/>总长度: 11字符<br/>最长标签: 3字符 com"]
+        V2["www.example.com<br/>总长度: 15字符<br/>最长标签: 7字符 example"]
+        V3["my-service.namespace.svc.cluster.local<br/>总长度: 42字符<br/>最长标签: 10字符 my-service"]
+    end
+    
+    subgraph "非法示例"
+        I1["标签超长<br/>aaaaa...64字符...aaaaa.com<br/>❌ 单个标签 > 63字符"]
+        I2["总长度超限<br/>very.very.very...254字符...long.domain<br/>❌ 总长度 > 253字符"]
+        I3["空标签<br/>www..example.com<br/>❌ 连续两个点"]
+    end
+    
+    style V1 fill:#c8e6c9
+    style V2 fill:#c8e6c9
+    style V3 fill:#c8e6c9
+    style I1 fill:#ffccbc
+    style I2 fill:#ffccbc
+    style I3 fill:#ffccbc
+```
+
+### 6. Kubernetes Service DNS示例
+
+```mermaid
+graph LR
+    subgraph "Kubernetes Service FQDN结构"
+        K1["service-name<br/>最大63字符"] --> K2["."]
+        K2 --> K3["namespace<br/>最大63字符"]
+        K3 --> K4["."]
+        K4 --> K5["svc"]
+        K5 --> K6["."]
+        K6 --> K7["cluster"]
+        K7 --> K8["."]
+        K8 --> K9["local"]
+    end
+    
+    subgraph "示例"
+        E1["my-app.production.svc.cluster.local<br/>✓ 合法"]
+        E2["very-long-service-name-123456789012345678901234567890123456789012.prod.svc.cluster.local<br/>✓ 合法 63字符标签"]
+        E3["超长服务名...65字符...超长.prod.svc.cluster.local<br/>❌ 非法 标签>63"]
+    end
+    
+    style K1 fill:#bbdefb
+    style K3 fill:#bbdefb
+    style E1 fill:#c8e6c9
+    style E2 fill:#c8e6c9
+    style E3 fill:#ffccbc
+```
+
+### 7. 长度计算公式
+
+```mermaid
+graph TB
+    subgraph "人类可读格式长度计算"
+        H["总长度 = Σ标签长度 + 点的数量"]
+        H1["示例: www.example.com"]
+        H2["= 3 + 7 + 3 + 2点"]
+        H3["= 15字符"]
+        H --> H1 --> H2 --> H3
+    end
+    
+    subgraph "Wire Format长度计算"
+        W["总长度 = Σ长度字节 + 标签字节 + 空终止符"]
+        W1["示例: www.example.com"]
+        W2["= 1+3 + 1+7 + 1+3 + 1"]
+        W3["= 17 bytes"]
+        W --> W1 --> W2 --> W3
+    end
+    
+    style H fill:#e1f5fe
+    style H3 fill:#a5d6a7
+    style W fill:#fff3e0
+    style W3 fill:#a5d6a7
+```
