@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2025-12-07 11:24:33
+Generated on: 2025-12-08 09:29:37
 Directory: /Users/lex/git/knowledge/gateway/no-gateway
 
 ## `verify-all.sh`
@@ -238,7 +238,7 @@ fi
 #------------------------------------------------------------------------------
 # 2.2 HealthCheckPolicy
 #------------------------------------------------------------------------------
-print_subsection "HealthCheckPolicy Resources"
+print_subsection "HealthCheckPolicy Resources at ${GATEWAY_NAMESPACE}"
 
 if kubectl get healthcheckpolicy -n "${GATEWAY_NAMESPACE}" &>/dev/null; then
     HCP_COUNT=$(kubectl get healthcheckpolicy -n "${GATEWAY_NAMESPACE}" --no-headers 2>/dev/null | wc -l || echo 0)
@@ -250,7 +250,22 @@ if kubectl get healthcheckpolicy -n "${GATEWAY_NAMESPACE}" &>/dev/null; then
         kubectl get healthcheckpolicy -n "${GATEWAY_NAMESPACE}" --no-headers 2>/dev/null | awk '{print "  - " $1}' || true
     fi
 else
-    log_warn "No HealthCheckPolicy resources found"
+    log_warn "No HealthCheckPolicy resources found at ${GATEWAY_NAMESPACE}"
+fi
+
+print_subsection "HealthCheckPolicy Resources at ${USER_NAMESPACE}"
+
+if kubectl get healthcheckpolicy -n "${USER_NAMESPACE}" &>/dev/null; then
+    HCP_COUNT=$(kubectl get healthcheckpolicy -n "${USER_NAMESPACE}" --no-headers 2>/dev/null | wc -l || echo 0)
+    log_success "Found ${HCP_COUNT} HealthCheckPolicy resource(s)"
+    
+    if [ "$VERBOSE" -eq 1 ]; then
+        kubectl get healthcheckpolicy -n "${USER_NAMESPACE}" -o wide
+    else
+        kubectl get healthcheckpolicy -n "${USER_NAMESPACE}" --no-headers 2>/dev/null | awk '{print "  - " $1}' || true
+    fi
+else
+    log_warn "No HealthCheckPolicy resources found at ${USER_NAMESPACE}"
 fi
 
 #------------------------------------------------------------------------------
