@@ -2,11 +2,11 @@
 # measure_startup.sh
 # 
 # 功能：测量 Pod 业务容器的真实启动时间（从容器启动到健康检查返回 200 OK 的耗时）
-# 原理：利用 kubectl exec 在容器内部或通过端口转发循环通过 curl 探测健康检查接口
+# 原理：利用 kubectl exec 在容器内部循环通过 curl 探测健康检查接口
 #
 # 前提：
 # 1. 目标 Pod 已经处于 Running 状态（或者正在启动中）
-# 2. 容器内有 curl 命令，或者允许从外部访问 Probe 端口
+# 2. 容器内必须有 curl 命令（适用于 GKE 等环境）
 
 set -e
 
@@ -53,21 +53,11 @@ echo "⏱️  Start probing health endpoint..."
 
 # 2. 循环探测直到成功
 while true; do
-    # 使用 kubectl exec 在容器内探测 (如果容器内有 curl)
-    # 或者使用 port-forward (更通用，不依赖容器内工具)
-    # 这里我们采用 port-forward 的方式，因为它通用性更好，虽然稍微慢一点
+    # 使用 kubectl exec 在容器内探测 (适用于 GKE 等环境)
+    # 前提：容器内需要有 curl 命令
     
-    # 启动后台 port-forward
-    kubectl port-forward pod/$POD_NAME $PORT:$PORT -n $NAMESPACE > /dev/null 2>&1 &
-    PF_PID=$!
-    
-    # 给一点时间让连接建立
-    sleep 1
-    
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SCHEME://127.0.0.1:$PORT$PATH" || echo "000")
-    
-    # 杀掉后台 port-forward
-    kill $PF_PID > /dev/null 2>&1 || true
+    # 尝试在容器内执行 curl 命令
+    HTTP_CODE=$(kubectl exec $POD_NAME -n $NAMESPACE -- curl -s -o /dev/null -w "%{http_code}" "$SCHEME://localhost:$PORT$PATH" 2>/dev/null || echo "000")
     
     CURRENT_TIME_SEC=$(date +%s)
     ELAPSED=$((CURRENT_TIME_SEC - START_TIME_SEC))
