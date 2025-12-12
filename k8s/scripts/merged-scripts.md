@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2025-12-12 12:43:49
+Generated on: 2025-12-12 13:04:53
 Directory: /Users/lex/git/knowledge/k8s/scripts
 
 ## `pod_exec.sh`
@@ -159,22 +159,23 @@ while [ $PROBE_COUNT -lt $MAX_PROBES ]; do
     # 根据协议选择探测方式
     if [[ "$PROBE_SCHEME" == "HTTPS" ]]; then
         # 使用 openssl 探测 HTTPS (忽略证书验证)
-        # 使用双引号包裹整个命令，变量会被正确展开
-        HTTP_RESPONSE=$(kubectl exec ${POD_NAME} -n ${NAMESPACE} -- sh -c "echo -e \"GET ${PROBE_PATH} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n\" | openssl s_client -connect localhost:${PROBE_PORT} -quiet 2>&1" 2>/dev/null || echo "")
+        # 直接在 Pod 内执行命令并提取状态行
+        # echo -e "GET /apiname/v1.28.0/.well-known/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" | openssl s_client -connect localhost:8443 -quiet 2>&1 | grep -E "HTTP/[0-9.]+ [0-9]+" | head -1
+        HTTP_STATUS_LINE=$(kubectl exec ${POD_NAME} -n ${NAMESPACE} -- sh -c "echo -e \"GET ${PROBE_PATH} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n\" | openssl s_client -connect localhost:${PROBE_PORT} -quiet 2>&1 | grep -E 'HTTP/[0-9.]+ [0-9]+' | head -1" 2>/dev/null || echo "")
         
         # 提取 HTTP 状态码
-        HTTP_CODE=$(echo "$HTTP_RESPONSE" | grep -E 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}')
+        HTTP_CODE=$(echo "$HTTP_STATUS_LINE" | awk '{print $2}')
         
-        # 如果没有提取到状态码，尝试另一种方式
+        # 如果没有提取到状态码，设置为 000
         if [ -z "$HTTP_CODE" ]; then
             HTTP_CODE="000"
         fi
     else
         # 使用 nc 探测 HTTP (通过 TCP 连接)
-        HTTP_RESPONSE=$(kubectl exec ${POD_NAME} -n ${NAMESPACE} -- sh -c "echo -e \"GET ${PROBE_PATH} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n\" | timeout 2 nc localhost ${PROBE_PORT}" 2>/dev/null || echo "")
+        HTTP_STATUS_LINE=$(kubectl exec ${POD_NAME} -n ${NAMESPACE} -- sh -c "echo -e \"GET ${PROBE_PATH} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n\" | timeout 2 nc localhost ${PROBE_PORT} 2>&1 | grep -E 'HTTP/[0-9.]+ [0-9]+' | head -1" 2>/dev/null || echo "")
         
         # 提取 HTTP 状态码
-        HTTP_CODE=$(echo "$HTTP_RESPONSE" | grep -E 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}')
+        HTTP_CODE=$(echo "$HTTP_STATUS_LINE" | awk '{print $2}')
         
         if [ -z "$HTTP_CODE" ]; then
             HTTP_CODE="000"
