@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2025-12-12 13:04:53
+Generated on: 2025-12-12 14:29:53
 Directory: /Users/lex/git/knowledge/k8s/scripts
 
 ## `pod_exec.sh`
@@ -156,12 +156,13 @@ MAX_PROBES=180  # 最多探测 3 分钟
 while [ $PROBE_COUNT -lt $MAX_PROBES ]; do
     PROBE_COUNT=$((PROBE_COUNT + 1))
     
+    
     # 根据协议选择探测方式
     if [[ "$PROBE_SCHEME" == "HTTPS" ]]; then
         # 使用 openssl 探测 HTTPS (忽略证书验证)
-        # 直接在 Pod 内执行命令并提取状态行
-        # echo -e "GET /apiname/v1.28.0/.well-known/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" | openssl s_client -connect localhost:8443 -quiet 2>&1 | grep -E "HTTP/[0-9.]+ [0-9]+" | head -1
-        HTTP_STATUS_LINE=$(kubectl exec ${POD_NAME} -n ${NAMESPACE} -- sh -c "echo -e \"GET ${PROBE_PATH} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n\" | openssl s_client -connect localhost:${PROBE_PORT} -quiet 2>&1 | grep -E 'HTTP/[0-9.]+ [0-9]+' | head -1" 2>/dev/null || echo "")
+        # 在本地构造 HTTP 请求，通过 stdin 传给远端，避免多层转义
+        HTTP_STATUS_LINE=$(printf "GET %s HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" "${PROBE_PATH}" | \
+            kubectl exec -i ${POD_NAME} -n ${NAMESPACE} -- sh -c "openssl s_client -connect localhost:${PROBE_PORT} -quiet 2>&1 | grep -E 'HTTP/[0-9.]+ [0-9]+' | head -1" 2>/dev/null || echo "")
         
         # 提取 HTTP 状态码
         HTTP_CODE=$(echo "$HTTP_STATUS_LINE" | awk '{print $2}')
@@ -172,7 +173,9 @@ while [ $PROBE_COUNT -lt $MAX_PROBES ]; do
         fi
     else
         # 使用 nc 探测 HTTP (通过 TCP 连接)
-        HTTP_STATUS_LINE=$(kubectl exec ${POD_NAME} -n ${NAMESPACE} -- sh -c "echo -e \"GET ${PROBE_PATH} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n\" | timeout 2 nc localhost ${PROBE_PORT} 2>&1 | grep -E 'HTTP/[0-9.]+ [0-9]+' | head -1" 2>/dev/null || echo "")
+        # 在本地构造 HTTP 请求，通过 stdin 传给远端
+        HTTP_STATUS_LINE=$(printf "GET %s HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" "${PROBE_PATH}" | \
+            kubectl exec -i ${POD_NAME} -n ${NAMESPACE} -- sh -c "timeout 2 nc localhost ${PROBE_PORT} 2>&1 | grep -E 'HTTP/[0-9.]+ [0-9]+' | head -1" 2>/dev/null || echo "")
         
         # 提取 HTTP 状态码
         HTTP_CODE=$(echo "$HTTP_STATUS_LINE" | awk '{print $2}')
