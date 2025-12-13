@@ -14,7 +14,7 @@ Run the following command to find `ClusterRole`s that use wildcards in the `apiG
 
 ```bash
 kubectl get clusterroles -o json | \
-jq '.items[] | select(.rules[] | select( (.apiGroups[]? | select(. == "*")) or (.resources[]? | select(. == "*")) or (.verbs[]? | select(. == "*")) )) | .metadata.name'
+jq '.items[] | select( (.rules // [])[] | select( (.apiGroups[]? | select(. == "*")) or (.resources[]? | select(. == "*")) or (.verbs[]? | select(. == "*")) )) | .metadata.name'
 ```
 
 *   **Command Explanation**:
@@ -36,7 +36,7 @@ Run the following command to find `Role`s in any namespace that use wildcards in
 
 ```bash
 kubectl get roles --all-namespaces -o json | \
-jq '.items[] | select(.rules[] | select( (.apiGroups[]? | select(. == "*")) or (.resources[]? | select(. == "*")) or (.verbs[]? | select(. == "*")) )) | .metadata.namespace + "/" + .metadata.name'
+jq '.items[] | select( (.rules // [])[] | select( (.apiGroups[]? | select(. == "*")) or (.resources[]? | select(. == "*")) or (.verbs[]? | select(. == "*")) )) | .metadata.namespace + "/" + .metadata.name'
 ```
 
 *   **Command Explanation**:
