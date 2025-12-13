@@ -1,7 +1,6 @@
 | **GCP-GKE-CTRL-51** | IDAM.5 - 特权访问控制 | 只有策略管理员必须有权创建准入策略。<br>注意:非策略管理员不得有权创建/更新/删除准入策略。 | CAEP team | 是 | 是 | 
-
+| GCP-GKE-CTRL-51 | IDAM.5 - Privileged Access Control | Only policy administrators MUST have privileges to create admission policies.<br>Note: Non-policy admins must not have privileges to create/update/delete admission policies. | CAEP team | Yes | Yes | |
 ### **合规性说明与实施方案**
-
 ---
 #### **1. 概念澄清：“准入策略”在GKE中指什么？**
 
@@ -105,3 +104,68 @@ jq -r '.items[] | select(.roleRef.name=="cluster-admin") | .subjects[] | .name'
 *   绑定到`cluster-admin`的主体（用户或群组）列表必须是经过严格审批和备案的最高权限管理员。
 
 通过提供上述`ClusterRole`和`ClusterRoleBinding`的审计结果，并与您的授权策略管理员列表进行比对，您就可以有力地证明`GCP-GKE-CTRL-51`得到了满足。
+
+---
+### **补充说明：Pod安全准入（PSA）作为另一种准入策略**
+
+如您所发现，**Pod Security Admission (PSA)** 是GKE中另一种内置的、非常重要的准入策略。它专注于强制执行[Pod安全标准](https://kubernetes.io/docs/concepts/security/pod-security-standards/)（例如 `privileged`, `baseline`, `restricted`），是取代已弃用的PodSecurityPolicy（PSP）的官方方案。
+
+#### **PSA如何工作？**
+
+PSA通过为**命名空间（Namespace）添加标签**来工作。策略管理员通过修改命名空间上的标签来定义该命名空间内所有Pod必须遵循的安全级别。
+
+**示例**：要在一个名为 `my-app` 的命名空间中强制执行 `baseline` 策略，管理员会执行：
+```bash
+kubectl label ns my-app pod-security.kubernetes.io/enforce=baseline
+```
+
+#### **PSA的“策略管理员”权限**
+
+从上面的示例可以看出，**创建/更新/删除PSA策略的权限，直接等同于创建/更新/删除`namespaces`资源（尤其是其标签）的RBAC权限**。
+
+因此，PSA的“策略管理员”就是指那些有权修改`namespaces`资源的用户或群组。这是一项非常高的权限，因为它可以影响整个命名空间的设置。
+
+#### **PSA的权限验证方法**
+
+要验证只有授权管理员才能管理PSA策略，您需要审计谁有权修改`namespaces`资源。
+
+**步骤1：查找哪些`ClusterRole`可以修改`namespaces`**
+
+```bash
+kubectl get clusterroles -o json | \
+jq -r '.items[] | select(.rules[]? | select((.resources[]? | index("namespaces")) and ((.verbs[]? | index("update")) or (.verbs[]? | index("patch")) or (.verbs[]? | index("*"))))) | .metadata.name'
+```
+**合规性预期输出**：
+此命令通常会返回`cluster-admin`, `admin`, `edit`等内置的高权限角色。关键在于审计谁被绑定到了这些角色。
+
+**步骤2：检查谁被绑定到了这些高权限角色**
+
+```bash
+# 以检查"admin"角色为例
+kubectl get clusterrolebindings -o json | \
+jq -r '.items[] | select(.roleRef.name=="admin") | .subjects[] | .name'
+```
+**合规性分析**：
+确保绑定到这些角色的用户或群组是经过授权的管理员。普通开发者不应出现在此列表中。
+
+**步骤3：审计当前集群中PSA策略的配置状态**
+
+您可以通过以下命令快速查看所有命名空间当前正在实施的PSA策略，这可以作为合规性的现状证据。
+
+```bash
+kubectl get namespaces -o=jsonpath='{range .items[*]}{"Namespace: "}{.metadata.name}{"\n  Enforce: "}{.metadata.labels.pod-security\.kubernetes\.io/enforce}{"\n  Warn: "}{.metadata.labels.pod-security\.kubernetes\.io/warn}{"\n  Audit: "}{.metadata.labels.pod-security\.kubernetes\.io/audit}{"\n\n"}{end}'
+```
+**合规性预期输出示例**：
+```
+Namespace: my-app
+  Enforce: baseline
+  Warn: baseline
+  Audit: baseline
+
+Namespace: kube-system
+  Enforce: privileged
+  Warn: 
+  Audit: 
+...
+```
+此输出清晰地展示了每个命名空间所强制执行的Pod安全级别。
