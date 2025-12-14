@@ -1,0 +1,73 @@
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34mMeasuring Pod Startup Time: nginx-deployment-854b5bc678-xqgmz (Namespace: lex)[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+
+[1;33m📋 Step 1: Get Pod Basic Information[0m
+[0;32m   Pod Creation Time:[0m 2025-12-14T12:48:36Z
+[0;32m   Container Start Time:[0m 2025-12-14T12:48:37Z
+
+[1;33m📋 Step 2: Analyze Readiness Probe Configuration[0m
+[0;32m   Readiness Probe Configuration:[0m
+{
+  "failureThreshold": 3,
+  "httpGet": {
+    "path": "/",
+    "port": 80,
+    "scheme": "HTTP"
+  },
+  "periodSeconds": 20,
+  "successThreshold": 1,
+  "timeoutSeconds": 3
+}
+
+[0;32m   Extracted Probe Parameters:[0m
+   - Scheme: HTTP
+   - Port: 80
+   - Path: /
+   - Initial Delay: 0s
+   - Period: 20s
+   - Failure Threshold: 3
+
+[1;33m⏱️  Step 3: Check Pod Ready Status[0m
+[0;32m   Pod is already in Ready status[0m
+[0;32m   Ready Time: 2025-12-14T12:48:47Z[0m
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;34m📊 Final Result[0m
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;32m✅ Application startup duration:[0m 10 seconds
+[0;32m   (Based on Kubernetes Ready status)[0m
+
+[1;33m📋 Current Probe Configuration Analysis:[0m
+   - Maximum startup time allowed by current config: 60 seconds
+   - Actual startup time: 10 seconds
+   [0;32m✓ Current configuration is sufficient[0m
+
+[1;33m💡 Recommended optimized configuration:[0m
+   readinessProbe:
+     httpGet:
+       path: /
+       port: 80
+       scheme: HTTP
+     initialDelaySeconds: 0
+     periodSeconds: 20
+     failureThreshold: 1
+
+[1;33m📋 Or use startupProbe (recommended):[0m
+   startupProbe:
+     httpGet:
+       path: /
+       port: 80
+       scheme: HTTP
+     initialDelaySeconds: 0
+     periodSeconds: 10
+     failureThreshold: 1
+   readinessProbe:
+     httpGet:
+       path: /
+       port: 80
+       scheme: HTTP
+     initialDelaySeconds: 0
+     periodSeconds: 5
+     failureThreshold: 3
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m

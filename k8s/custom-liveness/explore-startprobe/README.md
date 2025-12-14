@@ -18,6 +18,20 @@
   - 自动测量 Pod 启动耗时
   - 分析当前探针配置
   - 提供优化建议
+- summary script
+```bash
+This script measures the startup time of a Kubernetes Pod by monitoring its readiness probe. It connects to the pod using kubectl exec and uses openssl for HTTPS
+  requests and nc (netcat) for HTTP requests to check the health endpoint. The script:
+
+   1. Takes namespace and pod name as parameters
+   2. Extracts probe configuration (scheme, port, path) from the pod's readiness probe
+   3. Calculates the actual startup time by comparing timestamps
+   4. Performs real-time health checks if the pod isn't ready yet
+   5. Provides analysis of the current probe configuration and suggests optimal settings
+
+  For HTTPS requests, it uses openssl s_client to connect to the localhost endpoint within the pod. For HTTP requests, it uses nc (netcat) with a 2-second timeout. The
+  script is designed to work with pods that have OpenSSL available, which is noted as an optimization for your specific environment.
+```
 
 ## 🚀 快速开始
 
