@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2025-12-14 21:43:16
+Generated on: 2025-12-16 20:29:53
 Directory: /Users/lex/git/knowledge/k8s/custom-liveness/explore-startprobe
 
 ## `pod_measure_startup_enhance_eng.sh`
@@ -196,8 +196,21 @@ else
                 HTTP_CODE="000"
             fi
         else
-            HTTP_STATUS_LINE=$(printf "GET %s HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" "${PROBE_PATH}" | \
-                kubectl exec -i ${POD_NAME} -n ${NAMESPACE} -- sh -c "timeout 2 nc localhost ${PROBE_PORT} 2>&1 | grep -E 'HTTP/[0-9.]+ [0-9]+' | head -1" 2>/dev/null || echo "")
+            # HTTP Strategy: curl -> wget -> nc
+            # execute a single compound command inside the pod to find an available tool
+            local cmd="
+            if command -v curl >/dev/null 2>&1; then
+                # Option 1: curl (preferred)
+                curl -m 2 -s -I 'http://localhost:${PROBE_PORT}${PROBE_PATH}' 2>/dev/null | head -n 1
+            elif command -v wget >/dev/null 2>&1; then
+                # Option 2: wget
+                wget -T 2 -q --spider --server-response 'http://localhost:${PROBE_PORT}${PROBE_PATH}' 2>&1 | grep '^  HTTP' | head -n 1
+            else
+                # Option 3: nc (fallback)
+                printf 'GET ${PROBE_PATH} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' | timeout 2 nc localhost ${PROBE_PORT} 2>&1 | grep -E 'HTTP/[0-9.]+ [0-9]+' | head -1
+            fi"
+            
+            HTTP_STATUS_LINE=$(kubectl exec -i ${POD_NAME} -n ${NAMESPACE} -- sh -c "$cmd" 2>/dev/null || echo "")
             HTTP_CODE=$(echo "$HTTP_STATUS_LINE" | awk '{print $2}')
             if [ -z "$HTTP_CODE" ]; then
                 HTTP_CODE="000"
