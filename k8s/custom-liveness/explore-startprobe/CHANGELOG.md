@@ -1,5 +1,80 @@
 # 更新日志
 
+## v5.0 - 2025-12-18
+
+### 🚀 全新功能
+
+#### 1. Live Polling（实时轮询）
+- ✅ 新增 `-p/--poll` 参数 - 自动等待 Pod 变为 Ready
+- ✅ 实时进度显示 - 显示当前 Pod 状态
+- ✅ 可配置轮询参数 - `--max-probes` 和 `--probe-interval`
+
+#### 2. Live Probe Testing（实时探针测试）
+- ✅ **模拟模式** (`--simulate`) - 显示测试流程但不实际执行
+- ✅ **真实测试** (`--live-test`) - 通过 port-forward 实际 HTTP 测试
+- ✅ 多次重试机制 - 提高测试可靠性
+- ✅ 响应时间测量 - 精确到毫秒
+
+#### 3. 亚秒级精度计时
+- ✅ 纳秒级时间戳 - 使用 `date +%s.%N`
+- ✅ 跨平台兼容 - 自动适配 macOS/Linux
+- ✅ API 时间精确解析 - 支持毫秒/纳秒格式
+
+#### 4. 数据导出功能
+- ✅ JSON 导出 - 结构化数据 (`--export-json`)
+- ✅ CSV 导出 - 电子表格兼容 (`--export-csv`)
+- ✅ 一键导出 - 同时生成两种格式 (`--export`)
+- ✅ 自动命名 - 包含时间戳
+
+#### 5. 完善的命令行选项
+- ✅ 自定义端口/路径 - `--port` 和 `--path`
+- ✅ 详细日志 - `--verbose` 带时间戳
+- ✅ 可配置超时 - `--timeout` 参数
+
+#### 6. 增强的用户体验
+- ✅ 智能探针检测 - 优先使用 startupProbe, fallback 到 readiness/liveness
+- ✅ 实时错误提示 - 明确指导用户
+- ✅ 建议优化 - 三种配置方案适用于不同场景
+
+### 💡 使用示例
+
+```bash
+# 基本用法 (与 v4 兼容)
+./pod_measure_startup_enhanced_v5.sh -n default my-app-pod
+
+# 等待 Pod 变为 Ready
+./pod_measure_startup_enhanced_v5.sh -n production -p my-app-pod
+
+# 完整分析 + 导出
+./pod_measure_startup_enhanced_v5.sh -n default -p --live-test --export my-app-pod
+
+# CI/CD 用法
+./pod_measure_startup_enhanced_v5.sh -n staging --export-json results.json my-app-pod
+```
+
+### 📊 与 v4 对比
+
+| 功能 | v4 | v5 |
+|------|----|----|
+| 基本测量 | ✅ | ✅ |
+| 多容器支持 | ✅ | ✅ |
+| 颜色输出 | ✅ | ✅ |
+| 命令解析 | ✅ | ✅ |
+| **实时轮询** | ❌ | **✅** |
+| **探针测试** | ❌ | **✅** |
+| **亚秒级计时** | ❌ | **✅** |
+| **数据导出** | ❌ | **✅** |
+| **详细日志** | ❌ | **✅** |
+
+### 📝 技术改进
+
+1. **端口转发自动化** - 智能端口发现和管理
+2. **高精度计时** - 解决 macOS/Linux 差异
+3. **错误恢复** - 多次重试和优雅降级
+4. **资源清理** - 自动终止后台进程
+
+---
+
 ## v2.0 - 2024-12
 
 ### 🎉 重大更新
