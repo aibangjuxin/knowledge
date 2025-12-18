@@ -45,3 +45,9 @@ ENV PORT=3000 NODE_ENV=production
 
 CMD ["node", "server.js"]
 ```
+Docker 镜像的优化，结合 AI ，给一个项目的 Dockerfile 优化了一下，最后只有 140M，真的非常舒服，总结几条：
+
+* 使用 alpine 基础镜像，比普通的小太多了
+* 先拷贝依赖文件，安装依赖，最大化利用 Docker 层缓存，改代码不重新装依赖
+* 多阶段构建 base → builder → runner 三阶段，缓存依赖
+* 最后只拷贝真正最后 build 的文件，这样各种开发依赖就不会在镜像中了，可以配合 dockerignore
