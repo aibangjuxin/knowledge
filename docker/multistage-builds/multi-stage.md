@@ -1,0 +1,47 @@
+多层构建
+```dockerfile
+# ================================
+# Next.js 生产最优模板
+# 最终镜像 130~160MB
+# ================================
+
+# 公共 base（只拉一次镜像，所有阶段共享）
+FROM node:22-alpine AS base
+RUN apk add --no-cache libc6-compat
+# pnpm 只装一次，所有阶段都能用
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# 1. 只安装生产依赖（缓存命中率极高）
+FROM base AS deps
+WORKDIR /app
+COPY package.json pnpm-lock.yaml* ./
+RUN pnpm install --frozen-lockfile --prod
+
+# 2. 构建阶段
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN pnpm build
+
+# 3. 最终生产镜像
+FROM base AS runner
+WORKDIR /app
+
+# 非 root 用户（安全）
+RUN addgroup -S -g 1001 nodejs
+RUN adduser -S -u 1001 nextjs
+
+# 只复制独立运行所需的文件（Next.js 官方推荐的最小模式）
+COPY --from=builder /app/next.config.mjs .* 
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+
+USER nextjs
+EXPOSE 3000
+ENV PORT=3000 NODE_ENV=production
+
+CMD ["node", "server.js"]
+```
