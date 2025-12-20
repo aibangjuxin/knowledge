@@ -1,29 +1,69 @@
+# ===== OpenAI / ChatGPT =====
+DOMAIN-SUFFIX,openai.com
+DOMAIN-SUFFIX,chatgpt.com
 DOMAIN-SUFFIX,ab.chatgpt.com
 DOMAIN-SUFFIX,ios.chat.openai.com
+DOMAIN-SUFFIX,android.chat.openai.com
+DOMAIN-SUFFIX,desktop.chat.openai.com
+DOMAIN-SUFFIX,tcr9i.chat.openai.com
+DOMAIN-SUFFIX,auth.openai.com
+DOMAIN-SUFFIX,setup.auth.openai.com
+DOMAIN-SUFFIX,auth0.openai.com
+DOMAIN-SUFFIX,cdn.openaimerge.com
 DOMAIN-SUFFIX,ai.com
-DOMAIN-SUFFIX,bard.google.com
-DOMAIN-SUFFIX,auth0.com
-DOMAIN-SUFFIX,client-api.arkoselabs.com
-DOMAIN-SUFFIX,events.statsigapi.net
-DOMAIN-SUFFIX,featuregates.org
-DOMAIN-SUFFIX,identrust.com
+DOMAIN-KEYWORD,openai
+# ===== OpenAI Static / Assets =====
 DOMAIN-SUFFIX,oaistatic.com
 DOMAIN-SUFFIX,oaiusercontent.com
-# https://help.openai.com/en/articles/9247338-network-recommendations-for-chatgpt-errors-on-web-and-apps
+# ===== Auth / Identity / Security =====
+DOMAIN-SUFFIX,auth0.com
+DOMAIN-SUFFIX,identrust.com
+DOMAIN-SUFFIX,challenges.cloudflare.com
+# ===== Stats / Feature Flags / Telemetry =====
+DOMAIN-SUFFIX,statsigapi.net
+DOMAIN-SUFFIX,events.statsigapi.net
+DOMAIN-SUFFIX,featuregates.org
+DOMAIN-SUFFIX,featureassets.org
+# ===== Intercom (Support / Chat) =====
+DOMAIN-SUFFIX,intercom.io
+DOMAIN-SUFFIX,intercomcdn.com
+DOMAIN-SUFFIX,js.intercomcdn.com
+# ===== WorkOS (Auth / Org Mgmt) =====
+DOMAIN-SUFFIX,workos.com
+DOMAIN-SUFFIX,cdn.workos.com
+DOMAIN-SUFFIX,forwarder.workos.com
+DOMAIN-SUFFIX,setup.workos.com
+DOMAIN-SUFFIX,images.workoscdn.com
+DOMAIN-SUFFIX,workos.imgix.net
+# ===== SendGrid / Email =====
+DOMAIN-SUFFIX,ct.sendgrid.net
+# ===== Payments =====
+DOMAIN-SUFFIX,js.stripe.com
+# ===== Apple =====
+DOMAIN-SUFFIX,humb.apple.com
+# ===== Monitoring / Observability =====
+DOMAIN-SUFFIX,o207216.ingest.sentry.io
+DOMAIN-SUFFIX,o33249.ingest.sentry.io
+DOMAIN-SUFFIX,rum.browser-intake-datadoghq.com
+# ===== Google / AI =====
+DOMAIN-SUFFIX,bard.google.com
+DOMAIN-SUFFIX,labs.google
+# ===== ByteDance =====
 DOMAIN-SUFFIX,trae.ai
 DOMAIN-SUFFIX,bytednsdoc.com
-# poe
+# ===== Poe (Quora) =====
 DOMAIN-SUFFIX,poe.com
-DOMAIN-SUFFIX,quoracdn.net
 DOMAIN-SUFFIX,quora.com
-DOMAIN-KEYWORD,openai
-# perplexity.ai
+DOMAIN-SUFFIX,quoracdn.net
+# ===== Perplexity =====
 DOMAIN-SUFFIX,perplexity.ai
-# groq
+# ===== Groq =====
 DOMAIN-SUFFIX,groq.com
-DOMAIN-SUFFIX,labs.google
-# server.codeium.com
+# ===== Codeium =====
 DOMAIN-SUFFIX,codeium.com
-# Grok
+# ===== xAI / Grok =====
 DOMAIN-SUFFIX,x.ai
 DOMAIN-SUFFIX,grok.com
+# ===== Other =====
+DOMAIN-SUFFIX,prodregistryv2.org
+# https://help.openai.com/en/articles/9247338-network-recommendations-for-chatgpt-errors-on-web-and-apps
