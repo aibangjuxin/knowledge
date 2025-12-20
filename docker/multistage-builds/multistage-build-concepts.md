@@ -11,12 +11,54 @@ Deployment Task
 Documentation
 Demo & Training
 
+
+Reduced our Docker image size from 588 MB to 47.7 MB.
+
+Original build:
+- Full Python 3.9 base image
+- Multiple RUN instructions creating excess layers
+- No .dockerignore file
+- Single stage build with all dependencies
+
+Optimizations applied:
+1. Lightweight base image
+- Switched to Python 3.9-alpine
+- 95% smaller and faster to pull
+
+2. Layer optimization
+- Combined related commands
+- Reduced redundant RUN instructions
+
+3. .dockerignore file
+- Excluded venv, cache, and temp files
+- Reduced build context
+
+4. Multi stage builds
+- Build stage with dependencies
+- Production stage with only required runtime files
+
+Results:
+- Image size: 47.7 MB (down from 588 MB)
+- Size reduction: −91.89%
+- Faster container startup
+- Reduced deployment time and storage usage
+
+Small optimizations compound. Every MB saved accelerates every build.
+
+58K+ read my DevOps and Cloud newsletter: https://techopsexamples.com/subscribe
+
+What do we cover: 
+DevOps, Cloud, Kubernetes, IaC, GitOps, MLOps
+
+
+
+
 [https://yeasy.gitbook.io/docker_practice/image/multistage-builds](https://yeasy.gitbook.io/docker_practice/image/multistage-builds)
 
 这个是我们旧的Dockerfile模版
 - Dockerfile
 ````Dockerfile
-FROM FROM nexus3.companydomain:18080/zuljava-jre-Ubuntu-17:latest
+FROM FROM nus.companydomain:18080/zuljava-jre-Ubuntu-17:latest
 # set env
 ENV DEBIAN_FRONTEND=noninteractive
 ENV API_NAME
