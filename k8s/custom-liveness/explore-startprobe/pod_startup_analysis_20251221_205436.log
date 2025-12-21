@@ -1,0 +1,11 @@
+[2025-12-21T12:54:36.698356000] SECTION: 📋 Step 1/7: Get Pod Basic Information
+[2025-12-21T12:54:36.889792000] SECTION: 🔍 Step 2/7: Check Container Status
+[2025-12-21T12:54:36.903263000] SECTION: 🔍 Step 3/7: Analyze Probe Configuration
+[2025-12-21T12:54:36.950328000] SECTION: 🔍 Step 4/7: Extract Probe Detection Parameters
+[2025-12-21T12:54:36.967769000] SECTION: 🧪 Step 5/7: Live Probe Testing
+[2025-12-21T12:54:36.969677000] INFO: Skipping live probe testing (use --simulate or --live-test to enable)
+[2025-12-21T12:54:36.971842000] SECTION: ⏱️  Step 6/7: Measure Actual Startup Time
+[2025-12-21T12:54:36.977203000] SUCCESS: Pod is in Ready status
+[2025-12-21T12:54:36.991382000] SECTION: 📊 Step 7/7: Analysis & Recommendations
+[2025-12-21T12:54:36.993385000] SECTION: 📌 Configuration Recommendations
+[2025-12-21T12:54:36.995693000] SUCCESS: Analysis completed successfully!
