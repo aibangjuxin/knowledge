@@ -25,6 +25,7 @@
     - 不影响老用户（Firestore 逻辑必须继续可用）
     - 服务需要 同时支持两种凭据来源
     - 尽量不影响现有 Scheduler / PubSub 拓扑
+    - Now we using pub/sub StreamingPull to receive message. 
 
 ---
 
