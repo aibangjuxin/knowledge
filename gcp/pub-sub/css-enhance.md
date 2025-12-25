@@ -1,4 +1,4 @@
-# Cloud Scheduler 服务优化方案：基于 Secret Manager 的认证增强 (css-enhance.md)
+# Cloud Scheduler 服务优化方案：基于 Secret Manager 的认证增强
 
 ## 1. 现状与挑战分析
 
@@ -10,7 +10,21 @@
 - **兼容性**：必须支持“灰度平滑迁移”，即：
     - 如果 Secret Manager 中存在该 Team/User 的密码，则优先使用。
     - 如果 Secret Manager 不存在，则回退 (Fallback) 到原有的 Firestore 逻辑。
+      - firstore change ==> 中增加字段（兼容老数据) ==> Onboarding Process add new field
+      - only an example 
+        - 老数据：没有 authType → 默认 firestore
+        - 新用户：显式设置 authType=secret_manager
+        - 或者我们逻辑判断而不需要用户来付出类似的数据?
     - 确保老的调度任务无需修改即可继续运行。
+    - 这个Java的Schedule Service 需要 KSA可以访问Secret Manager。Need to add IAM policy for KSA. [infra change for environment]
+    - 新增 Secret Manager 作为认证凭据来源
+      - 需要确认或者优化Cloud Scheduler Service的读取Secret Manager的逻辑 确保高频率取值的性能.因为用户每次调度都会读取Secret Manager?
+        - 探索下Secret Manager的Cache策略?
+        - 探索下Secret Manager的速率或者频率限制?
+        - 探索下Secret Manager的API请求费用
+    - 不影响老用户（Firestore 逻辑必须继续可用）
+    - 服务需要 同时支持两种凭据来源
+    - 尽量不影响现有 Scheduler / PubSub 拓扑
 
 ---
 
@@ -30,11 +44,45 @@ graph TD
     D --> H[执行 Backend API 调用]
     F --> H
 ```
+#### **✅ 1. 优先级规则（强制）**
+
+```
+如果 authType=secret_manager：
+    → 只读 Secret Manager
+如果 authType=firestore：
+    → 只读 Firestore
+```
+
+❌ **不要** fallback（避免隐式错误）
+
+---
+
+#### **✅ 2. 启动期 & 缓存策略**
+
+Secret Manager 是 **有延迟 & 成本的**：
+
+- 建议：
+    - **本地 LRU Cache**
+    - TTL：5 ~ 10 分钟
+- 避免每条 Pub/Sub 消息都拉 Secret
+
+---
+
+#### **✅ 3. 可观测性**
+
+**必须打日志 & Metrics**
+
+```
+auth_source=secret_manager | firestore
+team_id=xxx
+job_id=yyy
+```
 
 ### 2.2 Secret 命名规范
 建议在 Secret Manager 中使用统一的命名约定，方便程序自动检索：
 - 格式：`teams-[team_id]-backend-secret` 或 `job-[job_id]-auth`
 - 优点：通过简单的字符串拼接即可定位密钥，无需在每个 Job 中显式传递路径。
+- 维护: 需要考虑后期用户cert的Renew,
 
 ---
 
@@ -67,12 +115,37 @@ def get_auth_password(team_id):
 
 ## 4. 实施步骤规划
 
-| 阶段 | 动作 | 描述 |
-| :--- | :--- | :--- |
-| **P1: 权限就绪** | Workload Identity 授权 | 赋予服务访问 Secret Manager 的最小权限。 |
-| **P2: 代码升级** | 部署支持双源认证的服务 | 发布新版本 Schedule Service，默认采用 fallback 逻辑。 |
-| **P3: 密钥迁移** | 录入 Secret Manager | 开始将新 Teams 或核心 Teams 的密码录入 Secret Manager。 |
-| **P4: 资源清理** | (可选) 停用 Firestore 存储 | 在所有密钥验证迁移完成后，可选择归档原 Firestore 数据。 |
+| 阶段 | 动作 | 描述 | By |
+| :--- | :--- | :--- | :--- |
+| **P1: 权限就绪** | Workload Identity 授权 | 赋予服务访问 Secret Manager 的最小权限。 | infra | 
+| **P2: 代码升级** | 部署支持双源认证的服务 | 发布新版本 Schedule Service，默认采用 fallback 逻辑。 | java |
+| **P3: 密钥迁移** | 录入 Secret Manager | 开始将新 Teams 或核心 Teams 的密码录入 Secret Manager。 | onboarding |
+| **P4: 资源清理** | (可选) 停用 Firestore 存储 | 在所有密钥验证迁移完成后，可选择归档原 Firestore 数据。 | infra && sre |
+
+### **Phase 1：代码准备（不影响生产）**
+
+- 抽象 CredentialProvider
+- 接入 Secret Manager SDK
+- Firestore 逻辑保持不动
+
+### **Phase 2：灰度启用在 new Project or new Team*
+
+- 给 **1~2 个 Team** 设置 authType=secret_manager
+- 验证：
+    - Secret 访问权限
+    - Backend 成功率
+    - Latency
+
+### **Phase 3：平台推广**
+
+- 新 Team 默认 Secret Manager
+- 老 Team 保持 Firestore
+
+### **Phase 4（可选）：长期优化**
+
+- 提供迁移工具 ==> prepare the User document . reference secret_manager onboarding process
+- Firestore 凭据逐步只读 / 禁用 ==> This is a long-term plan
+
 
 ---
 
