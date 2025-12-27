@@ -22,6 +22,7 @@
         - 探索下Secret Manager的Cache策略?
         - 探索下Secret Manager的速率或者频率限制?
         - 探索下Secret Manager的API请求费用
+        - secret manager naming strategy `projects/{project-id}/secrets/scheduler-team-{teamId}-basic-auth`
     - 不影响老用户（Firestore 逻辑必须继续可用）
     - 服务需要 同时支持两种凭据来源
     - 尽量不影响现有 Scheduler / PubSub 拓扑

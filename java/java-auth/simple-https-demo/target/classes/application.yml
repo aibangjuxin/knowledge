@@ -1,0 +1,39 @@
+# =============================================================================
+# Simple HTTPS Demo - Dual Role SSL Configuration
+# =============================================================================
+# Role 1: TLS Server (port 8443) - Use YOUR OWN certificate
+# Role 2: TLS Client (outbound)  - Use Java's built-in cacerts for third-party
+# =============================================================================
+
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    # --- Server Certificate (YOUR OWN) ---
+    key-store: classpath:ssl/server-keystore.p12
+    key-store-password: changeit
+    key-store-type: PKCS12
+    key-alias: server
+    # --- Protocol ---
+    protocol: TLS
+    enabled-protocols: TLSv1.2,TLSv1.3
+
+# =============================================================================
+# For TLS Client (outbound HTTPS calls):
+# - By default, Java uses $JAVA_HOME/lib/security/cacerts as TrustStore
+# - No extra config needed for public third-party services (Google, AWS, etc.)
+# - If you need custom truststore, uncomment below:
+# =============================================================================
+# spring:
+#   ssl:
+#     bundle:
+#       jks:
+#         client:
+#           truststore:
+#             location: classpath:ssl/client-truststore.p12
+#             password: changeit
+#             type: PKCS12
+
+logging:
+  level:
+    root: INFO
