@@ -1,0 +1,14 @@
+# team-name/env/region/scheduler_job_config.yaml
+scheduler_job_config:
+   enabled: true scheduler_job:
+   #The name of scheduler job
+   -  job_name: jobXdsRateQueryBu]
+   #END_POINT URL
+      api_endpoint: https://endpoint-url/
+   #GET/POST
+      http_method: POST 
+   #'crontab' in Linux
+   #MIN HOUR DAY MONTH WEEK 
+      frequency: "0 */1 * * *"
+   #Request body 
+      http_body: “{}”

@@ -23,6 +23,7 @@
         - 探索下Secret Manager的速率或者频率限制?
         - 探索下Secret Manager的API请求费用
         - secret manager naming strategy `projects/{project-id}/secrets/scheduler-team-{teamId}-basic-auth`
+        - It is necessary to add a conditional check to determine whether the Secret already exists. 因为如果这个 secret不存在 ，那么用户后面的部署肯定是要受影响的 ，所以说需要有一个大概的判断。 或者这个逻辑在什么时候时间比较合适需要考虑。 
     - 不影响老用户（Firestore 逻辑必须继续可用）
     - 服务需要 同时支持两种凭据来源
     - 尽量不影响现有 Scheduler / PubSub 拓扑
