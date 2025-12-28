@@ -66,6 +66,7 @@ scheduler_job:
 ```
 
 ### 2.2 增强后的 Onboarding 流程
+- 标准 Onboarding 流程
 ```mermaid
 graph TD
     A["Team 修改 YAML (Git Branch: team-alpha/env-us)"] --> B["Git Commit/Merge"]
