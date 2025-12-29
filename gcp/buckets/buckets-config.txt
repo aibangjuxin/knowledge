@@ -1,0 +1,17 @@
+# GCS Bucket 配置文件示例
+# 格式: kms-project == <kms-project> region == <region> project == <project> buckets = <bucket1> <bucket2> ...
+
+# 示例 1: 在 europe-west2 创建多个 bucket
+kms-project == abjx-id-kms-dev region == europe-west2 project == aibang-projectid-wwww-dev buckets = gs://cap-lex-eg-gkeconfigs gs://cap-lex-eg-gkeconfigs2
+
+# 示例 2: 在不同区域创建 bucket
+# kms-project == abjx-id-kms-dev region == us-central1 project == aibang-projectid-wwww-dev buckets = gs://cap-dev-us-backup
+
+# 示例 3: 创建单个 bucket
+# kms-project == abjx-id-kms-dev region == asia-east1 project == aibang-projectid-wwww-dev buckets = gs://cap-dev-asia-data
+
+# 注意:
+# 1. 以 # 开头的行为注释
+# 2. bucket 名称可以带或不带 gs:// 前缀
+# 3. 多个 bucket 之间用空格分隔
+# 4. 只有 project 字段与命令行参数 -p 匹配的配置行才会被处理
