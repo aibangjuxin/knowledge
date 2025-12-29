@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2025-12-29 17:10:57
+Generated on: 2025-12-29 17:21:47
 Directory: /Users/lex/git/knowledge/gcp/buckets
 
 ## `create-buckets.sh`
@@ -642,9 +642,9 @@ print_section "7. Encryption (加密配置)"
 print_info "获取加密配置..."
 echo ""
 
-encryption=$(gcloud storage buckets describe "gs://${BUCKET_NAME}" ${PROJECT_FLAG} --format="json(encryption,defaultEventBasedHold)")
+encryption=$(gcloud storage buckets describe "gs://${BUCKET_NAME}" ${PROJECT_FLAG} --format="json(default_kms_key,defaultEventBasedHold)")
 
-default_kms=$(echo "$encryption" | jq -r '.encryption.defaultKmsKeyName // "未配置 CMEK"')
+default_kms=$(echo "$encryption" | jq -r '.default_kms_key // "未配置 CMEK"')
 event_hold=$(echo "$encryption" | jq -r '.defaultEventBasedHold // false')
 
 echo "默认 KMS 密钥: ${default_kms}"
