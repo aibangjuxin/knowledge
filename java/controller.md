@@ -104,3 +104,113 @@ src
 ```
 
 通过添加这个简单的 Controller，你的 Java 应用就具备了响应 Kubernetes 健康检查的能力，从而确保了部署的稳定性和可靠性。
+
+---
+
+## 问题排查：@RequestMapping 使用属性占位符导致启动失败
+
+### 问题描述
+
+当在 `MainController` 的 `@RequestMapping` 注解中使用属性占位符（如 `@RequestMapping("$(abjx.rest.base-path)")` ）时，Spring Boot 应用启动失败。删除该注解行后，API 正常启动。
+
+### 根本原因分析
+
+#### 1. **属性占位符语法错误**
+
+在 Spring Boot 中，属性占位符应该使用 `${...}` 语法，而非 `$(...)`。
+
+```java
+// ❌ 错误：使用了错误的占位符语法
+@RequestMapping("$(abjx.rest.base-path)")
+public class MainController { ... }
+
+// ✅ 正确：使用正确的 Spring 占位符语法
+@RequestMapping("${abjx.rest.base-path}")
+public class MainController { ... }
+```
+
+#### 2. **属性未定义**
+
+Even with correct syntax，如果配置文件中未定义 `abjx.rest.base-path` 属性，Spring 启动时可能会失败（取决于配置和 Spring 版本）。
+
+#### 3. **类级别 @RequestMapping 的作用**
+
+类级别的 `@RequestMapping` 会为该类中的所有方法作为前缀。例如：
+
+```java
+@RestController
+@RequestMapping("/api/v1")
+public class MainController {
+    @GetMapping("/users")
+    public ResponseEntity<?> getUsers() { ... }  // 实际路径：/api/v1/users
+}
+```
+
+### 解决方案
+
+#### 方案 1：修正属性占位符语法
+
+确保在 `application.properties` 或 `application.yml` 中定义了该属性：
+
+**application.properties:**
+```properties
+abjx.rest.base-path=/api/v1
+```
+
+**MainController.java:**
+```java
+@RestController
+@RequestMapping("${abjx.rest.base-path}")
+public class MainController {
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, String>> getHealth() {
+        return ResponseEntity.ok(Collections.singletonMap("status", "UP"));
+    }
+}
+```
+
+#### 方案 2：使用环境变量
+
+如果属性来自环境变量或系统属性，可以使用带默认值的占位符：
+
+```java
+@RequestMapping("${abjx.rest.base-path:/api}")
+public class MainController { ... }
+```
+
+这样即使属性未定义，也会使用默认值 `/api`。
+
+#### 方案 3：在方法级别定义路径
+
+如果不需要类级别的前缀，可以在具体方法上定义路由：
+
+```java
+@RestController
+public class MainController {
+    @GetMapping("${abjx.rest.base-path}/health")
+    public ResponseEntity<Map<String, String>> getHealth() {
+        return ResponseEntity.ok(Collections.singletonMap("status", "UP"));
+    }
+}
+```
+
+### 调试技巧
+
+1. **检查应用日志**：查看 Spring 启动失败的具体错误信息，通常会显示属性解析失败或占位符不匹配的错误。
+
+2. **验证配置文件**：确保 `application.properties` 或 `application.yml` 包含所需的属性定义。
+
+3. **使用 Spring Boot Actuator**：添加依赖查看当前所有配置：
+   ```xml
+   <dependency>
+       <groupId>org.springframework.boot</groupId>
+       <artifactId>spring-boot-starter-actuator</artifactId>
+   </dependency>
+   ```
+   访问 `http://localhost:8080/actuator/configprops` 查看所有属性。
+
+4. **临时禁用占位符**：为了快速验证，可以使用硬编码的路径，确认 Controller 本身没有其他问题：
+   ```java
+   @RequestMapping("/api/v1")
+   public class MainController { ... }
+   ```
