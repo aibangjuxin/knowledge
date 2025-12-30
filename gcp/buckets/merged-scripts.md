@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2025-12-30 11:18:21
+Generated on: 2025-12-30 11:26:40
 Directory: /Users/lex/git/knowledge/gcp/buckets
 
 ## `add-bucket-binding.sh`
@@ -808,13 +808,15 @@ output_text() {
     
     # 统计信息
     local all_bindings=$(parse_iam_policy)
-    local total_bindings=$(echo "$all_bindings" | wc -l | tr -d ' ')
-    local cross_project_count=$(echo "$all_bindings" | grep -c "|true|" || echo "0")
-    local read_count=$(echo "$all_bindings" | grep -c "|read|" || echo "0")
-    local write_count=$(echo "$all_bindings" | grep -c "|write|" || echo "0")
-    local admin_count=$(echo "$all_bindings" | grep -c "|admin|" || echo "0")
+    # 去除空行后统计总行数
+    local total_bindings=$(echo "$all_bindings" | grep -v '^$' | wc -l | tr -d ' ')
+    # 使用 || true 吞掉非零退出码，避免 set -e 中断，且不产生额外输出
+    local cross_project_count=$(echo "$all_bindings" | grep -c "|true|" || true)
+    local read_count=$(echo "$all_bindings" | grep -c "|read|" || true)
+    local write_count=$(echo "$all_bindings" | grep -c "|write|" || true)
+    local admin_count=$(echo "$all_bindings" | grep -c "|admin|" || true)
     
-    # 确保变量是数字
+    # 确保变量是数字（参数扩展，默认为 0）
     total_bindings=${total_bindings:-0}
     cross_project_count=${cross_project_count:-0}
     read_count=${read_count:-0}
