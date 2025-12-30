@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2025-12-30 11:15:33
+Generated on: 2025-12-30 11:18:21
 Directory: /Users/lex/git/knowledge/gcp/buckets
 
 ## `add-bucket-binding.sh`
