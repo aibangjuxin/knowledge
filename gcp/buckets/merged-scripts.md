@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2025-12-30 11:08:52
+Generated on: 2025-12-30 11:15:33
 Directory: /Users/lex/git/knowledge/gcp/buckets
 
 ## `add-bucket-binding.sh`
@@ -814,6 +814,13 @@ output_text() {
     local write_count=$(echo "$all_bindings" | grep -c "|write|" || echo "0")
     local admin_count=$(echo "$all_bindings" | grep -c "|admin|" || echo "0")
     
+    # 确保变量是数字
+    total_bindings=${total_bindings:-0}
+    cross_project_count=${cross_project_count:-0}
+    read_count=${read_count:-0}
+    write_count=${write_count:-0}
+    admin_count=${admin_count:-0}
+    
     log_section "统计摘要"
     echo -e "${GREEN}总绑定数:${NC} $total_bindings"
     echo -e "${YELLOW}跨项目账户:${NC} $cross_project_count"
@@ -826,7 +833,7 @@ output_text() {
     
     # 读取权限
     if [[ "$PERMISSION_FILTER" == "all" ]] || [[ "$PERMISSION_FILTER" == "read" ]]; then
-        if [[ $read_count -gt 0 ]]; then
+        if [[ ${read_count} -gt 0 ]]; then
             echo -e "\n${CYAN}【读取权限】${NC}"
             echo "$all_bindings" | grep "|read|" | while IFS='|' read -r member role category is_cross member_project; do
                 local account_type=$(get_account_type "$member")
@@ -849,7 +856,7 @@ output_text() {
     
     # 写入权限
     if [[ "$PERMISSION_FILTER" == "all" ]] || [[ "$PERMISSION_FILTER" == "write" ]]; then
-        if [[ $write_count -gt 0 ]]; then
+        if [[ ${write_count} -gt 0 ]]; then
             echo -e "\n${GREEN}【写入权限】${NC}"
             echo "$all_bindings" | grep "|write|" | while IFS='|' read -r member role category is_cross member_project; do
                 local account_type=$(get_account_type "$member")
@@ -872,7 +879,7 @@ output_text() {
     
     # 管理权限
     if [[ "$PERMISSION_FILTER" == "all" ]] || [[ "$PERMISSION_FILTER" == "admin" ]]; then
-        if [[ $admin_count -gt 0 ]]; then
+        if [[ ${admin_count} -gt 0 ]]; then
             echo -e "\n${MAGENTA}【管理权限】${NC}"
             echo "$all_bindings" | grep "|admin|" | while IFS='|' read -r member role category is_cross member_project; do
                 local account_type=$(get_account_type "$member")
@@ -894,7 +901,7 @@ output_text() {
     fi
     
     # 跨项目账户汇总
-    if [[ $cross_project_count -gt 0 ]]; then
+    if [[ ${cross_project_count} -gt 0 ]]; then
         log_section "跨项目账户汇总"
         echo "$all_bindings" | grep "|true|" | while IFS='|' read -r member role category is_cross member_project; do
             local perm_desc=$(get_permission_description "$role")
