@@ -244,7 +244,333 @@ graph TD;
     H --> I[返回外部DNS的结果给Pod]
     G --> I
 ```
-```
+
 结论
 
 您的理解和分析都是准确的。保持DNS查询的清晰结构，避免在多个VPC中配置重叠的DNS Peering是确保网络稳定和性能的重要环节。
+
+
+
+# 问题分析
+
+需要为现有的 DNS 查询脚本添加 IP 地址类型判断功能,识别查询结果中的 IP 地址是否为 RFC1918 定义的私有 IP 地址范围。
+
+# 解决方案
+
+## 1. 添加 IP 类型判断功能
+
+需要实现以下功能:
+- 提取 DNS 查询结果中的 IP 地址
+- 判断 IP 是否为私有地址 (RFC1918)
+- 标识特殊用途 IP 地址范围
+
+## 2. 增强后的脚本
+
+```bash
+#!/opt/homebrew/bin/bash
+
+# Check if domain parameter is provided
+if [ $# -ne 1 ]; then
+  echo "Usage: $0 <domain>"
+  echo "Example: $0 www.baidu.com"
+  exit 1
+fi
+
+# Define domain and DNS server list (using associative array)
+DOMAIN=$1
+declare -A DNS_SERVERS=(
+  ["8.8.8.8"]="Google Public DNS"
+  ["119.29.29.29"]="Tencent DNSPod"
+  ["114.114.114.114"]="114 DNS"
+)
+
+# Define DNS Peering list (using array)
+DNS_PEERING=(
+  "baidu.com"
+  "sohu.com"
+)
+
+# ANSI color codes
+GREEN='\033[32m'
+YELLOW='\033[33m'
+RED='\033[31m'
+BLUE='\033[34m'
+NC='\033[0m'
+SEPARATOR="================================================================"
+
+# Function to convert IP to decimal
+ip_to_decimal() {
+  local ip=$1
+  local a b c d
+  IFS=. read -r a b c d <<< "$ip"
+  echo "$((a * 256 ** 3 + b * 256 ** 2 + c * 256 + d))"
+}
+
+# Function to check if IP is in CIDR range
+ip_in_cidr() {
+  local ip=$1
+  local cidr=$2
+  local network mask ip_decimal network_decimal
+  
+  network="${cidr%/*}"
+  mask="${cidr#*/}"
+  
+  ip_decimal=$(ip_to_decimal "$ip")
+  network_decimal=$(ip_to_decimal "$network")
+  
+  # Calculate network mask
+  local mask_decimal=$(( (0xFFFFFFFF << (32 - mask)) & 0xFFFFFFFF ))
+  
+  # Check if IP is in range
+  if [ $(( ip_decimal & mask_decimal )) -eq $(( network_decimal & mask_decimal )) ]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+# Function to determine IP address type
+get_ip_type() {
+  local ip=$1
+  
+  # RFC1918 Private IP ranges
+  if ip_in_cidr "$ip" "10.0.0.0/8"; then
+    echo "${RED}[Private - RFC1918: 10.0.0.0/8]${NC}"
+    return
+  fi
+  
+  if ip_in_cidr "$ip" "172.16.0.0/12"; then
+    echo "${RED}[Private - RFC1918: 172.16.0.0/12]${NC}"
+    return
+  fi
+  
+  if ip_in_cidr "$ip" "192.168.0.0/16"; then
+    echo "${RED}[Private - RFC1918: 192.168.0.0/16]${NC}"
+    return
+  fi
+  
+  # Loopback
+  if ip_in_cidr "$ip" "127.0.0.0/8"; then
+    echo "${YELLOW}[Loopback - RFC1122]${NC}"
+    return
+  fi
+  
+  # Link-local
+  if ip_in_cidr "$ip" "169.254.0.0/16"; then
+    echo "${YELLOW}[Link-Local - RFC3927]${NC}"
+    return
+  fi
+  
+  # Carrier-grade NAT (CGNAT)
+  if ip_in_cidr "$ip" "100.64.0.0/10"; then
+    echo "${YELLOW}[Shared Address Space - RFC6598 CGNAT]${NC}"
+    return
+  fi
+  
+  # Multicast
+  if ip_in_cidr "$ip" "224.0.0.0/4"; then
+    echo "${YELLOW}[Multicast - RFC5771]${NC}"
+    return
+  fi
+  
+  # Reserved
+  if ip_in_cidr "$ip" "240.0.0.0/4"; then
+    echo "${YELLOW}[Reserved - RFC1112]${NC}"
+    return
+  fi
+  
+  # Public IP
+  echo "${GREEN}[Public IP]${NC}"
+}
+
+# Function to extract and classify IP addresses from DNS result
+process_dns_result() {
+  local result=$1
+  
+  # Extract A records (IPv4)
+  local ips=$(echo "$result" | grep -E "^[^;].*\sA\s" | awk '{print $NF}')
+  
+  if [ -n "$ips" ]; then
+    echo -e "${GREEN}DNS A records found:${NC}"
+    while IFS= read -r line; do
+      # Extract complete DNS record line
+      local full_record=$(echo "$result" | grep -E "\s$line\s*$" | head -1)
+      if [ -n "$full_record" ]; then
+        local ip_type=$(get_ip_type "$line")
+        echo -e "${GREEN}${full_record}${NC} ${ip_type}"
+      fi
+    done <<< "$ips"
+    return 0
+  else
+    # If no A records, show other record types
+    if [ -n "$result" ]; then
+      echo -e "${BLUE}Other DNS records found:${NC}"
+      echo -e "${BLUE}${result}${NC}"
+      return 0
+    fi
+  fi
+  
+  return 1
+}
+
+# Function to check if domain is in Peering list
+check_domain_in_peering() {
+  local input_domain="$1"
+  for peering_domain in "${DNS_PEERING[@]}"; do
+    if [[ "$input_domain" == *"$peering_domain" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Check if input domain is in Peering list
+if check_domain_in_peering "$DOMAIN"; then
+  echo -e "✅ Domain $DOMAIN is in DNS Peering list"
+else
+  echo -e "❌ Domain $DOMAIN is not in DNS Peering list"
+fi
+
+# Query each DNS server
+for dns in "${!DNS_SERVERS[@]}"; do
+  echo -e "\n${SEPARATOR}"
+  echo -e "🔍 Using DNS Server: ${GREEN}${dns}${NC} (${DNS_SERVERS[$dns]})"
+  echo "${SEPARATOR}"
+  
+  # Execute dig command and process output
+  result=$(dig @"$dns" "$DOMAIN" +noall +answer +authority +additional)
+  
+  # Check if result exists
+  if [ -n "$result" ]; then
+    if ! process_dns_result "$result"; then
+      echo "❌ No DNS records found"
+    fi
+  else
+    echo "❌ Query failed or no results returned"
+  fi
+done
+
+echo -e "\n${SEPARATOR}"
+echo "✅ Query completed"
+```
+
+## 3. 功能流程图
+
+```mermaid
+graph TD
+    A[开始查询] --> B[执行 dig 命令]
+    B --> C{有结果?}
+    C -->|否| D[显示查询失败]
+    C -->|是| E[提取 A 记录]
+    E --> F{有 IP 地址?}
+    F -->|否| G[显示其他记录类型]
+    F -->|是| H[遍历 IP 地址]
+    H --> I[判断 IP 类型]
+    I --> J{10.0.0.0/8?}
+    J -->|是| K[标记为私有 IP]
+    J -->|否| L{172.16.0.0/12?}
+    L -->|是| K
+    L -->|否| M{192.168.0.0/16?}
+    M -->|是| K
+    M -->|否| N{其他特殊范围?}
+    N -->|是| O[标记特殊用途]
+    N -->|否| P[标记为公网 IP]
+    K --> Q[显示结果]
+    O --> Q
+    P --> Q
+    Q --> R{还有 IP?}
+    R -->|是| H
+    R -->|否| S[完成]
+    D --> S
+    G --> S
+```
+
+## 4. IP 地址类型判断范围
+
+| IP 范围 | 类型 | RFC 标准 | 用途 |
+|---------|------|----------|------|
+| 10.0.0.0/8 | 私有地址 | RFC1918 | 内网使用 |
+| 172.16.0.0/12 | 私有地址 | RFC1918 | 内网使用 |
+| 192.168.0.0/16 | 私有地址 | RFC1918 | 内网使用 |
+| 127.0.0.0/8 | 回环地址 | RFC1122 | 本地回环 |
+| 169.254.0.0/16 | 链路本地 | RFC3927 | 自动配置 |
+| 100.64.0.0/10 | 共享地址 | RFC6598 | 运营商 NAT |
+| 224.0.0.0/4 | 组播地址 | RFC5771 | 组播通信 |
+| 240.0.0.0/4 | 保留地址 | RFC1112 | 保留使用 |
+
+## 5. 代码示例说明
+
+### IP 转换为十进制
+```bash
+# 将 IP 地址转换为十进制数,便于范围比较
+ip_to_decimal() {
+  local ip=$1
+  local a b c d
+  IFS=. read -r a b c d <<< "$ip"
+  echo "$((a * 256 ** 3 + b * 256 ** 2 + c * 256 + d))"
+}
+```
+
+### CIDR 范围匹配
+```bash
+# 检查 IP 是否在指定 CIDR 范围内
+ip_in_cidr() {
+  local ip=$1
+  local cidr=$2
+  local network mask ip_decimal network_decimal
+  
+  network="${cidr%/*}"
+  mask="${cidr#*/}"
+  
+  ip_decimal=$(ip_to_decimal "$ip")
+  network_decimal=$(ip_to_decimal "$network")
+  
+  # 计算网络掩码
+  local mask_decimal=$(( (0xFFFFFFFF << (32 - mask)) & 0xFFFFFFFF ))
+  
+  # 检查 IP 是否在范围内
+  if [ $(( ip_decimal & mask_decimal )) -eq $(( network_decimal & mask_decimal )) ]; then
+    return 0
+  else
+    return 1
+  fi
+}
+```
+
+# 注意事项
+
+## 使用建议
+
+1. **权限要求**: 脚本无需 root 权限,普通用户即可执行
+2. **依赖检查**: 确保系统已安装 `dig` 命令 (bind-tools 或 dnsutils 包)
+3. **网络连接**: 需要能够访问配置的 DNS 服务器
+
+## 测试命令
+
+```bash
+# 测试私有 IP 域名 (如内网域名)
+./script.sh internal.company.com
+
+# 测试公网域名
+./script.sh www.baidu.com
+
+# 测试不存在的域名
+./script.sh nonexistent.example.com
+```
+
+## 扩展建议
+
+如需支持 IPv6 地址判断,可添加以下功能:
+
+```bash
+# IPv6 私有地址范围
+# fc00::/7 - Unique Local Address (ULA)
+# fe80::/10 - Link-Local Address
+```
+
+# 最佳实践
+
+1. **日志记录**: 可将查询结果重定向到文件保存
+2. **批量查询**: 可通过循环读取域名列表进行批量检测
+3. **告警集成**: 发现私有 IP 泄露时可发送告警通知
+4. **定时检测**: 通过 cron 定期执行检测任务
