@@ -1,0 +1,11 @@
+## public egress yaml file on API Level 
+publicEgress:
+   ## enabled indicate if this API will need to go out from abjx or not 
+   ## only with value true, this API can reach to fadns list in third_party_fadn_list part 
+   enabled: true
+## update below list to set the external connectivity 
+  third_party_fadn_list:
+    - fqdn: user-ai-api.azure.com
+      port: 443
+    - fqdn: login.microsoftonline.com
+      port: 443
