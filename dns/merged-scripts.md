@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2025-12-31 16:53:16
+Generated on: 2025-12-31 17:05:54
 Directory: /Users/lex/git/knowledge/dns
 
 ## `dns-peering-claude.sh`
@@ -238,10 +238,15 @@ else
   echo -e "❌ Domain $DOMAIN is not in DNS Peering list"
 fi
 
+# Query Parameters
+TIMEOUT=2
+TRIES=2
+
 # ANSI color codes
 GREEN='\033[32m'
 YELLOW='\033[33m'
 BLUE='\033[34m'
+RED='\033[31m'
 NC='\033[0m'
 SEPARATOR="================================================================"
 
@@ -281,8 +286,14 @@ for dns in "${!DNS_SERVERS[@]}"; do
   echo -e "🔍 Using DNS Server: ${BLUE}${dns}${NC} (${DNS_SERVERS[$dns]})"
   echo "${SEPARATOR}"
 
-  # Execute dig command
-  result=$(dig @"$dns" "$DOMAIN" +noall +answer +authority +additional)
+  # Execute dig command with timeout and retries
+  result=$(dig @"$dns" "$DOMAIN" +noall +answer +authority +additional +time=${TIMEOUT} +tries=${TRIES})
+  exit_code=$?
+
+  if [ $exit_code -ne 0 ]; then
+    echo -e "${RED}❌ Query failed (Exit Code: $exit_code). Server may be unreachable or timed out.${NC}"
+    continue
+  fi
 
   if [ -n "$result" ]; then
     echo -e "${GREEN}DNS records found:${NC}"
@@ -359,10 +370,15 @@ else
   echo -e "❌ Domain $DOMAIN is not in DNS Peering list"
 fi
 
+# Query Parameters
+TIMEOUT=2
+TRIES=2
+
 # ANSI color codes
 GREEN='\033[32m'
 YELLOW='\033[33m'
 BLUE='\033[34m'
+RED='\033[31m'
 NC='\033[0m'
 SEPARATOR="================================================================"
 
@@ -402,8 +418,14 @@ for dns in "${!DNS_SERVERS[@]}"; do
   echo -e "🔍 Using DNS Server: ${BLUE}${dns}${NC} (${DNS_SERVERS[$dns]})"
   echo "${SEPARATOR}"
 
-  # Execute dig command
-  result=$(dig @"$dns" "$DOMAIN" +noall +answer +authority +additional)
+  # Execute dig command with timeout and retries
+  result=$(dig @"$dns" "$DOMAIN" +noall +answer +authority +additional +time=${TIMEOUT} +tries=${TRIES})
+  exit_code=$?
+
+  if [ $exit_code -ne 0 ]; then
+    echo -e "${RED}❌ Query failed (Exit Code: $exit_code). Server may be unreachable or timed out.${NC}"
+    continue
+  fi
 
   if [ -n "$result" ]; then
     echo -e "${GREEN}DNS records found:${NC}"
