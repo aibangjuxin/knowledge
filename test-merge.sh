@@ -5,8 +5,8 @@ echo "🔍 查找 .sh 文件..."
 
 # 检查是否有 .sh 文件
 if ls *.sh 1> /dev/null 2>&1; then
-    echo "找到以下 .sh 文件:"
-    ls -1 *.sh
+    echo "找到以下 .sh 文件 (按时间由新到旧排序):"
+    ls -1t *.sh
 else
     echo "❌ 当前目录没有找到 .sh 文件"
     exit 1
@@ -45,7 +45,10 @@ echo "🚀 开始合并文件..."
     echo "Directory: $(pwd)"
     echo
     
-    for file in *.sh; do
+    # 获取按修改时间排序的文件列表 (最晚修改的在前面)
+    files=$(ls -t *.sh)
+    
+    for file in $files; do
         if [ -f "$file" ]; then
             echo "## \`$file\`"
             echo
