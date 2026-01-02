@@ -201,3 +201,10 @@ public class SecretManagerCache {
 Using GCP Secret Manager event notifications provides an optimal solution for caching secrets in the Cloud Scheduler Service. This approach ensures that cached secrets are invalidated immediately when they change while maintaining maximum cache efficiency for unchanged secrets. The event-driven model provides better performance, security, and cost efficiency compared to time-based caching strategies.
 
 This solution directly addresses the requirement to fetch secrets only when they have actually changed (e.g., due to password expiration or manual updates) rather than on a fixed schedule, making it ideal for the Cloud Scheduler Service authentication enhancement.
+
+## References
+
+1. Google Cloud Secret Manager Documentation - Event Notifications: https://docs.cloud.google.com/secret-manager/docs/event-notifications
+2. Stack Overflow - Google Cloud Secret Manager Notifications on PubSub: https://stackoverflow.com/questions/71435534/google-cloud-secret-manager-notifications-on-pubsub
+3. Hoop.dev Blog - The Simplest Way to Make GCP Secret Manager Google Pub/Sub Work Like It Should: https://hoop.dev/blog/the-simplest-way-to-make-gcp-secret-manager-google-pub-sub-work-like-it-should/
+4. HashiCorp Terraform Provider Google Issue #9548 - Secret Manager Secret publishing to Cloud Pub/Sub: https://github.com/hashicorp/terraform-provider-google/issues/9548

@@ -200,3 +200,10 @@ public class SecretManagerCache {
 使用 GCP Secret Manager 事件通知为 Cloud Scheduler 服务中的机密缓存提供了最优解决方案。这种方法确保在机密更改时立即使其失效，同时对未更改的机密保持最大缓存效率。与基于时间的缓存策略相比，事件驱动模型提供了更好的性能、安全性和成本效益。
 
 此解决方案直接解决了仅在机密实际更改时（例如由于密码过期或手动更新）而不是在固定时间表上获取机密的要求，使其成为 Cloud Scheduler 服务认证增强的理想选择。
+
+## 参考资料
+
+1. Google Cloud Secret Manager 文档 - 事件通知: https://docs.cloud.google.com/secret-manager/docs/event-notifications
+2. Stack Overflow - Google Cloud Secret Manager PubSub 通知: https://stackoverflow.com/questions/71435534/google-cloud-secret-manager-notifications-on-pubsub
+3. Hoop.dev 博客 - 让 GCP Secret Manager 与 Google Pub/Sub 协同工作的最简单方法: https://hoop.dev/blog/the-simplest-way-to-make-gcp-secret-manager-google-pub-sub-work-like-it-should/
+4. HashiCorp Terraform Provider Google Issue #9548 - Secret Manager Secret 发布到 Cloud Pub/Sub: https://github.com/hashicorp/terraform-provider-google/issues/9548
