@@ -38,6 +38,7 @@
 下面是一个简单的分层Pipeline示例代码，展示如何组织Job Layer、Stage Layer和Module Layer：
 
 // Job Layer - 定义Pipeline的主要流程
+```groovy
 pipeline {
     agent any
     stages {
@@ -101,7 +102,7 @@ class Module {
         // deploy logic here
     }
 }
-
+```
 总结
 
 分层设计对于基于Groovy开发的Pipeline来说，不仅提高了代码的复用性、可读性，还使得Pipeline更容易维护、调试和扩展。通过这种模块化设计，可以更好地应对复杂的CICD需求，并支持更加灵活的流程管理。
