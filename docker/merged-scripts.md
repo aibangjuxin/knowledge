@@ -1,3 +1,11 @@
+# Shell Scripts Collection
+
+Generated on: 2026-01-03 13:07:44
+Directory: /Users/lex/git/knowledge/docker
+
+## `debug-java-pod.sh`
+
+```bash
 #!/opt/homebrew/bin/bash
 
 ################################################################################
@@ -480,3 +488,6 @@ main() {
 
 # 执行主流程
 main "$@"
+
+```
+
