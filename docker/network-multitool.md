@@ -1,4 +1,5 @@
 下面给你一份**面向运维与 debug 的推荐 Docker 镜像列表**，这些都来自 Docker Hub，且都已经自带常用的网络/HTTP/调试工具（curl、wget、httpie、dig、tcpdump 等）。你可以直接 `docker run -it` 进入使用。
+sidecar network-multitool
 
 ---
 
@@ -71,13 +72,13 @@ docker run -it busybox sh
 
 # **对比表**
 
-|镜像|是否包含 curl|是否有 httpie|是否有 dig/nslookup|是否有 tcpdump|特点|
-|---|---|---|---|---|---|
-|praqma/network-multitool|✅|❌|✅|✅|最全面，配置简单|
-|wbitt/network-multitool|✅|❌|✅|❌|K8S 常用，功能丰富|
-|nicolaka/netshoot|✅|✅|✅|✅|K8S 网络排查神器|
-|alpine + apk|可安装|可安装|可安装|可安装|最小化，可自定义|
-|busybox|基础版|❌|❌|❌|极简体积超小|
+| 镜像                     | 是否包含 curl | 是否有 httpie | 是否有 dig/nslookup | 是否有 tcpdump | 特点               |
+| ------------------------ | ------------- | ------------- | ------------------- | -------------- | ------------------ |
+| praqma/network-multitool | ✅            | ❌            | ✅                  | ✅             | 最全面，配置简单   |
+| wbitt/network-multitool  | ✅            | ❌            | ✅                  | ❌             | K8S 常用，功能丰富 |
+| nicolaka/netshoot        | ✅            | ✅            | ✅                  | ✅             | K8S 网络排查神器   |
+| alpine + apk             | 可安装        | 可安装        | 可安装              | 可安装         | 最小化，可自定义   |
+| busybox                  | 基础版        | ❌            | ❌                  | ❌             | 极简体积超小       |
 
 ---
 
@@ -104,15 +105,10 @@ docker run --rm -it praqma/network-multitool bash
 比如：
 
 - curl + httpie + jq
-    
 - tcpdump + tshark
-    
 - openssl + iproute2 + strace
-    
 - 自定义 CA 证书
-    
 - 适配你的 GKE/Nginx/Kong 环境
-    
 
 若需要，我可以给你直接生成 Dockerfile。
 
@@ -129,11 +125,8 @@ docker run --rm -it praqma/network-multitool bash
 GAR 推送流程主要是：
 
 1. 登录 GCP 的 Docker Registry
-    
 2. 给镜像重新 tag 成 GAR 地址
-    
 3. push 到 GAR
-    
 
 ---
 
@@ -205,13 +198,9 @@ pragmaprime/network-multitool   latest   <IMAGE_ID>
 例如 GAR 仓库信息如下：
 
 - region：asia-east1
-    
 - project：my-project
-    
 - repo：common-tools
-    
 - image：network-multitool
-    
 
 执行：
 
@@ -248,23 +237,20 @@ graph TD
 # 4. **注意事项**
 
 - 如果推送报 403，检查 IAM 是否有：
-    
-    - `roles/artifactregistry.writer`
-        
+  - `roles/artifactregistry.writer`
 - 如果 push 报权限不足，请运行：
-    
-    ```powershell
-    gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://asia-east1-docker.pkg.dev
-    ```
-    
+
+  ```powershell
+  gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://asia-east1-docker.pkg.dev
+  ```
+
 - 确保你创建过 GAR repository：
-    
-    ```bash
-    gcloud artifacts repositories create common-tools \
-      --repository-format=docker \
-      --location=asia-east1
-    ```
-    
+
+  ```bash
+  gcloud artifacts repositories create common-tools \
+    --repository-format=docker \
+    --location=asia-east1
+  ```
 
 ---
 
@@ -273,16 +259,11 @@ graph TD
 比如一键完成：
 
 - 检查镜像
-    
 - 自动生成 GAR tag
-    
 - 自动登录
-    
 - 自动推送
-    
 
 我可以为你生成一个完全可执行的 `.ps1`
-
 
 下面重点回答你的关键问题：  
 **你现在使用的是 WSL1，而不是 WSL2，那还能不能在 WSL 里 push 镜像到 GAR？**
@@ -294,11 +275,8 @@ graph TD
 因为：
 
 - **WSL1 无法直接使用 Docker Desktop 的 Linux Socket `/var/run/docker.sock`**
-    
 - **WSL2 可以，但 WSL1 不行**
-    
 - **不过 Windows Docker CLI 本来就是可从 WSL1 调用的**（通过 PATH）
-    
 
 所以你的方案是：
 
@@ -379,7 +357,7 @@ docker.exe push asia-east1-docker.pkg.dev/<PROJECT_ID>/<REPO_NAME>/network-multi
 这是整个推送流程的关键。
 
 > ❗不能用 `docker`（Linux CLI）
-> 
+>
 > 在 WSL1 里只能用 **docker.exe**（Windows CLI），否则 WSL1 会找不到 Docker Engine。
 
 ---
@@ -421,10 +399,10 @@ graph TD
 
 如果你做大量 K8S/GKE/Docker 相关工作：
 
-|版本|Docker 支持|网络兼容性|性能|推荐程度|
-|---|---|---|---|---|
-|**WSL1**|❌ 不支持原生 Linux Docker，需要通过 docker.exe|👍 网络直通 Windows|🚫 差（无原生 Linux 内核）|⭐⭐|
-|**WSL2**|✔️ 原生支持 Docker Desktop、k3d、kind|⚠️ NAT 模式（但可配置）|✔️ 非常快：完整 Linux 内核|⭐⭐⭐⭐⭐|
+| 版本     | Docker 支持                                     | 网络兼容性              | 性能                       | 推荐程度   |
+| -------- | ----------------------------------------------- | ----------------------- | -------------------------- | ---------- |
+| **WSL1** | ❌ 不支持原生 Linux Docker，需要通过 docker.exe | 👍 网络直通 Windows     | 🚫 差（无原生 Linux 内核） | ⭐⭐       |
+| **WSL2** | ✔️ 原生支持 Docker Desktop、k3d、kind           | ⚠️ NAT 模式（但可配置） | ✔️ 非常快：完整 Linux 内核 | ⭐⭐⭐⭐⭐ |
 
 如果你长期做 GKE/K8S/容器开发 → **强烈建议未来升级 WSL2**。
 
@@ -443,8 +421,8 @@ docker.exe push ...
 
 只要给我你的 project、region、repo 名称即可。
 
-
 # local ==> server ==> push
+
 下面给你 **适合你当前情况的 3 种可靠方案**：  
 **本地不能直接 push，但本地有镜像 → 如何把镜像迁移到一台有权限的服务器上让它来 push 到 GAR？**
 
@@ -482,13 +460,13 @@ network-multitool.tar
 
 ## **步骤 2：传到你的服务器（可推 GAR 那台）**
 
-### Windows PowerShell：
+### Windows PowerShell
 
 ```powershell
 scp network-multitool.tar user@server:/tmp/
 ```
 
-### 或者 WinSCP、SSHFS、高级传输工具都可以。
+### 或者 WinSCP、SSHFS、高级传输工具都可以
 
 ---
 
@@ -555,14 +533,14 @@ graph TD
 
 如果你们团队普遍在用 Google Cloud：
 
-### 本地：
+### 本地
 
 ```bash
 docker save -o network-multitool.tar pragmaprime/network-multitool:latest
 gsutil cp network-multitool.tar gs://your-bucket/tmp/
 ```
 
-### 服务器：
+### 服务器
 
 ```bash
 gsutil cp gs://your-bucket/tmp/network-multitool.tar .
@@ -598,7 +576,7 @@ oras push <GAR repo> network-multitool.tar:application/vnd.oci.image.layer.v1.ta
 
 ---
 
-# 如果你愿意，我可以帮你生成：
+# 如果你愿意，我可以帮你生成
 
 ✔ 完整的 **Windows PowerShell 一键打包+上传脚本**  
 ✔ 完整的 **服务器端 load+push 脚本**  
@@ -607,8 +585,7 @@ oras push <GAR repo> network-multitool.tar:application/vnd.oci.image.layer.v1.ta
 你只要告诉我：
 
 - server 登录方式（IP / 用户名）
-    
 - GAR 的 region / project / repo
-    
 
 我就能给你自动化脚本。
+
