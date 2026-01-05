@@ -21,6 +21,7 @@
 - 你的项目继承了一个父 POM
 - 该父 POM 可能继承了另一个父 POM（如公司级父 POM）
 - 多层继承中某一层强制指定了旧版本
+- It is necessary to exclude a certain layer in multi - level inheritance where an old version is force - specified.
 
 ### 2. Properties 优先级问题
 - Maven 按照特定顺序解析属性：命令行 > POM 内部 > 父 POM
