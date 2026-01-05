@@ -41,6 +41,7 @@ mvn help:effective-pom -Doutput=effective-pom.xml
 ```
 - 查找 `<parent>` 标签，追踪完整的继承链
 - 检查每个父 POM 的版本定义
+- Check the version definition of each parent POM
 
 ### 步骤 2: 检查所有 Properties 定义
 ```bash
