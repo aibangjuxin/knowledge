@@ -499,7 +499,7 @@ graph TD
     E --> F[User Namespace Checks]
     F --> F1[Enumerate HTTPRoute]
     F1 --> F2[Resolve parentRefs -> Gateway listeners]
-    F2 --> F3[Generate Test URLs & connectivity test (curl)]
+    F2 --> F3["Generate Test URLs & connectivity test (curl)"]
     F3 --> G[Summary and Exit]
 ```
 
