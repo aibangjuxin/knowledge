@@ -1,3 +1,26 @@
+- [核心概念：GKE Gateway API 无网关模式下的版本控制与平滑切换](#核心概念gke-gateway-api-无网关模式下的版本控制与平滑切换)
+  - [1. 架构核心组件 (Core Architecture)](#1-架构核心组件-core-architecture)
+  - [2. 版本控制策略 (Versioning Strategy)](#2-版本控制策略-versioning-strategy)
+    - [URL 抽象模型](#url-抽象模型)
+    - [关键配置：URL 重写](#关键配置url-重写)
+  - [3. 平滑切换流程与配置示例 (Workflow \& Configuration)](#3-平滑切换流程与配置示例-workflow--configuration)
+    - [3.1 阶段一：资源准备 (Pre-deployment)](#31-阶段一资源准备-pre-deployment)
+      - [1. 创建新版本 Service](#1-创建新版本-service)
+      - [2. 绑定 HealthCheckPolicy](#2-绑定-healthcheckpolicy)
+      - [3. 绑定 GCPBackendPolicy](#3-绑定-gcpbackendpolicy)
+      - [4. 验证就绪状态 (Pre-switch Verification)](#4-验证就绪状态-pre-switch-verification)
+        - [4.1 验证 K8s 资源与 Endpoint](#41-验证-k8s-资源与-endpoint)
+        - [4.2 验证 Policy 绑定状态](#42-验证-policy-绑定状态)
+        - [4.3 验证 GCP 后端 (NEG) 健康状况 (关键点)](#43-验证-gcp-后端-neg-健康状况-关键点)
+        - [4.4 内部预验证 (Shadow Test)](#44-内部预验证-shadow-test)
+    - [3.2 阶段二：流量切换 (Traffic Switching)](#32-阶段二流量切换-traffic-switching)
+      - [场景：从 v11-24 升级到 v11-25](#场景从-v11-24-升级到-v11-25)
+    - [3.3 升级流程序列图](#33-升级流程序列图)
+  - [4. 常见问题 (FAQ)](#4-常见问题-faq)
+    - [Q1: 为什么不能新建一个 HTTPRoute 来发布新版本？](#q1-为什么不能新建一个-httproute-来发布新版本)
+    - [Q2: 如何验证网关已准备就绪？](#q2-如何验证网关已准备就绪)
+    - [Q3: Ingress 和 Gateway API 在切换上有什么区别？](#q3-ingress-和-gateway-api-在切换上有什么区别)
+
 # 核心概念：GKE Gateway API 无网关模式下的版本控制与平滑切换
 
 本文档总结了基于 GKE Gateway API 直接管理后端服务版本控制与平滑升级的核心概念与最佳实践，并提供了详细的部署配置示例。
@@ -111,14 +134,46 @@ spec:
     name: service-v11-25
 ```
 
-#### 4. 验证就绪状态
-在进行流量切换前，确保新资源已就绪。
-```bash
-# 检查资源创建
-kubectl get svc service-v11-25 -n abjx-int-common
-kubectl get healthcheckpolicy hcp-service-v11-25 -n abjx-int-common
+#### 4. 验证就绪状态 (Pre-switch Verification)
 
-# 此时新服务应已启动，但没有任何外部流量进入
+在更新 `HTTPRoute` 进行一键切换前，运维/CI 必须执行以下检查，确保后端已具备承接公网流量的能力。
+
+##### 4.1 验证 K8s 资源与 Endpoint
+确保 Pod 已经成功启动并挂载到 Service 下。
+```bash
+# 1. 检查 Service 的 Endpoints 列表，确保 IP 数量符合预期
+kubectl get endpoints service-v11-25 -n abjx-int-common
+
+# 2. 检查 Pod 的就绪探针 (Readiness Probe) 状态
+kubectl get pods -l app=api-name-sprint-samples-v11-25 -n abjx-int-common
+```
+
+##### 4.2 验证 Policy 绑定状态
+检查 GKE Policy 是否成功被 Gateway 控制器 Accepted。
+```bash
+# 检查 HealthCheckPolicy 是否生效 (Status.Conditions 应为 Accepted: True)
+kubectl describe healthcheckpolicy hcp-service-v11-25 -n abjx-int-common
+
+# 检查 GCPBackendPolicy 状态
+kubectl describe gcpbackendpolicy gbp-service-v11-25 -n abjx-int-common
+```
+
+##### 4.3 验证 GCP 后端 (NEG) 健康状况 (关键点)
+GKE Gateway 模式通过 NEG 直接转发。在切流前，必须确保 GCP 负载均衡器的健康检查已通过。
+```bash
+# 1. 获取 Service 对应的 NEG 名称 (通常在 annotation 中)
+kubectl get svc service-v11-25 -n abjx-int-common -o jsonpath='{.metadata.annotations.cloud\.google\.com/neg-status}'
+
+# 2. (进阶) 使用 gcloud 或控制台验证 NEG 中的流量状态
+# 确保所有 Endpoint 在 GCP 端显示为 HEALTHY
+```
+
+##### 4.4 内部预验证 (Shadow Test)
+在不改动公网入口的情况下，内部直接访问 Service 测试。
+```bash
+# 使用 kubectl port-forward 直接请求新版本接口，验证业务逻辑是否正常
+kubectl port-forward svc/service-v11-25 8443:8443 -n abjx-int-common
+curl -vk https://localhost:8443/.well-known/healthcheck
 ```
 
 ---
@@ -195,35 +250,76 @@ spec:
 
 ```mermaid
 sequenceDiagram
-    participant Dev as 运维/CI
+    participant Dev as Ops/CI
     participant K8s as K8s API
     participant GW as GKE Gateway
+    participant SvcOld as Old Service (v11-24)
+    participant SvcNew as New Service (v11-25)
+
+    Note over Dev, SvcNew: Phase 1: Resource Preparation
+    Dev->>K8s: 1. Create Service (v11-25)
+    Dev->>K8s: 2. Bind HealthCheck/BackendPolicy (v11-25)
+    K8s->>SvcNew: Deploy Pods and register Endpoints
+    K8s->>SvcNew: GCP starts health check probing
+    SvcNew-->>K8s: Health Check Passed (Healthy)
+
+    Note over Dev, SvcNew: Phase 2: Verification
+    Dev->>K8s: Check Service and Policy status
+    K8s->>Dev: Resources Ready
+
+    Note over Dev, SvcNew: Phase 3: Switching
+    Dev->>K8s: Update HTTPRoute (Point to v11-25)
+    K8s->>GW: Atomically update forwarding rules
+    
+    par Smooth Traffic Migration
+        GW->>SvcOld: Stop forwarding traffic
+        GW->>SvcNew: Start forwarding traffic
+    end
+
+    Note over Dev, SvcNew: Phase 4: Verification & Cleanup
+    Dev->>GW: Verify /v2025/health response
+    Dev->>K8s: Delete Old Service (v11-24)
+```
+---
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Dev as 运维 / CI Control
+    participant K8s as K8s API Server
+    participant GW as GKE Gateway (LB)
     participant SvcOld as 旧服务 (v11-24)
     participant SvcNew as 新服务 (v11-25)
 
-    Note over Dev, SvcNew: 阶段一：资源准备
-    Dev->>K8s: 1. 创建 Service (v11-25)
-    Dev->>K8s: 2. 绑定 HealthCheck/BackendPolicy (v11-25)
-    K8s->>SvcNew: 部署 Pods 并注册 Endpoint
-    K8s->>SvcNew: GCP 开始健康检查探测
-    SvcNew-->>K8s: Health Check Passed (Healthy)
-
-    Note over Dev, SvcNew: 阶段二：验证
-    Dev->>K8s: 检查 Service 和 Policy 状态
-    K8s->>Dev: 资源就绪
-
-    Note over Dev, SvcNew: 阶段三：切换
-    Dev->>K8s: 更新 HTTPRoute (指向 v11-25)
-    K8s->>GW: 原子更新转发规则
-    
-    par 流量平滑迁移
-        GW->>SvcOld: 停止转发流量
-        GW->>SvcNew: 开始转发流量
+    rect rgb(235, 245, 255)
+        Note over Dev, SvcNew: 阶段一：资源准备 (Resource Preparation)
+        Dev->>K8s: 创建 Service / HealthCheck / Policy (v11-25)
+        K8s-->>SvcNew: 部署 Pods 并注册 Endpoint
+        K8s-->>GW: GCP 探测器开始健康检查
+        SvcNew-->>K8s: Health Check Passed (Healthy)
     end
 
-    Note over Dev, SvcNew: 阶段四：验证与清理
-    Dev->>GW: 验证 /v2025/health 响应
-    Dev->>K8s: 删除旧服务 (v11-24)
+    rect rgb(255, 255, 240)
+        Note over Dev, SvcNew: 阶段二：预取验证 (Verification)
+        Dev->>K8s: 检查 Service 与 Policy 状态
+        K8s-->>Dev: 资源就绪且后端健康
+    end
+
+    rect rgb(235, 255, 235)
+        Note over Dev, SvcNew: 阶段三：原子切换 (Traffic Switching)
+        Dev->>K8s: 更新 HTTPRoute (指向 v11-25)
+        K8s->>GW: 同步转发规则 (Atomic Update)
+        
+        par 流量平滑平移
+            GW->>SvcOld: 按照 Draining 策略停止流量
+            GW->>SvcNew: 开始分发流量至新版本
+        end
+    end
+
+    rect rgb(255, 240, 240)
+        Note over Dev, SvcNew: 阶段四：拨测与清理 (Post-deployment)
+        Dev->>GW: 验证外部健康检查接口响应
+        Dev->>K8s: 删除旧服务与关联资源 (v11-24)
+    end
 ```
 
 ---
