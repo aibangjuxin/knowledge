@@ -1,9 +1,13 @@
 - [核心概念：GKE Gateway API 无网关模式下的版本控制与平滑切换](#核心概念gke-gateway-api-无网关模式下的版本控制与平滑切换)
   - [1. 架构核心组件 (Core Architecture)](#1-架构核心组件-core-architecture)
+    - [1.1 整体架构视图](#11-整体架构视图)
+    - [1.2 对象关系图 (ER Diagram)](#12-对象关系图-er-diagram)
   - [2. 版本控制策略 (Versioning Strategy)](#2-版本控制策略-versioning-strategy)
     - [URL 抽象模型](#url-抽象模型)
+    - [多版本并存架构视图](#多版本并存架构视图)
     - [关键配置：URL 重写](#关键配置url-重写)
   - [3. 平滑切换流程与配置示例 (Workflow \& Configuration)](#3-平滑切换流程与配置示例-workflow--configuration)
+    - [3.0 版本切换全流程视图](#30-版本切换全流程视图)
     - [3.1 阶段一：资源准备 (Pre-deployment)](#31-阶段一资源准备-pre-deployment)
       - [1. 创建新版本 Service](#1-创建新版本-service)
       - [2. 绑定 HealthCheckPolicy](#2-绑定-healthcheckpolicy)
@@ -15,7 +19,9 @@
         - [4.4 内部预验证 (Shadow Test)](#44-内部预验证-shadow-test)
     - [3.2 阶段二：流量切换 (Traffic Switching)](#32-阶段二流量切换-traffic-switching)
       - [场景：从 v11-24 升级到 v11-25](#场景从-v11-24-升级到-v11-25)
+      - [流量分配机制](#流量分配机制)
     - [3.3 升级流程序列图](#33-升级流程序列图)
+    - [3.4 资源清理生命周期](#34-资源清理生命周期)
   - [4. 常见问题 (FAQ)](#4-常见问题-faq)
     - [Q1: 为什么不能新建一个 HTTPRoute 来发布新版本？](#q1-为什么不能新建一个-httproute-来发布新版本)
     - [Q2: 如何验证网关已准备就绪？](#q2-如何验证网关已准备就绪)
@@ -42,6 +48,87 @@
     *   **HealthCheckPolicy** & **GCPBackendPolicy**: 必须**独立绑定**到每一个版本的 Service 上。
     *   Policy 的 `metadata.name` 不参与路由逻辑，唯一生效条件是 `targetRef` 指向对应的 Service。
 
+### 1.1 整体架构视图
+
+```mermaid
+graph TB
+    subgraph "外部流量入口"
+        Client[客户端请求<br/>dev.goole.cloud.uk.aibang]
+        Nginx[Nginx L7 负载均衡<br/>location /api-name-type-ri-sb-samples]
+    end
+    
+    subgraph "GKE Gateway Layer"
+        Gateway[GKE Gateway<br/>abjx-common-gateway]
+        HTTPRoute[HTTPRoute<br/>api-name-type-ri-sb-samples-route]
+    end
+    
+    subgraph "Backend Services"
+        SvcOld[Service 2025-11-19<br/>Port 443]
+        SvcNew[Service 2025-12-18<br/>Port 443]
+    end
+    
+    subgraph "应用层 Pods"
+        PodOld1[Pod v2025-11-19-1]
+        PodOld2[Pod v2025-11-19-2]
+        PodOld3[Pod v2025-11-19-3]
+        PodNew1[Pod v2025-12-18-1]
+        PodNew2[Pod v2025-12-18-2]
+        PodNew3[Pod v2025-12-18-3]
+    end
+    
+    Client -->|HTTPS| Nginx
+    Nginx -->|proxy_pass| Gateway
+    Gateway -->|路由规则| HTTPRoute
+    
+    HTTPRoute -->|weight: 80| SvcOld
+    HTTPRoute -->|weight: 20| SvcNew
+    
+    SvcOld -.->|selector: version=2025-11-19| PodOld1
+    SvcOld -.->|selector: version=2025-11-19| PodOld2
+    SvcOld -.->|selector: version=2025-11-19| PodOld3
+    
+    SvcNew -.->|selector: version=2025-12-18| PodNew1
+    SvcNew -.->|selector: version=2025-12-18| PodNew2
+    SvcNew -.->|selector: version=2025-12-18| PodNew3
+    
+    style Client fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    style Nginx fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style Gateway fill:#f3e5f5,stroke:#4a148c,stroke-width:3px
+    style HTTPRoute fill:#e8f5e9,stroke:#1b5e20,stroke-width:3px
+    style SvcOld fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    style SvcNew fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
+```
+
+### 1.2 对象关系图 (ER Diagram)
+
+```mermaid
+erDiagram
+    GATEWAY ||--o{ HTTPROUTE : "references"
+    HTTPROUTE ||--o{ SERVICE : "backendRefs"
+    SERVICE ||--o{ DEPLOYMENT : "selector"
+    DEPLOYMENT ||--o{ POD : "creates"
+    
+    GATEWAY {
+        string name "abjx-common-gateway"
+        string gatewayClassName "gke-l7-global-external-managed"
+    }
+    
+    HTTPROUTE {
+        string name "v2025-route"
+        string pathPrefix "/api/v2025"
+    }
+    
+    SERVICE {
+        string name "service-v2025-12-18"
+        int weight "20"
+    }
+    
+    POD {
+        string status "Running"
+        map labels "version=2025-12-18"
+    }
+```
+
 ---
 
 ## 2. 版本控制策略 (Versioning Strategy)
@@ -54,6 +141,41 @@
     *   使用主版本号（Major Version），保持对客户端的长期承诺。
 *   **内部路由 (Internal)**: 转发至 `service-v11-25`
     *   使用具体的补丁版本（Patch Version），便于回滚和排查。
+
+    *   使用具体的补丁版本（Patch Version），便于回滚和排查。
+
+### 多版本并存架构视图
+
+```mermaid
+graph TB
+    subgraph "命名空间: ns-int-common-ms"
+        subgraph "Gateway & Routing"
+            GW[Gateway<br/>abjx-common-gateway]
+            HR[HTTPRoute<br/>版本路由控制器]
+        end
+        
+        subgraph "Version Old (v11-24)"
+            Deploy1[Deployment<br/>v11-24]
+            Svc1[Service<br/>v11-24]
+            Svc1 -.-> Pod1[Pod v11-24]
+        end
+        
+        subgraph "Version New (v11-25)"
+            Deploy2[Deployment<br/>v11-25]
+            Svc2[Service<br/>v11-25]
+            Svc2 -.-> Pod2[Pod v11-25]
+        end
+    end
+    
+    GW --> HR
+    HR -->|weight: 80%| Svc1
+    HR -->|weight: 20%| Svc2
+    
+    style GW fill:#9c27b0,stroke:#4a148c,color:#fff,stroke-width:3px
+    style HR fill:#7b1fa2,stroke:#4a148c,color:#fff,stroke-width:2px
+    style Svc1 fill:#ff8a65,stroke:#bf360c,stroke-width:2px
+    style Svc2 fill:#9ccc65,stroke:#33691e,stroke-width:2px
+```
 
 ### 关键配置：URL 重写
 
@@ -72,6 +194,37 @@ graph TD
 ## 3. 平滑切换流程与配置示例 (Workflow & Configuration)
 
 为实现**零停机（Zero-Downtime）**部署，必须严格遵循以下流程。核心原则是：**先部署验证，后原子切换**。
+
+### 3.0 版本切换全流程视图
+
+```mermaid
+flowchart TD
+    Start([开始版本升级]) --> PrepDeploy[准备新版本 Deployment]
+    
+    PrepDeploy --> CreateYAML[创建 Deployment YAML]
+    CreateYAML --> ApplyDeploy[kubectl apply]
+    
+    ApplyDeploy --> WaitPods{等待 Pod Ready}
+    WaitPods -->|超时| RollbackDeploy[回滚]
+    WaitPods -->|Ready| CreateService[创建新版本 Service]
+    
+    CreateService --> ApplyService[绑定 Health/Backend Policies]
+    ApplyService --> UpdateHTTPRoute[更新 HTTPRoute 配置]
+    
+    UpdateHTTPRoute --> Stage1[阶段 1: 灰度 20%]
+    Stage1 --> Monitor{监控指标}
+    
+    Monitor -->|异常| Rollback[切回 100% 旧版本]
+    Monitor -->|正常| Stage2[阶段 2: 全量切换 100%]
+    
+    Stage2 --> FinalVerify{最终验证}
+    FinalVerify -->|稳定| Cleanup[清理旧资源]
+    
+    style Start fill:#4fc3f7,stroke:#0277bd,stroke-width:2px
+    style Stage1 fill:#ffb74d,stroke:#ef6c00,stroke-width:2px
+    style Stage2 fill:#81c784,stroke:#2e7d32,stroke-width:2px
+    style Rollback fill:#ef5350,stroke:#b71c1c,stroke-width:2px
+```
 
 ### 3.1 阶段一：资源准备 (Pre-deployment)
 
@@ -246,6 +399,24 @@ spec:
           weight: 1
     ```
 
+#### 流量分配机制
+
+```mermaid
+graph LR
+    subgraph "HTTPRoute 流量分配逻辑"
+        Input[100 个请求进入]
+        
+        Input -->|weight: 80| Old[80 个请求<br/>→ v11-24]
+        Input -->|weight: 20| New[20 个请求<br/>→ v11-25]
+        
+        Old -->|Round Robin| OldPod1[Pod-1]
+        New -->|Round Robin| NewPod1[Pod-1]
+    end
+    style Input fill:#bbdefb,stroke:#0d47a1,stroke-width:2px
+    style Old fill:#ffccbc,stroke:#bf360c,stroke-width:2px
+    style New fill:#c5e1a5,stroke:#33691e,stroke-width:2px
+```
+
 ### 3.3 升级流程序列图
 
 ```mermaid
@@ -320,6 +491,24 @@ sequenceDiagram
         Dev->>GW: 验证外部健康检查接口响应
         Dev->>K8s: 删除旧服务与关联资源 (v11-24)
     end
+```
+
+### 3.4 资源清理生命周期
+
+```mermaid
+timeline
+    title 版本清理生命周期管理
+    section 新版本部署
+        T+0h : 部署 Deployment v2
+             : 创建 Service v2
+             : HTTPRoute 灰度 20%
+    section 灰度验证
+        T+2h : 增加至 100% 流量
+    section 稳定观察
+        T+24h : 移除旧 backendRef
+    section 资源清理
+        T+72h : 删除 Service v1
+              : 删除 Deployment v1
 ```
 
 ---

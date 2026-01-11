@@ -493,3 +493,60 @@ timeline
 ---
 
 这些图表涵盖了从架构概览、流量分配、版本切换、监控回滚到资源清理的完整流程。每个图表都可以独立使用，也可以组合展示给团队成员理解整个灰度发布系统。
+
+---
+
+## 版本控制核心时序与逻辑
+
+### 1. URL 重写逻辑模型
+
+```mermaid
+graph TD
+    Client[Client Request] -->|/api/v2025/users| GW[GKE Gateway]
+    GW -->|Match PathPrefix: /api/v2025| Route[HTTPRoute]
+    Route -->|URLRewrite: ReplacePrefix /api/v2025.11.23| Svc[Service: v2025.11.23]
+    Svc --> Pod[Pod: v2025.11.23]
+```
+
+### 2. 版本升级详细时序图
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Dev as Ops / CI Control
+    participant K8s as K8s API Server
+    participant GW as GKE Gateway (LB)
+    participant SvcOld as Old Service (v11-24)
+    participant SvcNew as New Service (v11-25)
+
+    rect rgb(235, 245, 255)
+        Note over Dev, SvcNew: Phase 1: Resource Preparation
+        Dev->>K8s: Create Service / HealthCheck / Policy (v11-25)
+        K8s-->>SvcNew: Deploy Pods and register Endpoints
+        K8s-->>GW: GCP Probes start Health Checks
+        SvcNew-->>K8s: Health Check Passed (Healthy)
+    end
+
+    rect rgb(255, 255, 240)
+        Note over Dev, SvcNew: Phase 2: Verification
+        Dev->>K8s: Check Service and Policy status
+        K8s-->>Dev: Resources ready and backend healthy
+    end
+
+    rect rgb(235, 255, 235)
+        Note over Dev, SvcNew: Phase 3: Traffic Switching
+        Dev->>K8s: Update HTTPRoute (pointing to v11-25)
+        K8s->>GW: Sync forwarding rules (Atomic Update)
+        
+        par Smooth Traffic Migration
+            GW->>SvcOld: Stop traffic following Draining policy
+            GW->>SvcNew: Start distributing traffic to new version
+        end
+    end
+
+    rect rgb(255, 240, 240)
+        Note over Dev, SvcNew: Phase 4: Post-deployment & Cleanup
+        Dev->>GW: Verify external health check interface response
+        Dev->>K8s: Delete old service and associated resources (v11-24)
+    end
+```
