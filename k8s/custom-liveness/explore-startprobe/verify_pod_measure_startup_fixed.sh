@@ -99,12 +99,85 @@ if [ "$READY_CONDITION" == "True" ] && [ -n "$READY_TIME" ] && [ "$READY_TIME" !
     
     STARTUP_TIME=$((READY_TIME_SEC - START_TIME_SEC))
     
+    # 验证健康检查端点的实际状态
+    echo -e "\n${YELLOW}🔍 步骤 3.1: 验证健康检查端点${NC}"
+    echo -e "${GREEN}   目标: ${PROBE_SCHEME}://localhost:${PROBE_PORT}${PROBE_PATH}${NC}"
+    
+    # 根据协议选择探测方式
+    if [[ "$PROBE_SCHEME" == "HTTPS" ]]; then
+        HEALTH_CHECK_RESULT=$(printf "GET %s HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" "${PROBE_PATH}" | \
+            kubectl exec -i ${POD_NAME} -n ${NAMESPACE} -- sh -c "openssl s_client -connect localhost:${PROBE_PORT} -quiet 2>&1" 2>/dev/null || echo "")
+        HTTP_STATUS_LINE=$(echo "$HEALTH_CHECK_RESULT" | grep -E 'HTTP/[0-9.]+ [0-9]+' | head -1)
+        HTTP_CODE=$(echo "$HTTP_STATUS_LINE" | awk '{print $2}')
+        HTTP_MESSAGE=$(echo "$HTTP_STATUS_LINE" | cut -d' ' -f3-)
+        RESPONSE_BODY=$(echo "$HEALTH_CHECK_RESULT" | sed -n '/^{/,/^}/p' | head -1)
+    else
+        HEALTH_CHECK_RESULT=$(printf "GET %s HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" "${PROBE_PATH}" | \
+            kubectl exec -i ${POD_NAME} -n ${NAMESPACE} -- sh -c "timeout 2 nc localhost ${PROBE_PORT} 2>&1" 2>/dev/null || echo "")
+        HTTP_STATUS_LINE=$(echo "$HEALTH_CHECK_RESULT" | grep -E 'HTTP/[0-9.]+ [0-9]+' | head -1)
+        HTTP_CODE=$(echo "$HTTP_STATUS_LINE" | awk '{print $2}')
+        HTTP_MESSAGE=$(echo "$HTTP_STATUS_LINE" | cut -d' ' -f3-)
+        RESPONSE_BODY=$(echo "$HEALTH_CHECK_RESULT" | sed -n '/^{/,/^}/p' | head -1)
+    fi
+    
+    if [ -z "$HTTP_CODE" ]; then
+        HTTP_CODE="000"
+        HTTP_MESSAGE="Connection Failed"
+    fi
+    
+    # 显示健康检查结果
+    if [[ "$HTTP_CODE" == "200" ]]; then
+        echo -e "${GREEN}   ✅ 健康检查状态: HTTP ${HTTP_CODE} ${HTTP_MESSAGE}${NC}"
+    else
+        echo -e "${RED}   ⚠️  健康检查状态: HTTP ${HTTP_CODE} ${HTTP_MESSAGE}${NC}"
+    fi
+    
+    if [ -n "$RESPONSE_BODY" ]; then
+        echo -e "${GREEN}   📄 响应内容: ${RESPONSE_BODY}${NC}"
+    fi
+    
+    # 获取更多 Pod 运行时信息
+    echo -e "\n${YELLOW}📊 步骤 3.2: 获取 Pod 运行时详细信息${NC}"
+    
+    # 获取容器重启次数
+    RESTART_COUNT=$(kubectl get pod ${POD_NAME} -n ${NAMESPACE} -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null)
+    echo -e "${GREEN}   容器重启次数: ${RESTART_COUNT}${NC}"
+    
+    # 获取所有探针状态
+    LIVENESS_PROBE=$(kubectl get pod ${POD_NAME} -n ${NAMESPACE} -o jsonpath='{.spec.containers[0].livenessProbe}' 2>/dev/null)
+    STARTUP_PROBE=$(kubectl get pod ${POD_NAME} -n ${NAMESPACE} -o jsonpath='{.spec.containers[0].startupProbe}' 2>/dev/null)
+    
+    if [ -n "$LIVENESS_PROBE" ] && [ "$LIVENESS_PROBE" != "null" ]; then
+        LIVENESS_PATH=$(echo "$LIVENESS_PROBE" | jq -r '.httpGet.path // "N/A"')
+        echo -e "${GREEN}   Liveness 探针路径: ${LIVENESS_PATH}${NC}"
+    fi
+    
+    if [ -n "$STARTUP_PROBE" ] && [ "$STARTUP_PROBE" != "null" ]; then
+        STARTUP_PATH=$(echo "$STARTUP_PROBE" | jq -r '.httpGet.path // "N/A"')
+        STARTUP_FAILURE=$(echo "$STARTUP_PROBE" | jq -r '.failureThreshold // "N/A"')
+        echo -e "${GREEN}   Startup 探针路径: ${STARTUP_PATH}${NC}"
+        echo -e "${GREEN}   Startup 失败阈值: ${STARTUP_FAILURE}${NC}"
+    fi
+    
+    # 获取最近的事件
+    echo -e "\n${YELLOW}📋 步骤 3.3: 最近的 Pod 事件${NC}"
+    RECENT_EVENTS=$(kubectl get events -n ${NAMESPACE} --field-selector involvedObject.name=${POD_NAME} --sort-by='.lastTimestamp' -o json 2>/dev/null | \
+        jq -r '.items[-3:] | .[] | "   \(.type): \(.reason) - \(.message)"' 2>/dev/null)
+    
+    if [ -n "$RECENT_EVENTS" ]; then
+        echo "$RECENT_EVENTS"
+    else
+        echo -e "${GREEN}   无异常事件${NC}"
+    fi
+    
     echo ""
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BLUE}📊 最终结果 (Result)${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN}✅ 应用程序启动耗时:${NC} ${STARTUP_TIME} 秒"
     echo -e "${GREEN}   (基于 Kubernetes Ready 状态)${NC}"
+    echo -e "${GREEN}   健康检查端点状态:${NC} HTTP ${HTTP_CODE} ${HTTP_MESSAGE}"
+    echo -e "${GREEN}   容器重启次数:${NC} ${RESTART_COUNT}"
     echo ""
     
     ELAPSED=$STARTUP_TIME
