@@ -3,6 +3,117 @@
 Below is a platform perspective best practice explanation + formal response that can be directly sent to users, divided into problem analysis / best practice solutions / Chinese response to users / English response to users, content can be directly used for emails, Jira, or PenTest responses.
 
 ---
+```bash
+下面我先明确回答你自己的判断是否正确，然后给你一份更“落地、可执行、能推动用户行动”的回复版本（中文版 + 英文版）。我会把责任边界说清楚，但语气仍然是平台友好型，而不是甩锅型。
+
+⸻
+
+一、先确认你的判断：你的结论是正确的，而且处理方式是对的
+
+当前事实状态（非常关键）
+	1.	GCAP 最外层 Nginx 已经正确配置了 HSTS
+	•	这是 唯一必须、也是唯一有效 的位置
+	•	✔ 满足 PenTest / Security Scan 要求
+	•	✔ 满足行业最佳实践
+	2.	当前仍然出现两个 HSTS Header
+	•	说明 下游仍然有组件在注入 HSTS
+	•	而这个注入 已经不属于平台职责范围
+	3.	用户声称应用没有加
+	•	但从技术结论来看：
+	•	要么是 Java 应用 / Framework 默认行为
+	•	要么是 Sidecar / Filter / Library
+	•	要么是 容器内 Nginx / Spring Security / Tomcat / Jetty
+
+👉 因此最终结论是：
+
+平台侧已经完成正确整改，不需要再做额外处理
+剩余的重复 Header 必须由应用侧代码或框架配置移除
+
+这个结论在技术、安全、责任划分三个层面都是站得住的。
+
+⸻
+
+二、为什么“平台不需要再改”（你可以心里很稳）
+
+从 HTTP 协议角度：
+	•	HSTS 是 Response Header
+	•	GCAP 只能：
+	•	✅ 注入一次
+	•	❌ 无法安全地区分“哪个 Header 是应用加的”
+	•	再继续在平台侧做 strip / rewrite：
+	•	会破坏 平台与应用的清晰边界
+	•	会引入 不可预测的副作用
+
+平台做到“入口唯一注入”已经是最优解
+
+⸻
+
+三、给用户的【中文版回复】——强调：平台已完成，应用需配合
+
+语气：专业、明确、可执行
+目标：推动用户修改 Java 应用配置
+
+⸻
+
+中文回复（推荐最终版）
+
+关于 Strict-Transport-Security Header 重复出现的问题，我们再次确认了当前平台与应用侧的实际状态，结论如下：
+
+	1.	GCAP 平台已在最外层入口 Nginx 统一配置并注入 Strict-Transport-Security，该配置符合行业最佳实践，并已满足安全扫描与渗透测试的要求。
+	2.	在此基础上，平台侧不会、也不应再在下游组件（包括 Pod 或内部服务）重复注入该 Header。
+	3.	当前仍然观察到的 重复 HSTS Header，说明在 应用运行时或应用框架层面 仍然存在额外的 Header 注入行为。
+	4.	由于平台已经完成了入口级别的统一控制，继续在平台层做 Header 剥离或重写将破坏平台与应用之间的职责边界，因此不属于平台侧的整改范围。
+
+下一步建议的处理方式是：
+	•	请在 Java 应用或所使用的框架中检查并移除 Strict-Transport-Security 的配置
+（例如 Spring Security、Servlet Filter、Tomcat / Jetty / Undertow 的默认安全 Header 配置）
+
+完成上述调整后：
+	•	最终客户端只会收到 一条 HSTS Header（由 GCAP 注入）
+	•	不会再出现重复 Header
+	•	同时保持平台级与应用级安全职责的清晰划分
+
+如需要，我们可以协助一起定位应用侧具体是哪一层注入了该 Header。
+
+⸻
+
+四、给用户的【英文版回复】——同样强调“平台已完成整改”
+
+⸻
+
+English Reply (Final Recommended Version)
+
+We have revalidated the current state of the platform and application behavior regarding the duplicate Strict-Transport-Security headers. The conclusion is as follows:
+
+	1.	The GCAP platform has already correctly configured and injected Strict-Transport-Security at the outermost Nginx ingress, which aligns with industry best practices and fully satisfies penetration testing and security scan requirements.
+	2.	After this configuration, the platform does not and should not inject HSTS again at downstream components (including pods or internal services).
+	3.	The fact that duplicate HSTS headers are still observed indicates that additional header injection is occurring at the application runtime or framework level.
+	4.	Since the platform-level entry control has been completed, further stripping or rewriting headers at the platform layer would break the responsibility boundary between platform and application, and therefore is not considered a platform-side fix.
+
+Recommended next steps:
+	•	Please review and remove any Strict-Transport-Security configuration from the Java application or the underlying framework
+(for example: Spring Security default headers, Servlet Filters, or container-level security headers in Tomcat / Jetty / Undertow).
+
+After this adjustment:
+	•	Only a single HSTS header (injected by GCAP) will be returned to the client
+	•	Duplicate headers will no longer appear
+	•	A clear separation of responsibilities between the platform and application layers will be maintained
+
+We are happy to assist in identifying which application layer is injecting the header if needed.
+
+⸻
+
+五、你现在可以非常笃定的一句话（内部用）
+
+GCAP already enforces HSTS at the correct boundary. Any remaining duplication is application responsibility.
+
+如果你愿意，下一步我可以直接帮你：
+	•	写一个 Spring Boot / Spring Security 去掉 HSTS 的配置示例
+	•	或给你一个 Debug checklist（如何证明是应用加的）
+	•	或直接帮你准备 PenTest Closing Comment
+
+你现在这个处理方式是标准平台 Owner 级别的正确决策。
+```
 
 ## 1. Problem Analysis (Platform Perspective)
 
