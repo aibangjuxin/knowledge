@@ -704,3 +704,113 @@ Heap 健康 ≠ Pod 健康
 你只需要告诉我：
 
 👉 **Pod memory limit + Java 技术栈（Spring / Netty / gRPC）**
+
+---
+
+# Qwen Code 补充分析
+
+## 十三、Qwen Code 视角下的 G1GC 优化策略
+
+### 1️⃣ **容器环境下的内存预算管理**
+
+在GKE等容器环境中，理解内存的层次结构至关重要：
+
+```
+Pod Memory Limit (e.g., 3Gi)
+├── JVM Heap (controlled by -XX:MaxRAMPercentage)
+│   ├── Young Generation (Eden/Survivor regions)
+│   └── Old Generation (tenured objects)
+├── Metaspace (class metadata)
+├── Direct Memory (off-heap buffers)
+├── Thread Stacks (per-thread allocation)
+└── Native/JIT Code Cache
+```
+
+**关键洞察**：
+- JVM堆只应占用Pod限制的65-70%，为其他内存区域预留空间
+- OOMKilled由Linux内核根据RSS（Resident Set Size）判断，而非JVM堆使用量
+- G1GC的提前触发机制（IHOP）是防止OOMKilled的第一道防线
+
+### 2️⃣ **G1GC参数调优的决策树**
+
+```
+Start: Pod Memory Limit Known?
+├── Yes → Calculate MaxRAMPercentage (65-70%)
+│   ├── Is this a latency-sensitive service?
+│   │   ├── Yes → Set -XX:MaxGCPauseMillis=100-200
+│   │   └── No → Set -XX:MaxGCPauseMillis=300-500 (higher throughput)
+│   ├── Does app use lots of cached data?
+│   │   ├── Yes → Lower -XX:InitiatingHeapOccupancyPercent=25-30
+│   │   └── No → Default -XX:InitiatingHeapOccupancyPercent=30-35
+│   └── Does app create large objects frequently?
+│       ├── Yes → Set -XX:G1HeapRegionSize=16m or 32m
+│       └── No → Default -XX:G1HeapRegionSize=8m
+└── No → Ask for resource specs
+```
+
+### 3️⃣ **老年代问题的诊断优先级**
+
+当遇到内存问题时，按以下顺序排查：
+
+**P0 (最高优先级)**: **缓存泄漏**
+- 检查静态集合类（Map/List）是否有无限制增长
+- 验证缓存实现是否使用了合适的驱逐策略（LRU/LFU/TTL）
+
+**P1**: **线程相关内存泄漏**
+- 检查ThreadLocal使用后是否调用remove()
+- 验证线程池配置是否合理（避免无限增长）
+
+**P2**: **Direct Memory 问题**
+- 检查Netty、gRPC等框架的Direct Buffer使用
+- 设置明确的-XX:MaxDirectMemorySize限制
+
+**P3**: **类加载器泄漏**
+- 检查动态类加载场景（热部署、插件系统）
+- 设置-XX:MaxMetaspaceSize限制
+
+### 4️⃣ **GC日志分析的自动化思路**
+
+在生产环境中，建议建立自动化的GC日志监控：
+
+**关键指标阈值**：
+- Young GC频率 > 1次/秒 → 内存分配压力过大
+- Mixed GC持续时间 > MaxGCPauseMillis的2倍 → GC效率低下
+- Old Generation使用率 > 85%且持续增长 → 老年代回收不力
+- Full GC发生 → 系统性能严重受损
+
+**告警规则**：
+```
+IF (OldGen_Utilization > 80% AND trend = "increasing")
+THEN trigger "Potential_OldGen_Leak"
+
+IF (GC_Pause_Time > MaxGCPauseMillis * 1.5)
+THEN trigger "GC_Performance_Degraded"
+```
+
+### 5️⃣ **与HPA的协同优化**
+
+G1GC和HPA（Horizontal Pod Autoscaler）需要协同工作：
+
+**误区**：仅依赖内存利用率进行扩缩容
+- GC活动会导致内存使用率波动
+- 可能引发不必要的扩缩容震荡
+
+**推荐策略**：
+- 主要基于CPU利用率进行扩缩容
+- 内存作为辅助指标，设置较高的阈值（如85%）
+- 结合应用层面的业务指标（如请求延迟、队列长度）
+
+### 6️⃣ **实际部署检查清单**
+
+在部署使用G1GC的应用前，验证以下配置：
+
+- [ ] `-XX:+UseG1GC` 已启用
+- [ ] `-XX:+UseContainerSupport` 已启用
+- [ ] `-XX:MaxRAMPercentage` 设置为65-70%
+- [ ] `-XX:InitiatingHeapOccupancyPercent` 设置为25-35%
+- [ ] `-XX:MaxGCPauseMillis` 根据服务级别协议(SLA)设定
+- [ ] GC日志输出已配置 (`-Xlog:gc*:gc.log`)
+- [ ] Direct Memory限制已设置（如有必要）
+- [ ] HPA策略考虑了GC行为的影响
+
+通过以上分析和实践指南，可以更好地理解和应用G1GC在容器化环境中的优化策略，从而减少OOMKilled的发生并提升应用稳定性。
