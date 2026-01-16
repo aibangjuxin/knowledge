@@ -2,7 +2,7 @@
 
 ## 概述
 
-本文档提供了使用 Google Cloud Armor 地址组（Address Groups）功能来管理大量 IP 地址的详细步骤，特别适用于需要为特定路径配置 IP 访问控制且 IP 数量较多的场景。地址组是 Cloud Armor 企业版提供的功能，可以有效解决单条规则中 IP 地址数量限制（最多10个）的问题。
+本文档提供了使用 Google Cloud Armor 地址组（Address Groups）功能来管理大量 IP 地址的详细步骤，特别适用于需要为特定路径配置 IP 访问控制且 IP 数量较多的场景。地址组是 Cloud Armor 企业版提供的功能，可以有效解决单条规则中 IP 地址数量限制（最多 10 个）的问题。
 
 ## 前提条件
 
@@ -30,11 +30,11 @@
 2. 导航至 **网络安全 > 地址组**
 3. 点击 **创建地址组**
 4. 填写以下信息：
-   - **名称**：为地址组指定一个描述性名称（例如 `allowed-ips-for-admin-path`）
-   - **范围**：选择 **全局**（适用于 Cloud Armor 后端安全策略）
-   - **类型**：选择 IPv4 或 IPv6
-   - **用途**：选择 **CLOUD_ARMOR** 或 **DEFAULT,CLOUD_ARMOR**
-   - **容量**：根据需要设置（例如，对于 IPv4，可以设置为 1000）
+    - **名称**：为地址组指定一个描述性名称（例如 `allowed-ips-for-admin-path`）
+    - **范围**：选择 **全局**（适用于 Cloud Armor 后端安全策略）
+    - **类型**：选择 IPv4 或 IPv6
+    - **用途**：选择 **CLOUD_ARMOR** 或 **DEFAULT,CLOUD_ARMOR**
+    - **容量**：根据需要设置（例如，对于 IPv4，可以设置为 1000）
 5. 点击 **创建**
 
 #### 使用 gcloud 命令行
@@ -218,3 +218,341 @@ gcloud compute security-policies rules create 1200 \
 - [Cloud Armor 文档 - 使用地址组](https://cloud.google.com/armor/docs/address-groups)
 - [Cloud Armor 配额和限制](https://cloud.google.com/armor/quotas)
 - [Cloud Armor 高级规则语言参考](https://cloud.google.com/armor/docs/rules-language-reference)
+
+下面按**可操作、可验证**的方式说明，如何判断 **Cloud Armor 是 Standard 还是 Enterprise**，以及**是否支持 Address Group（地址组）**。
+
+---
+
+## **一、问题分析**
+
+你关心的核心有两点：
+
+1. **当前 GCP 工程中 Cloud Armor 使用的是 Standard 还是 Enterprise**
+2. **现有 / 可用的规则是否支持 Address Group（地址组）**
+
+这两点本质都不是“开关式配置”，而是通过 **功能是否可用 + 规则能力** 来反向判断。
+
+---
+
+## **二、如何判断 Cloud Armor 版本（Standard vs Enterprise）**
+
+### **结论先行（重要）**
+
+> **Cloud Armor 没有一个字段直接显示 “Standard / Enterprise”**
+
+> 版本是通过 **是否使用了 Enterprise-only 功能** 来体现的。
+
+---
+
+### **2.1 标准判断逻辑（最推荐）**
+
+| **能力**                            | **Standard** | **Enterprise** |
+| ----------------------------------- | ------------ | -------------- |
+| 基础 IP allow / deny                | ✅           | ✅             |
+| 基础 L7 自定义规则                  | ✅           | ✅             |
+| **Address Group（IP 地址组）**      | ❌           | ✅             |
+| **Adaptive Protection**             | ❌           | ✅             |
+| **Bot Management**                  | ❌           | ✅             |
+| **Preconfigured WAF（高级规则集）** | ❌           | ✅             |
+| **reCAPTCHA 集成**                  | ❌           | ✅             |
+
+👉 **只要你在用其中任意一个 Enterprise 功能，说明该项目已启用 Enterprise**
+
+---
+
+## **三、如何检查是否支持 Address Group（关键）**
+
+### **3.1 直接检查：是否能创建 Address Group**
+
+```
+gcloud compute security-policies address-groups list
+```
+
+#### **结果解读**
+
+- ✅ **能正常返回列表 / 为空列表**
+    - 说明 **Cloud Armor Enterprise 已启用**
+- ❌ 报错类似：
+
+```
+ERROR: (gcloud.compute.security-policies.address-groups.list)
+This feature requires Cloud Armor Enterprise
+```
+
+- -   说明 **当前是 Standard**
+
+---
+
+### **3.2 创建 Address Group（最强确认方式）**
+
+```
+gcloud compute security-policies address-groups create test-ip-group \
+  --description="test address group" \
+  --items=1.1.1.1/32 \
+  --region=global
+```
+
+- 成功 👉 **Enterprise**
+- 被拒 👉 **Standard**
+
+---
+
+## **四、现有 Cloud Armor 规则是否在使用 Address Group**
+
+### **4.1 查看 Security Policy 规则**
+
+```
+gcloud compute security-policies rules list \
+  --security-policy YOUR_POLICY_NAME
+```
+
+重点查看 match 字段：
+
+#### **使用 Address Group 的规则示例**
+
+```
+match:
+  expr:
+    expression: "inIpRange(origin.ip, 'addressGroups/my-ip-group')"
+```
+
+- 出现 addressGroups/xxx
+    👉 **一定是 Enterprise**
+
+---
+
+## **五、从 Console 页面确认（辅助）**
+
+路径：
+
+```
+Cloud Console
+→ Network Security
+→ Cloud Armor
+→ Address Groups
+```
+
+- **能看到 Address Groups 菜单**
+    - Enterprise
+- **看不到该菜单**
+    - Standard
+
+---
+
+## **六、推荐的判断流程（最佳实践）**
+
+```
+graph TD
+    A["开始"] --> B["尝试列出 Address Groups"]
+    B -->|"成功"| C["确认 Enterprise"]
+    B -->|"失败"| D["Standard"]
+    C --> E["检查规则是否引用 Address Group"]
+    D --> F["仅支持基础 IP / L7 规则"]
+```
+
+---
+
+## **七、注意事项（非常重要）**
+
+1. **不是所有工程默认都有 Enterprise**
+
+    - Enterprise 是 **计费能力级别**，不是 IAM 权限问题
+
+2. **规则能创建 ≠ 已实际使用**
+
+    - 有些项目开了 Enterprise，但规则还停留在 Standard 用法
+
+3. **Address Group 只能用于 L7（HTTP(S) LB）**
+
+    - TCP/UDP LB 不支持 Cloud Armor
+
+---
+
+## **八、一句话总结（给你对外解释用）**
+
+> Cloud Armor 没有显式版本标识，是否为 Enterprise 取决于是否使用了高级功能。
+
+> 只要项目支持 Address Group、Adaptive Protection 或高级 WAF 规则，就可以确认该项目启用了 Cloud Armor Enterprise。
+
+如果你愿意，我可以帮你：
+
+- **直接 review 一份现有 Security Policy**
+- **设计从 Standard → Enterprise 的规则演进方案**
+- **给用户一套“为什么要用 Address Group”的平台级解释文案**
+
+# 高级规则集
+
+下面我**只围绕 Preconfigured WAF（高级规则集）如何作为判断依据**来讲，给你一套**“看到就能判断是不是 Enterprise”**的标准。
+
+---
+
+## **一、问题分析**
+
+你现在的思路是正确的：
+
+> **如果我已经在 Cloud Armor 里看到了某些规则，哪些可以明确判断为 Preconfigured WAF（Enterprise-only）？**
+
+关键点在于：
+
+**Preconfigured WAF 有非常明确、可识别的“规则家族特征”**，不是泛泛的 L7 表达式。
+
+---
+
+## **二、什么才算 Preconfigured WAF（高级规则集）**
+
+### **核心判定标准（最重要）**
+
+> **凡是 match.expr 中引用了 evaluatePreconfiguredWaf() 或 Google 官方 WAF rule set 的规则，一定是 Enterprise**
+
+---
+
+## **三、最典型的 Preconfigured WAF 规则特征**
+
+### **3.1** 
+
+### **evaluatePreconfiguredWaf()**
+
+### **（100% Enterprise）**
+
+这是最明确、不可误判的特征。
+
+#### **示例（真实常见）**
+
+```
+match:
+  expr:
+    expression: "evaluatePreconfiguredWaf('xss-v33-stable')"
+```
+
+```
+match:
+  expr:
+    expression: "evaluatePreconfiguredWaf('sqli-v33-stable')"
+```
+
+```
+match:
+  expr:
+    expression: "evaluatePreconfiguredWaf('lfi-v33-stable')"
+```
+
+👉 **只要出现 evaluatePreconfiguredWaf()**
+
+- 不可能是 Standard
+- 必然是 **Cloud Armor Enterprise**
+
+---
+
+## **四、常见的 Preconfigured WAF 规则集名称（速查表）**
+
+| **攻击类型**    | **规则集示例**             | **是否 Enterprise** |
+| --------------- | -------------------------- | ------------------- |
+| SQL 注入        | sqli-v33-stable            | ✅                  |
+| XSS             | xss-v33-stable             | ✅                  |
+| LFI             | lfi-v33-stable             | ✅                  |
+| RFI             | rfi-v33-stable             | ✅                  |
+| RCE             | rce-v33-stable             | ✅                  |
+| Scanner / Probe | scannerv33-stable          | ✅                  |
+| PHP 攻击        | php-v33-stable             | ✅                  |
+| 协议违规        | protocolattack-v33-stable  | ✅                  |
+| 会话固定        | sessionfixation-v33-stable | ✅                  |
+
+> 只要是这种 _-v33-stable / _-v33-canary 形式
+
+> 👉 **100% 是 Preconfigured WAF**
+
+---
+
+## **五、容易混淆但「不是」Preconfigured WAF 的规则**
+
+### **5.1 自定义 L7 表达式（不是 Enterprise）**
+
+```
+expression: "request.path.matches('/admin.*')"
+```
+
+```
+expression: "origin.ip in ['1.1.1.1/32']"
+```
+
+```
+expression: "request.headers['user-agent'].contains('curl')"
+```
+
+❌ 这些 **全部是 Standard 就能做的**
+
+---
+
+### **5.2 rate-based rules（不是 Enterprise 判断依据）**
+
+```
+rateLimitOptions:
+  rateLimitThreshold:
+    count: 100
+    intervalSec: 60
+```
+
+- Rate limiting ≠ Preconfigured WAF
+- Standard 也支持基础 rate limit
+
+---
+
+## **六、如何在现有工程里快速排查（实操）**
+
+### **6.1 一条命令直接 grep**
+
+```
+gcloud compute security-policies rules list \
+  --security-policy YOUR_POLICY_NAME \
+  --format="yaml" | grep evaluatePreconfiguredWaf
+```
+
+- 有输出 👉 **Enterprise**
+- 无输出 👉 还不能下结论（可能没用高级规则）
+
+---
+
+### **6.2 全量查看并人工确认**
+
+```
+gcloud compute security-policies rules list \
+  --security-policy YOUR_POLICY_NAME \
+  --format="yaml"
+```
+
+重点看：
+
+- evaluatePreconfiguredWaf
+- \*-v33-stable
+- \*-v33-canary
+
+---
+
+## **七、判定流程图（给团队/用户解释用）**
+
+```
+graph TD
+    A["查看 Cloud Armor 规则"] --> B["是否存在 evaluatePreconfiguredWaf"]
+    B -->|"是"| C["Cloud Armor Enterprise"]
+    B -->|"否"| D["仅使用 Standard 能力"]
+    C --> E["规则集: sqli/xss/lfi 等"]
+    D --> F["IP/Path/Header 自定义规则"]
+```
+
+---
+
+## **八、给你一个“对外一句话说明”（非常实用）**
+
+> Cloud Armor 的 Preconfigured WAF 是 Enterprise 能力，只要规则中出现 evaluatePreconfiguredWaf() 或 Google 官方的 _-v33-_ WAF 规则集，即可确认该工程已启用 Cloud Armor Enterprise。
+
+---
+
+## **九、如果你下一步要做的事情**
+
+我可以继续帮你：
+
+- **帮你 review 一份现有 Security Policy（逐条标注 Standard / Enterprise）**
+- **设计一套从“只用 IP 规则”升级到“Preconfigured WAF + Address Group”的平台标准模板**
+- **给用户解释为什么不能在 Standard 里用这些规则（成本 & 能力边界）**
+
+你可以直接贴一条你们现在的规则出来，我帮你判定。
