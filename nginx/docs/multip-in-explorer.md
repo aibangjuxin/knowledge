@@ -1,7 +1,7 @@
 - [my requirement](#my-requirement)
   - [old flow](#old-flow)
   - [New flow](#new-flow)
-- [summary and analysis  block](#summary-and-analysis--block)
+- [Summary and analysis  block](#summary-and-analysis--block)
 - [Chatgpt](#chatgpt)
   - [**一、问题分析（核心矛盾）**](#一问题分析核心矛盾)
   - [**二、总体迁移设计（推荐架构）**](#二总体迁移设计推荐架构)
@@ -125,7 +125,7 @@ apiname2.gcp-project.domain -> 自己的独立https证书 -> https://apiname2.gc
 
 基于我的这个核心目的帮我看一下我需要做哪些调整或者能不能实现还有哪些地方需要评估和考虑。 
 
-# summary and analysis  block
+# Summary and analysis  block
 - 在不改变用户已有 API 域名 & URL 的前提下，将流量从 old flow 平滑迁移到 new flow，并最终 Demise old flow。
 - 如果证书不是 wildcard，则仍需 per-domain server block 所以如果可以的话 ，我们尽量使用泛解系证书 ，这样的话target-https-proxies update 绑定这些泛解析的证书应该就可以了。 
 -  Nginx L7 必须配置为支持 SNI (Server Name Indication)。配置要点: 确保每个 server 块准确匹配 server_name，并且分别加载各自的 ssl_certificate
@@ -134,10 +134,10 @@ apiname2.gcp-project.domain -> 自己的独立https证书 -> https://apiname2.gc
    -  https://docs.cloud.google.com/certificate-manager/docs/maps?hl=zh-cn
    -  https://docs.cloud.google.com/certificate-manager/docs/overview?hl=zh-cn#supported-certificates
    -  https://docs.cloud.google.com/certificate-manager/docs/overview?hl=zh-cn#limitations
-- 配置复用
+  如果 配置复用 可以免去二次迁移配置文件的修改
 # Chatgpt 
 
-下面基于**你的核心目标**来系统性拆解，并给出**可落地的迁移方案**与**评估点**，重点放在 **Nginx L7 如何承接 old flow 域名与路径，同时转发到 new flow（GKE Gateway）**，最终 **彻底下线 nginxL4 + ingress**。
+下面基于**核心目标**来系统性拆解，并给出**可落地的迁移方案**与**评估点**，重点放在 **Nginx L7 如何承接 old flow 域名与路径，同时转发到 new flow（GKE Gateway）**，最终 **彻底下线 nginxL4 + ingress**。
 
 ---
 
