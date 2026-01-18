@@ -135,6 +135,7 @@ apiname2.gcp-project.domain -> 自己的独立https证书 -> https://apiname2.gc
 - 如果证书不是 wildcard，则仍需 per-domain server block 所以如果可以的话 ，我们尽量使用泛解系证书 ，这样的话target-https-proxies update 绑定这些泛解析的证书应该就可以了。
 -  Nginx L7 必须配置为支持 SNI (Server Name Indication)。配置要点: 确保每个 server 块准确匹配 server_name，并且分别加载各自的 ssl_certificate
 -  配置唯一性 (Single Source of Truth)：无论是有多少个入口（Old API api.abc.com 或 New API newapi*.abc.com），后端的 location 配置管理应该只有一份。
+-  [nginx-Reuse-confd-en.md](./nginx-Reuse-confd-en.md)
 -  平滑迁移 (Smooth Migration)：支持并在未来轻松切换到统一入口，无需重写底层配置。
 -  简化证书管理 (Simplify Certs with Wildcard)：针对 "NewEPI" 约 50 个 API 的场景，使用泛域名证书减少维护成本
 
