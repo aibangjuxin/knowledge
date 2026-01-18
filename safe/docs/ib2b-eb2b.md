@@ -4,10 +4,10 @@
 
 ## **🔐 iB2B vs eB2B 说明**
 
-|**名称**|**全称**|**含义说明**|**常见场景举例**|
-|---|---|---|---|
-|iB2B|**Internal B2B**|企业 **内部系统之间（Intra-enterprise）** 的 B2B 通信与接入，强调内部可信。|同一集团下多个系统之间访问，如 GKE A 调用 GKE B 的 API|
-|eB2B|**External B2B**|企业与 **外部合作伙伴/企业（Extra-enterprise）** 的 B2B 接入和通信。|第三方合作伙伴接入平台 API，如供应商接入你的 Kong Gateway|
+|**名称**|**全称**|**含义说明**|**常见场景举例**| network |
+|---|---|---|---|---|
+|iB2B|**Internal B2B**|企业 **内部系统之间（Intra-enterprise）** 的 B2B 通信与接入，强调内部可信。|同一集团下多个系统之间访问，如 GKE A 调用 GKE B 的 API| CIDMZ |
+|eB2B|**External B2B**|企业与 **外部合作伙伴/企业（Extra-enterprise）** 的 B2B 接入和通信。|第三方合作伙伴接入平台 API，如供应商接入你的 Kong Gateway| DRN |
 
 ---
 
