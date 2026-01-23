@@ -639,7 +639,7 @@ kubectl logs -n kong -l app=kong-dp --tail=50 | grep "test-12345"
 
 下面按你的真实架构目标来做一次技术校验 + 风险点确认 + 可落地配置示例，确保这个方案在 GCP / GKE / Cloud Armor / Kong 维度是成立且可控的。
 
----
+⸻
 
 一、问题分析（你这个设计是否“成立”）
 
@@ -667,7 +667,7 @@ Cloud Armor 不能直接基于 path 生效
 
 这是 目前 GCP 官方推荐 + 可运维的方式。
 
----
+⸻
 
 二、整体请求流程验证（逐跳拆解）
 
@@ -695,7 +695,7 @@ Kong DP	API 管理 / Auth / Rate Limit	✅
 
 👉 结论：你的架构是“安全优先型、企业级可运维设计”，不是过度设计。
 
----
+⸻
 
 三、关键设计点（Cloud Armor 如何“只保护部分 API”）
 
@@ -717,7 +717,7 @@ Kong DP	API 管理 / Auth / Rate Limit	✅
 同一组 Kong DP Pod
 
 
----
+⸻
 
 四、完整流程图（Mermaid）
 
@@ -743,7 +743,7 @@ graph TD
     E3 --> F
 
 
----
+⸻
 
 五、关键配置示例（最小可行）
 
@@ -767,7 +767,7 @@ spec:
       port: 80
 
 
----
+⸻
 
 2️⃣ BackendPolicy：绑定 Cloud Armor（重点）
 
@@ -786,14 +786,14 @@ spec:
 
 👉 只有这个 Service 后面的 API 会被 Armor 强制保护
 
----
+⸻
 
 3️⃣ 不需要 Armor 的 API（对照）
 
 # 仅 HTTPRoute，不创建 BackendPolicy
 
 
----
+⸻
 
 六、为什么不建议在 Nginx L7 / L4 做 Armor？
 
@@ -804,7 +804,7 @@ Kong	安全规则和平台安全耦合，不利于合规
 GKE Gateway	✅ 原生支持 Armor / WAF / Bot / L7 DDoS
 
 
----
+⸻
 
 七、你这个架构的“隐藏优势”
 
@@ -817,7 +817,7 @@ GKE Gateway	✅ 原生支持 Armor / WAF / Bot / L7 DDoS
 	•	Adaptive Protection
 	•	Preconfigured WAF
 
----
+⸻
 
 八、注意事项（非常关键）
 	1.	确认 GKE Gateway 是 External Managed LB
@@ -825,7 +825,7 @@ GKE Gateway	✅ 原生支持 Armor / WAF / Bot / L7 DDoS
 	3.	Cloud Armor 日志建议打开
 	4.	避免在 Kong 再重复实现 WAF
 
----
+⸻
 
 九、一句话结论（可以直接拿去跟人解释）
 

@@ -1526,7 +1526,7 @@ graph TD
 
 下面我逐行拆解你这段 Shell 的真实含义，并从 安全、GKE 机制、是否必须、与 Workload Identity 的关系 四个维度帮你彻底讲清楚。
 
----
+⸻
 
 一、整体背景先给结论（先读这个）
 
@@ -1543,7 +1543,7 @@ Pod 行为	Pod 允不允许“危险行为”	pod-security.kubernetes.io/enforce
 Namespace 边界	统一策略生效范围	Namespace label
 
 
----
+⸻
 
 二、第一段：创建 Kubernetes ServiceAccount
 
@@ -1563,7 +1563,7 @@ kubectl -n $namespace create sa $gke_sa
 	•	不能访问 GCP API
 	•	只能在 K8S 内部参与 RBAC
 
----
+⸻
 
 三、第二段：Namespace 的 Pod Security enforce=baseline
 
@@ -1574,7 +1574,7 @@ kubectl label --overwrite ns $namespace pod-security.kubernetes.io/enforce=basel
 这是 Pod Security Admission（PSA） 机制
 在 Namespace 级别强制 Pod 安全规则
 
----
+⸻
 
 2️⃣ baseline 是什么级别？
 
@@ -1586,7 +1586,7 @@ baseline	生产默认推荐	中
 restricted	高安全场景	低
 
 
----
+⸻
 
 3️⃣ baseline 具体限制了什么？
 
@@ -1602,7 +1602,7 @@ HostPath 挂载	❌
 ⚠️ baseline 不强制非 root
 如果你想极致安全，用 restricted
 
----
+⸻
 
 4️⃣ 这个 label 是不是必须的？
 
@@ -1619,7 +1619,7 @@ Infra 组件	❌（可能需要 privileged）
 它解决的是「Pod 能不能做危险事情」，
 不是「Pod 能不能访问 GCP」
 
----
+⸻
 
 四、第三段：ServiceAccount annotation（核心）
 
@@ -1638,7 +1638,7 @@ iam.gke.io/gcp-service-account=$rt_sa
 👉 在访问 GCP 时
 👉 伪装成这个 GCP ServiceAccount
 
----
+⸻
 
 2️⃣ 没有这个 annotation 会怎样？
 
@@ -1648,7 +1648,7 @@ iam.gke.io/gcp-service-account=$rt_sa
 绑错 GCP SA	❌ IAM 权限错误
 
 
----
+⸻
 
 3️⃣ annotation 是不是必须的？
 
@@ -1668,7 +1668,7 @@ iam.gke.io/gcp-service-account=$rt_sa
 	•	纯 HTTP API
 	•	不访问任何 GCP 资源
 
----
+⸻
 
 五、它和 Workload Identity 的关系（重点）
 
@@ -1693,7 +1693,7 @@ GCP SA 没 IAM	403
 GCP SA 未授权 impersonation	403
 
 
----
+⸻
 
 六、从“安全角度”的完整评价
 
@@ -1713,7 +1713,7 @@ baseline	“你能干什么”
 
 两者互补，不能替代
 
----
+⸻
 
 七、什么时候 annotation 可以不加？（真实平台经验）
 
@@ -1725,7 +1725,7 @@ baseline	“你能干什么”
 平台 Runtime	✅
 
 
----
+⸻
 
 八、一句话终极总结（可以直接对外解释）
 
@@ -1771,13 +1771,13 @@ Pod 永远不会“直接”拿到 GCP 凭证，它只能通过 Workload Identit
 
 下面我按真实平台使用场景来系统性罗列 Workload Identity（WI）在 GKE 中最常见、最有价值、也是最推荐使用的场景，并同时说明 是否必须 / 是否强烈推荐 / 是否可选，方便你直接用于平台规范或安全评审。
 
----
+⸻
 
 一、先给一句总定义（便于对外解释）
 
 Workload Identity 用于让 GKE 中的 Pod 以“最小权限的 GCP 身份”安全访问 GCP 资源，避免节点凭证泄漏与静态密钥管理。
 
----
+⸻
 
 二、最常见 & 强烈推荐场景（生产必选）
 
@@ -1798,7 +1798,7 @@ roles/storage.objectViewer
 roles/storage.objectCreator
 
 
----
+⸻
 
 2️⃣ 访问 Secret Manager（强烈推荐）
 
@@ -1811,7 +1811,7 @@ API Token	第三方调用
 	•	无明文 Secret 挂载
 	•	支持 Secret Rotation
 
----
+⸻
 
 3️⃣ Pub/Sub（事件驱动架构）
 
@@ -1823,7 +1823,7 @@ Consumer	subscribe
 	•	API → Pub/Sub → Worker
 	•	异步解耦
 
----
+⸻
 
 4️⃣ BigQuery（数据平台 / 审计）
 
@@ -1833,7 +1833,7 @@ Consumer	subscribe
 分析数据	离线任务
 
 
----
+⸻
 
 5️⃣ Cloud SQL / AlloyDB（通过 Connector）
 
@@ -1845,7 +1845,7 @@ WI 作用
 	•	避免 DB 静态账号泄漏
 	•	支持自动轮转
 
----
+⸻
 
 三、平台 / 运维 / 控制面场景（非常典型）
 
@@ -1860,7 +1860,7 @@ WI 作用
 	•	不需要给 Runner JSON Key
 	•	可按 Namespace 隔离
 
----
+⸻
 
 7️⃣ 平台 Runtime / Gateway（你非常贴合的场景）
 
@@ -1874,7 +1874,7 @@ API Platform	配额 / 审计
 	•	身份强隔离
 	•	防止越权
 
----
+⸻
 
 四、安全增强 & 特殊能力场景
 
@@ -1885,7 +1885,7 @@ Token 加密	PII
 数据保护	密钥托管
 
 
----
+⸻
 
 9️⃣ Artifact Registry（拉 / 推镜像）
 
@@ -1894,7 +1894,7 @@ Token 加密	PII
 Scanner	拉镜像
 
 
----
+⸻
 
 🔟 调用 GCP API（通用）
 
@@ -1904,7 +1904,7 @@ IAM	查询策略
 Monitoring	上报指标
 
 
----
+⸻
 
 五、什么时候「不需要」Workload Identity？
 
@@ -1916,7 +1916,7 @@ Monitoring	上报指标
 👉 是否使用 WI 的判断标准只有一个：
 Pod 是否需要访问 GCP 控制面或数据面
 
----
+⸻
 
 六、Workload Identity 带来的核心安全收益（评审用）
 
@@ -1928,7 +1928,7 @@ Pod 是否需要访问 GCP 控制面或数据面
 攻击面	显著降低
 
 
----
+⸻
 
 七、推荐你在平台中定义的「强制使用 WI」对象
 
@@ -1940,7 +1940,7 @@ CI/CD	必须
 Infra Pod	例外评估
 
 
----
+⸻
 
 八、终极一句话总结（你可以直接对外用）
 
@@ -1953,13 +1953,13 @@ Workload Identity 是 GKE 中唯一推荐的、无密钥、可审计、最小权
 
 下面给你一份**「平台级 Workload Identity 使用白名单 / 黑名单」，是可以直接落到制度、平台准入、Namespace 模板里的版本**，偏你现在做的平台视角，而不是教材解释。
 
----
+⸻
 
 一、设计目标（一句话）
 
 只有“必须访问 GCP 的工作负载”才能使用 Workload Identity，其余一律禁止，避免权限泛滥。
 
----
+⸻
 
 二、Workload Identity【强制白名单】（必须使用）
 
@@ -1977,7 +1977,7 @@ Nginx + Lua 控制逻辑	读取 GCP 配置
 	•	1 Pod / 1 K8S SA / 1 GCP SA
 	•	禁止跨 Namespace 复用
 
----
+⸻
 
 2️⃣ 数据访问类服务（强制）
 
@@ -1988,7 +1988,7 @@ Pub/Sub	事件驱动
 Secret Manager	拉取密钥
 
 
----
+⸻
 
 3️⃣ CI / CD / Automation（强制）
 
@@ -1998,7 +1998,7 @@ GKE 内 Runner	推镜像 / 部署
 自动化脚本	Terraform / gcloud
 
 
----
+⸻
 
 4️⃣ 数据库与密钥类（强制）
 
@@ -2008,7 +2008,7 @@ AlloyDB	IAM Auth
 KMS	加解密
 
 
----
+⸻
 
 三、Workload Identity【条件白名单】（评估后允许）
 
@@ -2022,7 +2022,7 @@ KMS	加解密
 多租户	强烈建议
 
 
----
+⸻
 
 6️⃣ 运维 / 监控类 Pod
 
@@ -2031,7 +2031,7 @@ KMS	加解密
 拉配置	GCS
 
 
----
+⸻
 
 四、Workload Identity【黑名单】（禁止使用）
 
@@ -2045,7 +2045,7 @@ Sidecar	权限冗余
 Cache	无云资源访问
 
 
----
+⸻
 
 8️⃣ 不可信 / 外部代码（禁止）
 
@@ -2055,7 +2055,7 @@ PoC / 临时 Pod	权限滥用
 Debug Pod	人为误操作
 
 
----
+⸻
 
 9️⃣ 基础设施级 Pod（默认禁止）
 
@@ -2065,7 +2065,7 @@ CSI	有官方方式
 DaemonSet 工具	容易横向移动
 
 
----
+⸻
 
 五、平台强制策略建议（你可以直接用）
 
@@ -2077,7 +2077,7 @@ DaemonSet 工具	容易横向移动
 平台 Namespace	强制
 
 
----
+⸻
 
 2️⃣ ServiceAccount 创建规范
 
@@ -2086,7 +2086,7 @@ DaemonSet 工具	容易横向移动
 禁止多个 K8S SA 绑定同一个高权限 GCP SA
 
 
----
+⸻
 
 3️⃣ 审计与检测（平台层）
 
@@ -2096,13 +2096,13 @@ IAM Role	是否超权限
 Namespace	是否在白名单
 
 
----
+⸻
 
 六、简化版对外解释（一句话）
 
 Workload Identity 不是“能不能用”的问题，而是“谁有资格用”的问题。平台只允许必须访问 GCP 的工作负载使用它。
 
----
+⸻
 
 如果你愿意，下一步我可以帮你直接输出：
 	•	✅ Namespace + WI 强制模板

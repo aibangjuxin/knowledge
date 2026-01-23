@@ -52,7 +52,7 @@ iam.gserviceaccount.com	GCP Service Account 域
 ✅ 结论：
 这是 Cloud Scheduler 专属的 Google 管理 Service Agent。
 
----
+⸻
 
 4. Service Agent 在做什么？
 
@@ -68,7 +68,7 @@ iam.gserviceaccount.com	GCP Service Account 域
 
 这些操作 不能用你的用户身份执行，必须由 Google 后端完成。
 
----
+⸻
 
 5. roles/cloudscheduler.serviceAgent 的作用
 
@@ -91,7 +91,7 @@ roles/cloudscheduler.serviceAgent
 
 ⚠️ 具体 permission 列表通常不完全公开，这是 Google 内部定义的 系统角色
 
----
+⸻
 
 6. 这个角色是如何被授予的？
 
@@ -112,7 +112,7 @@ service-123456789012@gcp-sa-cloudscheduler.iam.gserviceaccount.com
   → roles/cloudscheduler.serviceAgent
 
 
----
+⸻
 
 7. 作用域（Scope）与安全影响
 
@@ -127,7 +127,7 @@ Project → IAM → Binding
 
 ✅ 这是安全基线做法
 
----
+⸻
 
 7.2 组织级绑定（高风险）
 
@@ -149,7 +149,7 @@ service-123456789012@gcp-sa-cloudscheduler.iam.gserviceaccount.com
 
 ⚠️ 这通常不是必须的，也不推荐。
 
----
+⸻
 
 8. Service Agent vs 普通 Service Account 对比
 
@@ -162,7 +162,7 @@ IAM 角色	系统角色为主	自由绑定
 可删除性	❌（不建议）	✅
 
 
----
+⸻
 
 9. 安全与治理最佳实践
 
@@ -178,14 +178,14 @@ IAM 角色	系统角色为主	自由绑定
 	•	是否存在 过度作用域
 	•	是否被误授予 非系统角色
 
----
+⸻
 
 10. 一句话总结
 
 Service Agent 是 Google 托管服务在你项目里的“官方执行身份”。
 它不是给你用的，而是 Google 用来安全地帮你把服务跑起来的。
 
----
+⸻
 
 11. Cloud Scheduler Service Agent 速查表（Quick Reference）
 
@@ -198,7 +198,7 @@ Service Agent	service-{projectNumber}@gcp-sa-cloudscheduler.iam.gserviceaccount.
 高风险点	绑定在 Org 级
 
 
----
+⸻
 
 如果你愿意，下一步我可以帮你：
 	•	对比 Service Agent vs Workload Identity

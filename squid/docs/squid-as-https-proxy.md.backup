@@ -389,7 +389,7 @@ graph LR
 
 下面按平台代理 + 网络协议的视角，把你的两个问题一次性讲清楚，并给出可行方案与不推荐方案的边界。
 
----
+⸻
 
 一、问题分析（反推当前 Squid 行为）
 
@@ -433,7 +433,7 @@ http_access allow CONNECT SSL_ports
 你现在用的是 标准 Forward HTTP Proxy + CONNECT 模式
 这是企业内最常见、最稳定的做法。
 
----
+⸻
 
 二、你想要的目标：Proxy 本身也加密
 
@@ -449,7 +449,7 @@ curl -x https://microsoft.env.region.aibang:3128 https://www.microsoft.com
 
 HTTPS Proxy / TLS-encrypted Forward Proxy
 
----
+⸻
 
 三、是否可行？结论先给
 
@@ -459,7 +459,7 @@ HTTPS Proxy（Proxy 本身 TLS）	⚠️ 可行	⭐⭐（复杂、不常用）
 HTTPS Proxy + MITM 解密	❌	🚫 强烈不建议
 
 
----
+⸻
 
 四、HTTPS Proxy（Proxy 本身加密）能不能做？
 
@@ -467,7 +467,7 @@ HTTPS Proxy + MITM 解密	❌	🚫 强烈不建议
 
 ❌ 但 Squid 并不原生推荐
 
----
+⸻
 
 方案 A：Squid 原生 https_port（不推荐）
 
@@ -494,7 +494,7 @@ HTTPS forward proxy is rarely needed
 	•	强制公网传输代理地址
 	•	特殊合规场景
 
----
+⸻
 
 方案 B：推荐架构（生产级）
 
@@ -517,7 +517,7 @@ Squid
 Internet
 
 
----
+⸻
 
 Nginx 示例（L4/L7 均可）
 
@@ -545,7 +545,7 @@ Squid 配置不变	稳定
 
 📌 这是云平台最佳实践
 
----
+⸻
 
 五、绝对不推荐的方案（容易踩坑）
 
@@ -562,7 +562,7 @@ ssl_bump bump all
 
 🚫 除非你是做安全审计盒子，否则别碰
 
----
+⸻
 
 六、决策总结矩阵
 
@@ -574,14 +574,14 @@ Proxy 地址走公网	Nginx / GLB TLS 包 Squid
 HTTPS 内容解析	❌ 不做
 
 
----
+⸻
 
 七、一句话结论（给架构评审用）
 
 HTTPS 本身已经端到端加密，没有必要让 Forward Proxy 再做 TLS
 如果一定要加密代理入口，应在 Squid 前面用 Nginx / GLB 做 TLS，而不是让 Squid 自己承担 HTTPS Proxy 角色
 
----
+⸻
 
 如果你愿意，下一步我可以直接帮你：
 	•	设计 GCP GLB + Squid Forward Proxy 标准架构

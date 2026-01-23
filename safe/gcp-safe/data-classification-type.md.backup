@@ -117,7 +117,7 @@ graph TD
     D -. "No Cache / No Disk" .- D
 
 
----
+⸻
 
 用户为什么会“特别强调”这一点？
 
@@ -131,7 +131,7 @@ graph TD
 
 他们不想把“数据安全责任”转移给平台
 
----
+⸻
 
 给用户的标准化安全表述（可直接用）
 
@@ -142,7 +142,7 @@ For Restricted / Highly Restricted data, the platform acts as a stateless traffi
 	•	Platform operators have no access to customer data
 	•	End-to-end encryption (TLS / mTLS) is enforced
 
----
+⸻
 
 注意事项 & 最佳实践
 	•	🚫 禁用任何 L7 Payload-based 功能
@@ -151,6 +151,6 @@ For Restricted / Highly Restricted data, the platform acts as a stateless traffi
 	•	✅ 日志最小化（Header + Metadata）
 	•	✅ 明确责任边界（平台 ≠ 数据处理方）
 
----
+⸻
 
 如果你愿意，下一步我可以帮你把这个 映射成一张安全问卷答复表（Excel / 审计版），或者直接 对标 ISO / SOC2 / PCI-DSS 的条目。
