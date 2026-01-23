@@ -311,10 +311,27 @@ You are correct, the Scheduler Job itself does not have a `--kms-key` flag. The 
     *   **如果成功**: 内部链接建立。
     *   **如果失败**: 任务被保存为 “失败/暂停” 状态，且链接 **从未建立**。
 
+    ```mermaid
+    graph TD
+        A[Start: gcloud scheduler jobs create] --> B[Handshake: Scheduler <-> Pub/Sub Topic]
+        B --> C{Checks}
+        C -->|Check 1| D[Org Policy: Topic CMEK Compliance?]
+        C -->|Check 2| IAM[IAM: Scheduler Permission?]
+
+        D --> E{Pass?}
+        IAM --> E
+
+        E -- Yes --> F[Success: Link Built]
+        F --> G[Job State: ENABLED]
+
+        E -- No --> H[Failure: Link Blocked]
+        H --> I[Job State: BROKEN]
+        I --> J[Resume = NOT_FOUND Error]
+    ```
+
 3.  **Why "Resume" Fails vs. "Recreate" Works / 为什么 “Resume” 失败而 “Recreate” 成功**:
     *   **Resume**: Only flips the status of the *existing* job object. It assumes the link is already built. If the link was never built (because it failed initially), Resume tries to wake up a "dead" link and fails with `NOT_FOUND`.
     *   **Recreate**: Forces the entire "Handshake" process to run again from scratch. Since you fixed the Topic and IAM permissions, this new handshake will succeed.
 
     *   **Resume**: 仅仅翻转 *现有* 任务对象的状态。它假设链接已经建立。如果链接从未建立（因为初始失败），Resume 试图唤醒一个“死”链接，因此报错 `NOT_FOUND`。
     *   **Recreate**: 强制从头开始再次运行整个“握手”过程。由于你已经修复了 Topic 和 IAM 权限，这次新的握手将会成功。
-```
