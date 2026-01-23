@@ -1,7 +1,82 @@
 # Shell Scripts Collection
 
-Generated on: 2026-01-23 18:14:46
+Generated on: 2026-01-23 18:22:46
 Directory: /Users/lex/git/knowledge/gcp/mtls
+
+## `debug-trust-configs.sh`
+
+```bash
+#!/bin/bash
+
+################################################################################
+# Script: debug-trust-configs.sh
+# Description: Debug version to test trust config access
+# Usage: ./debug-trust-configs.sh [--project PROJECT_ID]
+################################################################################
+
+set -x  # Enable debug mode
+
+PROJECT_ID="${1:-$(gcloud config get-value project 2>/dev/null)}"
+LOCATION="global"
+
+echo "================================"
+echo "Testing Trust Config Access"
+echo "================================"
+echo "Project: $PROJECT_ID"
+echo "Location: $LOCATION"
+echo ""
+
+echo "Step 1: List trust configs"
+echo "---"
+gcloud certificate-manager trust-configs list \
+    --location="$LOCATION" \
+    --project="$PROJECT_ID" \
+    --format="table(name,createTime)" 
+
+echo ""
+echo "Step 2: Get full resource names"
+echo "---"
+FULL_NAMES=$(gcloud certificate-manager trust-configs list \
+    --location="$LOCATION" \
+    --project="$PROJECT_ID" \
+    --format="value(name)")
+
+echo "Full names:"
+echo "$FULL_NAMES"
+
+echo ""
+echo "Step 3: Extract short names"
+echo "---"
+while IFS= read -r full_name; do
+    if [ -n "$full_name" ]; then
+        short_name=$(basename "$full_name")
+        echo "Full: $full_name"
+        echo "Short: $short_name"
+        echo ""
+        
+        echo "Step 4: Try describe with short name"
+        gcloud certificate-manager trust-configs describe "$short_name" \
+            --location="$LOCATION" \
+            --project="$PROJECT_ID" \
+            --format=yaml | head -10
+        
+        echo ""
+        echo "Step 5: Get JSON format"
+        gcloud certificate-manager trust-configs describe "$short_name" \
+            --location="$LOCATION" \
+            --project="$PROJECT_ID" \
+            --format=json | jq -r '.name, .createTime' 2>/dev/null || echo "jq failed"
+        
+        echo ""
+        echo "---"
+        break  # Only test first one
+    fi
+done <<< "$FULL_NAMES"
+
+echo ""
+echo "Debug test completed!"
+
+```
 
 ## `verify-trust-configs.sh`
 
@@ -173,17 +248,34 @@ get_project_id() {
 list_trust_configs() {
     print_header "Listing Trust Configs in ${LOCATION}"
     
-    local trust_configs=$(gcloud certificate-manager trust-configs list \
+    # Get full resource names
+    local trust_configs_full=$(gcloud certificate-manager trust-configs list \
         --location="$LOCATION" \
         --project="$PROJECT_ID" \
         --format="value(name)" 2>/dev/null)
     
-    if [ -z "$trust_configs" ]; then
+    if [ -z "$trust_configs_full" ]; then
         print_warning "No trust configs found in location: $LOCATION"
         return 1
     fi
     
-    echo "$trust_configs"
+    # Extract short names from full paths
+    # Input format: projects/PROJECT_ID/locations/LOCATION/trustConfigs/CONFIG_NAME
+    # Output format: CONFIG_NAME
+    local trust_configs=""
+    while IFS= read -r full_name; do
+        if [ -n "$full_name" ]; then
+            # Extract the last part after the last '/'
+            local short_name=$(basename "$full_name")
+            if [ -n "$trust_configs" ]; then
+                trust_configs="${trust_configs}\n${short_name}"
+            else
+                trust_configs="${short_name}"
+            fi
+        fi
+    done <<< "$trust_configs_full"
+    
+    echo -e "$trust_configs"
     return 0
 }
 
@@ -193,14 +285,36 @@ describe_trust_config() {
     
     print_header "Trust Config: ${trust_config_name}"
     
-    # Get full details in YAML format
+    # Get full details in YAML format with better error handling
+    set +e  # Temporarily disable exit on error
     local config_details=$(gcloud certificate-manager trust-configs describe "$trust_config_name" \
         --location="$LOCATION" \
         --project="$PROJECT_ID" \
-        --format=yaml 2>/dev/null)
+        --format=yaml 2>&1)
+    local describe_exit_code=$?
+    set -e  # Re-enable exit on error
+    
+    if [ $describe_exit_code -ne 0 ]; then
+        print_error "Failed to get details for trust config: $trust_config_name"
+        print_info "Error message: $config_details"
+        print_info "Trying with full resource path..."
+        
+        # Try with full resource path
+        local full_path="projects/${PROJECT_ID}/locations/${LOCATION}/trustConfigs/${trust_config_name}"
+        set +e
+        config_details=$(gcloud certificate-manager trust-configs describe "$full_path" \
+            --format=yaml 2>&1)
+        describe_exit_code=$?
+        set -e
+        
+        if [ $describe_exit_code -ne 0 ]; then
+            print_error "Failed with full path as well. Skipping this trust config."
+            return 1
+        fi
+    fi
     
     if [ -z "$config_details" ]; then
-        print_error "Failed to get details for trust config: $trust_config_name"
+        print_error "Empty response for trust config: $trust_config_name"
         return 1
     fi
     
@@ -208,10 +322,22 @@ describe_trust_config() {
     echo "$config_details" | grep -E "^(name|createTime|updateTime|description):" || true
     
     # Get JSON format for easier parsing
+    set +e
     local config_json=$(gcloud certificate-manager trust-configs describe "$trust_config_name" \
         --location="$LOCATION" \
         --project="$PROJECT_ID" \
         --format=json 2>/dev/null)
+    local json_exit_code=$?
+    set -e
+    
+    # If failed, try with full path
+    if [ $json_exit_code -ne 0 ] || [ -z "$config_json" ]; then
+        local full_path="projects/${PROJECT_ID}/locations/${LOCATION}/trustConfigs/${trust_config_name}"
+        set +e
+        config_json=$(gcloud certificate-manager trust-configs describe "$full_path" \
+            --format=json 2>/dev/null)
+        set -e
+    fi
     
     # Extract and parse trust anchors
     echo -e "\n${GREEN}Trust Anchors (Root CAs):${NC}"
@@ -317,12 +443,26 @@ export_trust_config() {
     
     local output_file="${output_dir}/${trust_config_name}-$(date +%Y%m%d-%H%M%S).yaml"
     
+    set +e
     gcloud certificate-manager trust-configs describe "$trust_config_name" \
         --location="$LOCATION" \
         --project="$PROJECT_ID" \
         --format=yaml > "$output_file" 2>/dev/null
+    local export_exit_code=$?
+    set -e
     
-    print_success "Exported to: $output_file"
+    # Try with full path if failed
+    if [ $export_exit_code -ne 0 ]; then
+        local full_path="projects/${PROJECT_ID}/locations/${LOCATION}/trustConfigs/${trust_config_name}"
+        gcloud certificate-manager trust-configs describe "$full_path" \
+            --format=yaml > "$output_file" 2>/dev/null
+    fi
+    
+    if [ -f "$output_file" ] && [ -s "$output_file" ]; then
+        print_success "Exported to: $output_file"
+    else
+        print_warning "Failed to export $trust_config_name"
+    fi
 }
 
 ################################################################################
