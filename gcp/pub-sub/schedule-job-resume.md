@@ -187,3 +187,134 @@ gcloud kms keys describe [KEY_NAME] \
     --keyring [KEYRING] \
     --format="value(plaintext)"
 ```
+
+## Q&A: Why does a Scheduler Job error relate to KMS? / 问答：为什么 Scheduler 任务报错与 KMS 有关？
+
+**User Question / 用户疑问**:
+> "I see all the verification steps are related to Pub/Sub. But my error is with the **Cloud Scheduler Job**. Are these two directly related?
+> I verified `roles/cloudscheduler.serviceAgent` and my account is listed. Why does it relate to the Pub/Sub KMS permissions?"
+>
+> “我看到所有的验证过程都是跟 Pub/Sub 有关的。但其实我的报错是 **Cloud Scheduler Job** 的问题。这两个有直接关系吗？
+> 我检查了 `roles/cloudscheduler.serviceAgent`，我的账号也在里面。那它跟 KMS 那个有什么关系呢？”
+
+**Answer / 解答**:
+
+Yes, they are directly related. The `NOT_FOUND` error you are seeing is a symptom of the **integration failure** between Scheduler and Pub/Sub, not a failure of the Scheduler Service Agent itself.
+是的，它们有直接关系。您看到的 `NOT_FOUND` 错误是 Scheduler 与 Pub/Sub **集成失败** 的症状，而不是 Scheduler 服务代理本身的故障。
+
+### 1. The "Hidden" Chain of Trust / “隐藏”的信任链
+When Cloud Scheduler targets Pub/Sub, it does not just "send" a message into the void. It must establish a authenticated connection stream to the specific Topic.
+当 Cloud Scheduler 以 Pub/Sub 为目标时，它不仅仅是向虚空“发送”一条消息。它必须建立一个通往特定主题（Topic）的经过验证的连接流。
+
+*   **Organization Policy Enforcement**: Your environment enforces `restrictNonCmekServices`. This means **DATA** cannot exist or be transmitted unless encrypted with your Key.
+    *   **组织策略强制执行**: 您的环境强制执行了 `restrictNonCmekServices`。这意味着除非使用您的密钥加密，否则**数据**无法存在或传输。
+*   **The Bottleneck**: The Pub/Sub Topic is the "Data Holder". Because of the policy, the Topic **MUST** be encrypted.
+    *   **瓶颈所在**: Pub/Sub 主题是“数据持有者”。由于策略原因，该主题**必须**被加密。
+
+### 2. Why the Service Agent Matters / 为什么服务代理很重要
+You checked `cloudscheduler.serviceAgent`, which manages the *Scheduler Control Plane* (creating jobs, etc.). However, the actual encryption/decryption of the message payload happens at the **Pub/Sub layer**.
+您检查了 `cloudscheduler.serviceAgent`，它管理 *Scheduler 控制平面*（创建任务等）。然而，消息负载的实际加密/解密发生在 **Pub/Sub 层**。
+
+*   **Scenario A: Topic is NOT Encrypted (Non-CMEK)**
+    *   The Org Policy immediately **blocks** the connection creation. Scheduler tries to create an internal stream -> Policy says "No" -> Scheduler returns `NOT_FOUND` (Generic error for "I couldn't create my backend").
+    *   **场景 A: 主题未加密 (非 CMEK)**: 组织策略立即**阻止**连接创建。Scheduler 尝试创建内部流 -> 策略拒绝 -> Scheduler 返回 `NOT_FOUND`（“无法创建后端”的通用错误）。
+
+*   **Scenario B: Topic IS Encrypted, but Pub/Sub Agent lacks KMS Role**
+    *   The Topic exists, but it is **broken**. Pub/Sub tries to accept the message but cannot access the Key to verify/encrypt it. The "Handshake" fails. Scheduler again fails to attach to the topic.
+    *   **场景 B: 主题已加密，但 Pub/Sub 代理缺少 KMS 角色**: 主题存在，但**已损坏**。Pub/Sub 尝试接收消息，但无法访问密钥进行验证/加密。“握手”失败。Scheduler 再次无法连接到主题。
+
+### Summary / 总结
+The `NOT_FOUND` error is misleading. It effectively means:
+> "I (Scheduler) tried to connect to your Pub/Sub Topic to prepare for sending messages, but the connection was rejected or the resource was unreachable due to Policy/Encryption configurations."
+这个 `NOT_FOUND` 错误具有误导性。它的实际含义是：
+> “我 (Scheduler) 尝试连接到您的 Pub/Sub 主题以准备发送消息，但由于 策略/加密 配置，连接被拒绝或资源无法通过验证。”
+
+**Fix**: Ensure the Topic is CMEK-encrypted **AND** the Pub/Sub Service Agent (not just the Scheduler Agent) has access to the Key.
+**修复**: 确保主题是 CMEK 加密的，**并且** Pub/Sub 服务代理（不仅仅是 Scheduler 代理）拥有访问密钥的权限。
+
+## Final Solution: Why "Resume" Still Fails? / 最终解决方案：为什么 “Resume” 仍然失败？
+
+**Scenario / 场景**:
+> "I have enabled CMEK for my Pub/Sub Topic, and I confirmed all permissions are correct. But when I run `gcloud scheduler jobs resume`, it **STILL** fails with `NOT_FOUND`."
+>
+> “我已经为 Pub/Sub 主题启用了 CMEK，并确认所有权限都正确。但是当我运行 `gcloud scheduler jobs resume` 时，它**仍然**失败并报错 `NOT_FOUND`。”
+
+**Root Cause / 根本原因**:
+**Stale Internal State / 内部状态陈旧**
+When a Cloud Scheduler job is paused (or fails creation) due to a policy violation (like missing CMEK), its internal link to the backend (the "RetryPolicy" resource mentioned in the error) is often never successfully created or is marked as permanently broken.
+当 Cloud Scheduler 任务因策略违规（如缺少 CMEK）而暂停（或创建失败）时，其指向后端的内部链接（错误信息中提到的 "RetryPolicy" 资源）通常从未成功创建，或者被标记为永久损坏。
+
+Running `resume` only attempts to unpause the *existing* job definition, which points to a **non-existent or invalid backend resource**. It does **not** trigger a re-provisioning of the underlying infrastructure link.
+运行 `resume` 仅仅尝试取消暂停 *现有的* 任务定义，而该定义指向一个 **不存在或无效的后端资源**。它 **不会** 触发底层基础设施链接的重新预配。
+
+**The Fix: Recreate, Don't Resume / 解决方法：重建，不要恢复**
+You **MUST** delete and recreate the job to force Cloud Scheduler to establish a *new* compliance check and create a *new* backend connection.
+您 **必须** 删除并重建该任务，以强制 Cloud Scheduler 建立 *新的* 合规性检查并创建 *新的* 后端连接。
+
+### Definitive Solution Steps / 最终解决步骤
+
+1.  **Delete the Broken Job / 删除损坏的任务**:
+    ```bash
+    gcloud scheduler jobs delete job-lex-eg-test-001 \
+        --location europe-west2 \
+        --project aibang-projectid-abjx01-dev \
+        --quiet
+    ```
+
+2.  **Verify Topic is Ready (CMEK Enabled) / 验证主题就绪 (CMEK 已启用)**:
+    ```bash
+    gcloud pubsub topics describe [TOPIC_NAME] \
+        --project aibang-projectid-abjx01-dev \
+        --format="value(kmsKeyName)"
+    # Ensure it returns your Key ID / 确保它返回您的 Key ID
+    ```
+
+3.  **Create a NEW Job / 创建一个新任务**:
+    ```bash
+    gcloud scheduler jobs create pubsub job-lex-eg-test-001 \
+        --schedule="* * * * *" \
+        --topic=[TOPIC_NAME] \
+        --message-body="{\"test\": \"payload\"}" \
+        --location europe-west2 \
+        --project aibang-projectid-abjx01-dev
+    ```
+
+**Result / 结果**:
+The new job will initiate a fresh connection request. Since the Topic is now encrypted and permissions are correct, the connection will succeed, and the job will be created in `ENABLED` state immediately.
+新任务将发起一个新的连接请求。由于主题现在已加密且权限正确，连接将成功，任务将立即以 `ENABLED` 状态创建。
+
+## Q&A: Where is the CMEK parameter in Cloud Scheduler? / 问答：Cloud Scheduler 的 CMEK 参数在哪里？
+
+**User Question / 用户疑问**:
+> "I don't see any CMEK-related parameter when creating the Cloud Scheduler job. So how does it map to the encryption? Why does recreating it fix the mapping?"
+>
+> “我在创建 Cloud Scheduler 任务时，并没有看到任何跟 CMEK 有关的参数。那么它是如何映射到加密的呢？为什么重新创建就能修复这个映射关系？”
+
+**Answer / 解答**:
+You are correct, the Scheduler Job itself does not have a `--kms-key` flag. The dependency is **implicit** (隐式的).
+你说的对，Scheduler 任务本身没有 `--kms-key` 标志。这种依赖关系是 **隐式的**。
+
+1.  **The "Target" Holds the Requirements / “目标”持有要求**:
+    The CMEK requirement lives on the **Pub/Sub Topic**, not the Scheduler Job. The Org Policy checks: "Is the data destination encrypted?"
+    CMEK 要求存在于 **Pub/Sub 主题** 上，而不是 Scheduler 任务上。组织策略检查的是：“数据目的地是否已加密？”
+
+2.  **The "Mapping" is the Link / “映射”即是链接**:
+    When you run `jobs create ... --topic=[TOPIC_NAME]`, you are creating a **Link**.
+    *   **Creation Time**: Scheduler tries to "handshake" with the Topic.
+    *   **The Check**: GCP checks "Is `[TOPIC_NAME]` compliant with Org Policy?" and "Does Scheduler have permission to write to this encrypted Topic?"
+    *   **If Success**: The internal link is built.
+    *   **If Failure**: The job is saved as "FAILED/PAUSED," and the link is **never built**.
+
+    一旦你运行 `jobs create ... --topic=[TOPIC_NAME]`，你就是在创建一个 **链接**。
+    *   **创建时**: Scheduler 尝试与 Topic “握手”。
+    *   **检查**: GCP 检查 “`[TOPIC_NAME]` 是否符合组织策略？” 以及 “Scheduler 是否有权限向这个加密的 Topic 写入？”
+    *   **如果成功**: 内部链接建立。
+    *   **如果失败**: 任务被保存为 “失败/暂停” 状态，且链接 **从未建立**。
+
+3.  **Why "Resume" Fails vs. "Recreate" Works / 为什么 “Resume” 失败而 “Recreate” 成功**:
+    *   **Resume**: Only flips the status of the *existing* job object. It assumes the link is already built. If the link was never built (because it failed initially), Resume tries to wake up a "dead" link and fails with `NOT_FOUND`.
+    *   **Recreate**: Forces the entire "Handshake" process to run again from scratch. Since you fixed the Topic and IAM permissions, this new handshake will succeed.
+
+    *   **Resume**: 仅仅翻转 *现有* 任务对象的状态。它假设链接已经建立。如果链接从未建立（因为初始失败），Resume 试图唤醒一个“死”链接，因此报错 `NOT_FOUND`。
+    *   **Recreate**: 强制从头开始再次运行整个“握手”过程。由于你已经修复了 Topic 和 IAM 权限，这次新的握手将会成功。
+```
