@@ -46,6 +46,7 @@
 | `safe/cwe/check_ubuntu_cve_status.sh`                                  | Queries Ubuntu's official security pages to check CVE fix status for specific Ubuntu versions.                                                                             |
 | `safe/cwe/verify.sh`                                                   | Checks the status of a CVE ID in Ubuntu security notices.                                                                                                                  |
 | `safe/gcp-safe/verify-kms-enhanced.sh`                                 | Validates GCP KMS cross-project encryption architecture, IAM policies, and key rotation.                                                                                   |
+| `gcp/mtls/trust-config/verify-trust-config.sh`                            | Verifies the trust configuration for mTLS.                                                                                   |
 
 ---
 
