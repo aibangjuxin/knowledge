@@ -1,3 +1,18 @@
+
+- [Cloud Scheduler \& Pub/Sub CMEK 集成全解析 / The Ultimate Guide to Pub/Sub CMEK with Cloud Scheduler](#cloud-scheduler--pubsub-cmek-集成全解析--the-ultimate-guide-to-pubsub-cmek-with-cloud-scheduler)
+  - [1. 核心架构：隐藏的“内部桥梁” (The Hidden Bridge)](#1-核心架构隐藏的内部桥梁-the-hidden-bridge)
+    - [关键点](#关键点)
+  - [2. 误导性的错误：NOT\_FOUND 之谜](#2-误导性的错误not_found-之谜)
+    - [故障传播路径 (Failure Propagation)](#故障传播路径-failure-propagation)
+  - [3. 系统拓扑图 / System Topology](#3-系统拓扑图--system-topology)
+  - [4. 权限矩阵 (IAM Matrix)](#4-权限矩阵-iam-matrix)
+  - [5. 最佳实践操作清单 (Implementation Checklist)](#5-最佳实践操作清单-implementation-checklist)
+    - [Step 1: 身份确认](#step-1-身份确认)
+    - [Step 2: 集中授权 (原子操作)](#step-2-集中授权-原子操作)
+    - [Step 3: 资源位置一致性 (Location Consistency)](#step-3-资源位置一致性-location-consistency)
+    - [Step 4: 恢复逻辑 (Delete \& Recreate)](#step-4-恢复逻辑-delete--recreate)
+  - [6. 风险评估与建议 (Risk Assessment)](#6-风险评估与建议-risk-assessment)
+
 # Cloud Scheduler & Pub/Sub CMEK 集成全解析 / The Ultimate Guide to Pub/Sub CMEK with Cloud Scheduler
 
 在 Google Cloud 平台中，当组织策略（Organization Policy）强制要求使用客户管理的加密密钥（CMEK）时，跨服务的集成会变得复杂。本指南基于对 Cloud Scheduler 与 Pub/Sub 在 CMEK 环境下集成失败案例的深度分析，旨在提供一个清晰的架构理解和操作范式。
@@ -35,7 +50,8 @@ data
       desc Complete
 ```
 
-### 关键点：
+### 关键点
+
 - **托管流（Managed Stream）**：这是一个由 Cloud Scheduler 服务代为管理的资源，作为 Job 与 Topic 之间的物理连接。
 - **权限主体**：创建这个 Stream 的主体是 **Cloud Scheduler Service Agent**，而不是 Pub/Sub 的服务账号。
 
@@ -45,7 +61,8 @@ data
 
 在 CMEK 环境下，最常见的报错是 `NOT_FOUND`，这往往让开发者误以为资源缺失，但其根因通常是**静默的权限拒绝**。
 
-### 故障传播路径 (Failure Propagation):
+### 故障传播路径 (Failure Propagation)
+
 1. **权限缺失**：Cloud Scheduler SA 缺少 KMS 密钥的 `cryptoKeyEncrypterDecrypter` 权限。
 2. **创建失败**：在创建 Job 或 Resume 时，内部 Stream 因无法访问加密密钥而创建失败。
 3. **资源孤立**：相关的重试策略（Retry Policy）无法挂载到不存在的 Stream 上。
@@ -107,7 +124,9 @@ graph TB
 ## 5. 最佳实践操作清单 (Implementation Checklist)
 
 ### Step 1: 身份确认
+
 获取项目编号并识别两个服务代理：
+
 ```bash
 PROJECT_NUMBER=$(gcloud projects describe ${PROJECT_ID} --format="value(projectNumber)")
 SCHEDULER_SA="service-${PROJECT_NUMBER}@gcp-sa-cloudscheduler.iam.gserviceaccount.com"
@@ -115,7 +134,9 @@ PUBSUB_SA="service-${PROJECT_NUMBER}@gcp-sa-pubsub.iam.gserviceaccount.com"
 ```
 
 ### Step 2: 集中授权 (原子操作)
+
 **重要提示**：如果 KMS 密钥在不同项目，请确保在 **KMS 所在项目** 执行绑定。
+
 ```bash
 for SA in ${SCHEDULER_SA} ${PUBSUB_SA}; do
   gcloud kms keys add-iam-policy-binding ${KEY_NAME} \
@@ -128,13 +149,17 @@ done
 ```
 
 ### Step 3: 资源位置一致性 (Location Consistency)
+
 确保以下资源的 Location 完全一致（例如都是 `europe-west2`）：
+
 1. Cloud Scheduler Job
 2. Pub/Sub Topic
 3. Cloud KMS Key (或使用 `global`)
 
 ### Step 4: 恢复逻辑 (Delete & Recreate)
+
 由于 `NOT_FOUND` 状态通常意味着内部资源处于损坏状态，**简单的 Resume 无法修复**。
+
 1. **删除**：`gcloud scheduler jobs delete ...`
 2. **重新创建**：在权限生效后执行 `gcloud scheduler jobs create ...`
 
@@ -152,6 +177,7 @@ done
 ---
 
 **文档信息 / Metadata**
+
 - **创建者**: Alma
 - **关联场景**: GCP Cloud Scheduler, Pub/Sub, CMEK, KMS Troubleshooting
 - **最后更新**: 2026-01-25
