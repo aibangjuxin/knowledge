@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
-# verify-pub-priv-ip-glm.sh
+# verify-pub-priv-ip-glm-ipv6-enhanced.sh
 # Purpose: Enhanced DNS verification with IPv6, parallel queries, batch processing,
-#          and multiple output formats.
-# Enhanced from: verify-pub-priv-ip.sh
+#          and multiple output formats with improved visual output.
 
 set -euo pipefail
 
@@ -50,6 +49,7 @@ readonly CYAN='\033[36m'
 readonly RED='\033[31m'
 readonly MAGENTA='\033[35m'
 readonly WHITE='\033[37m'
+readonly BLACK='\033[30m'
 readonly NC='\033[0m'
 readonly BOLD='\033[1m'
 readonly DIM='\033[2m'
@@ -59,7 +59,7 @@ readonly BG_GREEN='\033[42m'
 readonly BG_RED='\033[41m'
 readonly BG_YELLOW='\033[43m'
 readonly BG_CYAN='\033[46m'
-readonly BLACK='\033[30m'
+readonly BG_MAGENTA='\033[45m'
 
 # Visual elements
 readonly SEPARATOR="═════════════════════════════════════════════════════════════════════"
@@ -73,6 +73,7 @@ readonly PIPE="│"
 readonly ARROW="→"
 readonly DOUBLE_ARROW="⟹"
 readonly LEFT_CORNER="└"
+readonly TOP_CORNER="┌"
 
 # Output format flags
 OUTPUT_FORMAT="normal"  # normal, json, short, csv, yaml
@@ -90,15 +91,18 @@ DOMAINS=()
 # Print usage
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [OPTIONS] <domain|file>
+${BOLD}${CYAN}DNS Verification Tool with IPv6 Support${NC}
+${SEPARATOR}
 
-DNS verification tool with public/private IP detection and IPv6 support.
+${BOLD}Usage:${NC} $(basename "$0") [OPTIONS] <domain|file>
 
-Arguments:
+${BOLD}DNS verification tool${NC} with public/private IP detection and IPv6 support.
+
+${BOLD}Arguments:${NC}
   <domain>          Domain to query
   -f, --file FILE   Read domains from file (one per line)
 
-Options:
+${BOLD}Options:${NC}
   -t, --type TYPE   Record type: A, AAAA, CNAME, MX, ANY (default: A)
   -o, --output FMT  Output format: normal, json, short, csv, yaml (default: normal)
   -d, --dns IP[:IP] Custom DNS server(s), comma-separated
@@ -109,15 +113,14 @@ Options:
   --debug           Enable debug output
   -h, --help        Show this help
 
-Examples:
-  $(basename "$0") www.baidu.com
-  $(basename "$0") www.baidu.com --json
-  $(basename "$0") example.com --type AAAA
-  $(basename "$0") -f domains.txt --output csv
-  $(basename "$0") example.com -d 8.8.8.8,1.1.1.1
-  $(basename "$0") example.com --type ANY --verbose
+${BOLD}Examples:${NC}
+  ${DIM}$(basename "$0") www.baidu.com${NC}
+  ${DIM}$(basename "$0") www.baidu.com --json${NC}
+  ${DIM}$(basename "$0") example.com --type AAAA${NC}
+  ${DIM}$(basename "$0") -f domains.txt --output csv${NC}
+  ${DIM}$(basename "$0") example.com -d 8.8.8.8,1.1.1.1${NC}
 
-Exit Codes:
+${BOLD}Exit Codes:${NC}
   0 - Public IP detected
   1 - Private IP detected
   2 - Unknown/No result
@@ -147,7 +150,7 @@ log_error() {
   echo -e "${RED}[✗ ERROR]${NC} $*" >&2
 }
 
-# Progress indicator
+# Progress indicator with spinner
 log_progress() {
   local msg="$1"
   echo -ne "${CYAN}[↻]${NC} ${msg}...\r" >&2
@@ -381,7 +384,6 @@ get_ip_type() {
   fi
 }
 
-
 # Get colored IP type badge
 get_ip_type_badge() {
   local ip_type="$1"
@@ -418,9 +420,6 @@ query_dns_server() {
       ;;
   esac
 
-  # Note: dig may return non-zero exit code even with results (e.g., communications error)
-  # We ignore the exit code and just check for results below
-
   if [[ -z "$result" ]]; then
     echo "NO_RECORD|||" > "$output_file"
     return
@@ -431,33 +430,28 @@ query_dns_server() {
   local types=()
 
   if [[ "$record_type" == "ANY" ]]; then
-    # For ANY queries, include all record types
     while IFS= read -r line; do
-      local rec_type=$(echo "$line" | awk '{print $4}')
-      local rec_value=$(echo "$line" | awk '{print $NF}')
+      local r_type=$(echo "$line" | awk '{print $4}')
+      local r_value=$(echo "$line" | awk '{print $NF}')
 
-      if [[ -n "$rec_value" ]]; then
-        records+=("$rec_value")
-        types+=("$(get_ip_type "$rec_value")")
+      if [[ -n "$r_value" ]]; then
+        records+=("$r_value")
+        types+=("$(get_ip_type "$r_value")")
       fi
     done <<< "$result"
   else
-    # For specific queries, only include matching record types
     while IFS= read -r line; do
-      local rec_type=$(echo "$line" | awk '{print $4}')
-      local rec_value=$(echo "$line" | awk '{print $NF}')
+      local r_type=$(echo "$line" | awk '{print $4}')
+      local r_value=$(echo "$line" | awk '{print $NF}')
 
-      # Skip CNAME records for A/AAAA queries - the final A/AAAA will be included
-      if [[ "$rec_type" == "CNAME" ]]; then
+      if [[ "$r_type" == "CNAME" ]]; then
         continue
       fi
 
-      # Only include records that match the requested type (or are IP addresses)
-      if [[ -n "$rec_value" ]]; then
-        # Check if this is the record type we want or if it looks like an IP
-        if [[ "$rec_type" == "$record_type" ]] || [[ "$rec_value" =~ ^[0-9] ]] || [[ "$rec_value" =~ ^[0-9a-f:]*:[0-9a-f:]*$ ]]; then
-          records+=("$rec_value")
-          types+=("$(get_ip_type "$rec_value")")
+      if [[ -n "$r_value" ]]; then
+        if [[ "$r_type" == "$record_type" ]] || [[ "$r_value" =~ ^[0-9] ]] || [[ "$r_value" =~ ^[0-9a-f:]*:[0-9a-f:]*$ ]]; then
+          records+=("$r_value")
+          types+=("$(get_ip_type "$r_value")")
         fi
       fi
     done <<< "$result"
@@ -468,7 +462,6 @@ query_dns_server() {
     return
   fi
 
-  # Build result string
   local ips_csv=$(IFS=','; echo "${records[*]}")
   local types_csv=$(IFS=','; echo "${types[*]}")
   echo "SUCCESS|${desc}|${ips_csv}|${types_csv}" > "$output_file"
@@ -484,36 +477,28 @@ process_results() {
   local verdict="UNKNOWN"
   local exit_code=2
 
-  log_debug "Processing results for $domain"
-
-  # Count IP types
   local public_count=0
   local private_count=0
   local local_count=0
   local other_count=0
 
   for dns in "${!results_ref[@]}"; do
-    local result="${results_ref[$dns]}"
-    local ips="${ips_ref[$dns]:-}"
+    local res="${results_ref[$dns]}"
     local ip_types="${types_ref[$dns]:-}"
 
-    case "$result" in
-      "SUCCESS")
-        # Check each IP type
-        IFS=',' read -ra TYPE_ARRAY <<< "$ip_types"
-        for t in "${TYPE_ARRAY[@]}"; do
-          case "$t" in
-            "Public") ((public_count++)) ;;
-            "Private") ((private_count++)) ;;
-            "Local") ((local_count++)) ;;
-            *) ((other_count++)) ;;
-          esac
-        done
-        ;;
-    esac
+    if [[ "$res" == "SUCCESS" ]]; then
+      IFS=',' read -ra TYPE_ARRAY <<< "$ip_types"
+      for t in "${TYPE_ARRAY[@]}"; do
+        case "$t" in
+          "Public") ((public_count++)) ;;
+          "Private") ((private_count++)) ;;
+          "Local") ((local_count++)) ;;
+          *) ((other_count++)) ;;
+        esac
+      done
+    fi
   done
 
-  # Determine final verdict
   if [[ $public_count -gt 0 ]]; then
     verdict="PUBLIC"
     exit_code=0
@@ -537,33 +522,27 @@ output_normal() {
   declare -n types_ref="$5"
   local verdict="$6"
 
-  # Header with top border
   echo -e "\n${SEPARATOR}"
   echo -e "${BOLD}${CYAN}${STAR} DNS Verification Report${NC}"
   echo -e "${SEPARATOR_LIGHT}"
   
-  # Domain info
   echo -e "${PIPE} ${BOLD}Domain:${NC}        ${BLUE}$domain${NC}"
   echo -e "${PIPE} ${BOLD}Record Type:${NC}   ${CYAN}${RECORD_TYPE}${NC}"
   
-  # Peering Check with visual indicator
   if [[ "$peering_matched" == true ]]; then
     echo -e "${PIPE} ${BOLD}Peering Status:${NC} ${GREEN}${CHECKMARK} Matched${NC} (In Peering List)"
   else
     echo -e "${PIPE} ${BOLD}Peering Status:${NC} ${YELLOW}${CROSS} Unmatched${NC} (Not in Peering List)"
   fi
   
-  # Timestamp
   echo -e "${PIPE} ${BOLD}Timestamp:${NC}     ${DIM}$(date '+%Y-%m-%d %H:%M:%S')${NC}"
   echo -e "${SEPARATOR_LIGHT}"
 
-  # DNS Server Results
   echo -e "${BOLD}${CYAN}DNS Server Results:${NC}\n"
 
   local result_count=0
   local success_count=0
   
-  # Iterate over results, not all DNS servers
   for dns in "${!results_ref[@]}"; do
     local result="${results_ref[$dns]}"
     local ips="${ips_ref[$dns]:-}"
@@ -587,10 +566,7 @@ output_normal() {
           local ip="${IP_ARRAY[$i]}"
           local ip_type="${TYPE_ARRAY[$i]}"
           local type_badge=$(get_ip_type_badge "$ip_type")
-
-          # Create visual alignment
-          local index_str="[$((i+1))]"
-          echo -e "${PIPE}      ${index_str} ${type_badge} ${CYAN}$ip${NC}"
+          echo -e "${PIPE}      [$((i+1))] ${type_badge} ${CYAN}$ip${NC}"
         done
         ;;
       "FAILED")
@@ -603,19 +579,16 @@ output_normal() {
     echo
   done
 
-  # Summary statistics
   echo -e "${SEPARATOR_LIGHT}"
   echo -e "${BOLD}Summary:${NC}"
   echo -e "${PIPE} Total DNS servers queried: ${CYAN}$result_count${NC}"
   echo -e "${PIPE} Successful responses:      ${GREEN}$success_count${NC}"
   echo -e "${PIPE} Failed responses:          ${RED}$((result_count - success_count))${NC}"
 
-  # Final verdict with large visual indicator
   local verdict_color="${GREEN}"
-  local verdict_icon="${CHECKMARK}"
-  [[ "$verdict" == "PRIVATE" ]] && verdict_color="${YELLOW}" && verdict_icon="${CIRCLE}"
-  [[ "$verdict" == "LOCAL" ]] && verdict_color="${BLUE}" && verdict_icon="${CIRCLE}"
-  [[ "$verdict" == "UNKNOWN" ]] && verdict_color="${RED}" && verdict_icon="${CROSS}"
+  [[ "$verdict" == "PRIVATE" ]] && verdict_color="${YELLOW}"
+  [[ "$verdict" == "LOCAL" ]] && verdict_color="${BLUE}"
+  [[ "$verdict" == "UNKNOWN" ]] && verdict_color="${RED}"
 
   echo -e "\n${SEPARATOR}"
   echo -e "${BOLD}Final Verdict:${NC}"
@@ -635,7 +608,6 @@ output_json() {
   local peering_status="UNMATCHED"
   [[ "$peering_matched" == true ]] && peering_status="MATCHED"
 
-  # Start JSON output
   echo "{"
   echo "  \"domain\": \"$domain\","
   echo "  \"record_type\": \"$RECORD_TYPE\","
@@ -651,34 +623,26 @@ output_json() {
     local ip_types="${types_ref[$dns]:-}"
     local desc="${DNS_SERVERS[$dns]:-Custom DNS}"
 
-    # Output comma separator between entries
     [[ "$first" == true ]] && first=false || echo ","
 
-    # Start server entry
     echo -n "    {"
     echo -n "\"address\": \"$dns\", "
     echo -n "\"description\": \"$desc\", "
     echo -n "\"status\": \"$result\", "
-
-    # Build records array
     echo -n "\"records\": ["
     if [[ "$result" == "SUCCESS" && -n "$ips" ]]; then
       IFS=',' read -ra IP_ARRAY <<< "$ips"
       IFS=',' read -ra TYPE_ARRAY <<< "$ip_types"
-
       local ip_first=true
       for i in "${!IP_ARRAY[@]}"; do
         [[ "$ip_first" == true ]] && ip_first=false || echo -n ","
         echo -n "{\"ip\": \"${IP_ARRAY[$i]}\", \"type\": \"${TYPE_ARRAY[$i]}\"}"
       done
     fi
-    echo "]"
-    echo -n "    }"
+    echo -n "]"
+    echo -n "}"
   done
-
-  # Close JSON
-  echo ""
-  echo "  ]"
+  echo -e "\n  ]"
   echo "}"
 }
 
@@ -700,20 +664,13 @@ output_csv() {
   echo "dns_server,description,status,ips,types"
 
   for dns in "${!results_ref[@]}"; do
-    local result="${results_ref[$dns]}"
-    local ips="${ips_ref[$dns]:-}"
-    local ip_types="${types_ref[$dns]:-}"
-    local desc="${DNS_SERVERS[$dns]:-Custom DNS}"
-
-    echo "\"$dns\",\"$desc\",\"$result\",\"$ips\",\"$ip_types\""
+    echo "\"$dns\",\"${DNS_SERVERS[$dns]:-Custom DNS}\",\"${results_ref[$dns]}\",\"${ips_ref[$dns]:-}\",\"${types_ref[$dns]:-}\""
   done
 }
 
 # Output in short format
 output_short() {
-  local verdict="$1"
-  local exit_code="$2"
-  echo "$verdict"
+  echo "$1"
 }
 
 # Output in YAML format
@@ -742,19 +699,15 @@ EOF
     local result="${results_ref[$dns]}"
     local ips="${ips_ref[$dns]:-}"
     local ip_types="${types_ref[$dns]:-}"
-    local desc="${DNS_SERVERS[$dns]:-Custom DNS}"
-
     cat <<YAML_EOF
   - address: "$dns"
-    description: "$desc"
+    description: "${DNS_SERVERS[$dns]:-Custom DNS}"
     status: "$result"
     records:
 YAML_EOF
-
     if [[ "$result" == "SUCCESS" && -n "$ips" ]]; then
       IFS=',' read -ra IP_ARRAY <<< "$ips"
       IFS=',' read -ra TYPE_ARRAY <<< "$ip_types"
-
       for i in "${!IP_ARRAY[@]}"; do
         echo "      - ip: \"${IP_ARRAY[$i]}\""
         echo "        type: \"${TYPE_ARRAY[$i]}\""
@@ -766,69 +719,39 @@ YAML_EOF
 # Main processing function
 process_domain() {
   local domain="$1"
-
   log_verbose "Processing domain: $domain"
 
-  # Check peering status
   local peering_matched=false
-  if check_domain_in_peering "$domain"; then
-    peering_matched=true
-  fi
+  check_domain_in_peering "$domain" && peering_matched=true
 
-  # Use custom DNS servers if provided
   local -a DNS_LIST=()
   if [[ ${#CUSTOM_DNS_SERVERS[@]} -gt 0 ]]; then
-    for dns in "${CUSTOM_DNS_SERVERS[@]}"; do
-      DNS_LIST+=("$dns:Custom DNS")
-    done
+    for dns in "${CUSTOM_DNS_SERVERS[@]}"; do DNS_LIST+=("$dns:Custom DNS"); done
   else
-    # Use default DNS servers
-    for dns in "${!DNS_SERVERS[@]}"; do
-      DNS_LIST+=("$dns:${DNS_SERVERS[$dns]}")
-    done
+    for dns in "${!DNS_SERVERS[@]}"; do DNS_LIST+=("$dns:${DNS_SERVERS[$dns]}"); done
   fi
 
-  # Result arrays
-  declare -A SERVER_RESULTS
-  declare -A SERVER_IPS
-  declare -A SERVER_TYPES
-
-  # Create temp directory for parallel queries
-  local tmpdir
-  tmpdir=$(mktemp -d)
+  declare -A SERVER_RESULTS SERVER_IPS SERVER_TYPES
+  local tmpdir=$(mktemp -d)
   trap "rm -rf '$tmpdir'" EXIT RETURN
 
-    log_progress "Querying DNS servers"
-
-  # Query DNS servers (parallel)
+  log_progress "Querying DNS servers"
   local pids=()
   for entry in "${DNS_LIST[@]}"; do
     local dns="${entry%%:*}"
     local desc="${entry#*:}"
-    # Use DNS IP in filename for reliable mapping
     local safe_dns=$(echo "$dns" | tr '.:' '__')
     local output_file="$tmpdir/result_$safe_dns"
-
     query_dns_server "$dns" "$desc" "$domain" "$RECORD_TYPE" "$output_file" &
     pids+=($!)
-
-    # Limit parallel jobs
     if [[ ${#pids[@]} -ge $MAX_PARALLEL ]]; then
-      for i in "${!pids[@]}"; do
-        wait ${pids[$i]} 2>/dev/null || true
-      done
+      for pid in "${pids[@]}"; do wait "$pid" 2>/dev/null || true; done
       pids=()
     fi
   done
+  for pid in "${pids[@]}"; do wait "$pid" 2>/dev/null || true; done
+  echo -ne "\033[K\r" >&2
 
-  # Wait for remaining jobs
-  for pid in "${pids[@]}"; do
-    wait "$pid" 2>/dev/null || true
-  done
-
-
-  echo -ne "\033[K\r" >&2  # Clear progress line
-  # Read results
   for entry in "${DNS_LIST[@]}"; do
     local dns="${entry%%:*}"
     local safe_dns=$(echo "$dns" | tr '.:' '__')
@@ -843,67 +766,37 @@ process_domain() {
     fi
   done
 
-  rm -rf "$tmpdir"
-
-  # Process results
-  local verdict_info
-  verdict_info=$(process_results "$domain" SERVER_RESULTS SERVER_IPS SERVER_TYPES)
+  local verdict_info=$(process_results "$domain" SERVER_RESULTS SERVER_IPS SERVER_TYPES)
   IFS='|' read -r verdict exit_code <<< "$verdict_info"
 
-  # Output based on format
   case "$OUTPUT_FORMAT" in
-    "short")
-      output_short "$verdict" "$exit_code"
-      ;;
-    "json")
-      output_json "$domain" "$peering_matched" SERVER_RESULTS SERVER_IPS SERVER_TYPES "$verdict"
-      ;;
-    "csv")
-      output_csv "$domain" "$peering_matched" SERVER_RESULTS SERVER_IPS SERVER_TYPES "$verdict"
-      ;;
-    "yaml")
-      output_yaml "$domain" "$peering_matched" SERVER_RESULTS SERVER_IPS SERVER_TYPES "$verdict"
-      ;;
-    *)
-      output_normal "$domain" "$peering_matched" SERVER_RESULTS SERVER_IPS SERVER_TYPES "$verdict"
-      ;;
+    "short") output_short "$verdict";;
+    "json")  output_json "$domain" "$peering_matched" SERVER_RESULTS SERVER_IPS SERVER_TYPES "$verdict";;
+    "csv")   output_csv "$domain" "$peering_matched" SERVER_RESULTS SERVER_IPS SERVER_TYPES "$verdict";;
+    "yaml")  output_yaml "$domain" "$peering_matched" SERVER_RESULTS SERVER_IPS SERVER_TYPES "$verdict";;
+    *)       output_normal "$domain" "$peering_matched" SERVER_RESULTS SERVER_IPS SERVER_TYPES "$verdict";;
   esac
 
   return "$exit_code"
 }
 
-# ============================================================================
-# MAIN
-# ============================================================================
-
 main() {
   parse_args "$@"
-
-  # Get domains
   local domains=()
-
   if [[ -n "$DOMAINS_FILE" ]]; then
-    if [[ ! -f "$DOMAINS_FILE" ]]; then
-      log_error "File not found: $DOMAINS_FILE"
-      exit 3
-    fi
+    [[ ! -f "$DOMAINS_FILE" ]] && { log_error "File not found: $DOMAINS_FILE"; exit 3; }
     mapfile -t domains < <(grep -v '^[[:space:]]*#' "$DOMAINS_FILE" | grep -v '^[[:space:]]*$' | tr -d '\r')
   elif [[ ${#DOMAINS[@]} -gt 0 ]]; then
     domains=("${DOMAINS[@]}")
   else
-    log_error "No domain specified"
-    usage
-    exit 3
+    log_error "No domain specified"; usage; exit 3
   fi
 
-  # Count actual DNS servers to use
   local dns_count=${#CUSTOM_DNS_SERVERS[@]}
   [[ $dns_count -eq 0 ]] && dns_count=${#DNS_SERVERS[@]}
-  
   log_info "Processing ${#domains[@]} domain(s) with $dns_count DNS server(s)"
 
   local overall_exit_code=0
-  # Process each domain
   for domain in "${domains[@]}"; do
     process_domain "$domain" || {
       local code=$?

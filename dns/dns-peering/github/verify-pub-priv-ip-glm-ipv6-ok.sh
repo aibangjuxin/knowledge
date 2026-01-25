@@ -49,30 +49,10 @@ readonly BLUE='\033[34m'
 readonly CYAN='\033[36m'
 readonly RED='\033[31m'
 readonly MAGENTA='\033[35m'
-readonly WHITE='\033[37m'
 readonly NC='\033[0m'
 readonly BOLD='\033[1m'
 readonly DIM='\033[2m'
-readonly UNDERLINE='\033[4m'
-readonly BG_BLUE='\033[44m'
-readonly BG_GREEN='\033[42m'
-readonly BG_RED='\033[41m'
-readonly BG_YELLOW='\033[43m'
-readonly BG_CYAN='\033[46m'
-readonly BLACK='\033[30m'
-
-# Visual elements
-readonly SEPARATOR="═════════════════════════════════════════════════════════════════════"
-readonly SEPARATOR_LIGHT="─────────────────────────────────────────────────────────────────────"
-readonly BULLET="▶"
-readonly CHECKMARK="✓"
-readonly CROSS="✗"
-readonly STAR="★"
-readonly CIRCLE="●"
-readonly PIPE="│"
-readonly ARROW="→"
-readonly DOUBLE_ARROW="⟹"
-readonly LEFT_CORNER="└"
+readonly SEPARATOR="----------------------------------------------------------------"
 
 # Output format flags
 OUTPUT_FORMAT="normal"  # normal, json, short, csv, yaml
@@ -126,32 +106,12 @@ Exit Codes:
 EOF
 }
 
-# Logging functions with enhanced formatting
-log_debug() { 
-  [[ "$DEBUG" == true ]] && echo -e "${DIM}[▷ DEBUG]${NC} $*" >&2 || true
-}
-
-log_verbose() { 
-  [[ "$VERBOSE" == true ]] && echo -e "${CYAN}[ℹ INFO]${NC} $*" >&2 || true
-}
-
-log_info() { 
-  echo -e "${GREEN}[✓ INFO]${NC} $*" >&2
-}
-
-log_warn() { 
-  echo -e "${YELLOW}[⚠ WARN]${NC} $*" >&2
-}
-
-log_error() { 
-  echo -e "${RED}[✗ ERROR]${NC} $*" >&2
-}
-
-# Progress indicator
-log_progress() {
-  local msg="$1"
-  echo -ne "${CYAN}[↻]${NC} ${msg}...\r" >&2
-}
+# Logging functions
+log_debug() { [[ "$DEBUG" == true ]] && echo -e "${DIM}[DEBUG]${NC} $*" >&2 || true; }
+log_verbose() { [[ "$VERBOSE" == true ]] && echo -e "${CYAN}[VERBOSE]${NC} $*" >&2 || true; }
+log_info() { echo -e "${GREEN}[INFO]${NC} $*" >&2; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $*" >&2; }
+log_error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 
 # Parse arguments
 parse_args() {
@@ -381,22 +341,6 @@ get_ip_type() {
   fi
 }
 
-
-# Get colored IP type badge
-get_ip_type_badge() {
-  local ip_type="$1"
-  case "$ip_type" in
-    "Public") echo -e "${BG_GREEN}${BLACK} ${ip_type} ${NC}" ;;
-    "Private") echo -e "${BG_YELLOW}${BLACK} ${ip_type} ${NC}" ;;
-    "Local") echo -e "${BG_BLUE}${WHITE} ${ip_type} ${NC}" ;;
-    "CGNAT") echo -e "${BG_MAGENTA}${WHITE} ${ip_type} ${NC}" ;;
-    "Reserved") echo -e "${DIM}${YELLOW}[${ip_type}]${NC}" ;;
-    "Teredo") echo -e "${MAGENTA}[${ip_type}]${NC}" ;;
-    "6to4") echo -e "${CYAN}[${ip_type}]${NC}" ;;
-    *) echo -e "${DIM}[${ip_type}]${NC}" ;;
-  esac
-}
-
 # Perform DNS query for a single server
 query_dns_server() {
   local dns="$1"
@@ -528,7 +472,7 @@ process_results() {
   echo "$verdict|$exit_code"
 }
 
-# Output in normal format (ENHANCED)
+# Output in normal format
 output_normal() {
   local domain="$1"
   local peering_matched="$2"
@@ -537,89 +481,65 @@ output_normal() {
   declare -n types_ref="$5"
   local verdict="$6"
 
-  # Header with top border
-  echo -e "\n${SEPARATOR}"
-  echo -e "${BOLD}${CYAN}${STAR} DNS Verification Report${NC}"
-  echo -e "${SEPARATOR_LIGHT}"
-  
-  # Domain info
-  echo -e "${PIPE} ${BOLD}Domain:${NC}        ${BLUE}$domain${NC}"
-  echo -e "${PIPE} ${BOLD}Record Type:${NC}   ${CYAN}${RECORD_TYPE}${NC}"
-  
-  # Peering Check with visual indicator
+  echo -e "\n${BOLD}DNS Verification Report for: ${BLUE}${domain}${NC}"
+  echo -e "${SEPARATOR}"
+
+  # Peering Check
   if [[ "$peering_matched" == true ]]; then
-    echo -e "${PIPE} ${BOLD}Peering Status:${NC} ${GREEN}${CHECKMARK} Matched${NC} (In Peering List)"
+    echo -e "Peering Status: ${GREEN}Matched (In Peering List)${NC}"
   else
-    echo -e "${PIPE} ${BOLD}Peering Status:${NC} ${YELLOW}${CROSS} Unmatched${NC} (Not in Peering List)"
+    echo -e "Peering Status: ${YELLOW}Unmatched (Not in Peering List)${NC}"
   fi
-  
-  # Timestamp
-  echo -e "${PIPE} ${BOLD}Timestamp:${NC}     ${DIM}$(date '+%Y-%m-%d %H:%M:%S')${NC}"
-  echo -e "${SEPARATOR_LIGHT}"
 
-  # DNS Server Results
-  echo -e "${BOLD}${CYAN}DNS Server Results:${NC}\n"
+  echo -e "Record Type: ${CYAN}${RECORD_TYPE}${NC}"
+  echo -e "\n${BOLD}DNS Server Results:${NC}"
 
-  local result_count=0
-  local success_count=0
-  
   # Iterate over results, not all DNS servers
   for dns in "${!results_ref[@]}"; do
     local result="${results_ref[$dns]}"
     local ips="${ips_ref[$dns]:-}"
     local ip_types="${types_ref[$dns]:-}"
     local desc="${DNS_SERVERS[$dns]:-Custom DNS}"
-    
-    ((result_count++))
 
-    echo -e "${BLUE}${LEFT_CORNER}${DOUBLE_ARROW} [$result_count] $dns${NC}"
-    echo -e "${PIPE}    ${DIM}Description:${NC} $desc"
+    echo -e "\n${BLUE}➤ $dns ($desc)${NC}"
 
     case "$result" in
       "SUCCESS")
-        ((success_count++))
         IFS=',' read -ra IP_ARRAY <<< "$ips"
         IFS=',' read -ra TYPE_ARRAY <<< "$ip_types"
 
-        echo -e "${PIPE}    ${GREEN}${CHECKMARK} Success${NC} - ${#IP_ARRAY[@]} record(s) found:"
-        
         for i in "${!IP_ARRAY[@]}"; do
           local ip="${IP_ARRAY[$i]}"
           local ip_type="${TYPE_ARRAY[$i]}"
-          local type_badge=$(get_ip_type_badge "$ip_type")
+          local color="$GREEN"
 
-          # Create visual alignment
-          local index_str="[$((i+1))]"
-          echo -e "${PIPE}      ${index_str} ${type_badge} ${CYAN}$ip${NC}"
+          case "$ip_type" in
+            "Private") color="$YELLOW" ;;
+            "Local") color="$BLUE" ;;
+            "CGNAT") color="$MAGENTA" ;;
+            "Reserved") color="$DIM" ;;
+          esac
+
+          echo -e "  ${color}[$ip_type]${NC} $ip"
         done
         ;;
       "FAILED")
-        echo -e "${PIPE}    ${RED}${CROSS} Query failed${NC}"
+        echo -e "  ${RED}✗ Query failed${NC}"
         ;;
       NO_*_RECORD|NO_RECORD)
-        echo -e "${PIPE}    ${YELLOW}[!] No record found${NC}"
+        echo -e "  ${YELLOW}[!] No record found${NC}"
         ;;
     esac
-    echo
   done
 
-  # Summary statistics
-  echo -e "${SEPARATOR_LIGHT}"
-  echo -e "${BOLD}Summary:${NC}"
-  echo -e "${PIPE} Total DNS servers queried: ${CYAN}$result_count${NC}"
-  echo -e "${PIPE} Successful responses:      ${GREEN}$success_count${NC}"
-  echo -e "${PIPE} Failed responses:          ${RED}$((result_count - success_count))${NC}"
-
-  # Final verdict with large visual indicator
-  local verdict_color="${GREEN}"
-  local verdict_icon="${CHECKMARK}"
-  [[ "$verdict" == "PRIVATE" ]] && verdict_color="${YELLOW}" && verdict_icon="${CIRCLE}"
-  [[ "$verdict" == "LOCAL" ]] && verdict_color="${BLUE}" && verdict_icon="${CIRCLE}"
-  [[ "$verdict" == "UNKNOWN" ]] && verdict_color="${RED}" && verdict_icon="${CROSS}"
+  # Final verdict
+  local verdict_color="$GREEN"
+  [[ "$verdict" == "PRIVATE" ]] && verdict_color="$YELLOW"
+  [[ "$verdict" == "LOCAL" ]] && verdict_color="$BLUE"
+  [[ "$verdict" == "UNKNOWN" ]] && verdict_color="$RED"
 
   echo -e "\n${SEPARATOR}"
-  echo -e "${BOLD}Final Verdict:${NC}"
-  echo -e "${verdict_color}${BG_BLUE}${STAR}${STAR}${STAR}${NC} ${verdict_color}${BOLD}$verdict${NC} ${verdict_color}${BG_BLUE}${STAR}${STAR}${STAR}${NC}"
+  echo -e "${BOLD}Final Verdict: ${verdict_color}${verdict}${NC}"
   echo -e "${SEPARATOR}\n"
 }
 
@@ -714,6 +634,7 @@ output_short() {
   local verdict="$1"
   local exit_code="$2"
   echo "$verdict"
+  exit "$exit_code"
 }
 
 # Output in YAML format
@@ -798,15 +719,13 @@ process_domain() {
   tmpdir=$(mktemp -d)
   trap "rm -rf '$tmpdir'" EXIT RETURN
 
-    log_progress "Querying DNS servers"
-
   # Query DNS servers (parallel)
   local pids=()
   for entry in "${DNS_LIST[@]}"; do
     local dns="${entry%%:*}"
     local desc="${entry#*:}"
     # Use DNS IP in filename for reliable mapping
-    local safe_dns=$(echo "$dns" | tr '.:' '__')
+    local safe_dns="${dns//./_}"
     local output_file="$tmpdir/result_$safe_dns"
 
     query_dns_server "$dns" "$desc" "$domain" "$RECORD_TYPE" "$output_file" &
@@ -826,12 +745,10 @@ process_domain() {
     wait "$pid" 2>/dev/null || true
   done
 
-
-  echo -ne "\033[K\r" >&2  # Clear progress line
   # Read results
   for entry in "${DNS_LIST[@]}"; do
     local dns="${entry%%:*}"
-    local safe_dns=$(echo "$dns" | tr '.:' '__')
+    local safe_dns="${dns//./_}"
     local output_file="$tmpdir/result_$safe_dns"
     if [[ -f "$output_file" ]]; then
       IFS='|' read -r result desc ips types < "$output_file"
@@ -857,19 +774,21 @@ process_domain() {
       ;;
     "json")
       output_json "$domain" "$peering_matched" SERVER_RESULTS SERVER_IPS SERVER_TYPES "$verdict"
+      exit "$exit_code"
       ;;
     "csv")
       output_csv "$domain" "$peering_matched" SERVER_RESULTS SERVER_IPS SERVER_TYPES "$verdict"
+      exit "$exit_code"
       ;;
     "yaml")
       output_yaml "$domain" "$peering_matched" SERVER_RESULTS SERVER_IPS SERVER_TYPES "$verdict"
+      exit "$exit_code"
       ;;
     *)
       output_normal "$domain" "$peering_matched" SERVER_RESULTS SERVER_IPS SERVER_TYPES "$verdict"
+      exit "$exit_code"
       ;;
   esac
-
-  return "$exit_code"
 }
 
 # ============================================================================
@@ -902,15 +821,10 @@ main() {
   
   log_info "Processing ${#domains[@]} domain(s) with $dns_count DNS server(s)"
 
-  local overall_exit_code=0
   # Process each domain
   for domain in "${domains[@]}"; do
-    process_domain "$domain" || {
-      local code=$?
-      [[ $code -gt $overall_exit_code ]] && overall_exit_code=$code
-    }
+    process_domain "$domain"
   done
-  exit "$overall_exit_code"
 }
 
 main "$@"
