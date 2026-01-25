@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DNS Peer Verification Tool</title>
+    <style>
+      :root {
+        --bg-color: #0f172a;
+        --card-bg: rgba(30, 41, 59, 0.7);
+        --text-primary: #f1f5f9;
+        --text-secondary: #94a3b8;
+        --accent-color: #3b82f6;
+        --accent-hover: #2563eb;
+        --success: #22c55e;
+        --warning: #eab308;
+        --error: #ef4444;
+        --local: #06b6d4;
+        --border-radius: 12px;
+        --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      body {
+        font-family:
+          "Inter",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        background-color: var(--bg-color);
+        background-image:
+          radial-gradient(
+            at 0% 0%,
+            rgba(59, 130, 246, 0.15) 0px,
+            transparent 50%
+          ),
+          radial-gradient(
+            at 100% 0%,
+            rgba(139, 92, 246, 0.15) 0px,
+            transparent 50%
+          );
+        color: var(--text-primary);
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .container {
+        width: 100%;
+        max-width: 900px;
+        padding: 2rem;
+        box-sizing: border-box;
+      }
+
+      header {
+        text-align: center;
+        margin-bottom: 3rem;
+        animation: fadeInDown 0.8s ease-out;
+      }
+
+      h1 {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+        background: linear-gradient(to right, #60a5fa, #c084fc);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 800;
+      }
+
+      p.subtitle {
+        color: var(--text-secondary);
+        font-size: 1.1rem;
+      }
+
+      .search-box {
+        background: var(--card-bg);
+        padding: 1.5rem;
+        border-radius: var(--border-radius);
+        box-shadow:
+          0 4px 6px -1px rgba(0, 0, 0, 0.1),
+          0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 2rem;
+        animation: fadeInUp 0.8s ease-out 0.2s backwards;
+      }
+
+      input[type="text"] {
+        flex: 1;
+        background: rgba(15, 23, 42, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 0.8rem 1.2rem;
+        color: var(--text-primary);
+        font-size: 1.1rem;
+        transition: var(--transition);
+      }
+
+      input[type="text"]:focus {
+        outline: none;
+        border-color: var(--accent-color);
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+      }
+
+      button {
+        background: var(--accent-color);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 0 2rem;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+      }
+
+      button:hover {
+        background: var(--accent-hover);
+        transform: translateY(-1px);
+      }
+
+      button:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+      }
+
+      .loader {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: #fff;
+        animation: spin 1s ease-in-out infinite;
+        margin-right: 8px;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .results-container {
+        display: none; /* Hidden by default */
+        animation: fadeInUp 0.5s ease-out;
+      }
+
+      .verdict-card {
+        background: var(--card-bg);
+        border-radius: var(--border-radius);
+        padding: 2rem;
+        text-align: center;
+        margin-bottom: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+      }
+
+      .verdict-title {
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .verdict-value {
+        font-size: 2.5rem;
+        font-weight: 800;
+        margin-bottom: 1rem;
+      }
+
+      .peering-status {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.5rem 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 20px;
+        font-size: 0.9rem;
+      }
+
+      .peering-icon {
+        margin-right: 0.5rem;
+      }
+
+      .servers-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1.5rem;
+      }
+
+      .server-card {
+        background: var(--card-bg);
+        border-radius: var(--border-radius);
+        padding: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        transition: var(--transition);
+      }
+
+      .server-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(255, 255, 255, 0.1);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+      }
+
+      .server-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        padding-bottom: 0.8rem;
+      }
+
+      .server-name {
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+
+      .server-desc {
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+      }
+
+      .status-badge {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.6rem;
+        border-radius: 12px;
+        font-weight: 600;
+      }
+
+      .status-success {
+        background: rgba(34, 197, 94, 0.2);
+        color: #4ade80;
+      }
+      .status-error {
+        background: rgba(239, 68, 68, 0.2);
+        color: #f87171;
+      }
+      .status-loading {
+        background: rgba(96, 165, 250, 0.2);
+        color: #60a5fa;
+      }
+
+      .ip-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .ip-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 0.5rem;
+        font-family: "SF Mono", "Roboto Mono", monospace;
+        font-size: 0.9rem;
+      }
+
+      .ip-item:last-child {
+        margin-bottom: 0;
+      }
+
+      .ip-type-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 10px;
+      }
+
+      .type-Public {
+        background-color: var(--success);
+        box-shadow: 0 0 8px var(--success);
+      }
+      .type-Private {
+        background-color: var(--warning);
+        box-shadow: 0 0 8px var(--warning);
+      }
+      .type-Local {
+        background-color: var(--local);
+        box-shadow: 0 0 8px var(--local);
+      }
+      .type-Other {
+        background-color: var(--text-secondary);
+      }
+
+      @keyframes fadeInDown {
+        from {
+          opacity: 0;
+          transform: translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* Footer */
+      footer {
+        margin-top: auto;
+        padding: 2rem;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>DNS Verification Tool</h1>
+        <p class="subtitle">
+          Check Public/Private IP Resolution & Peering Status
+        </p>
+      </header>
+
+      <div class="search-box">
+        <input
+          type="text"
+          id="domainInput"
+          placeholder="Enter domain (e.g., www.baidu.com)"
+          autocomplete="off"
+        />
+        <button id="checkBtn" onclick="runCheck()">Resolve</button>
+      </div>
+
+      <div id="resultsArea" class="results-container">
+        <div class="verdict-card">
+          <div class="verdict-title">Final Verdict</div>
+          <div id="finalVerdict" class="verdict-value">--</div>
+          <div id="peeringStatus" class="peering-status">
+            <span class="peering-icon">❓</span>
+            <span id="peeringText">Checking...</span>
+          </div>
+        </div>
+
+        <div class="servers-grid" id="serversGrid">
+          <!-- Cards will be injected here -->
+        </div>
+      </div>
+    </div>
+
+    <footer>Generated by Antigravity • Runs entirely in browser</footer>
+
+    <script>
+      // --- Configuration ---
+      const DNS_SERVERS = [
+        {
+          id: "google",
+          name: "Google DNS",
+          ip: "8.8.8.8",
+          url: "https://dns.google/resolve",
+        },
+        {
+          id: "cloudflare",
+          name: "Cloudflare",
+          ip: "1.1.1.1",
+          url: "https://cloudflare-dns.com/dns-query",
+        },
+        {
+          id: "ali",
+          name: "AliDNS",
+          ip: "223.5.5.5",
+          url: "https://dns.alidns.com/resolve",
+        },
+        {
+          id: "quad9",
+          name: "Quad9",
+          ip: "9.9.9.9",
+          url: "https://dns.quad9.net/dns-query",
+        },
+        // DNSPod DoH often has CORS issues or requires specific params, we'll try the common public one or omit if unstable.
+        // Using AliDNS as the primary Chinese representitive is usually safer for CORS.
+      ];
+
+      const DNS_PEERING = ["baidu.com", "sohu.com", "internal.lan"];
+
+      // --- Logic ---
+
+      function getIpType(ip) {
+        // Remove brackets for IPv6
+        ip = ip.replace(/[\[\]]/g, "");
+
+        if (ip.includes(":")) {
+          return getIpv6Type(ip);
+        } else {
+          return getIpv4Type(ip);
+        }
+      }
+
+      function getIpv4Type(ip) {
+        const parts = ip.split(".").map(Number);
+        if (parts.length !== 4) return "Unknown";
+
+        const [a, b, c, d] = parts;
+
+        // Private: 10.0.0.0/8
+        if (a === 10) return "Private";
+        // Private: 172.16.0.0/12
+        if (a === 172 && b >= 16 && b <= 31) return "Private";
+        // Private: 192.168.0.0/16
+        if (a === 192 && b === 168) return "Private";
+        // Loopback: 127.0.0.0/8
+        if (a === 127) return "Local";
+        // Link-local: 169.254.0.0/16
+        if (a === 169 && b === 254) return "Local";
+        // CGNAT: 100.64.0.0/10
+        if (a === 100 && b >= 64 && b <= 127) return "Private"; // Often treated as private-ish
+
+        return "Public";
+      }
+
+      function getIpv6Type(ip) {
+        // Simplified check for common prefixes
+        // In a real browser environment, it's hard to handle shortened IPv6 logic perfectly without a library,
+        // but we can check the start.
+
+        // Normalize slightly by lowercasing
+        ip = ip.toLowerCase();
+
+        if (ip === "::1" || ip.startsWith("::1")) return "Local";
+        if (ip.startsWith("fc") || ip.startsWith("fd")) return "Private"; // ULA
+        if (ip.startsWith("fe80")) return "Local"; // Link-local
+
+        return "Public";
+      }
+
+      function checkDomainInPeering(domain) {
+        return DNS_PEERING.some((p) => domain.includes(p));
+      }
+
+      async function resolveDns(server, domain) {
+        const type = "A"; // Default to A record
+        let url = `${server.url}?name=${domain}&type=${type}`;
+
+        // Some providers use slightly different params or headers
+        const headers = { Accept: "application/dns-json" };
+
+        try {
+          const response = await fetch(url, { headers });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.json();
+          return data;
+        } catch (error) {
+          console.warn(
+            `Failed to resolve ${domain} via ${server.name}:`,
+            error,
+          );
+          return null;
+        }
+      }
+
+      // --- UI Functions ---
+
+      const domainInput = document.getElementById("domainInput");
+
+      domainInput.addEventListener("keypress", function (e) {
+        if (e.key === "Enter") {
+          runCheck();
+        }
+      });
+
+      async function runCheck() {
+        const domain = domainInput.value.trim();
+        if (!domain) return;
+
+        // Reset UI
+        document.getElementById("resultsArea").style.display = "block";
+        document.getElementById("serversGrid").innerHTML = "";
+        document.getElementById("checkBtn").disabled = true;
+        document.getElementById("checkBtn").innerHTML =
+          '<span class="loader"></span>Checking';
+
+        document.getElementById("finalVerdict").textContent = "...";
+        document.getElementById("finalVerdict").style.color =
+          "var(--text-secondary)";
+
+        // Peering Check
+        const isPeering = checkDomainInPeering(domain);
+        const peeringText = document.getElementById("peeringText");
+        const peeringIcon = document.querySelector(".peering-icon");
+
+        if (isPeering) {
+          peeringText.textContent = "Matched (In Peering List)";
+          peeringText.style.color = "var(--success)";
+          peeringIcon.textContent = "✅";
+        } else {
+          peeringText.textContent = "Unmatched";
+          peeringText.style.color = "var(--warning)";
+          peeringIcon.textContent = "ℹ️";
+        }
+
+        // Create cards for each server
+        DNS_SERVERS.forEach((server) => {
+          const card = document.createElement("div");
+          card.className = "server-card";
+          card.id = `card-${server.id}`;
+          card.innerHTML = `
+                    <div class="server-header">
+                        <div>
+                            <div class="server-name">${server.name}</div>
+                            <div class="server-desc">${server.ip}</div>
+                        </div>
+                        <span class="status-badge status-loading" id="badge-${server.id}">Waiting...</span>
+                    </div>
+                    <ul class="ip-list" id="list-${server.id}">
+                    </ul>
+                `;
+          document.getElementById("serversGrid").appendChild(card);
+        });
+
+        // Run queries
+        let publicCount = 0;
+        let privateCount = 0;
+
+        const promises = DNS_SERVERS.map(async (server) => {
+          const badge = document.getElementById(`badge-${server.id}`);
+          const list = document.getElementById(`list-${server.id}`);
+
+          badge.textContent = "Querying...";
+
+          const data = await resolveDns(server, domain);
+
+          if (!data || data.Status !== 0) {
+            badge.className = "status-badge status-error";
+            badge.textContent = data ? `Error ` + data.Status : "Failed";
+            return;
+          }
+
+          // Parse Answers
+          const answers = data.Answer || [];
+          if (answers.length === 0) {
+            badge.className = "status-badge status-error";
+            badge.textContent = "No Records";
+            return;
+          }
+
+          badge.className = "status-badge status-success";
+          badge.textContent = "Success";
+
+          answers.forEach((rec) => {
+            // Only care about A (1) or AAAA (28) records for IP checking
+            // But usually DoH returns type as number. 1 = A, 28 = AAAA.
+            if (rec.type === 1 || rec.type === 28) {
+              const ip = rec.data;
+              const type = getIpType(ip);
+
+              if (type === "Public") publicCount++;
+              if (type === "Private") privateCount++;
+
+              const li = document.createElement("li");
+              li.className = "ip-item";
+              li.innerHTML = `<span class="ip-type-dot type-${type}"></span>${ip}`;
+              list.appendChild(li);
+            }
+          });
+        });
+
+        await Promise.all(promises);
+
+        // Final Verdict
+        const verdictEl = document.getElementById("finalVerdict");
+        if (publicCount > 0) {
+          verdictEl.textContent = "PUBLIC";
+          verdictEl.style.color = "var(--success)";
+        } else if (privateCount > 0) {
+          verdictEl.textContent = "PRIVATE";
+          verdictEl.style.color = "var(--warning)";
+        } else {
+          verdictEl.textContent = "UNKNOWN";
+          verdictEl.style.color = "var(--text-secondary)";
+        }
+
+        // Reset Button
+        document.getElementById("checkBtn").disabled = false;
+        document.getElementById("checkBtn").textContent = "Resolve";
+      }
+    </script>
+  </body>
+</html>
