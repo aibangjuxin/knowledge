@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2026-01-26 09:35:00
+Generated on: 2026-01-26 10:58:22
 Directory: /Users/lex/git/knowledge/gcp/pub-sub/pub-sub-cmek
 
 ## `pubsub-cmek-manager.sh`
@@ -41,13 +41,13 @@ SCHEDULER_SA="service-${PROJECT_NUMBER}@gcp-sa-cloudscheduler.iam.gserviceaccoun
 PUBSUB_SA="service-${PROJECT_NUMBER}@gcp-sa-pubsub.iam.gserviceaccount.com"
 
 # Color codes for output
-readonly GREEN='\033[0;32m'
-readonly YELLOW='\033[1;33m'
-readonly RED='\033[0;31m'
-readonly BLUE='\033[0;34m'
-readonly CYAN='\033[0;36m'
-readonly NC='\033[0m' # No Color
-readonly BOLD='\033[1m'
+readonly GREEN=$'\e[0;32m'
+readonly YELLOW=$'\e[1;33m'
+readonly RED=$'\e[0;31m'
+readonly BLUE=$'\e[0;34m'
+readonly CYAN=$'\e[0;36m'
+readonly NC=$'\e[0m' # No Color
+readonly BOLD=$'\e[1m'
 
 # ============================================================================
 # UTILITY FUNCTIONS
