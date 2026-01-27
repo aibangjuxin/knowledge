@@ -190,10 +190,10 @@ create_dns_transaction() {
     local a_record=$4
     
     # 开始事务
-    echo -e "\n${BLUE}为 $domain 创建 DNS 记录...${NC}"
+    echo -e "\n${BLUE}为 $domain 创建 DNS 记录...${NC}" >&2
     
     # 创建临时事务文件
-    local transaction_file="/tmp/dns-transaction-$(date +%s).yaml"
+    local transaction_file="/tmp/dns-transaction-$(date +%s)-$$.yaml"
     
     cat > "$transaction_file" << EOF
 ---
@@ -218,7 +218,7 @@ EOF
   type: CNAME
 EOF
         
-        echo -e "  ${GREEN}添加 CNAME:${NC} $source -> $target"
+        echo -e "  ${GREEN}添加 CNAME:${NC} $source -> $target" >&2
     done
     
     # 添加 A 记录
@@ -237,9 +237,10 @@ EOF
   type: A
 EOF
         
-        echo -e "  ${GREEN}添加 A Record:${NC} $a_domain -> $a_ip"
+        echo -e "  ${GREEN}添加 A Record:${NC} $a_domain -> $a_ip" >&2
     fi
     
+    # 只输出文件名到 stdout
     echo "$transaction_file"
 }
 
