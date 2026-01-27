@@ -182,26 +182,19 @@ resolve_domain() {
     return 0
 }
 
-# Create DNS record transaction file
-create_dns_transaction() {
+# Add DNS records
+add_dns_records() {
     local zone=$1
     local domain=$2
-    local -n cnames=$3
+    local -n cnames_array=$3
     local a_record=$4
 
-    # Start transaction
-    echo -e "\n${BLUE}Creating DNS records for $domain...${NC}"
+    echo -e "\n${BLUE}Adding DNS records for $domain to Zone: $zone${NC}" >&2
 
-    # Create temporary transaction file
-    local transaction_file="/tmp/dns-transaction-$(date +%s).yaml"
-
-    cat > "$transaction_file" << EOF
----
-additions:
-EOF
+    local success=true
 
     # Add CNAME records
-    for cname_entry in "${cnames[@]}"; do
+    for cname_entry in "${cnames_array[@]}"; do
         local source=$(echo "$cname_entry" | awk '{print $1}')
         local target=$(echo "$cname_entry" | awk '{print $3}')
 
@@ -209,16 +202,23 @@ EOF
         [[ "$source" != *. ]] && source="${source}."
         [[ "$target" != *. ]] && target="${target}."
 
-        cat >> "$transaction_file" << EOF
-- kind: dns#resourceRecordSet
-  name: "$source"
-  rrdatas:
-  - "$target"
-  ttl: 300
-  type: CNAME
-EOF
+        echo -e "  ${BLUE}Adding CNAME:${NC} $source -> $target" >&2
 
-        echo -e "  ${GREEN}Adding CNAME:${NC} $source -> $target"
+        # Check if record already exists
+        if gcloud dns record-sets describe "$source" --type=CNAME --zone="$zone" &>/dev/null; then
+            echo -e "  ${YELLOW}Record already exists, skipping${NC}" >&2
+        else
+            if gcloud dns record-sets create "$source" \
+                --rrdatas="$target" \
+                --type=CNAME \
+                --ttl=300 \
+                --zone="$zone" &>/dev/null; then
+                echo -e "  ${GREEN}✓ Successfully added CNAME${NC}" >&2
+            else
+                echo -e "  ${RED}✗ Failed to add CNAME${NC}" >&2
+                success=false
+            fi
+        fi
     done
 
     # Add A record
@@ -228,39 +228,28 @@ EOF
 
         [[ "$a_domain" != *. ]] && a_domain="${a_domain}."
 
-        cat >> "$transaction_file" << EOF
-- kind: dns#resourceRecordSet
-  name: "$a_domain"
-  rrdatas:
-  - "$a_ip"
-  ttl: 300
-  type: A
-EOF
+        echo -e "  ${BLUE}Adding A Record:${NC} $a_domain -> $a_ip" >&2
 
-        echo -e "  ${GREEN}Adding A Record:${NC} $a_domain -> $a_ip"
+        # Check if record already exists
+        if gcloud dns record-sets describe "$a_domain" --type=A --zone="$zone" &>/dev/null; then
+            echo -e "  ${YELLOW}Record already exists, skipping${NC}" >&2
+        else
+            if gcloud dns record-sets create "$a_domain" \
+                --rrdatas="$a_ip" \
+                --type=A \
+                --ttl=300 \
+                --zone="$zone" &>/dev/null; then
+                echo -e "  ${GREEN}✓ Successfully added A Record${NC}" >&2
+            else
+                echo -e "  ${RED}✗ Failed to add A Record${NC}" >&2
+                success=false
+            fi
+        fi
     fi
 
-    echo "$transaction_file"
-}
-
-# Import DNS records
-import_dns_records() {
-    local zone=$1
-    local transaction_file=$2
-
-    echo -e "\n${BLUE}Importing DNS records to Zone: $zone${NC}"
-
-    gcloud dns record-sets import "$transaction_file" \
-        --zone="$zone" \
-        --zone-file-format 2>&1
-
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✓ Successfully imported DNS records${NC}"
-        rm -f "$transaction_file"
+    if [ "$success" = true ]; then
         return 0
     else
-        echo -e "${RED}✗ Import failed${NC}"
-        echo "Transaction file saved at: $transaction_file"
         return 1
     fi
 }
@@ -324,15 +313,12 @@ main() {
         echo -e "${GREEN}========================================${NC}"
 
         # Resolve domain
-        local cnames=()
-        local a_record=""
+        local domain_cnames=()
+        local domain_a_record=""
 
-        if resolve_domain "$domain" cnames a_record; then
-            # Create transaction file
-            local transaction_file=$(create_dns_transaction "$ZONE_NAME" "$domain" cnames "$a_record")
-
-            # Import records
-            if import_dns_records "$ZONE_NAME" "$transaction_file"; then
+        if resolve_domain "$domain" domain_cnames domain_a_record; then
+            # Add DNS records
+            if add_dns_records "$ZONE_NAME" "$domain" domain_cnames "$domain_a_record"; then
                 ((success_count++))
 
                 # Verify records
