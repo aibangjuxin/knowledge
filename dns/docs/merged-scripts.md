@@ -1,538 +1,746 @@
 # Shell Scripts Collection
 
-Generated on: 2025-12-31 17:05:54
-Directory: /Users/lex/git/knowledge/dns
+Generated on: 2026-01-27 15:56:01
+Directory: /Users/lex/git/knowledge/dns/docs
 
-## `dns-peering-claude.sh`
-
-```bash
-#!/opt/homebrew/bin/bash
-
-# Check if domain parameter is provided
-if [ $# -ne 1 ]; then
-  echo "Usage: $0 <domain>"
-  echo "Example: $0 www.baidu.com"
-  exit 1
-fi
-
-# Define domain and DNS server list (using associative array)
-DOMAIN=$1
-declare -A DNS_SERVERS=(
-  ["8.8.8.8"]="Google Public DNS"
-  ["119.29.29.29"]="Tencent DNSPod"
-  ["114.114.114.114"]="114 DNS"
-)
-
-# Define DNS Peering list (using array)
-DNS_PEERING=(
-  "baidu.com"
-  "sohu.com"
-)
-
-# ANSI color codes
-GREEN='\033[32m'
-YELLOW='\033[33m'
-RED='\033[31m'
-BLUE='\033[34m'
-NC='\033[0m'
-SEPARATOR="================================================================"
-
-# Function to convert IP to decimal
-ip_to_decimal() {
-  local ip=$1
-  local a b c d
-  IFS=. read -r a b c d <<< "$ip"
-  echo "$((a * 256 ** 3 + b * 256 ** 2 + c * 256 + d))"
-}
-
-# Function to check if IP is in CIDR range
-ip_in_cidr() {
-  local ip=$1
-  local cidr=$2
-  local network mask ip_decimal network_decimal
-  
-  network="${cidr%/*}"
-  mask="${cidr#*/}"
-  
-  ip_decimal=$(ip_to_decimal "$ip")
-  network_decimal=$(ip_to_decimal "$network")
-  
-  # Calculate network mask
-  local mask_decimal=$(( (0xFFFFFFFF << (32 - mask)) & 0xFFFFFFFF ))
-  
-  # Check if IP is in range
-  if [ $(( ip_decimal & mask_decimal )) -eq $(( network_decimal & mask_decimal )) ]; then
-    return 0
-  else
-    return 1
-  fi
-}
-
-# Function to determine IP address type
-get_ip_type() {
-  local ip=$1
-  
-  # RFC1918 Private IP ranges
-  if ip_in_cidr "$ip" "10.0.0.0/8"; then
-    echo "${RED}[Private - RFC1918: 10.0.0.0/8]${NC}"
-    return
-  fi
-  
-  if ip_in_cidr "$ip" "172.16.0.0/12"; then
-    echo "${RED}[Private - RFC1918: 172.16.0.0/12]${NC}"
-    return
-  fi
-  
-  if ip_in_cidr "$ip" "192.168.0.0/16"; then
-    echo "${RED}[Private - RFC1918: 192.168.0.0/16]${NC}"
-    return
-  fi
-  
-  # Loopback
-  if ip_in_cidr "$ip" "127.0.0.0/8"; then
-    echo "${YELLOW}[Loopback - RFC1122]${NC}"
-    return
-  fi
-  
-  # Link-local
-  if ip_in_cidr "$ip" "169.254.0.0/16"; then
-    echo "${YELLOW}[Link-Local - RFC3927]${NC}"
-    return
-  fi
-  
-  # Carrier-grade NAT (CGNAT)
-  if ip_in_cidr "$ip" "100.64.0.0/10"; then
-    echo "${YELLOW}[Shared Address Space - RFC6598 CGNAT]${NC}"
-    return
-  fi
-  
-  # Multicast
-  if ip_in_cidr "$ip" "224.0.0.0/4"; then
-    echo "${YELLOW}[Multicast - RFC5771]${NC}"
-    return
-  fi
-  
-  # Reserved
-  if ip_in_cidr "$ip" "240.0.0.0/4"; then
-    echo "${YELLOW}[Reserved - RFC1112]${NC}"
-    return
-  fi
-  
-  # Public IP
-  echo "${GREEN}[Public IP]${NC}"
-}
-
-# Function to extract and classify IP addresses from DNS result
-process_dns_result() {
-  local result=$1
-  
-  # Extract A records (IPv4)
-  local ips=$(echo "$result" | grep -E "^[^;].*\sA\s" | awk '{print $NF}')
-  
-  if [ -n "$ips" ]; then
-    echo -e "${GREEN}DNS A records found:${NC}"
-    while IFS= read -r line; do
-      # Extract complete DNS record line
-      local full_record=$(echo "$result" | grep -E "\s$line\s*$" | head -1)
-      if [ -n "$full_record" ]; then
-        local ip_type=$(get_ip_type "$line")
-        echo -e "${GREEN}${full_record}${NC} ${ip_type}"
-      fi
-    done <<< "$ips"
-    return 0
-  else
-    # If no A records, show other record types
-    if [ -n "$result" ]; then
-      echo -e "${BLUE}Other DNS records found:${NC}"
-      echo -e "${BLUE}${result}${NC}"
-      return 0
-    fi
-  fi
-  
-  return 1
-}
-
-# Function to check if domain is in Peering list
-check_domain_in_peering() {
-  local input_domain="$1"
-  for peering_domain in "${DNS_PEERING[@]}"; do
-    if [[ "$input_domain" == *"$peering_domain" ]]; then
-      return 0
-    fi
-  done
-  return 1
-}
-
-# Check if input domain is in Peering list
-if check_domain_in_peering "$DOMAIN"; then
-  echo -e "✅ Domain $DOMAIN is in DNS Peering list"
-else
-  echo -e "❌ Domain $DOMAIN is not in DNS Peering list"
-fi
-
-# Query each DNS server
-for dns in "${!DNS_SERVERS[@]}"; do
-  echo -e "\n${SEPARATOR}"
-  echo -e "🔍 Using DNS Server: ${GREEN}${dns}${NC} (${DNS_SERVERS[$dns]})"
-  echo "${SEPARATOR}"
-  
-  # Execute dig command and process output
-  result=$(dig @"$dns" "$DOMAIN" +noall +answer +authority +additional)
-  
-  # Check if result exists
-  if [ -n "$result" ]; then
-    if ! process_dns_result "$result"; then
-      echo "❌ No DNS records found"
-    fi
-  else
-    echo "❌ Query failed or no results returned"
-  fi
-done
-
-echo -e "\n${SEPARATOR}"
-echo "✅ Query completed"
-
-```
-
-## `dns-peering-eng.sh`
+## `dnsrecord-add-script-eng.sh`
 
 ```bash
-#!/opt/homebrew/bin/bash
+#!/bin/bash
 
-# Check if domain parameter is provided
-if [ $# -ne 1 ]; then
-  echo "Usage: $0 <domain>"
-  echo "Example: $0 www.baidu.com"
-  exit 1
-fi
+# GCP Cloud DNS Record Batch Addition Script
+# Purpose: Automatically resolve domains and add CNAME and A records to the specified Cloud DNS Zone
 
-# Define domain and DNS server list (using associative array)
-DOMAIN=$1
-declare -A DNS_SERVERS=(
-  ["8.8.8.8"]="Google Public DNS"
-  ["119.29.29.29"]="Tencent DNSPod"
-  ["114.114.114.114"]="114 DNS"
+# ============================================
+# Configuration Section
+# ============================================
+
+# GCP Project ID
+PROJECT_ID="your-project-id"
+
+# Default DNS Zone Name
+DEFAULT_ZONE_NAME="private-access"
+
+# Domain list to be added
+DOMAINS=(
+    "www.example.com"
+    "api.example.com"
+    "login.microsoft.com"
+    "graph.microsoft.com"
 )
 
-# Define DNS Peering list (using array)
-DNS_PEERING=(
-  "baidu.com"
-  "sohu.com"
-)
+# ============================================
+# Color Definitions
+# ============================================
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-# Function to check if domain is in Peering list
-check_domain_in_peering() {
-  local input_domain="$1"
-  for peering_domain in "${DNS_PEERING[@]}"; do
-    if [[ "$input_domain" == *"$peering_domain" ]]; then
-      return 0 # Match found
-    fi
-  done
-  return 1 # No match found
+# ============================================
+# Function Definitions
+# ============================================
+
+# Display help information
+show_help() {
+    cat << EOF
+Usage: $(basename $0) [options]
+
+Options:
+  -p PROJECT_ID    Specify GCP Project ID (default: $PROJECT_ID)
+  -z ZONE_NAME     Specify DNS Zone Name (default: $DEFAULT_ZONE_NAME)
+  -h               Show this help information
+
+Examples:
+  $(basename $0)                                    # Use default configuration
+  $(basename $0) -p my-project -z my-zone          # Specify project and Zone
+  $(basename $0) -z custom-zone                    # Specify Zone only
+
+Description:
+  The script automatically resolves all domains in the domain list, extracts CNAME and A records,
+  and adds them to the specified Cloud DNS Zone.
+
+EOF
 }
 
-# Check if input domain is in Peering list
-if check_domain_in_peering "$DOMAIN"; then
-  echo -e "✅ Domain $DOMAIN is in DNS Peering list"
-else
-  echo -e "❌ Domain $DOMAIN is not in DNS Peering list"
-fi
-
-# Query Parameters
-TIMEOUT=2
-TRIES=2
-
-# ANSI color codes
-GREEN='\033[32m'
-YELLOW='\033[33m'
-BLUE='\033[34m'
-RED='\033[31m'
-NC='\033[0m'
-SEPARATOR="================================================================"
-
-# Function to determine IP type (RFC1918)
-get_ip_type() {
-  local ip="$1"
-  local a b c d
-  if [[ ! "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "Unknown"
-    return
-  fi
-  IFS='.' read -r a b c d <<< "$ip"
-  
-  # RFC1918 Ranges
-  # 10.0.0.0/8
-  if [[ "$a" -eq 10 ]]; then
-    echo "Private"
-    return
-  fi
-  # 172.16.0.0/12
-  if [[ "$a" -eq 172 && "$b" -ge 16 && "$b" -le 31 ]]; then
-    echo "Private"
-    return
-  fi
-  # 192.168.0.0/16
-  if [[ "$a" -eq 192 && "$b" -eq 168 ]]; then
-    echo "Private"
-    return
-  fi
-  
-  echo "Public"
-}
-
-# Query each DNS server
-for dns in "${!DNS_SERVERS[@]}"; do
-  echo -e "\n${SEPARATOR}"
-  echo -e "🔍 Using DNS Server: ${BLUE}${dns}${NC} (${DNS_SERVERS[$dns]})"
-  echo "${SEPARATOR}"
-
-  # Execute dig command with timeout and retries
-  result=$(dig @"$dns" "$DOMAIN" +noall +answer +authority +additional +time=${TIMEOUT} +tries=${TRIES})
-  exit_code=$?
-
-  if [ $exit_code -ne 0 ]; then
-    echo -e "${RED}❌ Query failed (Exit Code: $exit_code). Server may be unreachable or timed out.${NC}"
-    continue
-  fi
-
-  if [ -n "$result" ]; then
-    echo -e "${GREEN}DNS records found:${NC}"
-    # Process each line of the answer
-    echo "$result" | while read -r line; do
-      # Ignore comment lines
-      [[ "$line" =~ ^\; ]] && continue
-      [[ -z "$line" ]] && continue
-
-      if [[ "$line" =~ [[:space:]]A[[:space:]]+([0-9.]+)$ ]]; then
-        ip="${BASH_REMATCH[1]}"
-        ip_type=$(get_ip_type "$ip")
-        
-        # Colorize type
-        type_color=$GREEN
-        [[ "$ip_type" == "Private" ]] && type_color=$YELLOW
-        
-        echo -e "${line}  -> ${type_color}[${ip_type}]${NC}"
-      else
-        echo "$line"
-      fi
+# Parse command-line arguments
+parse_args() {
+    while getopts "p:z:h" opt; do
+        case $opt in
+            p)
+                PROJECT_ID="$OPTARG"
+                ;;
+            z)
+                ZONE_NAME="$OPTARG"
+                ;;
+            h)
+                show_help
+                exit 0
+                ;;
+            \?)
+                echo -e "${RED}Error: Invalid option -$OPTARG${NC}" >&2
+                show_help
+                exit 1
+                ;;
+        esac
     done
-  else
-    echo "❌ Query failed or no results returned"
-  fi
-done
-
-echo -e "\n${SEPARATOR}"
-echo "✅ Query completed"
-
-```
-
-## `dns-query-eng.sh`
-
-```bash
-#!/opt/homebrew/bin/bash
-
-# Check if domain parameter is provided
-if [ $# -ne 1 ]; then
-  echo "Usage: $0 <domain>"
-  echo "Example: $0 www.baidu.com"
-  exit 1
-fi
-
-# Define domain and DNS server list (using associative array)
-DOMAIN=$1
-declare -A DNS_SERVERS=(
-  ["8.8.8.8"]="Google Public DNS"
-  ["119.29.29.29"]="Tencent DNSPod"
-  ["114.114.114.114"]="114 DNS"
-)
-
-# Define DNS Peering list (using array)
-DNS_PEERING=(
-  "baidu.com"
-  "sohu.com"
-)
-
-# Function to check if domain is in Peering list
-check_domain_in_peering() {
-  local input_domain="$1"
-  for peering_domain in "${DNS_PEERING[@]}"; do
-    if [[ "$input_domain" == *"$peering_domain" ]]; then
-      return 0 # Match found
-    fi
-  done
-  return 1 # No match found
 }
 
-# Check if input domain is in Peering list
-if check_domain_in_peering "$DOMAIN"; then
-  echo -e "✅ Domain $DOMAIN is in DNS Peering list"
-else
-  echo -e "❌ Domain $DOMAIN is not in DNS Peering list"
-fi
+# Check if required commands exist
+check_dependencies() {
+    local missing_deps=()
 
-# Query Parameters
-TIMEOUT=2
-TRIES=2
-
-# ANSI color codes
-GREEN='\033[32m'
-YELLOW='\033[33m'
-BLUE='\033[34m'
-RED='\033[31m'
-NC='\033[0m'
-SEPARATOR="================================================================"
-
-# Function to determine IP type (RFC1918)
-get_ip_type() {
-  local ip="$1"
-  local a b c d
-  if [[ ! "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "Unknown"
-    return
-  fi
-  IFS='.' read -r a b c d <<< "$ip"
-  
-  # RFC1918 Ranges
-  # 10.0.0.0/8
-  if [[ "$a" -eq 10 ]]; then
-    echo "Private"
-    return
-  fi
-  # 172.16.0.0/12
-  if [[ "$a" -eq 172 && "$b" -ge 16 && "$b" -le 31 ]]; then
-    echo "Private"
-    return
-  fi
-  # 192.168.0.0/16
-  if [[ "$a" -eq 192 && "$b" -eq 168 ]]; then
-    echo "Private"
-    return
-  fi
-  
-  echo "Public"
-}
-
-# Query each DNS server
-for dns in "${!DNS_SERVERS[@]}"; do
-  echo -e "\n${SEPARATOR}"
-  echo -e "🔍 Using DNS Server: ${BLUE}${dns}${NC} (${DNS_SERVERS[$dns]})"
-  echo "${SEPARATOR}"
-
-  # Execute dig command with timeout and retries
-  result=$(dig @"$dns" "$DOMAIN" +noall +answer +authority +additional +time=${TIMEOUT} +tries=${TRIES})
-  exit_code=$?
-
-  if [ $exit_code -ne 0 ]; then
-    echo -e "${RED}❌ Query failed (Exit Code: $exit_code). Server may be unreachable or timed out.${NC}"
-    continue
-  fi
-
-  if [ -n "$result" ]; then
-    echo -e "${GREEN}DNS records found:${NC}"
-    # Process each line of the answer
-    echo "$result" | while read -r line; do
-      # Ignore comment lines
-      [[ "$line" =~ ^\; ]] && continue
-      [[ -z "$line" ]] && continue
-
-      if [[ "$line" =~ [[:space:]]A[[:space:]]+([0-9.]+)$ ]]; then
-        ip="${BASH_REMATCH[1]}"
-        ip_type=$(get_ip_type "$ip")
-        
-        # Colorize type
-        type_color=$GREEN
-        [[ "$ip_type" == "Private" ]] && type_color=$YELLOW
-        
-        echo -e "${line}  -> ${type_color}[${ip_type}]${NC}"
-      else
-        echo "$line"
-      fi
-    done
-  else
-    echo "❌ Query failed or no results returned"
-  fi
-done
-
-echo -e "\n${SEPARATOR}"
-echo "✅ Query completed"
-
-```
-
-## `dns-query.sh`
-
-```bash
-#!/opt/homebrew/bin/bash
-
-# 检查是否提供了域名参数
-if [ $# -ne 1 ]; then
-    echo "Usage: $0 <domain>"
-    echo "Example: $0 www.baidu.com"
-    exit 1
-fi
-
-# 定义域名和 DNS 服务器列表（使用关联数组）
-DOMAIN=$1
-declare -A DNS_SERVERS=(
-    ["8.8.8.8"]="Google Public DNS"
-    ["119.29.29.29"]="腾讯 DNSPod"
-    ["114.114.114.114"]="114 DNS"
-)
-
-# 定义 DNS Peering 列表（使用普通数组）
-DNS_PEERING=(
-    "baidu.com"
-    "sohu.com"
-)
-
-# 检查域名是否在 Peering 列表中的函数
-check_domain_in_peering() {
-    local input_domain="$1"
-    for peering_domain in "${DNS_PEERING[@]}"; do
-        if [[ "$input_domain" == *"$peering_domain" ]]; then
-            return 0  # 找到匹配
+    for cmd in gcloud host; do
+        if ! command -v $cmd &> /dev/null; then
+            missing_deps+=($cmd)
         fi
     done
-    return 1  # 未找到匹配
+
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        echo -e "${RED}Error: Missing required commands: ${missing_deps[*]}${NC}"
+        echo "Please install the missing tools and try again"
+        exit 1
+    fi
 }
 
-# 检查输入域名是否在 Peering 列表中
-if check_domain_in_peering "$DOMAIN"; then
-    echo -e "✅ 域名 $DOMAIN 属于 DNS Peering 列表"
-else
-    echo -e "❌ 域名 $DOMAIN 不属于 DNS Peering 列表"
-fi
+# Set GCP Project
+set_project() {
+    echo -e "${BLUE}Setting GCP Project: $PROJECT_ID${NC}"
+    gcloud config set project "$PROJECT_ID" --quiet
 
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}Error: Cannot set project $PROJECT_ID${NC}"
+        exit 1
+    fi
+}
 
-# ANSI 颜色代码
-GREEN='\033[32m'
-NC='\033[0m'
-SEPARATOR="================================================================"
+# List all DNS Zones
+list_zones() {
+    echo -e "\n${GREEN}========================================${NC}"
+    echo -e "${GREEN}DNS Zones in Current Project:${NC}"
+    echo -e "${GREEN}========================================${NC}"
 
-# 对每个 DNS 服务器执行查询
-for dns in "${!DNS_SERVERS[@]}"; do
-    echo -e "\n${SEPARATOR}"
-    echo -e "🔍 使用 DNS 服务器: ${GREEN}${dns}${NC} (${DNS_SERVERS[$dns]})"
-    echo "${SEPARATOR}"
-    
-    # 执行 dig 命令并处理输出
-    result=$(dig @"$dns" "$DOMAIN" +noall +answer +authority +additional)
-    
-    # 检查是否有 ANSWER SECTION
-    if [ -n "$result" ]; then
-        # 提取并高亮显示 ANSWER SECTION
-        answer_section=$(echo "$result" | grep -A 10 "^$DOMAIN")
-        if [ -n "$answer_section" ]; then
-            echo -e "${GREEN}找到解析记录:${NC}"
-            echo -e "${GREEN}${answer_section}${NC}"
-        else
-            echo "❌ 未找到解析记录"
+    gcloud dns managed-zones list \
+        --format='table[box](dnsName, creationTime:sort=1, name, privateVisibilityConfig.networks.networkUrl.basename(), description)'
+
+    echo ""
+}
+
+# Check if Zone exists
+check_zone_exists() {
+    local zone=$1
+
+    if ! gcloud dns managed-zones describe "$zone" &> /dev/null; then
+        echo -e "${RED}Error: DNS Zone '$zone' does not exist${NC}"
+        echo "Available Zones:"
+        gcloud dns managed-zones list --format="value(name)"
+        exit 1
+    fi
+}
+
+# Resolve domain to get all records
+resolve_domain() {
+    local domain=$1
+    local -n cnames_ref=$2
+    local -n a_record_ref=$3
+
+    echo -e "${BLUE}Resolving domain: $domain${NC}"
+
+    # Use host command to resolve
+    local host_output=$(host "$domain" 2>&1)
+
+    if [ $? -ne 0 ]; then
+        echo -e "${YELLOW}  Warning: Cannot resolve $domain${NC}"
+        return 1
+    fi
+
+    # Extract CNAME records
+    local cname_chain=()
+    local current_domain="$domain"
+
+    while true; do
+        local cname=$(echo "$host_output" | grep "is an alias for" | awk '{print $NF}' | sed 's/\.$//')
+
+        if [ -z "$cname" ]; then
+            break
         fi
+
+        cname_chain+=("$current_domain -> $cname")
+        echo -e "  ${GREEN}CNAME:${NC} $current_domain -> $cname"
+
+        current_domain="$cname"
+        host_output=$(host "$cname" 2>&1)
+    done
+
+    # Extract A record
+    local ip_address=$(echo "$host_output" | grep "has address" | awk '{print $NF}' | head -1)
+
+    if [ -n "$ip_address" ]; then
+        echo -e "  ${GREEN}A Record:${NC} $current_domain -> $ip_address"
+        a_record_ref="$current_domain $ip_address"
     else
-        echo "❌ 查询失败或未返回结果"
+        echo -e "${YELLOW}  Warning: No A record found${NC}"
+        return 1
     fi
-done
 
-echo -e "\n${SEPARATOR}"
-echo "✅ 查询完成"
+    # Return CNAME chain
+    cnames_ref=("${cname_chain[@]}")
+
+    return 0
+}
+
+# Create DNS record transaction file
+create_dns_transaction() {
+    local zone=$1
+    local domain=$2
+    local -n cnames=$3
+    local a_record=$4
+
+    # Start transaction
+    echo -e "\n${BLUE}Creating DNS records for $domain...${NC}"
+
+    # Create temporary transaction file
+    local transaction_file="/tmp/dns-transaction-$(date +%s).yaml"
+
+    cat > "$transaction_file" << EOF
+---
+additions:
+EOF
+
+    # Add CNAME records
+    for cname_entry in "${cnames[@]}"; do
+        local source=$(echo "$cname_entry" | awk '{print $1}')
+        local target=$(echo "$cname_entry" | awk '{print $3}')
+
+        # Ensure ends with .
+        [[ "$source" != *. ]] && source="${source}."
+        [[ "$target" != *. ]] && target="${target}."
+
+        cat >> "$transaction_file" << EOF
+- kind: dns#resourceRecordSet
+  name: "$source"
+  rrdatas:
+  - "$target"
+  ttl: 300
+  type: CNAME
+EOF
+
+        echo -e "  ${GREEN}Adding CNAME:${NC} $source -> $target"
+    done
+
+    # Add A record
+    if [ -n "$a_record" ]; then
+        local a_domain=$(echo "$a_record" | awk '{print $1}')
+        local a_ip=$(echo "$a_record" | awk '{print $2}')
+
+        [[ "$a_domain" != *. ]] && a_domain="${a_domain}."
+
+        cat >> "$transaction_file" << EOF
+- kind: dns#resourceRecordSet
+  name: "$a_domain"
+  rrdatas:
+  - "$a_ip"
+  ttl: 300
+  type: A
+EOF
+
+        echo -e "  ${GREEN}Adding A Record:${NC} $a_domain -> $a_ip"
+    fi
+
+    echo "$transaction_file"
+}
+
+# Import DNS records
+import_dns_records() {
+    local zone=$1
+    local transaction_file=$2
+
+    echo -e "\n${BLUE}Importing DNS records to Zone: $zone${NC}"
+
+    gcloud dns record-sets import "$transaction_file" \
+        --zone="$zone" \
+        --zone-file-format 2>&1
+
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓ Successfully imported DNS records${NC}"
+        rm -f "$transaction_file"
+        return 0
+    else
+        echo -e "${RED}✗ Import failed${NC}"
+        echo "Transaction file saved at: $transaction_file"
+        return 1
+    fi
+}
+
+# Verify if records were added successfully
+verify_records() {
+    local zone=$1
+    local domain=$2
+
+    echo -e "\n${BLUE}Verifying DNS records for $domain...${NC}"
+
+    # Query all records related to this domain
+    gcloud dns record-sets list \
+        --zone="$zone" \
+        --filter="name:$domain" \
+        --format="table[box](name, type, ttl, rrdatas)"
+
+    echo ""
+}
+
+# ============================================
+# Main Program
+# ============================================
+
+main() {
+    # Parse arguments
+    parse_args "$@"
+
+    # Use default Zone if not specified
+    ZONE_NAME="${ZONE_NAME:-$DEFAULT_ZONE_NAME}"
+
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}GCP Cloud DNS Record Batch Addition Tool${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "Project ID: ${BLUE}$PROJECT_ID${NC}"
+    echo -e "DNS Zone: ${BLUE}$ZONE_NAME${NC}"
+    echo -e "Domain Count: ${BLUE}${#DOMAINS[@]}${NC}"
+    echo ""
+
+    # Check dependencies
+    check_dependencies
+
+    # Set project
+    set_project
+
+    # List all Zones
+    list_zones
+
+    # Check if Zone exists
+    check_zone_exists "$ZONE_NAME"
+
+    # Statistics variables
+    local total_domains=${#DOMAINS[@]}
+    local success_count=0
+    local fail_count=0
+
+    # Process each domain
+    for domain in "${DOMAINS[@]}"; do
+        echo -e "\n${GREEN}========================================${NC}"
+        echo -e "${GREEN}Processing domain: $domain${NC}"
+        echo -e "${GREEN}========================================${NC}"
+
+        # Resolve domain
+        local cnames=()
+        local a_record=""
+
+        if resolve_domain "$domain" cnames a_record; then
+            # Create transaction file
+            local transaction_file=$(create_dns_transaction "$ZONE_NAME" "$domain" cnames "$a_record")
+
+            # Import records
+            if import_dns_records "$ZONE_NAME" "$transaction_file"; then
+                ((success_count++))
+
+                # Verify records
+                verify_records "$ZONE_NAME" "$domain"
+            else
+                ((fail_count++))
+            fi
+        else
+            ((fail_count++))
+        fi
+    done
+
+    # Display summary
+    echo -e "\n${GREEN}========================================${NC}"
+    echo -e "${GREEN}Processing Complete${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "Total Domains: ${BLUE}$total_domains${NC}"
+    echo -e "Success: ${GREEN}$success_count${NC}"
+    echo -e "Failed: ${RED}$fail_count${NC}"
+    echo -e "${GREEN}========================================${NC}"
+
+    # Display all records in the end
+    echo -e "\n${BLUE}All records in Zone '$ZONE_NAME':${NC}"
+    gcloud dns record-sets list \
+        --zone="$ZONE_NAME" \
+        --format="table[box](name, type, ttl, rrdatas)"
+}
+
+# Run main program
+main "$@"
+```
+
+## `dnsrecord-add-script.sh`
+
+```bash
+#!/bin/bash
+
+# GCP Cloud DNS 记录批量添加脚本
+# 用途: 自动解析域名并将 CNAME 和 A 记录添加到指定的 Cloud DNS Zone
+
+# ============================================
+# 配置区域
+# ============================================
+
+# GCP 项目 ID
+PROJECT_ID="your-project-id"
+
+# 默认 DNS Zone 名称
+DEFAULT_ZONE_NAME="private-access"
+
+# 需要添加的域名列表
+DOMAINS=(
+    "www.example.com"
+    "api.example.com"
+    "login.microsoft.com"
+    "graph.microsoft.com"
+)
+
+# ============================================
+# 颜色定义
+# ============================================
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# ============================================
+# 函数定义
+# ============================================
+
+# 显示帮助信息
+show_help() {
+    cat << EOF
+用法: $(basename $0) [选项]
+
+选项:
+  -p PROJECT_ID    指定 GCP 项目 ID (默认: $PROJECT_ID)
+  -z ZONE_NAME     指定 DNS Zone 名称 (默认: $DEFAULT_ZONE_NAME)
+  -h               显示此帮助信息
+
+示例:
+  $(basename $0)                                    # 使用默认配置
+  $(basename $0) -p my-project -z my-zone          # 指定项目和 Zone
+  $(basename $0) -z custom-zone                    # 只指定 Zone
+
+说明:
+  脚本会自动解析域名列表中的所有域名，提取 CNAME 和 A 记录，
+  并将它们添加到指定的 Cloud DNS Zone 中。
+
+EOF
+}
+
+# 解析命令行参数
+parse_args() {
+    while getopts "p:z:h" opt; do
+        case $opt in
+            p)
+                PROJECT_ID="$OPTARG"
+                ;;
+            z)
+                ZONE_NAME="$OPTARG"
+                ;;
+            h)
+                show_help
+                exit 0
+                ;;
+            \?)
+                echo -e "${RED}错误: 无效选项 -$OPTARG${NC}" >&2
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# 检查必要的命令是否存在
+check_dependencies() {
+    local missing_deps=()
+    
+    for cmd in gcloud host; do
+        if ! command -v $cmd &> /dev/null; then
+            missing_deps+=($cmd)
+        fi
+    done
+    
+    if [ ${#missing_deps[@]} -gt 0 ]; then
+        echo -e "${RED}错误: 缺少必要的命令: ${missing_deps[*]}${NC}"
+        echo "请安装缺失的工具后重试"
+        exit 1
+    fi
+}
+
+# 设置 GCP 项目
+set_project() {
+    echo -e "${BLUE}设置 GCP 项目: $PROJECT_ID${NC}"
+    gcloud config set project "$PROJECT_ID" --quiet
+    
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}错误: 无法设置项目 $PROJECT_ID${NC}"
+        exit 1
+    fi
+}
+
+# 列出所有 DNS Zones
+list_zones() {
+    echo -e "\n${GREEN}========================================${NC}"
+    echo -e "${GREEN}当前项目的 DNS Zones:${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    
+    gcloud dns managed-zones list \
+        --format='table[box](dnsName, creationTime:sort=1, name, privateVisibilityConfig.networks.networkUrl.basename(), description)'
+    
+    echo ""
+}
+
+# 检查 Zone 是否存在
+check_zone_exists() {
+    local zone=$1
+    
+    if ! gcloud dns managed-zones describe "$zone" &> /dev/null; then
+        echo -e "${RED}错误: DNS Zone '$zone' 不存在${NC}"
+        echo "可用的 Zones:"
+        gcloud dns managed-zones list --format="value(name)"
+        exit 1
+    fi
+}
+
+# 解析域名获取所有记录
+resolve_domain() {
+    local domain=$1
+    local -n cnames_ref=$2
+    local -n a_record_ref=$3
+    
+    echo -e "${BLUE}解析域名: $domain${NC}"
+    
+    # 使用 host 命令解析
+    local host_output=$(host "$domain" 2>&1)
+    
+    if [ $? -ne 0 ]; then
+        echo -e "${YELLOW}  警告: 无法解析 $domain${NC}"
+        return 1
+    fi
+    
+    # 提取 CNAME 记录
+    local cname_chain=()
+    local current_domain="$domain"
+    
+    while true; do
+        local cname=$(echo "$host_output" | grep "is an alias for" | awk '{print $NF}' | sed 's/\.$//')
+        
+        if [ -z "$cname" ]; then
+            break
+        fi
+        
+        cname_chain+=("$current_domain -> $cname")
+        echo -e "  ${GREEN}CNAME:${NC} $current_domain -> $cname"
+        
+        current_domain="$cname"
+        host_output=$(host "$cname" 2>&1)
+    done
+    
+    # 提取 A 记录
+    local ip_address=$(echo "$host_output" | grep "has address" | awk '{print $NF}' | head -1)
+    
+    if [ -n "$ip_address" ]; then
+        echo -e "  ${GREEN}A Record:${NC} $current_domain -> $ip_address"
+        a_record_ref="$current_domain $ip_address"
+    else
+        echo -e "${YELLOW}  警告: 未找到 A 记录${NC}"
+        return 1
+    fi
+    
+    # 返回 CNAME 链
+    cnames_ref=("${cname_chain[@]}")
+    
+    return 0
+}
+
+# 创建 DNS 记录事务文件
+create_dns_transaction() {
+    local zone=$1
+    local domain=$2
+    local -n cnames=$3
+    local a_record=$4
+    
+    # 开始事务
+    echo -e "\n${BLUE}为 $domain 创建 DNS 记录...${NC}"
+    
+    # 创建临时事务文件
+    local transaction_file="/tmp/dns-transaction-$(date +%s).yaml"
+    
+    cat > "$transaction_file" << EOF
+---
+additions:
+EOF
+    
+    # 添加 CNAME 记录
+    for cname_entry in "${cnames[@]}"; do
+        local source=$(echo "$cname_entry" | awk '{print $1}')
+        local target=$(echo "$cname_entry" | awk '{print $3}')
+        
+        # 确保以 . 结尾
+        [[ "$source" != *. ]] && source="${source}."
+        [[ "$target" != *. ]] && target="${target}."
+        
+        cat >> "$transaction_file" << EOF
+- kind: dns#resourceRecordSet
+  name: "$source"
+  rrdatas:
+  - "$target"
+  ttl: 300
+  type: CNAME
+EOF
+        
+        echo -e "  ${GREEN}添加 CNAME:${NC} $source -> $target"
+    done
+    
+    # 添加 A 记录
+    if [ -n "$a_record" ]; then
+        local a_domain=$(echo "$a_record" | awk '{print $1}')
+        local a_ip=$(echo "$a_record" | awk '{print $2}')
+        
+        [[ "$a_domain" != *. ]] && a_domain="${a_domain}."
+        
+        cat >> "$transaction_file" << EOF
+- kind: dns#resourceRecordSet
+  name: "$a_domain"
+  rrdatas:
+  - "$a_ip"
+  ttl: 300
+  type: A
+EOF
+        
+        echo -e "  ${GREEN}添加 A Record:${NC} $a_domain -> $a_ip"
+    fi
+    
+    echo "$transaction_file"
+}
+
+# 导入 DNS 记录
+import_dns_records() {
+    local zone=$1
+    local transaction_file=$2
+    
+    echo -e "\n${BLUE}导入 DNS 记录到 Zone: $zone${NC}"
+    
+    gcloud dns record-sets import "$transaction_file" \
+        --zone="$zone" \
+        --zone-file-format 2>&1
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓ 成功导入 DNS 记录${NC}"
+        rm -f "$transaction_file"
+        return 0
+    else
+        echo -e "${RED}✗ 导入失败${NC}"
+        echo "事务文件保存在: $transaction_file"
+        return 1
+    fi
+}
+
+# 验证记录是否添加成功
+verify_records() {
+    local zone=$1
+    local domain=$2
+    
+    echo -e "\n${BLUE}验证 $domain 的 DNS 记录...${NC}"
+    
+    # 查询该域名相关的所有记录
+    gcloud dns record-sets list \
+        --zone="$zone" \
+        --filter="name:$domain" \
+        --format="table[box](name, type, ttl, rrdatas)"
+    
+    echo ""
+}
+
+# ============================================
+# 主程序
+# ============================================
+
+main() {
+    # 解析参数
+    parse_args "$@"
+    
+    # 使用默认 Zone 如果未指定
+    ZONE_NAME="${ZONE_NAME:-$DEFAULT_ZONE_NAME}"
+    
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}GCP Cloud DNS 记录批量添加工具${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "项目 ID: ${BLUE}$PROJECT_ID${NC}"
+    echo -e "DNS Zone: ${BLUE}$ZONE_NAME${NC}"
+    echo -e "域名数量: ${BLUE}${#DOMAINS[@]}${NC}"
+    echo ""
+    
+    # 检查依赖
+    check_dependencies
+    
+    # 设置项目
+    set_project
+    
+    # 列出所有 Zones
+    list_zones
+    
+    # 检查 Zone 是否存在
+    check_zone_exists "$ZONE_NAME"
+    
+    # 统计变量
+    local total_domains=${#DOMAINS[@]}
+    local success_count=0
+    local fail_count=0
+    
+    # 处理每个域名
+    for domain in "${DOMAINS[@]}"; do
+        echo -e "\n${GREEN}========================================${NC}"
+        echo -e "${GREEN}处理域名: $domain${NC}"
+        echo -e "${GREEN}========================================${NC}"
+        
+        # 解析域名
+        local cnames=()
+        local a_record=""
+        
+        if resolve_domain "$domain" cnames a_record; then
+            # 创建事务文件
+            local transaction_file=$(create_dns_transaction "$ZONE_NAME" "$domain" cnames "$a_record")
+            
+            # 导入记录
+            if import_dns_records "$ZONE_NAME" "$transaction_file"; then
+                ((success_count++))
+                
+                # 验证记录
+                verify_records "$ZONE_NAME" "$domain"
+            else
+                ((fail_count++))
+            fi
+        else
+            ((fail_count++))
+        fi
+    done
+    
+    # 显示汇总
+    echo -e "\n${GREEN}========================================${NC}"
+    echo -e "${GREEN}处理完成${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "总域名数: ${BLUE}$total_domains${NC}"
+    echo -e "成功: ${GREEN}$success_count${NC}"
+    echo -e "失败: ${RED}$fail_count${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    
+    # 显示最终的所有记录
+    echo -e "\n${BLUE}Zone '$ZONE_NAME' 中的所有记录:${NC}"
+    gcloud dns record-sets list \
+        --zone="$ZONE_NAME" \
+        --format="table[box](name, type, ttl, rrdatas)"
+}
+
+# 运行主程序
+main "$@"
+
 ```
 
