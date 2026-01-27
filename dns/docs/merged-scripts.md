@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2026-01-27 16:13:41
+Generated on: 2026-01-27 16:17:43
 Directory: /Users/lex/git/knowledge/dns/docs
 
 ## `dnsrecord-add-script.sh`
@@ -190,23 +190,16 @@ resolve_domain() {
     return 0
 }
 
-# 创建 DNS 记录事务文件
-create_dns_transaction() {
+# 添加 DNS 记录
+add_dns_records() {
     local zone=$1
     local domain=$2
     local -n cnames_array=$3
     local a_record=$4
     
-    # 开始事务
-    echo -e "\n${BLUE}为 $domain 创建 DNS 记录...${NC}" >&2
+    echo -e "\n${BLUE}为 $domain 添加 DNS 记录到 Zone: $zone${NC}" >&2
     
-    # 创建临时事务文件
-    local transaction_file="/tmp/dns-transaction-$(date +%s)-$$.yaml"
-    
-    cat > "$transaction_file" << EOF
----
-additions:
-EOF
+    local success=true
     
     # 添加 CNAME 记录
     for cname_entry in "${cnames_array[@]}"; do
@@ -217,16 +210,23 @@ EOF
         [[ "$source" != *. ]] && source="${source}."
         [[ "$target" != *. ]] && target="${target}."
         
-        cat >> "$transaction_file" << EOF
-- kind: dns#resourceRecordSet
-  name: "$source"
-  rrdatas:
-  - "$target"
-  ttl: 300
-  type: CNAME
-EOF
+        echo -e "  ${BLUE}添加 CNAME:${NC} $source -> $target" >&2
         
-        echo -e "  ${GREEN}添加 CNAME:${NC} $source -> $target" >&2
+        # 检查记录是否已存在
+        if gcloud dns record-sets describe "$source" --type=CNAME --zone="$zone" &>/dev/null; then
+            echo -e "  ${YELLOW}记录已存在,跳过${NC}" >&2
+        else
+            if gcloud dns record-sets create "$source" \
+                --rrdatas="$target" \
+                --type=CNAME \
+                --ttl=300 \
+                --zone="$zone" &>/dev/null; then
+                echo -e "  ${GREEN}✓ 成功添加 CNAME${NC}" >&2
+            else
+                echo -e "  ${RED}✗ 添加 CNAME 失败${NC}" >&2
+                success=false
+            fi
+        fi
     done
     
     # 添加 A 记录
@@ -236,40 +236,28 @@ EOF
         
         [[ "$a_domain" != *. ]] && a_domain="${a_domain}."
         
-        cat >> "$transaction_file" << EOF
-- kind: dns#resourceRecordSet
-  name: "$a_domain"
-  rrdatas:
-  - "$a_ip"
-  ttl: 300
-  type: A
-EOF
+        echo -e "  ${BLUE}添加 A Record:${NC} $a_domain -> $a_ip" >&2
         
-        echo -e "  ${GREEN}添加 A Record:${NC} $a_domain -> $a_ip" >&2
+        # 检查记录是否已存在
+        if gcloud dns record-sets describe "$a_domain" --type=A --zone="$zone" &>/dev/null; then
+            echo -e "  ${YELLOW}记录已存在,跳过${NC}" >&2
+        else
+            if gcloud dns record-sets create "$a_domain" \
+                --rrdatas="$a_ip" \
+                --type=A \
+                --ttl=300 \
+                --zone="$zone" &>/dev/null; then
+                echo -e "  ${GREEN}✓ 成功添加 A Record${NC}" >&2
+            else
+                echo -e "  ${RED}✗ 添加 A Record 失败${NC}" >&2
+                success=false
+            fi
+        fi
     fi
     
-    # 只输出文件名到 stdout
-    echo "$transaction_file"
-}
-
-# 导入 DNS 记录
-import_dns_records() {
-    local zone=$1
-    local transaction_file=$2
-    
-    echo -e "\n${BLUE}导入 DNS 记录到 Zone: $zone${NC}"
-    
-    gcloud dns record-sets import "$transaction_file" \
-        --zone="$zone" \
-        --zone-file-format 2>&1
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✓ 成功导入 DNS 记录${NC}"
-        rm -f "$transaction_file"
+    if [ "$success" = true ]; then
         return 0
     else
-        echo -e "${RED}✗ 导入失败${NC}"
-        echo "事务文件保存在: $transaction_file"
         return 1
     fi
 }
@@ -337,11 +325,8 @@ main() {
         local domain_a_record=""
         
         if resolve_domain "$domain" domain_cnames domain_a_record; then
-            # 创建事务文件
-            local transaction_file=$(create_dns_transaction "$ZONE_NAME" "$domain" domain_cnames "$domain_a_record")
-            
-            # 导入记录
-            if import_dns_records "$ZONE_NAME" "$transaction_file"; then
+            # 添加 DNS 记录
+            if add_dns_records "$ZONE_NAME" "$domain" domain_cnames "$domain_a_record"; then
                 ((success_count++))
                 
                 # 验证记录
