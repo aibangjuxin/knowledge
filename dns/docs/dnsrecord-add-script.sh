@@ -186,7 +186,7 @@ resolve_domain() {
 create_dns_transaction() {
     local zone=$1
     local domain=$2
-    local -n cnames=$3
+    local -n cnames_array=$3
     local a_record=$4
     
     # 开始事务
@@ -201,7 +201,7 @@ additions:
 EOF
     
     # 添加 CNAME 记录
-    for cname_entry in "${cnames[@]}"; do
+    for cname_entry in "${cnames_array[@]}"; do
         local source=$(echo "$cname_entry" | awk '{print $1}')
         local target=$(echo "$cname_entry" | awk '{print $3}')
         
@@ -324,12 +324,12 @@ main() {
         echo -e "${GREEN}========================================${NC}"
         
         # 解析域名
-        local cnames=()
-        local a_record=""
+        local domain_cnames=()
+        local domain_a_record=""
         
-        if resolve_domain "$domain" cnames a_record; then
+        if resolve_domain "$domain" domain_cnames domain_a_record; then
             # 创建事务文件
-            local transaction_file=$(create_dns_transaction "$ZONE_NAME" "$domain" cnames "$a_record")
+            local transaction_file=$(create_dns_transaction "$ZONE_NAME" "$domain" domain_cnames "$domain_a_record")
             
             # 导入记录
             if import_dns_records "$ZONE_NAME" "$transaction_file"; then
