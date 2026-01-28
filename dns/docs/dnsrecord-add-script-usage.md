@@ -1,5 +1,30 @@
 # GCP Cloud DNS 记录批量添加脚本使用说明
 
+  使用方式                                                                                                                                                                                                        
+                                                                                                                                                                                                                  
+  # 添加 DNS 记录                                                                                                                                                                                                 
+  ./dnsrecord-add-del.sh add                    # 使用默认配置                                                                                                                                                    
+  ./dnsrecord-add-del.sh add -p my-project -z my-zone    # 指定项目和 Zone                                                                                                                                        
+                                                                                                                                                                                                                  
+  # 删除 DNS 记录                                                                                                                                                                                                 
+  ./dnsrecord-add-del.sh del                    # 实际删除                                                                                                                                                        
+  ./dnsrecord-add-del.sh del -n                 # 预览模式（只显示，不删除）                                                                                                                                      
+  ./dnsrecord-add-del.sh del -z custom-zone -n  # 预览指定 Zone                                                                                                                                                   
+                                                                                                                                                                                                                  
+  # 列出 DNS 记录                                                                                                                                                                                                 
+  ./dnsrecord-add-del.sh list                   # 列出默认 Zone 的所有记录                                                                                                                                        
+  ./dnsrecord-add-del.sh list -z my-zone        # 列出指定 Zone                                                                                                                                                   
+                                                                                                                                                                                                                  
+  主要改进点                                                                                                                                                                                                      
+                                                                                                                                                                                                                  
+  1. 统一入口: 通过第一个参数 add/del/list 决定操作模式                                                                                                                                                           
+  2. 代码复用: 共享通用的配置、颜色定义和基础函数（如 check_dependencies、set_project 等）                                                                                                                        
+  3. 避免重复: 不再维护两套几乎相同的逻辑                                                                                                                                                                         
+  4. 新增 list 模式: 方便快速查看 Zone 中的所有记录                                                                                                                                                               
+                                                                                                                                                                                                                  
+  使用前记得修改脚本顶部的 PROJECT_ID 和 DOMAINS 配置。 
+  
+
 ## 脚本功能
 
 自动解析域名列表中的所有域名，提取完整的 CNAME 链和 A 记录，并将它们批量添加到指定的 GCP Cloud DNS Zone 中。
