@@ -139,8 +139,92 @@ gcloud compute backend-services update bs-api-a --security-policy=policy-api-a -
 #   - paths: ["/api-b/*"]
 #     service: bs-api-b  <-- 流量被分流，并应用 policy-api-b
 ```
+#### 3.1 导出现有 URL Map 配置
 
-## 5. 总结 (Summary)
+```bash
+gcloud compute url-maps export $EXISTING_URL_MAP \
+    --destination=url-map-backup.yaml \
+    --global \
+    --project=$PROJECT_ID
+```
+
+#### 3.2 创建新的 URL Map 配置文件
+
+创建 `url-map-new.yaml`:
+
+```yaml
+kind: compute#urlMap
+name: www-abc-com-url-map
+defaultService: https://www.googleapis.com/compute/v1/projects/your-project-id/global/backendServices/nginx-backend-service
+
+hostRules:
+- hosts:
+  - www.abc.com
+  pathMatcher: api-path-matcher
+
+pathMatchers:
+- name: api-path-matcher
+  defaultService: https://www.googleapis.com/compute/v1/projects/your-project-id/global/backendServices/nginx-backend-service
+  
+  pathRules:
+  # Payment API - 最严格策略
+  - paths:
+    - /payment-v1/*
+    - /payment-v2/*
+    service: https://www.googleapis.com/compute/v1/projects/your-project-id/global/backendServices/payment-backend-service
+  
+  # User API - 中等安全策略
+  - paths:
+    - /user-v1/*
+    - /user-v2/*
+    service: https://www.googleapis.com/compute/v1/projects/your-project-id/global/backendServices/user-backend-service
+  
+  # Public API - 基础防护策略
+  - paths:
+    - /public-v1/*
+    - /public-v2/*
+    service: https://www.googleapis.com/compute/v1/projects/your-project-id/global/backendServices/public-backend-service
+  
+  # 其他 API 使用默认 Backend Service
+  # 默认会匹配到 defaultService
+```
+
+#### 3.3 应用新的 URL Map 配置
+
+```bash
+# 方式一: 使用 import(推荐)
+gcloud compute url-maps import $EXISTING_URL_MAP \
+    --source=url-map-new.yaml \
+    --global \
+    --project=$PROJECT_ID
+
+# 方式二: 使用 gcloud 命令直接更新(示例)
+gcloud compute url-maps add-path-matcher $EXISTING_URL_MAP \
+    --path-matcher-name=api-path-matcher \
+    --default-service=nginx-backend-service \
+    --path-rules="/payment-v1/*=payment-backend-service,/payment-v2/*=payment-backend-service,/user-v1/*=user-backend-service,/user-v2/*=user-backend-service,/public-v1/*=public-backend-service,/public-v2/*=public-backend-service" \
+    --global \
+    --project=$PROJECT_ID
+```
+
+---
+
+#### 3.4 验证配置
+
+```bash
+# 查看 URL Map 详细配置
+gcloud compute url-maps describe $EXISTING_URL_MAP \
+    --global \
+    --project=$PROJECT_ID
+
+# 测试 URL Map 路由(模拟请求)
+gcloud compute url-maps validate $EXISTING_URL_MAP \
+    --global \
+    --project=$PROJECT_ID
+
+```
+
+### 4. 总结 (Summary)
 
 通过 **"Backend Service Splitting"** 模式，我们成功实现了：
 1.  **精细化控制**: 不同的 API 路径拥有了独立的安全策略上下文。
