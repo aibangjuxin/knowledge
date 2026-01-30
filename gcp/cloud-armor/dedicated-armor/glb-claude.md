@@ -457,10 +457,10 @@ gcloud compute url-maps describe $EXISTING_URL_MAP \
     --project=$PROJECT_ID
 
 # 测试 URL Map 路由(模拟请求)
-gcloud compute url-maps validate-url-map $EXISTING_URL_MAP \
-    --path-matcher-name=api-path-matcher \
+gcloud compute url-maps validate $EXISTING_URL_MAP \
     --global \
     --project=$PROJECT_ID
+
 ```
 
 #### 6.2 验证 Backend Service 配置
