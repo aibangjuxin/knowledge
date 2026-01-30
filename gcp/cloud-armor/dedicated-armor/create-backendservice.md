@@ -3,16 +3,20 @@
 # 验证通过：可以在一条命令中完成绝大部分配置
 gcloud compute backend-services create bs-api-a-v1 \
     --global \
-    --protocol=HTTP \
+    --protocol=HTTPS \
+    --port-name=https \
     --load-balancing-scheme=EXTERNAL_MANAGED \
     --health-checks=hc-nginx-http \
-    --timeout=30s \
+    --connection-draining-timeout=300s \
+    --timeout=60s \
     --enable-logging \
     --logging-sample-rate=1.0 \
-    --logging-optional-mode=exclude-all-optional \
-    --custom-response-header="X-API-Name: api-a-v1" \
-    --no-iap
+    --custom-response-header="Strict-Transport-Security: max-age=31536000; includeSubDomains: preload" \
+    --custom-response-header="X-Frame-Options: DENY"  \
+    --description="Backend Service for API A V1" \
+    --project=your-project
 ```
+GCP 的机制是：只要 URL Map 的名字没变，Target Proxy 会自动感知到其内部规则（Host/Path）的变化，无需再次执行 target-https-proxies update
 
 gcloud 参数
 
@@ -22,7 +26,8 @@ gcloud 参数
 | --logging-sample-rate=1.0 | sampleRate = 1.0 |
 | --logging-optional-mode=EXCLUDE_ALL_OPTIONAL | optionalMode = EXCLUDE_ALL_OPTIONAL |
 | *(Default)* | connectionDraining.drainingTimeoutSec = 300 | **默认值**。未指定 `--connection-draining-timeout` 时，GCP 默认为 300秒 (5分钟)。 |
-执行完该 `create` 命令后，Google Cloud 会返回该资源的 **YAML 格式描述**（如果你是在控制台或脚本中查看，或者执行 `gcloud compute backend-services describe bs-api-a-v1 --global`）。
+执行完该 `create` 命令后，Google Cloud 会返回该资源的 **YAML 格式描述**（如果你是在控制台或脚本中查看，或者执行 
+`gcloud compute backend-services describe bs-api-a-v1 --global`）。
 
 以下是根据你提供的参数生成的**预期输出结果**。通过这个输出，你可以验证所有配置（特别是日志模式和自定义 Header）是否生效。
 
@@ -35,8 +40,9 @@ connectionDraining:
   drainingTimeoutSec: 300
 creationTimestamp: '2023-10-27T01:02:03.456-07:00'
 customResponseHeaders:
-- 'X-API-Name: api-a-v1'
-description: ''
+- 'Strict-Transport-Security: max-age=31536000; includeSubDomains: preload'
+- 'X-Frame-Options: DENY'
+description: 'Backend Service for API A V1'
 enableCDN: false
 fingerprint: xxxxxxxx_xxx=
 healthChecks:
@@ -48,14 +54,12 @@ kind: compute#backendService
 loadBalancingScheme: EXTERNAL_MANAGED
 logConfig:
   enable: true
-  optionalMode: EXCLUDE_ALL_OPTIONAL
   sampleRate: 1.0
 name: bs-api-a-v1
-port: 80
-portName: http
-protocol: HTTP
+portName: https
+protocol: HTTPS
 selfLink: https://www.googleapis.com/compute/v1/projects/your-project/global/backendServices/bs-api-a-v1
-timeoutSec: 30
+timeoutSec: 60
 ```
 
 ---
@@ -64,11 +68,12 @@ timeoutSec: 30
 
 |**字段**|**状态**|**专家点评**|
 |---|---|---|
-|**`customResponseHeaders`**|列表格式显示|确认 Header 已成功注入，多个 Header 会在此处列出。|
-|**`logConfig.optionalMode`**|`EXCLUDE_ALL_OPTIONAL`|**这是最重要的验证点**。这证明了你的日志优化策略已生效，不会记录冗余的 optional 字段。|
-|**`loadBalancingScheme`**|`EXTERNAL_MANAGED`|确认这是一个 Envoy-based 的新型负载均衡器，支持高级流量管理。|
-|**`iap.enabled`**|`false`|确认 Identity-Aware Proxy 已显式关闭。|
-|**`backends`**|**(缺失)**|**注意**：由于你刚执行完 `create` 尚未执行 `add-backend`，此列表目前为空。|
+|**`customResponseHeaders`**|包含 HSTS 和 X-Frame-Options|确认多个安全 Header 已成功注入，增强了响应安全性。|
+|**`connectionDraining`**|`300`|确认连接排空时间已设为 5 分钟（来自显式指定或默认值）。|
+|**`timeoutSec`**|`60`|确认后端超时时间已更新为 60秒，比之前的 30秒更宽松。|
+|**`protocol`/`portName`**|`HTTPS` / `https`|确认已切换为全链路 HTTPS 加密通信模式。|
+|**`loadBalancingScheme`**|`EXTERNAL_MANAGED`|确认这是一个 Envoy-based 的新型负载均衡器。|
+|**`backends`**|**(缺失)**|**注意**：由于刚执行完 `create`，此列表目前为空。|
 
 ---
 
@@ -82,9 +87,10 @@ graph TD
     
     subgraph Properties [配置属性]
         HC[Health Check: hc-nginx-http]
-        Log[LogConfig: 100% Sample / Exclude Optional]
-        Header[Custom Header: X-API-Name]
-        IAP[IAP: Disabled]
+        Log[LogConfig: 100% Sample]
+        Header1[Header: HSTS]
+        Header2[Header: X-Frame-Options]
+        Proto[Protocol: HTTPS / Timeout: 60s]
     end
 
     subgraph Runtime [运行时状态]
