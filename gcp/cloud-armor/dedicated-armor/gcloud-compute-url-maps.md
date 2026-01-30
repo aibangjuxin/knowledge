@@ -22,6 +22,7 @@ gcloud compute url-maps add-path-matcher [URL_MAP_NAME] \
 ## 解决方案
 
 ### 1. Path Rules 核心限制
+- https://docs.cloud.google.com/load-balancing/docs/quotas#url_maps
 
 #### 1.1 数量配额限制
 
@@ -382,31 +383,47 @@ curl -X POST \
 
 ---
 
-### 6. 配额增加申请
+### 6. 配额与限制深度解析 (Quotas & Limits)
 
-如需突破默认配额限制:
+随着业务规模增长，默认的 URL Map 配额可能成为瓶颈。以下是基于 GCP 官方文档的最新整理及其对环境的影响分析。
+
+#### 6.1 配额参考表
+
+| 配额类型 | 默认值 (Classic) | 可申请最大值 (参考) | 官方参考链接 |
+| :--- | :--- | :--- | :--- |
+| **URL Maps per project** | 200 | 1,000+ | [Quotas Doc](https://cloud.google.com/load-balancing/docs/quotas#url_maps) |
+| **Path matchers per URL map** | 100 | 500 | [Limits Doc](https://cloud.google.com/load-balancing/docs/quotas#url_maps) |
+| **Path rules per path matcher** | 200 | 1,000 | [Limits Doc](https://cloud.google.com/load-balancing/docs/quotas#url_maps) |
+
+> [!NOTE]
+> 对于新型 **Global External Application Load Balancer (Envoy-based)**，部分限制（如 Match Conditions）可能更严格（默认 100），请务必在控制端确认。
+
+#### 6.2 大规模配置的环境影响 (Environmental Impact)
+
+当您的 URL Map 规模达到数百甚至上千条规则时，需关注以下影响：
+
+1.  **数据面延迟 (Data Plane Latency)**: **忽略不计**。
+    - GCP 使用高效的查找算法（如压缩 Tries），查找 10 条还是 1000 条规则的耗时差异通常在微秒（µs）级别。
+2.  **控制面同步 (Control Plane Propagation)**: **显著增大**。
+    - YAML 文件越大，GCP 控制台验证、下发和全球 GFE 同步的时间就越长。超大配置同步可能需要 **3-5 分钟** 才能在全球生效。
+3.  **配置容量限制 (Config Size Limit)**: 
+    - 除了条数限制，还有总字节数限制（通常为 **256 KB** 左右）。如果 Path 非常长或 Host 极多，可能会触及容量上限。
+4.  **管理风险 (Management Complexity)**:
+    - **逻辑遮蔽 (Shadowing)**：规则越多，越容易出现前面的通用规则意外“截流”了后面具体的规则。
+    - **人工误操作**：建议必须切换到 [how-to-manage-url-map.md](./how-to-manage-url-map.md) 描述的 GitOps 模式。
+
+#### 6.3 检查与操作命令
 
 ```bash
-# 查看当前配额使用情况
+# 查看当前项目 URL Map 使用情况
 gcloud compute project-info describe \
     --project=$PROJECT_ID \
-    --format="table(quotas.metric.yesno(no='-'),quotas.limit,quotas.usage)"
+    --format="table(quotas.metric.filter(metric:URL_MAPS),quotas.limit,quotas.usage)"
 
-# 申请配额增加
-# 1. 访问 GCP Console > IAM & Admin > Quotas
-# 2. 搜索 "URL maps"
-# 3. 选择对应配额项
-# 4. 点击 "EDIT QUOTAS"
-# 5. 填写业务理由并提交
+# 变更建议
+# 1. 优先使用通配符 (/assets/*) 减少规则条数。
+# 2. 如果规则超过 500 条，考虑拆分为多个 Load Balancer（通过域名区分）。
 ```
-
-**可申请增加的配额:**
-
-|配额类型|默认值|可申请最大值|
-|---|---|---|
-|URL Maps per project|200|1000|
-|Path matchers per URL map|100|500|
-|Path rules per path matcher|200|1000|
 
 ---
 
