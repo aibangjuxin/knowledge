@@ -52,8 +52,7 @@ GCP 请求日志中记录了处理该请求的 `backendServiceName`。
 
 **查询语句 (Cloud Logging)**：
 ```sql
-resource.type="http_load_balancer"
-jsonPayload.backendServiceName="payment-backend-service"
+resouce.labels.backend_service_name="payment-backend-service"
 ```
 通过观察日志是否有新的流量流入特定的 Backend Service 名，可以实锤路由是否生效。
 
