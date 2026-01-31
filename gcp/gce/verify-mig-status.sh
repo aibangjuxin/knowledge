@@ -38,42 +38,31 @@ echo -e ""
 
 # --- 1. Discover MIGs ---
 echo -e "${YELLOW}[1/3] Searching for MIGs matching '$KEYWORD'...${NC}"
-MIGS=$(gcloud compute instance-groups managed list --filter="name ~ $KEYWORD" --format="table(name,zone,region,targetSize,status.isStable)")
+# Use table for user display
+gcloud compute instance-groups managed list --filter="name ~ $KEYWORD" --format="table(name,zone,region,targetSize,status.isStable)"
 
-if [ -z "$(echo "$MIGS" | tail -n +2)" ]; then
+# Use value(name,zone,region) for script processing - tab separated, no wrapping
+MIG_LIST=$(gcloud compute instance-groups managed list --filter="name ~ $KEYWORD" --format="value(name,zone,region)")
+
+if [ -z "$MIG_LIST" ]; then
     echo -e "${RED}❌ No Managed Instance Groups found matching keyword '$KEYWORD'.${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}Found following MIGs:${NC}"
-echo "$MIGS"
-
 # --- 2. Iterate through found MIGs ---
-while read -r name zone region; do
-    # Skip header or empty lines
-    if [ "$name" == "NAME" ] || [ -z "$name" ]; then continue; fi
+while IFS=$'\t' read -r name zone region; do
+    [ -z "$name" ] && continue
 
     # Determine if it's regional or zonal
-    # Both zone and region might be URLs or simple names
     if [ -n "$zone" ]; then
         # Zonal MIG
-        # Extract zone name from URL if needed
-        if [[ "$zone" == *"zones/"* ]]; then
-            ZONE_NAME=$(echo "$zone" | sed -n 's|.*/zones/\([^/]*\).*|\1|p')
-        else
-            ZONE_NAME="$zone"
-        fi
+        ZONE_NAME=$(echo "$zone" | awk -F'/' '{print $NF}')
         LOCATION_FLAG="--zone=$ZONE_NAME"
         LOCATION_TYPE="zonal"
         LOCATION="$ZONE_NAME"
     else
         # Regional MIG
-        # Extract region name from URL if needed
-        if [[ "$region" == *"regions/"* ]]; then
-            REGION_NAME=$(echo "$region" | sed -n 's|.*/regions/\([^/]*\).*|\1|p')
-        else
-            REGION_NAME="$region"
-        fi
+        REGION_NAME=$(echo "$region" | awk -F'/' '{print $NF}')
         LOCATION_FLAG="--region=$REGION_NAME"
         LOCATION_TYPE="regional"
         LOCATION="$REGION_NAME"
@@ -185,7 +174,7 @@ while read -r name zone region; do
     
     echo ""
 
-done <<< "$(gcloud compute instance-groups managed list --filter="name ~ $KEYWORD" --format="value(name,zone,region)")"
+done <<< "$MIG_LIST"
 
 echo -e "\n${BLUE}====================================================${NC}"
 echo -e "${BLUE}   Verification Complete!                           ${NC}"
