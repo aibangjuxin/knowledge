@@ -74,39 +74,87 @@ while read -r name location type; do
     echo -e "${BLUE}Update Policy:  ${NC} $UPDATE_POLICY"
 
     # --- 3. Instance Level Details ---
-    echo -e "${YELLOW}[2/3] Fetching instance details...${NC}"
-    # We use list-instances and then describe individual instances for creation time
-    INSTANCE_LIST=$(gcloud compute instance-groups managed list-instances "$name" $LOCATION_FLAG \
-        --format="table[no-headers](instance.basename(),status,currentAction,instanceTemplate.basename())")
-
-    echo -e "${BLUE}%-30s %-15s %-15s %-30s %-25s${NC}" "NAME" "STATUS" "ACTION" "TEMPLATE" "CREATION_TIME"
+    echo -e "\n${YELLOW}[2/3] Fetching instance details...${NC}"
     
-    while read -r inst_name inst_status inst_action inst_template; do
-        if [ -z "$inst_name" ]; then continue; fi
+    # 获取实例列表和健康状态
+    INSTANCE_DATA=$(gcloud compute instance-groups managed list-instances "$name" $LOCATION_FLAG --format="json")
+    
+    # 打印表头
+    printf "${BLUE}%-35s %-12s %-12s %-15s %-30s %-20s${NC}\n" \
+        "INSTANCE_NAME" "STATUS" "ACTION" "HEALTH" "TEMPLATE" "UPTIME"
+    echo "------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
+    
+    # 遍历每个实例
+    echo "$INSTANCE_DATA" | jq -c '.[]' | while read -r instance; do
+        inst_name=$(echo "$instance" | jq -r '.instance' | awk -F'/' '{print $NF}')
+        inst_status=$(echo "$instance" | jq -r '.instanceStatus // "UNKNOWN"')
+        inst_action=$(echo "$instance" | jq -r '.currentAction // "NONE"')
+        inst_template=$(echo "$instance" | jq -r '.instanceTemplate' | awk -F'/' '{print $NF}')
         
-        # Get creation time (requires separate call or complex filter, here we optimize with one describe per instance or a bulk command)
-        # To avoid too many calls, we can try to get creation time for all VMs in one go if possible, 
-        # but for accuracy per MIG we do it here.
-        CREATE_TIME=$(gcloud compute instances describe "$inst_name" $LOCATION_FLAG --format="value(creationTimestamp)" 2>/dev/null)
+        # 获取健康状态
+        inst_health=$(echo "$instance" | jq -r '.instanceHealth[0].detailedHealthState // "N/A"')
         
-        # Formatting action/template for highlighting
-        DISP_ACTION=$inst_action
-        if [ "$inst_action" != "NONE" ]; then DISP_ACTION="${YELLOW}$inst_action${NC}"; fi
+        # 获取创建时间并计算运行时长
+        CREATE_TIME=$(gcloud compute instances describe "$inst_name" $LOCATION_FLAG --format="value(creationTimestamp)")
         
-        DISP_TEMPLATE=$inst_template
-        if [ "$inst_template" != "$TARGET_TEMPLATE" ]; then DISP_TEMPLATE="${RED}$inst_template (Old)${NC}"; else DISP_TEMPLATE="${GREEN}$inst_template${NC}"; fi
-
-        printf "%-30s %-15s %b %b %-25s\n" "$inst_name" "$inst_status" "$DISP_ACTION" "$DISP_TEMPLATE" "$CREATE_TIME"
-    done <<< "$INSTANCE_LIST"
-
-    # --- 4. Health Check Status ---
-    echo -e "\n${YELLOW}[3/3] Checking health states...${NC}"
-    HEALTH=$(gcloud compute instance-groups managed list-instances "$name" $LOCATION_FLAG --format="table(instance.basename(),healthStatus[0].healthState)")
-    if [ -n "$(echo "$HEALTH" | tail -n +2)" ]; then
-        echo "$HEALTH"
-    else
-        echo -e "${YELLOW}No health check information available for this MIG.${NC}"
-    fi
+        # 计算运行时长（参考 get_instance_uptime.sh）
+        if [ -n "$CREATE_TIME" ]; then
+            START_TIME_UTC=$(TZ=UTC date -d"$CREATE_TIME" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
+            CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            SECONDS1=$(date -u -d "$CURRENT_TIME" +"%s")
+            SECONDS2=$(date -u -d "$START_TIME_UTC" +"%s")
+            DIFF_SECONDS=$((SECONDS1 - SECONDS2))
+            
+            # 计算天、小时、分钟
+            DAYS=$((DIFF_SECONDS / 86400))
+            HOURS=$(((DIFF_SECONDS % 86400) / 3600))
+            MINUTES=$(((DIFF_SECONDS % 3600) / 60))
+            
+            if [ $DAYS -gt 0 ]; then
+                UPTIME="${DAYS}d ${HOURS}h ${MINUTES}m"
+            else
+                UPTIME="${HOURS}h ${MINUTES}m"
+            fi
+        else
+            UPTIME="N/A"
+        fi
+        
+        # 格式化显示
+        # Action 高亮
+        if [ "$inst_action" != "NONE" ]; then
+            DISP_ACTION="${YELLOW}${inst_action}${NC}"
+        else
+            DISP_ACTION="${inst_action}"
+        fi
+        
+        # Template 对比
+        if [ "$inst_template" != "$TARGET_TEMPLATE" ]; then
+            DISP_TEMPLATE="${RED}${inst_template}*${NC}"
+        else
+            DISP_TEMPLATE="${GREEN}${inst_template}${NC}"
+        fi
+        
+        # Health 状态颜色
+        case "$inst_health" in
+            "HEALTHY")
+                DISP_HEALTH="${GREEN}${inst_health}${NC}"
+                ;;
+            "UNHEALTHY")
+                DISP_HEALTH="${RED}${inst_health}${NC}"
+                ;;
+            "N/A")
+                DISP_HEALTH="${YELLOW}${inst_health}${NC}"
+                ;;
+            *)
+                DISP_HEALTH="${inst_health}"
+                ;;
+        esac
+        
+        printf "%-35s %-12s %b %-15s %b %-20s\n" \
+            "$inst_name" "$inst_status" "$DISP_ACTION" "$DISP_HEALTH" "$DISP_TEMPLATE" "$UPTIME"
+    done
+    
+    echo ""
 
 done <<< "$(gcloud compute instance-groups managed list --filter="name ~ $KEYWORD" --format="value(name,zone,region)")"
 
