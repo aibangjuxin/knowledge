@@ -54,16 +54,18 @@ while read -r name zone region; do
     if [ "$name" == "NAME" ] || [ -z "$name" ]; then continue; fi
 
     # Determine if it's regional or zonal
-    if [ -n "$zone" ]; then
-        # Zonal MIG
+    if [ -n "$zone" ] && [ "$zone" != "https://"* ]; then
+        # Zonal MIG - zone is a simple name like "us-central1-a"
         LOCATION_FLAG="--zone=$zone"
         LOCATION_TYPE="zonal"
         LOCATION="$zone"
     else
-        # Regional MIG
-        LOCATION_FLAG="--region=$region"
+        # Regional MIG - region might be a URL, extract the region name
+        # URL format: https://www.googleapis.com/compute/v1/projects/PROJECT/regions/REGION
+        REGION_NAME=$(echo "$region" | awk -F'/' '{print $NF}')
+        LOCATION_FLAG="--region=$REGION_NAME"
         LOCATION_TYPE="regional"
-        LOCATION="$region"
+        LOCATION="$REGION_NAME"
     fi
 
     echo -e "\n${BLUE}>>> Analyzing MIG: ${GREEN}$name${BLUE} (Location: $LOCATION, Type: $LOCATION_TYPE)${NC}"
