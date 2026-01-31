@@ -1,201 +1,234 @@
 # Shell Scripts Collection
 
-Generated on: 2025-11-25 11:20:13
+Generated on: 2026-01-31 14:38:41
 Directory: /Users/lex/git/knowledge/gcp/gce
 
-## `get_instance_timestamps.sh`
+## `verify-mig-status.sh`
 
 ```bash
 #!/bin/bash
 
-# 设置输出文件路径（您可以根据需要修改路径，确保在允许的目录内）
-OUTPUT_FILE="/Users/lex/git/knowledge/gcp/gce/instance_timestamps.txt"
+# ==============================================================================
+# Script Name: verify-mig-status.sh
+# Description: Verifies the status of Managed Instance Groups (MIG) and their instances.
+# Usage: ./verify-mig-status.sh <mig-keyword>
+# ==============================================================================
 
-# 检查是否提供了实例名称和区域，否则使用默认值或提示用户输入
-if [ $# -lt 2 ]; then
-  echo "使用方法: $0 <实例名称> <区域>"
-  echo "示例: $0 my-instance us-central1-a"
-  echo "您也可以编辑此脚本，在下方设置默认实例和区域。"
-  exit 1
-fi
+# --- Color Definitions ---
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
 
-INSTANCE_NAME="$1"
-ZONE="$2"
-
-echo "正在获取实例 $INSTANCE_NAME (区域: $ZONE) 的时间戳信息..."
-
-# 获取创建时间
-CREATION_TIME=$(gcloud compute instances describe "$INSTANCE_NAME" --zone="$ZONE" --format="value(creationTimestamp)" 2>/dev/null)
-if [ -z "$CREATION_TIME" ]; then
-  CREATION_TIME="无法获取（实例不存在或无权限）"
-fi
-
-# 获取最后启动时间
-LAST_START_TIME=$(gcloud compute instances describe "$INSTANCE_NAME" --zone="$ZONE" --format="value(lastStartTimestamp)" 2>/dev/null)
-if [ -z "$LAST_START_TIME" ]; then
-  LAST_START_TIME="无法获取（实例不存在或无权限）"
-fi
-
-# 获取最后停止时间
-LAST_STOP_TIME=$(gcloud compute instances describe "$INSTANCE_NAME" --zone="$ZONE" --format="value(lastStopTimestamp)" 2>/dev/null)
-if [ -z "$LAST_STOP_TIME" ]; then
-  LAST_STOP_TIME="无法获取（实例不存在或从未停止）"
-fi
-
-# 将结果输出到控制台
-echo "实例: $INSTANCE_NAME (区域: $ZONE)"
-echo "  创建时间 (creationTimestamp): $CREATION_TIME"
-echo "  最后启动时间 (lastStartTimestamp): $LAST_START_TIME"
-echo "  最后停止时间 (lastStopTimestamp): $LAST_STOP_TIME"
-
-# 将结果保存到文件
-echo "实例: $INSTANCE_NAME (区域: $ZONE)" >> "$OUTPUT_FILE"
-echo "  创建时间 (creationTimestamp): $CREATION_TIME" >> "$OUTPUT_FILE"
-echo "  最后启动时间 (lastStartTimestamp): $LAST_START_TIME" >> "$OUTPUT_FILE"
-echo "  最后停止时间 (lastStopTimestamp): $LAST_STOP_TIME" >> "$OUTPUT_FILE"
-echo "--------------------------------" >> "$OUTPUT_FILE"
-
-echo "结果已保存到 $OUTPUT_FILE"
-
-```
-
-## `get_instance_uptime.sh`
-
-```bash
-#!/bin/bash
-keyword="aibangrt"
-instance_list=$(gcloud compute instances list --filter="name~${keyword}*" --format="value(name,ZONE)")
-
-while read -r instances; do
-  NAME=$(echo "$instances" | cut -f1)
-  zone=$(echo "$instances" | cut -f2)
-
-  # 实例启动时间(本地时区时间)
-  START_TIMESTAMP=$(gcloud compute instances describe $NAME --zone $zone --format="value(creationTimestamp)")
-
-  # 本地时间转换为UTC时间
-  START_TIME_UTC=$(TZ=UTC date -d"$START_TIMESTAMP" +"%Y-%m-%dT%H:%M:%SZ")
-
-  # 当前UTC时间
-  CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-  # 基于UTC时间计算持续时间
-  #DURATION=$(date -u -d "$CURRENT_TIME" -d "$START_TIME_UTC" +"%H:%M:%S")
-  SECONDS1=$(date -u -d "$CURRENT_TIME" +"%s")
-  SECONDS2=$(date -u -d "$START_TIME_UTC" +"%s")
-  # 计算差值
-  DIFF_SECONDS=$((SECONDS1 - SECONDS2))
-  # # 将差值转换为时:分:秒格式
-  DIFF_TIME=$(date -u -d "@$DIFF_SECONDS" +"%H:%M:%S")
-
-  echo "Instance $NAME has been running for: $DIFF_TIME"
-
-done <<< "$instance_list"
-
-```
-
-## `instance-uptime-gemini.sh`
-
-```bash
-#!/bin/bash
-
-# 脚本: instance-uptime-gemini.sh
-# 用途: 获取GCE实例的时间戳信息并转换为不同时区的时间.
-# 用法: ./instance-uptime-gemini.sh <instance-name> <zone>
-# 示例: ./instance-uptime-gemini.sh my-instance asia-east2-a
-
-# 1. 参数校验
-if [ "$#" -ne 2 ]; then
-    echo "错误: 需要提供2个参数."
-    echo "用法: $0 <instance-name> <zone>"
-    echo "示例: $0 my-instance asia-east2-a"
+# --- Function: Usage ---
+show_usage() {
+    echo -e "${BLUE}Usage:${NC} $0 <mig-keyword>"
+    echo -e "${BLUE}Example:${NC} $0 'web-server'"
     exit 1
-fi
-
-INSTANCE_NAME=$1
-ZONE=$2
-
-# 2. 依赖检查
-if ! command -v gcloud &> /dev/null; then
-    echo "错误: gcloud 命令未找到. 请确保 Google Cloud SDK 已安装并配置."
-    exit 1
-fi
-
-if ! command -v jq &> /dev/null; then
-    echo "错误: jq 命令未找到. 请使用 'brew install jq' 或 'apt-get install jq' 安装."
-    exit 1
-fi
-
-# 3. 获取实例信息
-echo "正在获取实例 '$INSTANCE_NAME' 在区域 '$ZONE' 的信息..."
-INSTANCE_INFO=$(gcloud compute instances describe "$INSTANCE_NAME" --zone="$ZONE" --format=json 2>/dev/null)
-
-if [ $? -ne 0 ] || [ -z "$INSTANCE_INFO" ]; then
-    echo "错误: 无法获取实例信息. 请检查实例名称和区域是否正确."
-    exit 1
-fi
-
-# 4. 时间转换函数
-# $1: 时间戳字符串 (e.g., "2024-01-15T10:30:45.123-08:00")
-# $2: 时间点的标签 (e.g., "创建时间")
-convert_time() {
-    local timestamp=$1
-    local label=$2
-    
-    if [ -z "$timestamp" ] || [ "$timestamp" == "null" ]; then
-        printf "| %-15s | %-35s | %-25s | %-25s | %-25s |\n" "$label" "N/A" "N/A" "N/A" "N/A"
-        return
-    fi
-    
-    local original_time="$timestamp"
-    local date_cmd="date"
-
-    # 检查是否为macOS，并使用gdate（如果存在）
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        if command -v gdate &>/dev/null; then
-            date_cmd="gdate"
-        else
-            echo "警告: 在macOS上, 建议安装 'gdate' (brew install coreutils) 以获得更强大的日期处理功能." >&2
-        fi
-    fi
-
-    # 尝试转换时间
-    local china_time=$(TZ='Asia/Shanghai' $date_cmd -d "$timestamp" +"%Y-%m-%d %H:%M:%S %Z" 2>/dev/null)
-    local utc_time=$(TZ='UTC' $date_cmd -d "$timestamp" +"%Y-%m-%d %H:%M:%S %Z" 2>/dev/null)
-    local london_time=$(TZ='Europe/London' $date_cmd -d "$timestamp" +"%Y-%m-%d %H:%M:%S %Z" 2>/dev/null)
-    
-    # 如果转换失败，显示错误信息
-    if [ -z "$china_time" ]; then
-        china_time="解析失败"
-        utc_time="解析失败"
-        london_time="解析失败"
-    fi
-    
-    printf "| %-15s | %-35s | %-25s | %-25s | %-25s |\n" "$label" "$original_time" "$china_time" "$utc_time" "$london_time"
 }
 
-# 5. 提取并显示时间信息
-echo "正在提取和转换时间信息..."
+# --- Check Arguments ---
+if [ "$#" -ne 1 ]; then
+    echo -e "${RED}Error: Missing MIG keyword argument.${NC}"
+    show_usage
+fi
 
-CREATION_TIMESTAMP=$(echo "$INSTANCE_INFO" | jq -r '.creationTimestamp // empty')
-LAST_START_TIMESTAMP=$(echo "$INSTANCE_INFO" | jq -r '.lastStartTimestamp // empty')
-LAST_STOP_TIMESTAMP=$(echo "$INSTANCE_INFO" | jq -r '.lastStopTimestamp // empty')
+KEYWORD=$1
+PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
 
-# 打印表头
+echo -e "${BLUE}====================================================${NC}"
+echo -e "${BLUE}   GCP MIG Status Verification Tool                 ${NC}"
+echo -e "${BLUE}====================================================${NC}"
+echo -e "${GREEN}Project:${NC} $PROJECT_ID"
+echo -e "${GREEN}Keyword:${NC} $KEYWORD"
+echo -e ""
+
+# --- 1. Discover MIGs ---
+echo -e "${YELLOW}[1/3] Searching for MIGs matching '$KEYWORD'...${NC}"
+MIGS=$(gcloud compute instance-groups managed list --filter="name ~ $KEYWORD" --format="table(name,zone,region,targetSize,status.isStable)")
+
+if [ -z "$(echo "$MIGS" | tail -n +2)" ]; then
+    echo -e "${RED}❌ No Managed Instance Groups found matching keyword '$KEYWORD'.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}Found following MIGs:${NC}"
+echo "$MIGS"
+
+# --- 2. Iterate through found MIGs ---
+while read -r name location type; do
+    # Skip header
+    if [ "$name" == "NAME" ] || [ -z "$name" ]; then continue; fi
+
+    # Determine if it's regional or zonal
+    LOCATION_FLAG="--zone=$location"
+    if [[ "$location" == *[a-z] ]]; then 
+        LOCATION_FLAG="--zone=$location"
+    else
+        LOCATION_FLAG="--region=$location"
+    fi
+
+    echo -e "\n${BLUE}>>> Analyzing MIG: ${GREEN}$name${BLUE} (Location: $location)${NC}"
+
+    # Get MIG details
+    MIG_DESC=$(gcloud compute instance-groups managed describe "$name" $LOCATION_FLAG --format="json")
+    TARGET_TEMPLATE=$(echo "$MIG_DESC" | jq -r '.instanceTemplate' | awk -F'/' '{print $NF}')
+    IS_STABLE=$(echo "$MIG_DESC" | jq -r '.status.isStable')
+    UPDATE_POLICY=$(echo "$MIG_DESC" | jq -r '.updatePolicy.type')
+    
+    echo -e "${BLUE}Target Template:${NC} $TARGET_TEMPLATE"
+    echo -e "${BLUE}Status Stable:  ${NC} $([ "$IS_STABLE" == "true" ] && echo -e "${GREEN}YES${NC}" || echo -e "${RED}NO (Updating...)${NC}")"
+    echo -e "${BLUE}Update Policy:  ${NC} $UPDATE_POLICY"
+
+    # --- 3. Instance Level Details ---
+    echo -e "${YELLOW}[2/3] Fetching instance details...${NC}"
+    # We use list-instances and then describe individual instances for creation time
+    INSTANCE_LIST=$(gcloud compute instance-groups managed list-instances "$name" $LOCATION_FLAG \
+        --format="table[no-headers](instance.basename(),status,currentAction,instanceTemplate.basename())")
+
+    echo -e "${BLUE}%-30s %-15s %-15s %-30s %-25s${NC}" "NAME" "STATUS" "ACTION" "TEMPLATE" "CREATION_TIME"
+    
+    while read -r inst_name inst_status inst_action inst_template; do
+        if [ -z "$inst_name" ]; then continue; fi
+        
+        # Get creation time (requires separate call or complex filter, here we optimize with one describe per instance or a bulk command)
+        # To avoid too many calls, we can try to get creation time for all VMs in one go if possible, 
+        # but for accuracy per MIG we do it here.
+        CREATE_TIME=$(gcloud compute instances describe "$inst_name" $LOCATION_FLAG --format="value(creationTimestamp)" 2>/dev/null)
+        
+        # Formatting action/template for highlighting
+        DISP_ACTION=$inst_action
+        if [ "$inst_action" != "NONE" ]; then DISP_ACTION="${YELLOW}$inst_action${NC}"; fi
+        
+        DISP_TEMPLATE=$inst_template
+        if [ "$inst_template" != "$TARGET_TEMPLATE" ]; then DISP_TEMPLATE="${RED}$inst_template (Old)${NC}"; else DISP_TEMPLATE="${GREEN}$inst_template${NC}"; fi
+
+        printf "%-30s %-15s %b %b %-25s\n" "$inst_name" "$inst_status" "$DISP_ACTION" "$DISP_TEMPLATE" "$CREATE_TIME"
+    done <<< "$INSTANCE_LIST"
+
+    # --- 4. Health Check Status ---
+    echo -e "\n${YELLOW}[3/3] Checking health states...${NC}"
+    HEALTH=$(gcloud compute instance-groups managed list-instances "$name" $LOCATION_FLAG --format="table(instance.basename(),healthStatus[0].healthState)")
+    if [ -n "$(echo "$HEALTH" | tail -n +2)" ]; then
+        echo "$HEALTH"
+    else
+        echo -e "${YELLOW}No health check information available for this MIG.${NC}"
+    fi
+
+done <<< "$(gcloud compute instance-groups managed list --filter="name ~ $KEYWORD" --format="value(name,zone,region)")"
+
+echo -e "\n${BLUE}====================================================${NC}"
+echo -e "${BLUE}   Verification Complete!                           ${NC}"
+echo -e "${BLUE}====================================================${NC}"
+
+```
+
+## `verify-gcp-and-gke-status.sh`
+
+```bash
+#!/bin/bash
+
+# Colors for better readability
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}=== Step 0: GCE Forwarding Rules ===${NC}"
+echo "Listing forwarding rules..."
+gcloud compute forwarding-rules list
+
 echo ""
-echo "实例 '$INSTANCE_NAME' 的时间信息:"
-printf "+-----------------+-------------------------------------+---------------------------+---------------------------+---------------------------+\n"
-printf "| %-15s | %-35s | %-25s | %-25s | %-25s |\n" "时间点" "原始时间" "中国时间 (CST)" "UTC 时间" "伦敦时间 (GMT/BST)"
-printf "+-----------------+-------------------------------------+---------------------------+---------------------------+---------------------------+\n"
+read -p "Enter a Forwarding Rule name to describe (or press Enter to skip): " fr_name
 
-# 打印每一行数据
-convert_time "$CREATION_TIMESTAMP" "创建时间"
-convert_time "$LAST_START_TIMESTAMP" "最后启动时间"
-convert_time "$LAST_STOP_TIMESTAMP" "最后停止时间"
+if [ -n "$fr_name" ]; then
+    echo -e "${YELLOW}Describing Forwarding Rule: $fr_name${NC}"
+    gcloud compute forwarding-rules describe "$fr_name"
+else
+    echo "Skipping description."
+fi
 
-printf "+-----------------+-------------------------------------+---------------------------+---------------------------+---------------------------+\n"
 echo ""
-echo "脚本执行完毕."
+echo -e "${GREEN}=== Step 1: Managed Instance Groups (MIGs) ===${NC}"
+echo "Listing managed instance groups..."
+gcloud compute instance-groups managed list
+
+echo ""
+echo -e "${GREEN}=== Step 2: Filter MIGs and check Autoscaler ===${NC}"
+read -p "Enter a keyword to filter Instance Group names (or press Enter to skip filtering): " mig_keyword
+
+if [ -n "$mig_keyword" ]; then
+    echo -e "${YELLOW}Filtering for MIGs containing '$mig_keyword' and showing autoscaler info...${NC}"
+    # Fetch JSON, filter by name containing keyword (using gcloud filter or jq), then extract autoscaler
+    # Using gcloud filter for efficiency
+    gcloud compute instance-groups managed list --filter="name ~ $mig_keyword" --format="json" | jq '.[] | {name: .name, autoscaler: .autoscaler}'
+else
+    echo "Skipping filtering."
+fi
+
+echo ""
+echo -e "${GREEN}=== Step 3: DNS Managed Zones ===${NC}"
+echo "Listing managed zones..."
+# Get list of zones (name only) for selection
+zones=$(gcloud dns managed-zones list --format="value(name)")
+# Display with index
+i=1
+declare -a zone_array
+for zone in $zones; do
+    echo "[$i] $zone"
+    zone_array[$i]=$zone
+    ((i++))
+done
+
+echo ""
+echo -e "${GREEN}=== Step 4: Select DNS Zone to List Record Sets ===${NC}"
+if [ ${#zone_array[@]} -eq 0 ]; then
+    echo "No DNS zones found."
+else
+    read -p "Select a zone number (1-$((i-1))) to list record sets: " zone_choice
+    selected_zone=${zone_array[$zone_choice]}
+
+    if [ -n "$selected_zone" ]; then
+        echo -e "${YELLOW}Listing record sets for zone: $selected_zone${NC}"
+        gcloud dns record-sets list --zone="$selected_zone"
+    else
+        echo -e "${RED}Invalid selection.${NC}"
+    fi
+fi
+
+echo ""
+echo -e "${GREEN}=== Step 5: Kubernetes Namespaces ===${NC}"
+echo "Listing namespaces..."
+namespaces=$(kubectl get ns -o jsonpath='{.items[*].metadata.name}')
+
+# Display with index
+j=1
+declare -a ns_array
+for ns in $namespaces; do
+    echo "[$j] $ns"
+    ns_array[$j]=$ns
+    ((j++))
+done
+
+echo ""
+echo -e "${GREEN}=== Step 6: Select Namespace to List Resources ===${NC}"
+if [ ${#ns_array[@]} -eq 0 ]; then
+    echo "No namespaces found."
+else
+    read -p "Select a namespace number (1-$((j-1))) to list all resources: " ns_choice
+    selected_ns=${ns_array[$ns_choice]}
+
+    if [ -n "$selected_ns" ]; then
+        echo -e "${YELLOW}Listing all resources in namespace: $selected_ns${NC}"
+        kubectl get all -n "$selected_ns"
+    else
+        echo -e "${RED}Invalid selection.${NC}"
+    fi
+fi
+
+echo ""
+echo -e "${GREEN}=== Verification Complete ===${NC}"
 
 ```
 
@@ -720,111 +753,199 @@ main "$@"
 
 ```
 
-## `verify-gcp-and-gke-status.sh`
+## `instance-uptime-gemini.sh`
 
 ```bash
 #!/bin/bash
 
-# Colors for better readability
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# 脚本: instance-uptime-gemini.sh
+# 用途: 获取GCE实例的时间戳信息并转换为不同时区的时间.
+# 用法: ./instance-uptime-gemini.sh <instance-name> <zone>
+# 示例: ./instance-uptime-gemini.sh my-instance asia-east2-a
 
-echo -e "${GREEN}=== Step 0: GCE Forwarding Rules ===${NC}"
-echo "Listing forwarding rules..."
-gcloud compute forwarding-rules list
-
-echo ""
-read -p "Enter a Forwarding Rule name to describe (or press Enter to skip): " fr_name
-
-if [ -n "$fr_name" ]; then
-    echo -e "${YELLOW}Describing Forwarding Rule: $fr_name${NC}"
-    gcloud compute forwarding-rules describe "$fr_name"
-else
-    echo "Skipping description."
+# 1. 参数校验
+if [ "$#" -ne 2 ]; then
+    echo "错误: 需要提供2个参数."
+    echo "用法: $0 <instance-name> <zone>"
+    echo "示例: $0 my-instance asia-east2-a"
+    exit 1
 fi
 
-echo ""
-echo -e "${GREEN}=== Step 1: Managed Instance Groups (MIGs) ===${NC}"
-echo "Listing managed instance groups..."
-gcloud compute instance-groups managed list
+INSTANCE_NAME=$1
+ZONE=$2
 
-echo ""
-echo -e "${GREEN}=== Step 2: Filter MIGs and check Autoscaler ===${NC}"
-read -p "Enter a keyword to filter Instance Group names (or press Enter to skip filtering): " mig_keyword
-
-if [ -n "$mig_keyword" ]; then
-    echo -e "${YELLOW}Filtering for MIGs containing '$mig_keyword' and showing autoscaler info...${NC}"
-    # Fetch JSON, filter by name containing keyword (using gcloud filter or jq), then extract autoscaler
-    # Using gcloud filter for efficiency
-    gcloud compute instance-groups managed list --filter="name ~ $mig_keyword" --format="json" | jq '.[] | {name: .name, autoscaler: .autoscaler}'
-else
-    echo "Skipping filtering."
+# 2. 依赖检查
+if ! command -v gcloud &> /dev/null; then
+    echo "错误: gcloud 命令未找到. 请确保 Google Cloud SDK 已安装并配置."
+    exit 1
 fi
 
-echo ""
-echo -e "${GREEN}=== Step 3: DNS Managed Zones ===${NC}"
-echo "Listing managed zones..."
-# Get list of zones (name only) for selection
-zones=$(gcloud dns managed-zones list --format="value(name)")
-# Display with index
-i=1
-declare -a zone_array
-for zone in $zones; do
-    echo "[$i] $zone"
-    zone_array[$i]=$zone
-    ((i++))
-done
+if ! command -v jq &> /dev/null; then
+    echo "错误: jq 命令未找到. 请使用 'brew install jq' 或 'apt-get install jq' 安装."
+    exit 1
+fi
 
-echo ""
-echo -e "${GREEN}=== Step 4: Select DNS Zone to List Record Sets ===${NC}"
-if [ ${#zone_array[@]} -eq 0 ]; then
-    echo "No DNS zones found."
-else
-    read -p "Select a zone number (1-$((i-1))) to list record sets: " zone_choice
-    selected_zone=${zone_array[$zone_choice]}
+# 3. 获取实例信息
+echo "正在获取实例 '$INSTANCE_NAME' 在区域 '$ZONE' 的信息..."
+INSTANCE_INFO=$(gcloud compute instances describe "$INSTANCE_NAME" --zone="$ZONE" --format=json 2>/dev/null)
 
-    if [ -n "$selected_zone" ]; then
-        echo -e "${YELLOW}Listing record sets for zone: $selected_zone${NC}"
-        gcloud dns record-sets list --zone="$selected_zone"
-    else
-        echo -e "${RED}Invalid selection.${NC}"
+if [ $? -ne 0 ] || [ -z "$INSTANCE_INFO" ]; then
+    echo "错误: 无法获取实例信息. 请检查实例名称和区域是否正确."
+    exit 1
+fi
+
+# 4. 时间转换函数
+# $1: 时间戳字符串 (e.g., "2024-01-15T10:30:45.123-08:00")
+# $2: 时间点的标签 (e.g., "创建时间")
+convert_time() {
+    local timestamp=$1
+    local label=$2
+    
+    if [ -z "$timestamp" ] || [ "$timestamp" == "null" ]; then
+        printf "| %-15s | %-35s | %-25s | %-25s | %-25s |\n" "$label" "N/A" "N/A" "N/A" "N/A"
+        return
     fi
-fi
+    
+    local original_time="$timestamp"
+    local date_cmd="date"
 
-echo ""
-echo -e "${GREEN}=== Step 5: Kubernetes Namespaces ===${NC}"
-echo "Listing namespaces..."
-namespaces=$(kubectl get ns -o jsonpath='{.items[*].metadata.name}')
-
-# Display with index
-j=1
-declare -a ns_array
-for ns in $namespaces; do
-    echo "[$j] $ns"
-    ns_array[$j]=$ns
-    ((j++))
-done
-
-echo ""
-echo -e "${GREEN}=== Step 6: Select Namespace to List Resources ===${NC}"
-if [ ${#ns_array[@]} -eq 0 ]; then
-    echo "No namespaces found."
-else
-    read -p "Select a namespace number (1-$((j-1))) to list all resources: " ns_choice
-    selected_ns=${ns_array[$ns_choice]}
-
-    if [ -n "$selected_ns" ]; then
-        echo -e "${YELLOW}Listing all resources in namespace: $selected_ns${NC}"
-        kubectl get all -n "$selected_ns"
-    else
-        echo -e "${RED}Invalid selection.${NC}"
+    # 检查是否为macOS，并使用gdate（如果存在）
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        if command -v gdate &>/dev/null; then
+            date_cmd="gdate"
+        else
+            echo "警告: 在macOS上, 建议安装 'gdate' (brew install coreutils) 以获得更强大的日期处理功能." >&2
+        fi
     fi
+
+    # 尝试转换时间
+    local china_time=$(TZ='Asia/Shanghai' $date_cmd -d "$timestamp" +"%Y-%m-%d %H:%M:%S %Z" 2>/dev/null)
+    local utc_time=$(TZ='UTC' $date_cmd -d "$timestamp" +"%Y-%m-%d %H:%M:%S %Z" 2>/dev/null)
+    local london_time=$(TZ='Europe/London' $date_cmd -d "$timestamp" +"%Y-%m-%d %H:%M:%S %Z" 2>/dev/null)
+    
+    # 如果转换失败，显示错误信息
+    if [ -z "$china_time" ]; then
+        china_time="解析失败"
+        utc_time="解析失败"
+        london_time="解析失败"
+    fi
+    
+    printf "| %-15s | %-35s | %-25s | %-25s | %-25s |\n" "$label" "$original_time" "$china_time" "$utc_time" "$london_time"
+}
+
+# 5. 提取并显示时间信息
+echo "正在提取和转换时间信息..."
+
+CREATION_TIMESTAMP=$(echo "$INSTANCE_INFO" | jq -r '.creationTimestamp // empty')
+LAST_START_TIMESTAMP=$(echo "$INSTANCE_INFO" | jq -r '.lastStartTimestamp // empty')
+LAST_STOP_TIMESTAMP=$(echo "$INSTANCE_INFO" | jq -r '.lastStopTimestamp // empty')
+
+# 打印表头
+echo ""
+echo "实例 '$INSTANCE_NAME' 的时间信息:"
+printf "+-----------------+-------------------------------------+---------------------------+---------------------------+---------------------------+\n"
+printf "| %-15s | %-35s | %-25s | %-25s | %-25s |\n" "时间点" "原始时间" "中国时间 (CST)" "UTC 时间" "伦敦时间 (GMT/BST)"
+printf "+-----------------+-------------------------------------+---------------------------+---------------------------+---------------------------+\n"
+
+# 打印每一行数据
+convert_time "$CREATION_TIMESTAMP" "创建时间"
+convert_time "$LAST_START_TIMESTAMP" "最后启动时间"
+convert_time "$LAST_STOP_TIMESTAMP" "最后停止时间"
+
+printf "+-----------------+-------------------------------------+---------------------------+---------------------------+---------------------------+\n"
+echo ""
+echo "脚本执行完毕."
+
+```
+
+## `get_instance_uptime.sh`
+
+```bash
+#!/bin/bash
+keyword="aibangrt"
+instance_list=$(gcloud compute instances list --filter="name~${keyword}*" --format="value(name,ZONE)")
+
+while read -r instances; do
+  NAME=$(echo "$instances" | cut -f1)
+  zone=$(echo "$instances" | cut -f2)
+
+  # 实例启动时间(本地时区时间)
+  START_TIMESTAMP=$(gcloud compute instances describe $NAME --zone $zone --format="value(creationTimestamp)")
+
+  # 本地时间转换为UTC时间
+  START_TIME_UTC=$(TZ=UTC date -d"$START_TIMESTAMP" +"%Y-%m-%dT%H:%M:%SZ")
+
+  # 当前UTC时间
+  CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+  # 基于UTC时间计算持续时间
+  #DURATION=$(date -u -d "$CURRENT_TIME" -d "$START_TIME_UTC" +"%H:%M:%S")
+  SECONDS1=$(date -u -d "$CURRENT_TIME" +"%s")
+  SECONDS2=$(date -u -d "$START_TIME_UTC" +"%s")
+  # 计算差值
+  DIFF_SECONDS=$((SECONDS1 - SECONDS2))
+  # # 将差值转换为时:分:秒格式
+  DIFF_TIME=$(date -u -d "@$DIFF_SECONDS" +"%H:%M:%S")
+
+  echo "Instance $NAME has been running for: $DIFF_TIME"
+
+done <<< "$instance_list"
+
+```
+
+## `get_instance_timestamps.sh`
+
+```bash
+#!/bin/bash
+
+# 设置输出文件路径（您可以根据需要修改路径，确保在允许的目录内）
+OUTPUT_FILE="/Users/lex/git/knowledge/gcp/gce/instance_timestamps.txt"
+
+# 检查是否提供了实例名称和区域，否则使用默认值或提示用户输入
+if [ $# -lt 2 ]; then
+  echo "使用方法: $0 <实例名称> <区域>"
+  echo "示例: $0 my-instance us-central1-a"
+  echo "您也可以编辑此脚本，在下方设置默认实例和区域。"
+  exit 1
 fi
 
-echo ""
-echo -e "${GREEN}=== Verification Complete ===${NC}"
+INSTANCE_NAME="$1"
+ZONE="$2"
+
+echo "正在获取实例 $INSTANCE_NAME (区域: $ZONE) 的时间戳信息..."
+
+# 获取创建时间
+CREATION_TIME=$(gcloud compute instances describe "$INSTANCE_NAME" --zone="$ZONE" --format="value(creationTimestamp)" 2>/dev/null)
+if [ -z "$CREATION_TIME" ]; then
+  CREATION_TIME="无法获取（实例不存在或无权限）"
+fi
+
+# 获取最后启动时间
+LAST_START_TIME=$(gcloud compute instances describe "$INSTANCE_NAME" --zone="$ZONE" --format="value(lastStartTimestamp)" 2>/dev/null)
+if [ -z "$LAST_START_TIME" ]; then
+  LAST_START_TIME="无法获取（实例不存在或无权限）"
+fi
+
+# 获取最后停止时间
+LAST_STOP_TIME=$(gcloud compute instances describe "$INSTANCE_NAME" --zone="$ZONE" --format="value(lastStopTimestamp)" 2>/dev/null)
+if [ -z "$LAST_STOP_TIME" ]; then
+  LAST_STOP_TIME="无法获取（实例不存在或从未停止）"
+fi
+
+# 将结果输出到控制台
+echo "实例: $INSTANCE_NAME (区域: $ZONE)"
+echo "  创建时间 (creationTimestamp): $CREATION_TIME"
+echo "  最后启动时间 (lastStartTimestamp): $LAST_START_TIME"
+echo "  最后停止时间 (lastStopTimestamp): $LAST_STOP_TIME"
+
+# 将结果保存到文件
+echo "实例: $INSTANCE_NAME (区域: $ZONE)" >> "$OUTPUT_FILE"
+echo "  创建时间 (creationTimestamp): $CREATION_TIME" >> "$OUTPUT_FILE"
+echo "  最后启动时间 (lastStartTimestamp): $LAST_START_TIME" >> "$OUTPUT_FILE"
+echo "  最后停止时间 (lastStopTimestamp): $LAST_STOP_TIME" >> "$OUTPUT_FILE"
+echo "--------------------------------" >> "$OUTPUT_FILE"
+
+echo "结果已保存到 $OUTPUT_FILE"
 
 ```
 
