@@ -83,12 +83,15 @@ fi
 # --- 4. Check Service Account level IAM policy (Permissions on the SA) ---
 echo -e "\n${YELLOW}[4/4] Checking permissions ON this Service Account...${NC}"
 SA_IAM=$(gcloud iam service-accounts get-iam-policy "$SA_EMAIL" --project="$SA_PROJECT_ID" --format="table(bindings.role, bindings.members)" | tail -n +2)
+SA_IAM_JSON=$(gcloud iam service-accounts get-iam-policy "$SA_EMAIL" --project="$SA_PROJECT_ID" --format="json")
 
 if [ -z "$SA_IAM" ]; then
     echo -e "${GREEN}✅ No special IAM bindings on this SA resource itself.${NC}"
 else
     echo -e "${GREEN}✅ Found the following entities with access to this SA:${NC}"
     echo "$SA_IAM"
+    echo -e "${GREEN}JSON format:${NC}"
+    echo "$SA_IAM_JSON" | jq .
 fi
 
 # --- Cross-Project Warning ---
