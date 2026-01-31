@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2026-01-31 17:21:16
+Generated on: 2026-01-31 17:32:52
 Directory: /Users/lex/git/knowledge/gcp/gce
 
 ## `verify-mig-status.sh`
@@ -57,19 +57,24 @@ echo -e "${GREEN}Found following MIGs:${NC}"
 echo "$MIGS"
 
 # --- 2. Iterate through found MIGs ---
-while read -r name location type; do
-    # Skip header
+while read -r name zone region; do
+    # Skip header or empty lines
     if [ "$name" == "NAME" ] || [ -z "$name" ]; then continue; fi
 
     # Determine if it's regional or zonal
-    LOCATION_FLAG="--zone=$location"
-    if [[ "$location" == *[a-z] ]]; then 
-        LOCATION_FLAG="--zone=$location"
+    if [ -n "$zone" ]; then
+        # Zonal MIG
+        LOCATION_FLAG="--zone=$zone"
+        LOCATION_TYPE="zonal"
+        LOCATION="$zone"
     else
-        LOCATION_FLAG="--region=$location"
+        # Regional MIG
+        LOCATION_FLAG="--region=$region"
+        LOCATION_TYPE="regional"
+        LOCATION="$region"
     fi
 
-    echo -e "\n${BLUE}>>> Analyzing MIG: ${GREEN}$name${BLUE} (Location: $location)${NC}"
+    echo -e "\n${BLUE}>>> Analyzing MIG: ${GREEN}$name${BLUE} (Location: $LOCATION, Type: $LOCATION_TYPE)${NC}"
 
     # Get MIG details
     MIG_DESC=$(gcloud compute instance-groups managed describe "$name" $LOCATION_FLAG --format="json")
@@ -102,8 +107,16 @@ while read -r name location type; do
         # 获取健康状态
         inst_health=$(echo "$instance" | jq -r '.instanceHealth[0].detailedHealthState // "N/A"')
         
+        # 对于 regional MIG，需要从实例 URL 中提取 zone
+        if [ "$LOCATION_TYPE" == "regional" ]; then
+            inst_zone=$(echo "$instance" | jq -r '.instance' | awk -F'/' '{print $(NF-2)}')
+            INST_LOCATION_FLAG="--zone=$inst_zone"
+        else
+            INST_LOCATION_FLAG="$LOCATION_FLAG"
+        fi
+        
         # 获取创建时间并计算运行时长
-        CREATE_TIME=$(gcloud compute instances describe "$inst_name" $LOCATION_FLAG --format="value(creationTimestamp)")
+        CREATE_TIME=$(gcloud compute instances describe "$inst_name" $INST_LOCATION_FLAG --format="value(creationTimestamp)")
         
         # 计算运行时长（参考 get_instance_uptime.sh）
         if [ -n "$CREATE_TIME" ]; then
