@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2026-01-31 17:51:01
+Generated on: 2026-01-31 17:58:02
 Directory: /Users/lex/git/knowledge/gcp/gce
 
 ## `verify-mig-status.sh`
@@ -110,8 +110,11 @@ while read -r name zone region; do
         inst_health=$(echo "$instance" | jq -r '.instanceHealth[0].detailedHealthState // "N/A"')
         
         # 对于 regional MIG，需要从实例 URL 中提取 zone
+        # URL 格式: https://www.googleapis.com/compute/v1/projects/PROJECT/zones/ZONE/instances/INSTANCE
         if [ "$LOCATION_TYPE" == "regional" ]; then
-            inst_zone=$(echo "$instance" | jq -r '.instance' | awk -F'/' '{print $(NF-2)}')
+            inst_url=$(echo "$instance" | jq -r '.instance')
+            # 使用 sed 提取 zones/ 后面的部分
+            inst_zone=$(echo "$inst_url" | sed -n 's|.*/zones/\([^/]*\)/.*|\1|p')
             INST_LOCATION_FLAG="--zone=$inst_zone"
         else
             INST_LOCATION_FLAG="$LOCATION_FLAG"
