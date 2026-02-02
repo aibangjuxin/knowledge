@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2026-02-02 15:55:24
+Generated on: 2026-02-02 16:27:33
 Directory: /Users/lex/git/knowledge/kong/kongdp
 
 ## `compare-dp.sh`
@@ -114,11 +114,12 @@ print_table_row() {
     local col2="$2"
     local col3="$3"
     local col4="$4"
-    printf "| %-30s | %-35s | %-35s | %-10s |\n" "$col1" "$col2" "$col3" "$col4"
+    # Use %b instead of %s to interpret ANSI color codes
+    printf "| %-40b | %-45b | %-45b | %-20b |\n" "$col1" "$col2" "$col3" "$col4"
 }
 
 print_table_separator() {
-    echo "+--------------------------------+-------------------------------------+-------------------------------------+------------+"
+    echo "+------------------------------------------+-----------------------------------------------+-----------------------------------------------+----------------------+"
 }
 
 # Extract certificate information using openssl
@@ -435,6 +436,144 @@ if [ -n "$SOURCE_SECRETS" ] && [ -n "$TARGET_SECRETS" ]; then
         echo "$TARGET_ONLY" | while read -r secret; do
             echo "  - $secret"
         done
+    fi
+fi
+
+# Additional cert-secret certificate details
+if [ -n "$SOURCE_SECRETS" ] || [ -n "$TARGET_SECRETS" ]; then
+    print_subheader "证书详细信息 (cert-secret 结尾)"
+    echo -e "${CYAN}Using openssl to extract certificate information...${NC}\n"
+    
+    # Find secrets ending with cert-secret
+    SOURCE_CERT_SECRETS=$(echo "$SOURCE_SECRETS" | grep 'cert-secret$' || echo "")
+    TARGET_CERT_SECRETS=$(echo "$TARGET_SECRETS" | grep 'cert-secret$' || echo "")
+    
+    # Process source namespace cert-secrets
+    if [ -n "$SOURCE_CERT_SECRETS" ]; then
+        echo -e "${GREEN}源 Namespace ($SOURCE_NS) 的 cert-secret 证书:${NC}"
+        echo ""
+        
+        echo "$SOURCE_CERT_SECRETS" | while read -r secret_name; do
+            [ -z "$secret_name" ] && continue
+            
+            echo -e "${YELLOW}📜 Secret: $secret_name${NC}"
+            
+            # Extract certificate data
+            CERT_DATA=$(kubectl get secret "$secret_name" -n "$SOURCE_NS" -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
+            
+            if [ -z "$CERT_DATA" ]; then
+                print_warning "  无法读取证书数据"
+                echo ""
+                continue
+            fi
+            
+            # Extract CN
+            CN=$(echo "$CERT_DATA" | openssl x509 -noout -subject 2>/dev/null | grep -oP 'CN\s*=\s*\K[^,/]+' || echo "N/A")
+            echo "  Common Name (CN): $CN"
+            
+            # Extract SAN
+            SAN=$(echo "$CERT_DATA" | openssl x509 -noout -text 2>/dev/null | grep -A1 "Subject Alternative Name" | tail -1 | sed 's/^[[:space:]]*//' || echo "N/A")
+            echo "  Subject Alternative Names (SAN):"
+            if [ "$SAN" != "N/A" ]; then
+                # Format SAN for better readability
+                echo "$SAN" | tr ',' '\n' | while read -r san_entry; do
+                    [ -n "$san_entry" ] && echo "    - $(echo "$san_entry" | xargs)"
+                done
+            else
+                echo "    - N/A"
+            fi
+            
+            # Extract expiry date
+            EXPIRY=$(echo "$CERT_DATA" | openssl x509 -noout -enddate 2>/dev/null | sed 's/notAfter=//' || echo "N/A")
+            echo "  过期时间: $EXPIRY"
+            
+            # Check if expired
+            if [ "$EXPIRY" != "N/A" ]; then
+                EXPIRY_EPOCH=$(date -j -f "%b %d %T %Y %Z" "$EXPIRY" "+%s" 2>/dev/null || echo "0")
+                NOW_EPOCH=$(date "+%s")
+                if [ "$EXPIRY_EPOCH" -gt 0 ]; then
+                    if [ "$EXPIRY_EPOCH" -lt "$NOW_EPOCH" ]; then
+                        echo -e "  ${RED}状态: 已过期 ❌${NC}"
+                    else
+                        DAYS_LEFT=$(( ($EXPIRY_EPOCH - $NOW_EPOCH) / 86400 ))
+                        if [ "$DAYS_LEFT" -lt 30 ]; then
+                            echo -e "  ${YELLOW}状态: 即将过期 (剩余 $DAYS_LEFT 天) ⚠️${NC}"
+                        else
+                            echo -e "  ${GREEN}状态: 有效 (剩余 $DAYS_LEFT 天) ✅${NC}"
+                        fi
+                    fi
+                fi
+            fi
+            
+            echo ""
+        done
+    else
+        echo -e "${CYAN}源 Namespace ($SOURCE_NS) 中未找到 cert-secret 结尾的证书${NC}"
+        echo ""
+    fi
+    
+    # Process target namespace cert-secrets
+    if [ -n "$TARGET_CERT_SECRETS" ]; then
+        echo -e "${GREEN}目标 Namespace ($TARGET_NS) 的 cert-secret 证书:${NC}"
+        echo ""
+        
+        echo "$TARGET_CERT_SECRETS" | while read -r secret_name; do
+            [ -z "$secret_name" ] && continue
+            
+            echo -e "${YELLOW}📜 Secret: $secret_name${NC}"
+            
+            # Extract certificate data
+            CERT_DATA=$(kubectl get secret "$secret_name" -n "$TARGET_NS" -o jsonpath='{.data.tls\.crt}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
+            
+            if [ -z "$CERT_DATA" ]; then
+                print_warning "  无法读取证书数据"
+                echo ""
+                continue
+            fi
+            
+            # Extract CN
+            CN=$(echo "$CERT_DATA" | openssl x509 -noout -subject 2>/dev/null | grep -oP 'CN\s*=\s*\K[^,/]+' || echo "N/A")
+            echo "  Common Name (CN): $CN"
+            
+            # Extract SAN
+            SAN=$(echo "$CERT_DATA" | openssl x509 -noout -text 2>/dev/null | grep -A1 "Subject Alternative Name" | tail -1 | sed 's/^[[:space:]]*//' || echo "N/A")
+            echo "  Subject Alternative Names (SAN):"
+            if [ "$SAN" != "N/A" ]; then
+                # Format SAN for better readability
+                echo "$SAN" | tr ',' '\n' | while read -r san_entry; do
+                    [ -n "$san_entry" ] && echo "    - $(echo "$san_entry" | xargs)"
+                done
+            else
+                echo "    - N/A"
+            fi
+            
+            # Extract expiry date
+            EXPIRY=$(echo "$CERT_DATA" | openssl x509 -noout -enddate 2>/dev/null | sed 's/notAfter=//' || echo "N/A")
+            echo "  过期时间: $EXPIRY"
+            
+            # Check if expired
+            if [ "$EXPIRY" != "N/A" ]; then
+                EXPIRY_EPOCH=$(date -j -f "%b %d %T %Y %Z" "$EXPIRY" "+%s" 2>/dev/null || echo "0")
+                NOW_EPOCH=$(date "+%s")
+                if [ "$EXPIRY_EPOCH" -gt 0 ]; then
+                    if [ "$EXPIRY_EPOCH" -lt "$NOW_EPOCH" ]; then
+                        echo -e "  ${RED}状态: 已过期 ❌${NC}"
+                    else
+                        DAYS_LEFT=$(( ($EXPIRY_EPOCH - $NOW_EPOCH) / 86400 ))
+                        if [ "$DAYS_LEFT" -lt 30 ]; then
+                            echo -e "  ${YELLOW}状态: 即将过期 (剩余 $DAYS_LEFT 天) ⚠️${NC}"
+                        else
+                            echo -e "  ${GREEN}状态: 有效 (剩余 $DAYS_LEFT 天) ✅${NC}"
+                        fi
+                    fi
+                fi
+            fi
+            
+            echo ""
+        done
+    else
+        echo -e "${CYAN}目标 Namespace ($TARGET_NS) 中未找到 cert-secret 结尾的证书${NC}"
+        echo ""
     fi
 fi
 
