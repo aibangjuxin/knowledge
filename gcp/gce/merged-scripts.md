@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2026-02-02 09:32:33
+Generated on: 2026-02-02 09:38:40
 Directory: /Users/lex/git/knowledge/gcp/gce
 
 ## `verify-mig-status.sh`
@@ -51,8 +51,9 @@ check_prerequisites() {
 # --- Function: Get MIG list by keyword ---
 get_mig_list() {
     local keyword=$1
-    echo -e "${BLUE}Searching for MIGs matching keyword: ${keyword}${NC}"
-    echo ""
+    # CRITICAL: Send status messages to stderr so they don't pollute the data stream (stdout)
+    echo -e "${BLUE}Searching for MIGs matching keyword: ${keyword}${NC}" >&2
+    echo "" >&2
     
     # Capture output while letting stderr flow to terminal (handles warnings/errors)
     local migs
@@ -66,13 +67,16 @@ get_mig_list() {
         --filter="name:${keyword}" 2>/dev/null)
     
     if [ -z "$migs" ] && [ -z "$regional_migs" ]; then
-        echo -e "${RED}Error: No MIG found matching keyword '${keyword}'${NC}"
+        echo -e "${RED}Error: No MIG found matching keyword '${keyword}'${NC}" >&2
         exit 1
     fi
     
     [ -n "$migs" ] && echo "$migs"
     [ -n "$regional_migs" ] && echo "$regional_migs"
 }
+
+# --- Function: Get instance details safely ---
+# ... (rest of the functions remain the same)
 
 # --- Function: Get instance details safely ---
 get_instance_details() {
@@ -238,7 +242,7 @@ main() {
     
     local mig_data
     mig_data=$(get_mig_list "$keyword")
-    
+    # Process each MIG
     while IFS= read -r line; do
         [ -z "$line" ] && continue
         
@@ -247,6 +251,12 @@ main() {
         local location
         location=$(echo "$line" | awk '{print $2}')
         
+        # Skip header lines if they somehow leaked (e.g., if keyword is 'Searching')
+        if [ "$mig_name" == "Searching" ] || [ "$mig_name" == "INSTANCE_NAME" ]; then
+            continue
+        fi
+        
+        # Determine if it's zonal or regional
         local location_type="zone"
         if [[ "$location" =~ ^[a-z]+-[a-z]+[0-9]+$ ]]; then
             location_type="region"
