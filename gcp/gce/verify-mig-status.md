@@ -62,24 +62,17 @@ get_mig_list() {
     echo -e "${BLUE}Searching for MIGs matching keyword: ${keyword}${NC}" >&2
     echo "" >&2
     
-    # Capture output while letting stderr flow to terminal (handles warnings/errors)
-    local migs
-    migs=$(gcloud compute instance-groups managed list \
-        --format="table[no-heading](name,zone,baseInstanceName,targetSize,INSTANCE_TEMPLATE)" \
-        --filter="name:${keyword}" 2>/dev/null)
+    local json_data
+    # Unified call for both zonal and regional MIGs
+    json_data=$(gcloud compute instance-groups managed list --filter="name:${keyword}" --format=json 2>/dev/null)
     
-    local regional_migs
-    regional_migs=$(gcloud compute instance-groups managed list \
-        --format="table[no-heading](name,region,baseInstanceName,targetSize,INSTANCE_TEMPLATE)" \
-        --filter="name:${keyword}" 2>/dev/null)
-    
-    if [ -z "$migs" ] && [ -z "$regional_migs" ]; then
+    if [ -z "$json_data" ] || [ "$json_data" == "[]" ]; then
         echo -e "${RED}Error: No MIG found matching keyword '${keyword}'${NC}" >&2
         exit 1
     fi
     
-    [ -n "$migs" ] && echo "$migs"
-    [ -n "$regional_migs" ] && echo "$regional_migs"
+    # Extract name and location (handles both .zone and .region fields)
+    echo "$json_data" | jq -r '.[] | .name + " " + (.zone // .region | split("/") | last)'
 }
 
 # --- Function: Get instance details safely ---
