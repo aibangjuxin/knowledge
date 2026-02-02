@@ -2,14 +2,14 @@
 
 # verify-mig-status.sh - Verify MIG instances status after refresh/replace
 # Author: Infrastructure Team
-# Version: 1.1 (Optimized)
+# Version: 1.2 (Linux Hardened - Fixed JQ Parse Error)
 
 # --- Color Definitions ---
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # --- Function: Usage ---
 show_usage() {
@@ -31,7 +31,7 @@ check_prerequisites() {
     fi
     
     if ! command -v jq &> /dev/null; then
-        echo -e "${RED}Error: jq not found. Please install jq (e.g., brew install jq, apt-get install jq).${NC}"
+        echo -e "${RED}Error: jq not found. Please install jq (e.g., sudo apt-get install jq).${NC}"
         missing_deps=1
     fi
 
@@ -46,30 +46,24 @@ get_mig_list() {
     echo -e "${BLUE}Searching for MIGs matching keyword: ${keyword}${NC}"
     echo ""
     
-    # Search in all zones
-    local migs=$(gcloud compute instance-groups managed list \
-        --format=\"table[no-heading](name,zone,baseInstanceName,targetSize,INSTANCE_TEMPLATE)\" \
-        --filter=\"name:${keyword}\" 2>/dev/null)
+    # Capture output while letting stderr flow to terminal (handles warnings/errors)
+    local migs
+    migs=$(gcloud compute instance-groups managed list \
+        --format="table[no-heading](name,zone,baseInstanceName,targetSize,INSTANCE_TEMPLATE)" \
+        --filter="name:${keyword}" 2>/dev/null)
     
-    # Search in all regions (regional MIGs)
-    local regional_migs=$(gcloud compute instance-groups managed list \
-        --format=\"table[no-heading](name,region,baseInstanceName,targetSize,INSTANCE_TEMPLATE)\" \
-        --filter=\"name:${keyword}\" 2>/dev/null)
+    local regional_migs
+    regional_migs=$(gcloud compute instance-groups managed list \
+        --format="table[no-heading](name,region,baseInstanceName,targetSize,INSTANCE_TEMPLATE)" \
+        --filter="name:${keyword}" 2>/dev/null)
     
     if [ -z "$migs" ] && [ -z "$regional_migs" ]; then
         echo -e "${RED}Error: No MIG found matching keyword '${keyword}'${NC}"
         exit 1
     fi
     
-    # Output zonal MIGs if found
-    if [ -n "$migs" ]; then
-        echo "$migs"
-    fi
-    
-    # Output regional MIGs if found
-    if [ -n "$regional_migs" ]; then
-        echo "$regional_migs"
-    fi
+    [ -n "$migs" ] && echo "$migs"
+    [ -n "$regional_migs" ] && echo "$regional_migs"
 }
 
 # --- Function: Get instance details safely ---
@@ -78,21 +72,17 @@ get_instance_details() {
     local zone=$2
     
     if [ -z "$zone" ] || [ -z "$instance_name" ]; then
-        echo "ERROR: Missing zone or instance name"
         return 1
     fi
 
-    # Execute command and handle errors
-    local cmd="gcloud compute instances describe ${instance_name} --zone=${zone} --format=json"
-    local result=$(eval $cmd 2>&1)
+    local result
+    # CRITICAL: Separate assignment from local to catch exit code.
+    # CRITICAL: Do NOT redirect 2>&1 into JSON variable because warnings/errors break jq.
+    result=$(gcloud compute instances describe "${instance_name}" --zone="${zone}" --format=json 2>/dev/null)
+    local exit_val=$?
     
-    if [ $? -ne 0 ]; then
-        # Check if it's a 404 (instance might be terminating)
-        if [[ "$result" == *"was not found"* ]]; then
-             echo "NOT_FOUND"
-        else
-             echo "ERROR: Failed to describe instance ${instance_name} in zone ${zone}"
-        fi
+    if [ $exit_val -ne 0 ] || [ -z "$result" ]; then
+        # If it failed, check why (let stderr flow for info if wanted, or just return 1)
         return 1
     fi
     
@@ -111,23 +101,24 @@ verify_mig_instances() {
     echo -e "${GREEN}================================================${NC}"
     echo ""
     
-    # Get MIG details
-    local mig_cmd=""
+    local mig_info
     if [ "$location_type" == "zone" ]; then
-        mig_cmd="gcloud compute instance-groups managed describe ${mig_name} --zone=${location} --format=json"
+        mig_info=$(gcloud compute instance-groups managed describe "${mig_name}" --zone="${location}" --format=json 2>/dev/null)
     else
-        mig_cmd="gcloud compute instance-groups managed describe ${mig_name} --region=${location} --format=json"
+        mig_info=$(gcloud compute instance-groups managed describe "${mig_name}" --region="${location}" --format=json 2>/dev/null)
     fi
     
-    local mig_info=$(eval $mig_cmd 2>&1)
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Error: Failed to get MIG details${NC}"
+    if [ $? -ne 0 ] || [ -z "$mig_info" ]; then
+        echo -e "${RED}Error: Failed to get MIG details for ${mig_name}${NC}"
         return 1
     fi
     
-    local target_size=$(echo "$mig_info" | jq -r '.targetSize // 0')
-    local current_actions=$(echo "$mig_info" | jq -r '.currentActions // {}')
-    local instance_template=$(echo "$mig_info" | jq -r '.instanceTemplate' | awk -F'/' '{print $NF}')
+    local target_size
+    target_size=$(echo "$mig_info" | jq -r '.targetSize // 0')
+    local current_actions
+    current_actions=$(echo "$mig_info" | jq -r '.currentActions // {}')
+    local instance_template
+    instance_template=$(echo "$mig_info" | jq -r '.instanceTemplate' | awk -F'/' '{print $NF}')
     
     echo -e "${BLUE}MIG Configuration:${NC}"
     echo "  Target Size: ${target_size}"
@@ -136,55 +127,66 @@ verify_mig_instances() {
     echo "$current_actions" | jq '.'
     echo ""
     
-    # Get instances list
-    local instances_cmd=""
+    local instances
     if [ "$location_type" == "zone" ]; then
-        instances_cmd="gcloud compute instance-groups managed list-instances ${mig_name} --zone=${location} --format=json"
+        instances=$(gcloud compute instance-groups managed list-instances "${mig_name}" --zone="${location}" --format=json 2>/dev/null)
     else
-        instances_cmd="gcloud compute instance-groups managed list-instances ${mig_name} --region=${location} --format=json"
+        instances=$(gcloud compute instance-groups managed list-instances "${mig_name}" --region="${location}" --format=json 2>/dev/null)
     fi
     
-    local instances=$(eval $instances_cmd 2>/dev/null)
     if [ -z "$instances" ] || [ "$instances" == "[]" ]; then
         echo -e "${YELLOW}Warning: No instances found in this MIG${NC}"
         return 0
     fi
     
-    local instance_count=$(echo "$instances" | jq '. | length')
+    local instance_count
+    instance_count=$(echo "$instances" | jq '. | length')
     echo -e "${BLUE}Found ${instance_count} instances:${NC}"
     echo ""
     
-    # Create summary table header
-    printf "% -35s % -15s % -15s % -25s % -30s\n" "INSTANCE_NAME" "ZONE" "STATUS" "CREATION_TIME" "INSTANCE_TEMPLATE"
-    printf "% -35s % -15s % -15s % -25s % -30s\n" "-----------------------------------" "--------------- " "--------------- " "-------------------------" "------------------------------"
+    printf "%-35s %-15s %-15s %-25s %-30s\n" "INSTANCE_NAME" "ZONE" "STATUS" "CREATION_TIME" "INSTANCE_TEMPLATE"
+    printf "%-35s %-15s %-15s %-25s %-30s\n" "-----------------------------------" "---------------" "---------------" "-------------------------" "------------------------------"
     
-    # Iterate through instances
     local healthy_count=0
     local unhealthy_count=0
     
     for i in $(seq 0 $((instance_count - 1))); do
-        local instance_url=$(echo "$instances" | jq -r ".[${i}].instance")
-        local instance_name=$(echo "$instance_url" | awk -F'/' '{print $NF}')
+        local instance_url
+        instance_url=$(echo "$instances" | jq -r ".[${i}].instance")
+        local instance_name
+        instance_name=$(echo "$instance_url" | awk -F'/' '{print $NF}')
         
-        # Extract zone from URL: .../zones/us-central1-a/instances/...
-        local instance_zone=$(echo "$instance_url" | sed -n 's/.*\/zones\/\([^\/]*\)\/instances\/.*/\1/p')
+        local instance_zone
+        instance_zone=$(echo "$instance_url" | sed -n 's/.*\/zones\/\([^\/]*\)\/instances\/.*/\1/p')
         
-        local instance_status=$(echo "$instances" | jq -r ".[${i}].instanceStatus")
-        local current_action=$(echo "$instances" | jq -r ".[${i}].currentAction // \"NONE\"")
+        local instance_status
+        instance_status=$(echo "$instances" | jq -r ".[${i}].instanceStatus")
+        local current_action
+        current_action=$(echo "$instances" | jq -r ".[${i}].currentAction // \"NONE\"")
         
-        # Optimization: Pass extracted zone directly
-        local instance_details=$(get_instance_details "$instance_name" "$instance_zone")
+        local instance_details
+        instance_details=$(get_instance_details "$instance_name" "$instance_zone")
         
-        if [[ "$instance_details" == ERROR* ]] || [[ "$instance_details" == "NOT_FOUND" ]]; then
-            printf "% -35s % -15s % -15s % -25s % -30s\n" "$instance_name" "${instance_zone}" "UNKNOWN" "N/A" "N/A"
+        if [ -z "$instance_details" ]; then
+            printf "%-35s %-15s %-15s %-25s %-30s\n" "$instance_name" "${instance_zone}" "UNKNOWN" "N/A" "N/A"
             ((unhealthy_count++))
             continue
         fi
         
-        local creation_time=$(echo "$instance_details" | jq -r '.creationTimestamp // "N/A"')
-        local instance_template_from_metadata=$(echo "$instance_details" | jq -r '.metadata.items[] | select(.key=="instance-template") | .value' 2>/dev/null | awk -F'/' '{print $NF}')
+        local creation_time
+        creation_time=$(echo "$instance_details" | jq -r '.creationTimestamp // "N/A"')
         
-        # Status color coding
+        # GNU date compatibility for Linux
+        local creation_time_fmt
+        if [[ "$creation_time" != "N/A" ]]; then
+            creation_time_fmt=$(date -d "${creation_time}" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "${creation_time:0:19}")
+        else
+            creation_time_fmt="N/A"
+        fi
+
+        local instance_template_from_metadata
+        instance_template_from_metadata=$(echo "$instance_details" | jq -r '.metadata.items[]? | select(.key=="instance-template") | .value' 2>/dev/null | awk -F'/' '{print $NF}')
+        
         local status_display="$instance_status"
         if [ "$instance_status" == "RUNNING" ]; then
             status_display="${GREEN}${instance_status}${NC}"
@@ -194,14 +196,13 @@ verify_mig_instances() {
             ((unhealthy_count++))
         fi
         
-        printf "% -35s % -15s % -24b % -25s % -30s\n" \
+        printf "%-35s %-15s %-24b %-25s %-30s\n" \
             "${instance_name:0:35}" \
             "${instance_zone}" \
             "$status_display" \
-            "${creation_time:0:19}" \
+            "${creation_time_fmt}" \
             "${instance_template_from_metadata:-N/A}"
         
-        # Show current action if any
         if [ "$current_action" != "NONE" ]; then
             echo -e "  ${YELLOW}→ Current Action: ${current_action}${NC}"
         fi
@@ -219,31 +220,25 @@ verify_mig_instances() {
 
 # --- Main Execution ---
 main() {
-    # Check arguments
     if [ "$#" -ne 1 ]; then
         echo -e "${RED}Error: Missing MIG keyword argument.${NC}"
         show_usage
     fi
     
     local keyword=$1
-    
-    # Check prerequisites
     check_prerequisites
     
-    # Get MIG list
-    local mig_data=$(get_mig_list "$keyword")
+    local mig_data
+    mig_data=$(get_mig_list "$keyword")
     
-    # Process each MIG
-    # Use while loop with input redirection to handle multiple lines correctly
     while IFS= read -r line; do
-        if [ -z "$line" ]; then
-            continue
-        fi
+        [ -z "$line" ] && continue
         
-        local mig_name=$(echo "$line" | awk '{print $1}')
-        local location=$(echo "$line" | awk '{print $2}')
+        local mig_name
+        mig_name=$(echo "$line" | awk '{print $1}')
+        local location
+        location=$(echo "$line" | awk '{print $2}')
         
-        # Determine if it's zonal or regional
         local location_type="zone"
         if [[ "$location" =~ ^[a-z]+-[a-z]+[0-9]+$ ]]; then
             location_type="region"
@@ -255,5 +250,4 @@ main() {
     echo -e "${GREEN}Verification completed!${NC}"
 }
 
-# Run main function
 main "$@"
