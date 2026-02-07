@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2026-01-31 12:16:07
+Generated on: 2026-02-07 12:44:31
 Directory: /Users/lex/git/knowledge/gcp/sa
 
 ## `verify-gce-sa.sh`
@@ -12,7 +12,16 @@ Directory: /Users/lex/git/knowledge/gcp/sa
 # Script Name: verify-gce-sa.sh
 # Description: Verifies the existence, keys, and IAM roles of a GCP Service Account.
 # Usage: ./verify-gce-sa.sh {sa-email}
-# ==============================================================================
+# 1 first verify our onboarding secret manager sa at service level owner (eg: {$env}-{$region}-sm-admin-sa@{$project-id}.iam.gserviceaccount.com)
+# eg : verify this onboarding sa need owner role ==> roles/iam.serviceAccountUser
+# 2 project_role : roles/iam.securityReviewer
+## verify project level role roles/iam.securityReviewer ==> need add onboarding sa to this role {$env}-{$region}-onboarding-sa@{$project-id}.iam.gserviceaccount.com
+
+# Because for secret . we need using onboarding sa eg: {$env}-{$region}-onboarding-sa@{$project-id}.iam.gserviceaccount.com to trigger call secret manager sa to create a new instance 
+# the secret manager sa eg: {$env}-{$region}-sm-admin-sa@{$project-id}.iam.gserviceaccount.com
+# because we need using sm-admin-sa to create a new instance  ==> so sm-admin-sa need roles/iam.serviceAccountUser
+# =================================
+=============================================
 
 # --- Color Definitions ---
 GREEN='\033[0;32m'
@@ -76,6 +85,7 @@ fi
 # --- 3. Check project-level IAM roles ---
 echo -e "\n${YELLOW}[3/4] Checking project-level IAM roles...${NC}"
 # Using the command provided by the user
+# gcloud projects get-iam-policy {project-id} --flatten="bindings[].members" --filter="bindings.members:{sa-email}" --format="table(bindings.role)"
 ROLES=$(gcloud projects get-iam-policy "$SA_PROJECT_ID" \
     --flatten="bindings[].members" \
     --filter="bindings.members:$SA_EMAIL" \
@@ -91,12 +101,15 @@ fi
 # --- 4. Check Service Account level IAM policy (Permissions on the SA) ---
 echo -e "\n${YELLOW}[4/4] Checking permissions ON this Service Account...${NC}"
 SA_IAM=$(gcloud iam service-accounts get-iam-policy "$SA_EMAIL" --project="$SA_PROJECT_ID" --format="table(bindings.role, bindings.members)" | tail -n +2)
+SA_IAM_JSON=$(gcloud iam service-accounts get-iam-policy "$SA_EMAIL" --project="$SA_PROJECT_ID" --format="json")
 
 if [ -z "$SA_IAM" ]; then
     echo -e "${GREEN}✅ No special IAM bindings on this SA resource itself.${NC}"
 else
     echo -e "${GREEN}✅ Found the following entities with access to this SA:${NC}"
     echo "$SA_IAM"
+    echo -e "${GREEN}JSON format:${NC}"
+    echo "$SA_IAM_JSON" | jq .
 fi
 
 # --- Cross-Project Warning ---

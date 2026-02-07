@@ -4,7 +4,16 @@
 # Script Name: verify-gce-sa.sh
 # Description: Verifies the existence, keys, and IAM roles of a GCP Service Account.
 # Usage: ./verify-gce-sa.sh {sa-email}
-# ==============================================================================
+# 1 first verify our onboarding secret manager sa at service level owner (eg: {$env}-{$region}-sm-admin-sa@{$project-id}.iam.gserviceaccount.com)
+# eg : verify this onboarding sa need owner role ==> roles/iam.serviceAccountUser
+# 2 project_role : roles/iam.securityReviewer
+## verify project level role roles/iam.securityReviewer ==> need add onboarding sa to this role {$env}-{$region}-onboarding-sa@{$project-id}.iam.gserviceaccount.com
+
+# Because for secret . we need using onboarding sa eg: {$env}-{$region}-onboarding-sa@{$project-id}.iam.gserviceaccount.com to trigger call secret manager sa to create a new instance 
+# the secret manager sa eg: {$env}-{$region}-sm-admin-sa@{$project-id}.iam.gserviceaccount.com
+# because we need using sm-admin-sa to create a new instance  ==> so sm-admin-sa need roles/iam.serviceAccountUser
+# =================================
+=============================================
 
 # --- Color Definitions ---
 GREEN='\033[0;32m'
@@ -68,6 +77,7 @@ fi
 # --- 3. Check project-level IAM roles ---
 echo -e "\n${YELLOW}[3/4] Checking project-level IAM roles...${NC}"
 # Using the command provided by the user
+# gcloud projects get-iam-policy {project-id} --flatten="bindings[].members" --filter="bindings.members:{sa-email}" --format="table(bindings.role)"
 ROLES=$(gcloud projects get-iam-policy "$SA_PROJECT_ID" \
     --flatten="bindings[].members" \
     --filter="bindings.members:$SA_EMAIL" \
