@@ -1,1 +1,18 @@
+# 环境变量文件
 .env
+*.env
+.env.*
+!.env.example
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+.DS_Store
+
+# Token 缓存文件（如果将来实现）
+*_token_cache
+token_cache.*
