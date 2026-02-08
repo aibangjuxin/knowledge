@@ -26,8 +26,9 @@ It adds 6 shortcuts when editing a Todo file:
 'Cmd/Ctrl+Shift+A' // Triggers  `Todo: Archive`
 
 
+- Weekly Git Log Analysis
 
-
+Analyze my git logs from the last week. Categorize modified files by technical domain. Summarize the key knowledge points and present everything in a Markdown document with a Mermaid mindmap.
 
 
 
