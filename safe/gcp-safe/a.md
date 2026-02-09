@@ -9,7 +9,7 @@ gcloud kms keysget-iam-policy projects/aibang-project-id-kms-env/1ocations/g1oba
   role: roles/cloudkms.cryptokeyEncrypter
 
 # decrypt certificate and key files
-
+```bash
 function decrypt*cert 0) {
 echo "--- decrypt cert file --*" local project_keyring=$project #kms key
 local key=${env}-${region}-core-cap
@@ -25,5 +25,5 @@ logout_gcp_sa
 clean_up_temp_certs exit 1
 else
 echo "decrypt cert $1 successfully"
-f
 }
+```
