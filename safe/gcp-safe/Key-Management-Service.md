@@ -1,3 +1,4 @@
+- [HSM](./key-keyring.md)
 # **问题分析**
 
 在 KMS（Key Management Service）里谈 **对称加密 vs 非对称加密**，本质不是“哪种更安全”，而是：
@@ -234,3 +235,73 @@ graph TD
 - **Fingerprint → 不加密**
 
 这样你既不会性能浪费，也不会把 Key 管理复杂化。
+
+---
+
+# **HSM Asymmetric KMS 核心概念与 Rotation 实战**
+
+## **核心概念 (Core Concepts)**
+
+在使用云端 HSM（Hardware Security Module）管理非对称密钥时，通常涉及以下层级结构：
+
+| **概念** | **描述** | **类比** |
+| --- | --- | --- |
+| **Location** | 密钥存储的物理区域（如 `asia-east1` 或 `global`）。 | 办公大楼的位置 |
+| **KeyRing** | 用于组织密钥的逻辑组，不可直接删除。 | 办公室里的钥匙架 |
+| **Key Name** | 具体的密钥资源（CryptoKey），定义其用途（如 `ASYMMETRIC_SIGN`）。 | 钥匙架上的某把锁的标签 |
+| **Key Version** | 密钥的实际版本，同一个 Key Name 下可以有多个版本。 | 锁具内部的第 N 次换芯 |
+| **HSM Level** | 保护级别。`HSM` 表示物理隔离，私钥永远无法被导出。 | 银行级的物理保险柜 |
+
+## **核心痛点：非对称密钥的 Rotation**
+
+### **为什么不能自动旋转？**
+对于 **对称密钥**（AES），KMS 可以实现“透明旋转”，即老数据用老版本解，新数据用新版本加，API 调用者无感知。
+但对于 **非对称密钥**（RSA/ECC）：
+1. **公钥分发性**：公钥可能已经被分发到外部系统，自动旋转会导致兼容性断裂。
+2. **逻辑唯一性**：解密/签名必须明确指定 `Version`。
+
+> [!WARNING]
+> **Cloud KMS 的 HSM 非对称密钥不支持“自动轮转时间表”。** 必须手动执行。
+
+## **解决方案：手动轮转 (Manual Rotation) 流程**
+
+当需要轮转非对称密钥（如 CSR 证书过期、机密性合规触发）时，推荐采用以下标准流程：
+
+```mermaid
+graph TD
+    A["创建新版本 (New Version)"] -- "Status: PENDING_GENERATION" --> B["完成生成 (ENABLED)"]
+    B --> C["获取新公钥 (Get New Public Key)"]
+    C --> D["部署公钥到应用/客户端"]
+    D --> E["业务切换 (Switch Traffic)"]
+    E -- "旧版本暂留" --> F["监控旧版本调用 (Monitor)"]
+    F -- "无调用后" --> G["禁用/删除旧版本 (Disable/Destroy)"]
+```
+
+### **操作步骤示例**
+
+1.  **创建新版本**：
+    ```bash
+    gcloud kms keys versions create --key "my-hsm-key" \
+      --keyring "my-keyring" --location "asia-east1"
+    ```
+
+2.  **更新应用逻辑**：
+    -   获取新版本的 `Resource ID` (形如 `projects/.../cryptoKeyVersions/2`)。
+    -   在签名或解密代码中，将引用的 `Version` 更新为最新值。
+
+3.  **灰度与观察**：
+    -   保留 `Version 1` 一段时间，用于处理排队中的旧请求。
+    -   通过 Cloud Logging 确认 `Version 1` 的 API 调用量归零。
+
+4.  **最终退役**：
+    -   禁用旧版本：`versions disable`。
+    -   合规期满后：`versions destroy`。
+
+---
+
+# **总结：HSM 密钥管理金律**
+
+1.  **分层管理**：一个 `KeyRing` 可以存放多个 `Key`（如 `jwt-key` 和 `api-key`）。
+2.  **显式版本**：非对称加密的代码中，**永远推荐在配置中显式写入 Version ID**，而不是只写 Key Name，以确保结果的一致性。
+3.  **灾备演练**：手动 Rotation 必须在 CI/CD 流程中有对应的逻辑，避免证书过期时手忙脚乱。
+
