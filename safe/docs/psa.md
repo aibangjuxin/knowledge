@@ -28,9 +28,9 @@ PSA 依赖于三个预定义的策略级别，分别对应不同的安全宽容�
 
 对于上述的每个安全标准，你可以在命名空间级别配置三种不同的操作模式：
 
-1.  **Enforce（强制）**: 如果 Pod 违规，直接拒绝创建（拦截）。
-2.  **Audit（审计）**: 允许 Pod 创建，但在审计日志中记录违规事件。
-3.  **Warn（警告）**: 允许 Pod 创建，但在用户执行 `kubectl apply` 时返回警告信息。
+1. **Enforce（强制）**: 如果 Pod 违规，直接拒绝创建（拦截）。
+2. **Audit（审计）**: 允许 Pod 创建，但在审计日志中记录违规事件。
+3. **Warn（警告）**: 允许 Pod 创建，但在用户执行 `kubectl apply` 时返回警告信息。
 
 ## 在 GKE 中如何配置 PSA
 
@@ -70,35 +70,3 @@ kubectl label --overwrite ns app-production \
   pod-security.kubernetes.io/enforce=restricted \
   pod-security.kubernetes.io/enforce-version=latest
 ```
-
-## GKE 环境中的最佳实践与合规性
-
-根据你的工作区文档（如 `gke-control-cn.md`），PSA 在你的安全合规控制中扮演重要角色：
-
-- **关联控制项 GCP-GKE-CTRL-15**:
-
-  > "必须在集群上定义并强制执行 Pod 安全标准基线或受限配置文件。"
-
-  虽然该控制项备注提到了可以使用 Gatekeeper，但 PSA 是 Kubernetes 原生的实现方式，性能更好且维护成本低。
-
-- **关联控制项 GCP-GKE-CTRL-59**:
-
-  > "Seccomp 配置文件必须在 Pod 定义中设置为 runtime/default。"
-
-  这正是 PSA **Restricted** 级别所强制要求的内容之一。如果在 Restricted 模式下，Pod 没有配置 Seccomp，PSA 会直接拒绝该 Pod 的启动。
-
-### 迁移建议
-
-如果你的环境正在从 PSP 迁移或从 Gatekeeper 转向原生控制：
-
-1.  先使用 `audit` 和 `warn` 模式观察一段时间，确保现有应用不会被误杀。
-2.  对于系统级命名空间（如 `kube-system`），通常保持 `privileged`。
-3.  对于业务命名空间，建议至少实施 `baseline`，并针对由于合规要求（如 `GCP-GKE-CTRL-15`）逐步推行 `restricted`。
-
-## 总结
-
-**PSA 是 GKE 安全的守门员**。它通过简单的标签机制，确保开发者部署的 Pod 符合组织的安全底线。
-
-- **它是什么**: K8s 内置的根据标准拦截不安全 Pod 的机制。
-- **怎么用**: 给 Namespace 打标签 (`enforce=restricted` 等)。
-- **GKE 价值**: 它是满足你 `GCP-GKE-CTRL-15` 和 `GCP-GKE-CTRL-59` 合规要求的原生、最简方案。
