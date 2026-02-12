@@ -383,37 +383,46 @@ import_records() {
     local filtered_count=$(jq '. | length' "$filtered_file")
     echo -e "${CYAN}需要导入的记录数（已过滤 NS/SOA）: $filtered_count${NC}"
     
+    if [ "$filtered_count" -eq 0 ]; then
+        echo -e "${YELLOW}警告: 没有需要导入的记录（所有记录都是 NS/SOA）${NC}"
+        rm -f "$filtered_file"
+        return 0
+    fi
+    
     # 将 JSON 转换为 YAML 格式（gcloud dns import 需要 YAML 格式）
     local yaml_file="/tmp/${target_zone}-import-$(date +%Y%m%d-%H%M%S).yaml"
     
     echo -e "${BLUE}转换记录格式为 YAML...${NC}"
     
-    # 使用 jq 将 JSON 转换为 YAML 格式
-    # gcloud dns 期望的 YAML 格式示例:
-    # - name: example.com.
-    #   type: A
-    #   ttl: 300
-    #   rrdatas:
-    #   - 1.2.3.4
+    # 使用 jq 将 JSON 转换为 gcloud dns 期望的 YAML 格式
+    # 正确的格式示例:
+    # ---
+    # kind: dns#resourceRecordSet
+    # name: example.com.
+    # rrdatas:
+    # - 192.0.2.91
+    # ttl: 300
+    # type: A
     
     jq -r '.[] | 
-        "- name: " + .name + "\n" +
-        "  type: " + .type + "\n" +
-        "  ttl: " + (.ttl | tostring) + "\n" +
-        "  rrdatas:\n" +
-        (.rrdatas | map("  - " + .) | join("\n"))
+        "---\nkind: dns#resourceRecordSet\nname: " + .name + 
+        "\nrrdatas:\n" + (.rrdatas | map("- " + .) | join("\n")) +
+        "\nttl: " + (.ttl | tostring) + 
+        "\ntype: " + .type
     ' "$filtered_file" > "$yaml_file"
     
     if [ ! -s "$yaml_file" ]; then
-        echo -e "${YELLOW}警告: 没有需要导入的记录${NC}"
+        echo -e "${YELLOW}警告: YAML 文件生成失败${NC}"
         rm -f "$filtered_file" "$yaml_file"
-        return 0
+        return 1
     fi
     
     echo -e "${GREEN}✓ YAML 文件已生成: $yaml_file${NC}"
+    echo -e "${CYAN}预览前 20 行:${NC}"
+    head -20 "$yaml_file"
     
     # 使用 gcloud dns record-sets import 批量导入
-    echo -e "${BLUE}开始批量导入记录...${NC}"
+    echo -e "\n${BLUE}开始批量导入记录...${NC}"
     
     if gcloud dns record-sets import "$yaml_file" \
         --zone="$target_zone" \
