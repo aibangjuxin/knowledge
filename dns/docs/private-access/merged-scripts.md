@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2026-02-12 13:15:59
+Generated on: 2026-02-12 13:28:02
 Directory: /Users/lex/git/knowledge/dns/docs/private-access
 
 ## `create-claude.sh`
@@ -348,8 +348,9 @@ create_zone() {
         fi
     fi
     
-    # 构建网络参数 - 修复: 每个网络都需要单独的 --networks 参数
+    # 构建网络参数 - 修复: 使用逗号分隔的列表，而不是多个 --networks 参数
     local network_args=""
+    local network_list=""
     local network_count=0
     
     IFS=';' read -ra network_array <<< "$networks"
@@ -364,10 +365,18 @@ create_zone() {
             echo -e "  ${network_count}. ${CYAN}$network_name${NC}" >&2
             echo -e "     ${BLUE}$network${NC}" >&2
             
-            # 关键修复: 每个网络单独添加 --networks 参数
-            network_args="$network_args --networks=$network"
+            # 构建逗号分隔的列表
+            if [ -z "$network_list" ]; then
+                network_list="$network"
+            else
+                network_list="$network_list,$network"
+            fi
         fi
     done
+    
+    if [ -n "$network_list" ]; then
+        network_args="--networks=$network_list"
+    fi
     
     echo -e "\n${BLUE}将绑定 ${GREEN}$network_count${BLUE} 个网络${NC}" >&2
     echo -e "${BLUE}网络参数: $network_args${NC}" >&2
@@ -644,15 +653,22 @@ main() {
         
         # 尝试恢复原来的网络绑定
         IFS=';' read -ra network_array <<< "$source_networks"
-        local restore_args=""
+        local restore_networks=""
+        
         for network in "${network_array[@]}"; do
             network=$(echo "$network" | xargs)
             if [ -n "$network" ]; then
-                restore_args="$restore_args --networks=$network"
+                if [ -z "$restore_networks" ]; then
+                    restore_networks="$network"
+                else
+                    restore_networks="$restore_networks,$network"
+                fi
             fi
         done
         
-        gcloud dns managed-zones update "$source_zone" $restore_args --quiet
+        if [ -n "$restore_networks" ]; then
+            gcloud dns managed-zones update "$source_zone" --networks="$restore_networks" --quiet
+        fi
         echo -e "${YELLOW}已尝试恢复源 Zone 的网络绑定${NC}"
         exit 1
     fi
