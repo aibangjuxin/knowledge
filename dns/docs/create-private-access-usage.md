@@ -374,17 +374,17 @@ check_zone_exists() {
 get_zone_networks() {
     local zone=$1
     
-    echo -e "${BLUE}获取 Zone '$zone' 绑定的网络...${NC}"
+    echo -e "${BLUE}获取 Zone '$zone' 绑定的网络...${NC}" >&2
     
     local networks=$(gcloud dns managed-zones describe "$zone" \
         --format='value(privateVisibilityConfig.networks[].networkUrl)' 2>/dev/null)
     
     if [ -z "$networks" ]; then
-        echo -e "${YELLOW}警告: Zone '$zone' 未绑定任何网络${NC}"
+        echo -e "${YELLOW}警告: Zone '$zone' 未绑定任何网络${NC}" >&2
         return 1
     fi
     
-    echo -e "${GREEN}绑定的网络:${NC}"
+    echo -e "${GREEN}绑定的网络:${NC}" >&2
     # 处理分号分隔的网络 URL
     IFS=';' read -ra network_array <<< "$networks"
     for network in "${network_array[@]}"; do
@@ -392,10 +392,11 @@ get_zone_networks() {
         network=$(echo "$network" | xargs)
         if [ -n "$network" ]; then
             local network_name=$(basename "$network")
-            echo -e "  - ${CYAN}$network_name${NC}"
+            echo -e "  - ${CYAN}$network_name${NC}" >&2
         fi
     done
     
+    # 只输出网络 URL 到 stdout（不带颜色代码）
     echo "$networks"
 }
 
@@ -446,21 +447,21 @@ create_zone() {
     local dns_name=$2
     local networks=$3
     
-    echo -e "\n${BLUE}创建新的 DNS Zone: $zone_name${NC}"
+    echo -e "\n${BLUE}创建新的 DNS Zone: $zone_name${NC}" >&2
     
     # 检查 Zone 是否已存在
     if check_zone_exists "$zone_name"; then
-        echo -e "${YELLOW}警告: Zone '$zone_name' 已存在${NC}"
+        echo -e "${YELLOW}警告: Zone '$zone_name' 已存在${NC}" >&2
         read -p "是否要删除并重新创建? (y/N): " confirm
         if [[ $confirm =~ ^[Yy]$ ]]; then
-            echo -e "${BLUE}删除现有 Zone...${NC}"
+            echo -e "${BLUE}删除现有 Zone...${NC}" >&2
             gcloud dns managed-zones delete "$zone_name" --quiet
             if [ $? -ne 0 ]; then
-                echo -e "${RED}错误: 删除 Zone 失败${NC}"
+                echo -e "${RED}错误: 删除 Zone 失败${NC}" >&2
                 return 1
             fi
         else
-            echo -e "${YELLOW}跳过创建，使用现有 Zone${NC}"
+            echo -e "${YELLOW}跳过创建，使用现有 Zone${NC}" >&2
             return 0
         fi
     fi
@@ -476,7 +477,7 @@ create_zone() {
         fi
     done
     
-    echo -e "${BLUE}网络参数: $network_args${NC}"
+    echo -e "${BLUE}网络参数: $network_args${NC}" >&2
     
     # 创建 Zone
     gcloud dns managed-zones create "$zone_name" \
@@ -486,10 +487,10 @@ create_zone() {
         $network_args
     
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✓ 成功创建 Zone '$zone_name'${NC}"
+        echo -e "${GREEN}✓ 成功创建 Zone '$zone_name'${NC}" >&2
         return 0
     else
-        echo -e "${RED}✗ 创建 Zone 失败${NC}"
+        echo -e "${RED}✗ 创建 Zone 失败${NC}" >&2
         return 1
     fi
 }
