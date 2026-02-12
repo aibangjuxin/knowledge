@@ -176,7 +176,9 @@ graph TD
 ```
 
 这将从 `my-custom-zone` 而不是默认的 `private-access` 导出记录。
+
 ```bash
+
 #!/bin/bash
 
 # GCP Cloud DNS Zone 迁移脚本
@@ -441,6 +443,54 @@ show_records() {
         --format='table[box](name, type, ttl, rrdatas)'
 }
 
+# 从 Zone 解绑网络
+unbind_zone_networks() {
+    local zone=$1
+    local networks=$2
+    
+    echo -e "\n${YELLOW}========================================${NC}" >&2
+    echo -e "${YELLOW}从 Zone '$zone' 解绑网络${NC}" >&2
+    echo -e "${YELLOW}========================================${NC}" >&2
+    
+    if [ -z "$networks" ]; then
+        echo -e "${YELLOW}警告: 没有需要解绑的网络${NC}" >&2
+        return 0
+    fi
+    
+    # 处理分号分隔的网络 URL
+    IFS=';' read -ra network_array <<< "$networks"
+    local networks_to_remove=""
+    
+    for network in "${network_array[@]}"; do
+        network=$(echo "$network" | xargs)
+        if [ -n "$network" ]; then
+            local network_name=$(basename "$network")
+            echo -e "${CYAN}准备解绑网络: $network_name${NC}" >&2
+            
+            if [ -z "$networks_to_remove" ]; then
+                networks_to_remove="$network"
+            else
+                networks_to_remove="$networks_to_remove,$network"
+            fi
+        fi
+    done
+    
+    if [ -n "$networks_to_remove" ]; then
+        echo -e "${BLUE}执行解绑操作...${NC}" >&2
+        
+        # 使用 gcloud 更新命令移除网络绑定
+        if gcloud dns managed-zones update "$zone" \
+            --networks="" \
+            --quiet 2>&1; then
+            echo -e "${GREEN}✓ 成功从 Zone '$zone' 解绑所有网络${NC}" >&2
+            return 0
+        else
+            echo -e "${RED}✗ 解绑网络失败${NC}" >&2
+            return 1
+        fi
+    fi
+}
+
 # 创建新的 DNS Zone
 create_zone() {
     local zone_name=$1
@@ -636,9 +686,46 @@ main() {
     # 获取源 Zone 的 DNS 名称
     source_dns_name=$(gcloud dns managed-zones describe "$source_zone" --format='value(dnsName)')
     
+    echo -e "\n${CYAN}========================================${NC}"
+    echo -e "${CYAN}重要提示${NC}"
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "由于 GCP DNS 限制，同一个 DNS 名称（${BLUE}$source_dns_name${NC}）"
+    echo -e "在同一个网络中只能被一个 Private Zone 绑定。"
+    echo -e ""
+    echo -e "接下来将执行以下操作："
+    echo -e "  1. 从源 Zone ${BLUE}'$source_zone'${NC} 解绑网络"
+    echo -e "  2. 创建新 Zone ${BLUE}'$target_zone'${NC}"
+    echo -e "  3. 将网络绑定到新 Zone"
+    echo -e ""
+    read -p "是否继续? (y/N): " confirm
+    if [[ ! $confirm =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}操作已取消${NC}"
+        exit 0
+    fi
+    
+    # 从源 Zone 解绑网络
+    if ! unbind_zone_networks "$source_zone" "$source_networks"; then
+        echo -e "${RED}错误: 解绑网络失败${NC}"
+        exit 1
+    fi
+    
     # 创建新 Zone
     if ! create_zone "$target_zone" "$source_dns_name" "$source_networks"; then
         echo -e "${RED}错误: 创建 Zone 失败${NC}"
+        echo -e "${YELLOW}尝试恢复源 Zone 的网络绑定...${NC}"
+        
+        # 尝试恢复原来的网络绑定
+        IFS=';' read -ra network_array <<< "$source_networks"
+        local restore_args=""
+        for network in "${network_array[@]}"; do
+            network=$(echo "$network" | xargs)
+            if [ -n "$network" ]; then
+                restore_args="$restore_args --networks=$network"
+            fi
+        done
+        
+        gcloud dns managed-zones update "$source_zone" $restore_args --quiet
+        echo -e "${YELLOW}已尝试恢复源 Zone 的网络绑定${NC}"
         exit 1
     fi
     
