@@ -234,31 +234,27 @@ get_zone_networks() {
     echo "$networks"
 }
 
-# 导出 Zone 的所有记录 (JSON 格式)
+# 导出 Zone 的所有记录 (BIND 格式)
 export_zone_records() {
     local zone=$1
-    local export_file="/tmp/${zone}-records-$(date +%Y%m%d-%H%M%S).json"
+    local export_file="/tmp/${zone}-records-$(date +%Y%m%d-%H%M%S).txt"
     
     echo -e "\n${BLUE}导出 Zone '$zone' 的所有记录...${NC}" >&2
     
-    gcloud dns record-sets list \
+    gcloud dns record-sets export "$export_file" \
         --zone="$zone" \
-        --format=json > "$export_file"
+        --zone-file-format
     
     if [ $? -ne 0 ]; then
         echo -e "${RED}错误: 导出记录失败${NC}" >&2
         return 1
     fi
     
-    local record_count=$(jq '. | length' "$export_file")
-    echo -e "${GREEN}✓ 成功导出 $record_count 条记录到: $export_file${NC}" >&2
+    # 统计记录数（排除注释和空行）
+    local record_count=$(grep -v '^;' "$export_file" | grep -v '^$' | wc -l)
+    echo -e "${GREEN}✓ 成功导出 $record_count 行记录到: $export_file${NC}" >&2
     
-    # 显示记录摘要
-    echo -e "\n${CYAN}记录类型统计:${NC}" >&2
-    jq -r '.[] | .type' "$export_file" | sort | uniq -c | while read count type; do
-        echo -e "  ${type}: ${BLUE}$count${NC}" >&2
-    done
-    
+    # 只输出文件路径到 stdout（不带颜色代码）
     echo "$export_file"
 }
 
@@ -402,104 +398,89 @@ create_zone() {
     fi
 }
 
-# 逐条导入记录 (优化版)
+# 导入记录到新 Zone (批量导入优化版)
 import_records() {
     local source_file=$1
     local target_zone=$2
     
-    echo -e "\n${BLUE}开始导入记录到 Zone '$target_zone'...${NC}"
+    echo -e "\n${BLUE}导入记录到 Zone '$target_zone' (批量模式)...${NC}"
     
-    # 统计变量
-    local total_records=$(jq '. | length' "$source_file")
-    local imported=0
-    local skipped=0
-    local failed=0
-    local current=0
+    # 获取目标 Zone 的 DNS 名称 (例如 example.com.)
+    local zone_dns=$(gcloud dns managed-zones describe "$target_zone" --format="value(dnsName)")
     
-    # 创建失败记录日志
-    local failed_log="/tmp/${target_zone}-failed-$(date +%Y%m%d-%H%M%S).log"
+    # 准备过滤后的导入文件
+    local filtered_file="/tmp/${target_zone}-import-$(date +%Y%m%d-%H%M%S).txt"
     
-    echo -e "${CYAN}总记录数: $total_records${NC}"
-    echo -e "${CYAN}开始逐条导入...${NC}\n"
+    echo -e "${CYAN}预处理导入文件 (过滤 Zone Root 的 SOA 和 NS 记录)...${NC}"
     
-    # 读取记录并导入
-    while IFS= read -r record; do
-        ((current++))
-        
-        local name=$(echo "$record" | jq -r '.name')
-        local type=$(echo "$record" | jq -r '.type')
-        local ttl=$(echo "$record" | jq -r '.ttl')
-        
-        # 处理 rrdatas - 转换为逐个参数
-        local rrdatas_count=$(echo "$record" | jq '.rrdatas | length')
-        local rrdatas_args=""
-        
-        for ((i=0; i<$rrdatas_count; i++)); do
-            local rrdata=$(echo "$record" | jq -r ".rrdatas[$i]")
-            rrdatas_args="$rrdatas_args --rrdatas=\"$rrdata\""
-        done
-        
-        # 跳过 NS 和 SOA 记录
-        if [[ "$type" == "NS" || "$type" == "SOA" ]]; then
-            echo -e "[${current}/${total_records}] ${YELLOW}跳过${NC}: $name ($type) - 系统管理的记录"
-            ((skipped++))
-            continue
-        fi
-        
-        # 显示进度
-        echo -e "[${current}/${total_records}] ${CYAN}导入${NC}: $name ($type, TTL=$ttl)"
-        
-        # 检查记录是否已存在
-        if gcloud dns record-sets describe "$name" --type="$type" --zone="$target_zone" &> /dev/null; then
-            echo -e "              ${YELLOW}记录已存在，跳过${NC}"
-            ((skipped++))
-            continue
-        fi
-        
-        # 创建记录 - 使用 eval 处理多个 rrdatas
-        local create_cmd="gcloud dns record-sets create \"$name\" $rrdatas_args --type=\"$type\" --ttl=\"$ttl\" --zone=\"$target_zone\""
-        
-        if eval $create_cmd &> /dev/null; then
-            echo -e "              ${GREEN}✓ 成功${NC}"
-            ((imported++))
-        else
-            echo -e "              ${RED}✗ 失败${NC}"
-            ((failed++))
-            
-            # 记录失败的详情
-            echo "=== Failed Record ===" >> "$failed_log"
-            echo "Name: $name" >> "$failed_log"
-            echo "Type: $type" >> "$failed_log"
-            echo "TTL: $ttl" >> "$failed_log"
-            echo "RRDatas: $(echo "$record" | jq -c '.rrdatas')" >> "$failed_log"
-            echo "Command: $create_cmd" >> "$failed_log"
-            echo "" >> "$failed_log"
-        fi
-        
-        # 显示进度百分比
-        local percent=$((current * 100 / total_records))
-        echo -e "              进度: ${BLUE}${percent}%${NC} (成功: ${GREEN}$imported${NC}, 跳过: ${YELLOW}$skipped${NC}, 失败: ${RED}$failed${NC})"
-        echo ""
-        
-    done < <(jq -c '.[]' "$source_file")
+    # 使用 awk 过滤记录
+    # 1. 过滤掉所有的 SOA 记录
+    # 2. 过滤掉 Zone Apex (Root) 的 NS 记录，但保留子域的 NS 记录
+    awk -v zone="$zone_dns" '
+    BEGIN {
+        # 移除末尾的点以便比较 (如果有)
+        # zone_no_dot = zone
+        # sub(/\.$/, "", zone_no_dot)
+    }
     
-    # 显示最终统计
-    echo -e "\n${GREEN}========================================${NC}"
-    echo -e "${GREEN}导入完成${NC}"
-    echo -e "${GREEN}========================================${NC}"
-    echo -e "总记录数: ${BLUE}$total_records${NC}"
-    echo -e "已导入:   ${GREEN}$imported${NC}"
-    echo -e "已跳过:   ${YELLOW}$skipped${NC}"
-    echo -e "失败:     ${RED}$failed${NC}"
+    # 跳过注释和空行
+    /^;/ { print; next }
+    /^\s*$/ { next }
     
-    if [ $failed -gt 0 ]; then
-        echo -e "\n${YELLOW}失败记录详情已保存到: $failed_log${NC}"
+    # 处理记录
+    {
+        # 第 4 列通常是类型 (Name TTL Class Type Data) 或者 (Name Class Type Data)
+        # BIND 格式可能略有不同，但通常包含 IN
+        
+        # 简单检查行中是否包含 SOA
+        if ($0 ~ /IN\s+SOA/) {
+            # print "; Skipping SOA record: " $0
+            next
+        }
+        
+        # 检查 NS 记录
+        if ($0 ~ /IN\s+NS/) {
+            # 检查是否是 Root NS
+            # 如果第一列是 @ 或者等于 zone 名
+            if ($1 == "@" || $1 == zone) {
+                 # print "; Skipping Root NS record: " $0
+                 next
+            }
+        }
+        
+        print $0
+    }' "$source_file" > "$filtered_file"
+    
+    local filtered_count=$(grep -v '^;' "$filtered_file" | grep -v '^$' | wc -l)
+    echo -e "${GREEN}✓ 预处理完成，待导入记录数: $filtered_count${NC}"
+    
+    if [ "$filtered_count" -eq 0 ]; then
+        echo -e "${YELLOW}警告: 没有需要导入的记录${NC}"
+        rm -f "$filtered_file"
+        return 0
     fi
     
-    # 如果有导入成功的记录，返回成功
-    if [ $imported -gt 0 ]; then
+    # 显示前几行预览
+    echo -e "\n${CYAN}导入文件预览 (前 5 行):${NC}"
+    head -n 5 "$filtered_file"
+    
+    echo -e "\n${BLUE}执行批量导入...${NC}"
+    
+    # 使用 --delete-all-existing 标志
+    # 注意：这不会删除 Cloud DNS 自动生成的 NS 和 SOA 记录
+    # 只会删除用户创建的记录，然后导入新记录
+    if gcloud dns record-sets import "$filtered_file" \
+        --zone="$target_zone" \
+        --zone-file-format \
+        --delete-all-existing \
+        --quiet; then
+        
+        echo -e "${GREEN}✓ 批量导入成功${NC}"
+        rm -f "$filtered_file"
         return 0
     else
+        echo -e "${RED}✗ 批量导入失败${NC}"
+        echo -e "${YELLOW}保留导入文件用于调试: $filtered_file${NC}"
         return 1
     fi
 }
