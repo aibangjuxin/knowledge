@@ -226,26 +226,27 @@ export_zone_records() {
     local zone=$1
     local export_file="/tmp/${zone}-records-$(date +%Y%m%d-%H%M%S).json"
     
-    echo -e "\n${BLUE}导出 Zone '$zone' 的所有记录...${NC}"
+    echo -e "\n${BLUE}导出 Zone '$zone' 的所有记录...${NC}" >&2
     
     gcloud dns record-sets list \
         --zone="$zone" \
         --format=json > "$export_file"
     
     if [ $? -ne 0 ]; then
-        echo -e "${RED}错误: 导出记录失败${NC}"
+        echo -e "${RED}错误: 导出记录失败${NC}" >&2
         return 1
     fi
     
     local record_count=$(jq '. | length' "$export_file")
-    echo -e "${GREEN}✓ 成功导出 $record_count 条记录到: $export_file${NC}"
+    echo -e "${GREEN}✓ 成功导出 $record_count 条记录到: $export_file${NC}" >&2
     
     # 显示记录摘要
-    echo -e "\n${CYAN}记录类型统计:${NC}"
+    echo -e "\n${CYAN}记录类型统计:${NC}" >&2
     jq -r '.[] | .type' "$export_file" | sort | uniq -c | while read count type; do
-        echo -e "  ${type}: ${BLUE}$count${NC}"
+        echo -e "  ${type}: ${BLUE}$count${NC}" >&2
     done
     
+    # 只输出文件路径到 stdout（不带颜色代码）
     echo "$export_file"
 }
 
