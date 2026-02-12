@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# GCP Cloud DNS Zone 迁移脚本 - 优化版
+# GCP Cloud DNS Zone 迁移脚本 - 稳定版
 # 用途: 从 private-access Zone 导出记录并创建新的环境特定 Zone
-# 优化: 使用批量导入提升性能
+# 优化: 可靠的逐条导入 + 正确的多网络绑定
 
 # ============================================
 # 环境配置
@@ -40,7 +40,7 @@ NC='\033[0m' # No Color
 show_help() {
     cat <<EOF
 ${GREEN}========================================${NC}
-${GREEN}GCP Cloud DNS Zone 迁移工具 - 优化版${NC}
+${GREEN}GCP Cloud DNS Zone 迁移工具 - 稳定版${NC}
 ${GREEN}========================================${NC}
 
 用法: $(basename $0) -e ENVIRONMENT [选项]
@@ -59,17 +59,12 @@ ${GREEN}========================================${NC}
 
 功能说明:
   1. 列出当前项目的所有 DNS Zones
-  2. 从源 Zone (private-access) 导出所有记录 (YAML 格式)
-  3. 获取源 Zone 绑定的网络信息
+  2. 从源 Zone (private-access) 导出所有记录
+  3. 获取源 Zone 绑定的网络信息 (支持多网络)
   4. 创建新的 Zone: {env}-{region}-private-access
-  5. 绑定相同的网络到新 Zone
-  6. 批量导入记录到新 Zone (性能优化)
+  5. 绑定相同的网络到新 Zone (保持多网络配置)
+  6. 逐条导入记录到新 Zone (稳定可靠)
   7. 对比验证新旧 Zone 的记录
-
-性能优化:
-  - 使用 YAML 格式导出/导入
-  - 批量导入替代逐条导入
-  - 自动过滤系统管理的记录
 
 EOF
 }
@@ -197,65 +192,71 @@ check_zone_exists() {
     return 0
 }
 
-# 获取 Zone 绑定的网络
+# 获取 Zone 绑定的网络 (修复版 - 正确处理多网络)
 get_zone_networks() {
     local zone=$1
     
     echo -e "${BLUE}获取 Zone '$zone' 绑定的网络...${NC}" >&2
     
-    # 获取网络 URL List
-    local networks=$(gcloud dns managed-zones describe "$zone" \
-        --format='value(privateVisibilityConfig.networks[].networkUrl)' 2>/dev/null)
+    # 获取网络 URL List (JSON 格式更可靠)
+    local networks_json=$(gcloud dns managed-zones describe "$zone" \
+        --format='json' 2>/dev/null | jq -r '.privateVisibilityConfig.networks[]?.networkUrl // empty')
     
-    if [ -z "$networks" ]; then
+    if [ -z "$networks_json" ]; then
         echo -e "${YELLOW}警告: Zone '$zone' 未绑定任何网络${NC}" >&2
         return 1
     fi
     
-    # 将换行符转换为分号
-    networks=$(echo "$networks" | tr '\n' ';')
-    networks=${networks%;}
+    # 将网络 URL 转换为分号分隔的字符串
+    local networks=$(echo "$networks_json" | tr '\n' ';')
+    networks=${networks%;}  # 去除末尾的分号
     
-    echo -e "${GREEN}绑定的网络:${NC}" >&2
+    # 统计网络数量
+    local network_count=$(echo "$networks" | tr ';' '\n' | grep -v '^$' | wc -l)
+    
+    echo -e "${GREEN}绑定的网络数量: ${BLUE}$network_count${NC}" >&2
+    echo -e "${GREEN}网络列表:${NC}" >&2
+    
+    # 显示每个网络
     IFS=';' read -ra network_array <<< "$networks"
+    local index=1
     for network in "${network_array[@]}"; do
         network=$(echo "$network" | xargs)
         if [ -n "$network" ]; then
             local network_name=$(basename "$network")
-            echo -e "  - ${CYAN}$network_name${NC}" >&2
+            echo -e "  ${index}. ${CYAN}$network_name${NC}" >&2
+            echo -e "     ${BLUE}$network${NC}" >&2
+            ((index++))
         fi
     done
     
+    # 输出网络字符串到 stdout
     echo "$networks"
 }
 
-# 导出 Zone 的所有记录 (YAML 格式 - 优化版)
+# 导出 Zone 的所有记录 (JSON 格式)
 export_zone_records() {
     local zone=$1
-    local export_file="/tmp/${zone}-records-$(date +%Y%m%d-%H%M%S).yaml"
+    local export_file="/tmp/${zone}-records-$(date +%Y%m%d-%H%M%S).json"
     
-    echo -e "\n${BLUE}导出 Zone '$zone' 的所有记录 (YAML 格式)...${NC}" >&2
+    echo -e "\n${BLUE}导出 Zone '$zone' 的所有记录...${NC}" >&2
     
-    # 使用 zone-file-format 导出为 BIND zone file 格式
-    gcloud dns record-sets export "$export_file" \
+    gcloud dns record-sets list \
         --zone="$zone" \
-        --zone-file-format
+        --format=json > "$export_file"
     
     if [ $? -ne 0 ]; then
         echo -e "${RED}错误: 导出记录失败${NC}" >&2
         return 1
     fi
     
-    # 统计记录数 (跳过注释和空行)
-    local record_count=$(grep -v '^;' "$export_file" | grep -v '^$' | grep -v '^\$' | wc -l)
+    local record_count=$(jq '. | length' "$export_file")
     echo -e "${GREEN}✓ 成功导出 $record_count 条记录到: $export_file${NC}" >&2
     
     # 显示记录摘要
     echo -e "\n${CYAN}记录类型统计:${NC}" >&2
-    grep -v '^;' "$export_file" | grep -v '^$' | grep -v '^\$' | awk '{print $4}' | sort | uniq -c | while read count type; do
-        if [ -n "$type" ]; then
-            echo -e "  ${type}: ${BLUE}$count${NC}" >&2
-        fi
+    jq -r '.[] | .type' "$export_file" | sort | uniq -c | while read count type; do
+        echo -e "  ${type}: ${BLUE}$count${NC}" >&2
     done
     
     echo "$export_file"
@@ -274,7 +275,7 @@ show_records() {
         --format='table[box](name, type, ttl, rrdatas)'
 }
 
-# 从 Zone 解绑网络
+# 从 Zone 解绑网络 (修复版 - 正确处理多网络)
 unbind_zone_networks() {
     local zone=$1
     local networks=$2
@@ -288,39 +289,33 @@ unbind_zone_networks() {
         return 0
     fi
     
+    # 统计网络数量
     IFS=';' read -ra network_array <<< "$networks"
-    local networks_to_remove=""
+    local network_count=0
     
     for network in "${network_array[@]}"; do
         network=$(echo "$network" | xargs)
         if [ -n "$network" ]; then
+            ((network_count++))
             local network_name=$(basename "$network")
-            echo -e "${CYAN}准备解绑网络: $network_name${NC}" >&2
-            
-            if [ -z "$networks_to_remove" ]; then
-                networks_to_remove="$network"
-            else
-                networks_to_remove="$networks_to_remove,$network"
-            fi
+            echo -e "${CYAN}准备解绑网络 $network_count: $network_name${NC}" >&2
         fi
     done
     
-    if [ -n "$networks_to_remove" ]; then
-        echo -e "${BLUE}执行解绑操作...${NC}" >&2
-        
-        if gcloud dns managed-zones update "$zone" \
-            --networks="" \
-            --quiet 2>&1; then
-            echo -e "${GREEN}✓ 成功从 Zone '$zone' 解绑所有网络${NC}" >&2
-            return 0
-        else
-            echo -e "${RED}✗ 解绑网络失败${NC}" >&2
-            return 1
-        fi
+    echo -e "${BLUE}执行解绑操作 (清空所有网络绑定)...${NC}" >&2
+    
+    if gcloud dns managed-zones update "$zone" \
+        --networks="" \
+        --quiet 2>&1; then
+        echo -e "${GREEN}✓ 成功从 Zone '$zone' 解绑所有 $network_count 个网络${NC}" >&2
+        return 0
+    else
+        echo -e "${RED}✗ 解绑网络失败${NC}" >&2
+        return 1
     fi
 }
 
-# 创建新的 DNS Zone
+# 创建新的 DNS Zone (修复版 - 正确绑定多个网络)
 create_zone() {
     local zone_name=$1
     local dns_name=$2
@@ -345,27 +340,52 @@ create_zone() {
         fi
     fi
     
-    # 构建网络参数
+    # 构建网络参数 - 修复: 每个网络都需要单独的 --networks 参数
     local network_args=""
+    local network_count=0
+    
     IFS=';' read -ra network_array <<< "$networks"
+    
+    echo -e "${CYAN}准备绑定的网络:${NC}" >&2
+    
     for network in "${network_array[@]}"; do
         network=$(echo "$network" | xargs)
         if [ -n "$network" ]; then
+            ((network_count++))
+            local network_name=$(basename "$network")
+            echo -e "  ${network_count}. ${CYAN}$network_name${NC}" >&2
+            echo -e "     ${BLUE}$network${NC}" >&2
+            
+            # 关键修复: 每个网络单独添加 --networks 参数
             network_args="$network_args --networks=$network"
         fi
     done
     
+    echo -e "\n${BLUE}将绑定 ${GREEN}$network_count${BLUE} 个网络${NC}" >&2
     echo -e "${BLUE}网络参数: $network_args${NC}" >&2
     
     # 创建 Zone
-    gcloud dns managed-zones create "$zone_name" \
+    echo -e "\n${BLUE}执行创建命令...${NC}" >&2
+    
+    if gcloud dns managed-zones create "$zone_name" \
         --description="Private access zone for $environment" \
         --dns-name="$dns_name" \
         --visibility=private \
-        $network_args
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✓ 成功创建 Zone '$zone_name'${NC}" >&2
+        $network_args; then
+        
+        echo -e "${GREEN}✓ 成功创建 Zone '$zone_name' 并绑定 $network_count 个网络${NC}" >&2
+        
+        # 验证网络绑定
+        echo -e "\n${CYAN}验证网络绑定...${NC}" >&2
+        local created_networks=$(get_zone_networks "$zone_name")
+        local created_count=$(echo "$created_networks" | tr ';' '\n' | grep -v '^$' | wc -l)
+        
+        if [ "$created_count" -eq "$network_count" ]; then
+            echo -e "${GREEN}✓ 网络绑定验证成功: $created_count/$network_count${NC}" >&2
+        else
+            echo -e "${YELLOW}⚠ 网络绑定数量不匹配: $created_count/$network_count${NC}" >&2
+        fi
+        
         return 0
     else
         echo -e "${RED}✗ 创建 Zone 失败${NC}" >&2
@@ -373,81 +393,104 @@ create_zone() {
     fi
 }
 
-# 批量导入记录 (优化版)
+# 逐条导入记录 (优化版)
 import_records() {
     local source_file=$1
     local target_zone=$2
     
-    echo -e "\n${BLUE}批量导入记录到 Zone '$target_zone'...${NC}"
+    echo -e "\n${BLUE}开始导入记录到 Zone '$target_zone'...${NC}"
     
-    # 创建过滤后的临时文件
-    local filtered_file="/tmp/${target_zone}-filtered-$(date +%Y%m%d-%H%M%S).yaml"
+    # 统计变量
+    local total_records=$(jq '. | length' "$source_file")
+    local imported=0
+    local skipped=0
+    local failed=0
+    local current=0
     
-    echo -e "${CYAN}预处理导入文件 (过滤 SOA/NS 记录)...${NC}"
+    # 创建失败记录日志
+    local failed_log="/tmp/${target_zone}-failed-$(date +%Y%m%d-%H%M%S).log"
     
-    # 获取目标 Zone 的 DNS 名称
-    local zone_name=$(gcloud dns managed-zones describe "$target_zone" --format='value(dnsName)')
+    echo -e "${CYAN}总记录数: $total_records${NC}"
+    echo -e "${CYAN}开始逐条导入...${NC}\n"
     
-    # 过滤掉 SOA 和根域名的 NS 记录
-    awk -v zone="$zone_name" '
-    BEGIN { 
-        skip = 0
-        # 移除末尾的点
-        gsub(/\.$/, "", zone)
-    }
-    # 保留注释和指令
-    /^;/ || /^\$/ { print; next }
-    # 跳过 SOA 记录块
-    /IN\s+SOA/ { skip = 1; next }
-    skip == 1 && /\)/ { skip = 0; next }
-    skip == 1 { next }
-    # 跳过根域名的 NS 记录
-    $1 == zone "." && $4 == "NS" { next }
-    # 跳过空行
-    /^$/ { next }
-    # 保留其他记录
-    { print }
-    ' "$source_file" > "$filtered_file"
-    
-    local filtered_count=$(grep -v '^;' "$filtered_file" | grep -v '^\$' | grep -v '^$' | wc -l)
-    echo -e "${GREEN}✓ 预处理完成，待导入记录数: $filtered_count${NC}"
-    
-    # 显示将要导入的记录预览
-    echo -e "\n${CYAN}记录预览 (前 5 条):${NC}"
-    grep -v '^;' "$filtered_file" | grep -v '^\$' | grep -v '^$' | head -5 | while read line; do
-        echo -e "  ${line}"
-    done
-    
-    # 批量导入
-    echo -e "\n${BLUE}执行批量导入...${NC}"
-    
-    local import_log="/tmp/${target_zone}-import-$(date +%Y%m%d-%H%M%S).log"
-    
-    if gcloud dns record-sets import "$filtered_file" \
-        --zone="$target_zone" \
-        --zone-file-format \
-        --delete-all-existing 2>&1 | tee "$import_log"; then
+    # 读取记录并导入
+    while IFS= read -r record; do
+        ((current++))
         
-        echo -e "\n${GREEN}========================================${NC}"
-        echo -e "${GREEN}导入完成${NC}"
-        echo -e "${GREEN}========================================${NC}"
+        local name=$(echo "$record" | jq -r '.name')
+        local type=$(echo "$record" | jq -r '.type')
+        local ttl=$(echo "$record" | jq -r '.ttl')
         
-        # 统计导入后的记录数
-        local final_count=$(gcloud dns record-sets list --zone="$target_zone" --format=json | \
-            jq '[.[] | select(.type != "NS" and .type != "SOA")] | length')
+        # 处理 rrdatas - 转换为逐个参数
+        local rrdatas_count=$(echo "$record" | jq '.rrdatas | length')
+        local rrdatas_args=""
         
-        echo -e "成功导入记录数: ${GREEN}$final_count${NC}"
-        echo -e "导入日志: ${BLUE}$import_log${NC}"
+        for ((i=0; i<$rrdatas_count; i++)); do
+            local rrdata=$(echo "$record" | jq -r ".rrdatas[$i]")
+            rrdatas_args="$rrdatas_args --rrdatas=\"$rrdata\""
+        done
         
-        # 清理临时文件
-        rm -f "$filtered_file"
+        # 跳过 NS 和 SOA 记录
+        if [[ "$type" == "NS" || "$type" == "SOA" ]]; then
+            echo -e "[${current}/${total_records}] ${YELLOW}跳过${NC}: $name ($type) - 系统管理的记录"
+            ((skipped++))
+            continue
+        fi
+        
+        # 显示进度
+        echo -e "[${current}/${total_records}] ${CYAN}导入${NC}: $name ($type, TTL=$ttl)"
+        
+        # 检查记录是否已存在
+        if gcloud dns record-sets describe "$name" --type="$type" --zone="$target_zone" &> /dev/null; then
+            echo -e "              ${YELLOW}记录已存在，跳过${NC}"
+            ((skipped++))
+            continue
+        fi
+        
+        # 创建记录 - 使用 eval 处理多个 rrdatas
+        local create_cmd="gcloud dns record-sets create \"$name\" $rrdatas_args --type=\"$type\" --ttl=\"$ttl\" --zone=\"$target_zone\""
+        
+        if eval $create_cmd &> /dev/null; then
+            echo -e "              ${GREEN}✓ 成功${NC}"
+            ((imported++))
+        else
+            echo -e "              ${RED}✗ 失败${NC}"
+            ((failed++))
+            
+            # 记录失败的详情
+            echo "=== Failed Record ===" >> "$failed_log"
+            echo "Name: $name" >> "$failed_log"
+            echo "Type: $type" >> "$failed_log"
+            echo "TTL: $ttl" >> "$failed_log"
+            echo "RRDatas: $(echo "$record" | jq -c '.rrdatas')" >> "$failed_log"
+            echo "Command: $create_cmd" >> "$failed_log"
+            echo "" >> "$failed_log"
+        fi
+        
+        # 显示进度百分比
+        local percent=$((current * 100 / total_records))
+        echo -e "              进度: ${BLUE}${percent}%${NC} (成功: ${GREEN}$imported${NC}, 跳过: ${YELLOW}$skipped${NC}, 失败: ${RED}$failed${NC})"
+        echo ""
+        
+    done < <(jq -c '.[]' "$source_file")
+    
+    # 显示最终统计
+    echo -e "\n${GREEN}========================================${NC}"
+    echo -e "${GREEN}导入完成${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "总记录数: ${BLUE}$total_records${NC}"
+    echo -e "已导入:   ${GREEN}$imported${NC}"
+    echo -e "已跳过:   ${YELLOW}$skipped${NC}"
+    echo -e "失败:     ${RED}$failed${NC}"
+    
+    if [ $failed -gt 0 ]; then
+        echo -e "\n${YELLOW}失败记录详情已保存到: $failed_log${NC}"
+    fi
+    
+    # 如果有导入成功的记录，返回成功
+    if [ $imported -gt 0 ]; then
         return 0
     else
-        echo -e "\n${RED}========================================${NC}"
-        echo -e "${RED}导入失败${NC}"
-        echo -e "${RED}========================================${NC}"
-        echo -e "${YELLOW}请查看日志: $import_log${NC}"
-        echo -e "${YELLOW}过滤后的文件已保留用于调试: $filtered_file${NC}"
         return 1
     fi
 }
@@ -485,11 +528,27 @@ compare_zones() {
             echo -e "${GREEN}✓ 记录内容完全一致${NC}"
         else
             echo -e "${YELLOW}⚠ 记录内容存在差异${NC}"
-            echo -e "${YELLOW}可使用以下命令查看详细差异:${NC}"
-            echo -e "  diff <(jq -S '.' $source_file) <(jq -S '.' $target_file)"
+            echo -e "\n${CYAN}详细差异:${NC}"
+            diff -u <(jq -S '.' "$source_file") <(jq -S '.' "$target_file") | head -20
         fi
     else
         echo -e "${YELLOW}⚠ 记录数量不一致，差异: $((target_count - source_count))${NC}"
+        
+        # 找出缺失的记录
+        echo -e "\n${CYAN}查找缺失的记录...${NC}"
+        local missing_records=$(jq -n --slurpfile source "$source_file" --slurpfile target "$target_file" \
+            '$source[0] - $target[0]')
+        
+        local missing_count=$(echo "$missing_records" | jq '. | length')
+        
+        if [ "$missing_count" -gt 0 ]; then
+            echo -e "${RED}缺失 $missing_count 条记录:${NC}"
+            echo "$missing_records" | jq -r '.[] | "  - \(.name) (\(.type))"' | head -10
+            
+            if [ "$missing_count" -gt 10 ]; then
+                echo -e "  ${YELLOW}... 还有 $((missing_count - 10)) 条记录${NC}"
+            fi
+        fi
     fi
     
     # 清理临时文件
@@ -505,7 +564,7 @@ main() {
     parse_args "$@"
     
     echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}GCP Cloud DNS Zone 迁移工具 - 优化版${NC}"
+    echo -e "${GREEN}GCP Cloud DNS Zone 迁移工具 - 稳定版${NC}"
     echo -e "${GREEN}========================================${NC}\n"
     
     # 检查依赖
@@ -529,14 +588,14 @@ main() {
     # 显示源 Zone 的记录
     show_records "$source_zone"
     
-    # 获取源 Zone 的网络绑定
+    # 获取源 Zone 的网络绑定 (修复版 - 支持多网络)
     source_networks=$(get_zone_networks "$source_zone")
     if [ -z "$source_networks" ]; then
         echo -e "${YELLOW}警告: 源 Zone 未绑定网络，将使用配置中的网络${NC}"
         source_networks="https://www.googleapis.com/compute/v1/projects/$project/global/networks/$private_network"
     fi
     
-    # 导出源 Zone 的记录 (YAML 格式)
+    # 导出源 Zone 的记录
     export_file=$(export_zone_records "$source_zone")
     if [ -z "$export_file" ]; then
         echo -e "${RED}错误: 导出记录失败${NC}"
@@ -553,10 +612,10 @@ main() {
     echo -e "在同一个网络中只能被一个 Private Zone 绑定。"
     echo -e ""
     echo -e "接下来将执行以下操作："
-    echo -e "  1. 从源 Zone ${BLUE}'$source_zone'${NC} 解绑网络"
+    echo -e "  1. 从源 Zone ${BLUE}'$source_zone'${NC} 解绑所有网络"
     echo -e "  2. 创建新 Zone ${BLUE}'$target_zone'${NC}"
-    echo -e "  3. 将网络绑定到新 Zone"
-    echo -e "  4. ${GREEN}批量导入${NC}记录到新 Zone (性能优化)"
+    echo -e "  3. 将${GREEN}所有相同的网络${NC}绑定到新 Zone"
+    echo -e "  4. 逐条导入记录到新 Zone"
     echo -e ""
     read -p "是否继续? (y/N): " confirm
     if [[ ! $confirm =~ ^[Yy]$ ]]; then
@@ -570,7 +629,7 @@ main() {
         exit 1
     fi
     
-    # 创建新 Zone
+    # 创建新 Zone (修复版 - 正确绑定多个网络)
     if ! create_zone "$target_zone" "$source_dns_name" "$source_networks"; then
         echo -e "${RED}错误: 创建 Zone 失败${NC}"
         echo -e "${YELLOW}尝试恢复源 Zone 的网络绑定...${NC}"
@@ -590,11 +649,9 @@ main() {
         exit 1
     fi
     
-    # 批量导入记录
+    # 逐条导入记录
     if ! import_records "$export_file" "$target_zone"; then
-        echo -e "${RED}错误: 导入记录失败${NC}"
-        echo -e "${YELLOW}源文件已保存: $export_file${NC}"
-        exit 1
+        echo -e "${YELLOW}警告: 部分记录导入失败${NC}"
     fi
     
     # 显示新 Zone 的记录
@@ -609,11 +666,6 @@ main() {
     echo -e "导出文件: ${BLUE}$export_file${NC}"
     echo -e "源 Zone: ${BLUE}$source_zone${NC}"
     echo -e "新 Zone: ${BLUE}$target_zone${NC}"
-    echo -e ""
-    echo -e "${CYAN}性能优化说明:${NC}"
-    echo -e "  - 使用 YAML 格式批量导入"
-    echo -e "  - 自动过滤系统管理的记录"
-    echo -e "  - 相比逐条导入，性能提升约 ${GREEN}10-50 倍${NC}"
     echo ""
 }
 

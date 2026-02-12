@@ -343,16 +343,26 @@ create_zone() {
         fi
     fi
     
-    # 构建网络参数 - 处理分号分隔的网络 URL
+    # 构建网络参数 - 使用逗号分隔的列表
     local network_args=""
+    local network_list=""
+    
     IFS=';' read -ra network_array <<< "$networks"
     for network in "${network_array[@]}"; do
         # 去除可能的空格
         network=$(echo "$network" | xargs)
         if [ -n "$network" ]; then
-            network_args="$network_args --networks=$network"
+            if [ -z "$network_list" ]; then
+                network_list="$network"
+            else
+                network_list="$network_list,$network"
+            fi
         fi
     done
+    
+    if [ -n "$network_list" ]; then
+        network_args="--networks=$network_list"
+    fi
     
     echo -e "${BLUE}网络参数: $network_args${NC}" >&2
     
@@ -543,15 +553,22 @@ main() {
         
         # 尝试恢复原来的网络绑定
         IFS=';' read -ra network_array <<< "$source_networks"
-        local restore_args=""
+        local restore_networks=""
+        
         for network in "${network_array[@]}"; do
             network=$(echo "$network" | xargs)
             if [ -n "$network" ]; then
-                restore_args="$restore_args --networks=$network"
+                if [ -z "$restore_networks" ]; then
+                    restore_networks="$network"
+                else
+                    restore_networks="$restore_networks,$network"
+                fi
             fi
         done
         
-        gcloud dns managed-zones update "$source_zone" $restore_args --quiet
+        if [ -n "$restore_networks" ]; then
+            gcloud dns managed-zones update "$source_zone" --networks="$restore_networks" --quiet
+        fi
         echo -e "${YELLOW}已尝试恢复源 Zone 的网络绑定${NC}"
         exit 1
     fi
