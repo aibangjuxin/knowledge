@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2026-02-12 12:50:58
+Generated on: 2026-02-12 12:58:15
 Directory: /Users/lex/git/knowledge/dns/docs/private-access
 
 ## `create-private-access.sh`
@@ -205,6 +205,8 @@ get_zone_networks() {
     
     echo -e "${BLUE}获取 Zone '$zone' 绑定的网络...${NC}" >&2
     
+    # 获取网络 URL List
+    # 注意：gcloud value 格式可能会输出多行，我们需要将其转换为单行分号分隔
     local networks=$(gcloud dns managed-zones describe "$zone" \
         --format='value(privateVisibilityConfig.networks[].networkUrl)' 2>/dev/null)
     
@@ -212,6 +214,11 @@ get_zone_networks() {
         echo -e "${YELLOW}警告: Zone '$zone' 未绑定任何网络${NC}" >&2
         return 1
     fi
+    
+    # 将换行符转换为分号，确保是单行字符串
+    networks=$(echo "$networks" | tr '\n' ';')
+    # 去除可能末尾多余的分号
+    networks=${networks%;}
     
     echo -e "${GREEN}绑定的网络:${NC}" >&2
     # 处理分号分隔的网络 URL
@@ -373,104 +380,60 @@ create_zone() {
     fi
 }
 
-# 导入记录到新 Zone（批量导入优化版）
+# 导入记录到新 Zone
 import_records() {
     local source_file=$1
     local target_zone=$2
     
     echo -e "\n${BLUE}导入记录到 Zone '$target_zone'...${NC}"
     
-    # 统计总记录数
     local total_records=$(jq '. | length' "$source_file")
-    echo -e "${CYAN}总记录数: $total_records${NC}"
+    local imported=0
+    local skipped=0
+    local failed=0
     
-    # 过滤掉 NS 和 SOA 记录，这些是 Zone 自动生成的
-    local filtered_file="/tmp/${target_zone}-filtered-$(date +%Y%m%d-%H%M%S).json"
-    jq '[.[] | select(.type != "NS" and .type != "SOA")]' "$source_file" > "$filtered_file"
-    
-    local filtered_count=$(jq '. | length' "$filtered_file")
-    echo -e "${CYAN}需要导入的记录数（已过滤 NS/SOA）: $filtered_count${NC}"
-    
-    if [ "$filtered_count" -eq 0 ]; then
-        echo -e "${YELLOW}警告: 没有需要导入的记录（所有记录都是 NS/SOA）${NC}"
-        rm -f "$filtered_file"
-        return 0
-    fi
-    
-    # 将 JSON 转换为 YAML 格式（gcloud dns import 需要 YAML 格式）
-    local yaml_file="/tmp/${target_zone}-import-$(date +%Y%m%d-%H%M%S).yaml"
-    
-    echo -e "${BLUE}转换记录格式为 YAML...${NC}"
-    
-    # 使用 jq 将 JSON 转换为 gcloud dns 期望的 YAML 格式
-    # 正确的格式示例（注意 --- 在记录之间，不是开头）:
-    # kind: dns#resourceRecordSet
-    # name: example.com.
-    # rrdatas:
-    # - 192.0.2.91
-    # ttl: 300
-    # type: A
-    # ---
-    # kind: dns#resourceRecordSet
-    # name: www.example.com.
-    # ...
-    
-    # 生成第一条记录（不带前置 ---）
-    jq -r '.[0] | 
-        "kind: dns#resourceRecordSet\nname: " + .name + 
-        "\nrrdatas:\n" + (.rrdatas | map("- " + .) | join("\n")) +
-        "\nttl: " + (.ttl | tostring) + 
-        "\ntype: " + .type
-    ' "$filtered_file" > "$yaml_file"
-    
-    # 追加其余记录（每条前面加 ---）
-    if [ "$filtered_count" -gt 1 ]; then
-        jq -r '.[1:] | .[] | 
-            "---\nkind: dns#resourceRecordSet\nname: " + .name + 
-            "\nrrdatas:\n" + (.rrdatas | map("- " + .) | join("\n")) +
-            "\nttl: " + (.ttl | tostring) + 
-            "\ntype: " + .type
-        ' "$filtered_file" >> "$yaml_file"
-    fi
-    
-    if [ ! -s "$yaml_file" ]; then
-        echo -e "${YELLOW}警告: YAML 文件生成失败${NC}"
-        rm -f "$filtered_file" "$yaml_file"
-        return 1
-    fi
-    
-    echo -e "${GREEN}✓ YAML 文件已生成: $yaml_file${NC}"
-    echo -e "${CYAN}预览前 20 行:${NC}"
-    head -20 "$yaml_file"
-    
-    # 使用 gcloud dns record-sets import 批量导入
-    echo -e "\n${BLUE}开始批量导入记录...${NC}"
-    
-    if gcloud dns record-sets import "$yaml_file" \
-        --zone="$target_zone" \
-        --delete-all-existing 2>&1 | tee /tmp/import-log.txt; then
+    # 读取记录并导入
+    jq -c '.[]' "$source_file" | while read record; do
+        local name=$(echo "$record" | jq -r '.name')
+        local type=$(echo "$record" | jq -r '.type')
+        local ttl=$(echo "$record" | jq -r '.ttl')
+        local rrdatas=$(echo "$record" | jq -r '.rrdatas | join(",")')
         
-        echo -e "\n${GREEN}========================================${NC}"
-        echo -e "${GREEN}批量导入完成${NC}"
-        echo -e "${GREEN}========================================${NC}"
-        echo -e "导入的记录数: ${GREEN}$filtered_count${NC}"
-        echo -e "YAML 文件: ${BLUE}$yaml_file${NC}"
+        # 跳过 NS 和 SOA 记录（这些是自动生成的）
+        if [[ "$type" == "NS" || "$type" == "SOA" ]]; then
+            ((skipped++))
+            continue
+        fi
         
-        # 清理临时文件
-        rm -f "$filtered_file"
+        echo -e "  ${CYAN}导入:${NC} $name ($type)"
         
-        return 0
-    else
-        echo -e "\n${RED}========================================${NC}"
-        echo -e "${RED}批量导入失败${NC}"
-        echo -e "${RED}========================================${NC}"
-        echo -e "${YELLOW}保留文件以供调试:${NC}"
-        echo -e "  - 过滤后的 JSON: ${BLUE}$filtered_file${NC}"
-        echo -e "  - YAML 导入文件: ${BLUE}$yaml_file${NC}"
-        echo -e "  - 导入日志: ${BLUE}/tmp/import-log.txt${NC}"
-        
-        return 1
-    fi
+        # 检查记录是否已存在
+        if gcloud dns record-sets describe "$name" --type="$type" --zone="$target_zone" &> /dev/null; then
+            echo -e "    ${YELLOW}记录已存在，跳过${NC}"
+            ((skipped++))
+        else
+            # 创建记录
+            if gcloud dns record-sets create "$name" \
+                --rrdatas="$rrdatas" \
+                --type="$type" \
+                --ttl="$ttl" \
+                --zone="$target_zone" &> /dev/null; then
+                echo -e "    ${GREEN}✓ 成功${NC}"
+                ((imported++))
+            else
+                echo -e "    ${RED}✗ 失败${NC}"
+                ((failed++))
+            fi
+        fi
+    done
+    
+    echo -e "\n${GREEN}========================================${NC}"
+    echo -e "${GREEN}导入完成${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "总记录数: ${BLUE}$total_records${NC}"
+    echo -e "已导入: ${GREEN}$imported${NC}"
+    echo -e "跳过: ${YELLOW}$skipped${NC}"
+    echo -e "失败: ${RED}$failed${NC}"
 }
 
 # 对比两个 Zone 的记录
@@ -558,36 +521,16 @@ main() {
     # 获取源 Zone 的 DNS 名称
     source_dns_name=$(gcloud dns managed-zones describe "$source_zone" --format='value(dnsName)')
     
-    # 统计网络数量
-    IFS=';' read -ra network_check_array <<< "$source_networks"
-    local network_count=0
-    for net in "${network_check_array[@]}"; do
-        net=$(echo "$net" | xargs)
-        if [ -n "$net" ]; then
-            ((network_count++))
-        fi
-    done
-    
     echo -e "\n${CYAN}========================================${NC}"
     echo -e "${CYAN}重要提示${NC}"
     echo -e "${CYAN}========================================${NC}"
     echo -e "由于 GCP DNS 限制，同一个 DNS 名称（${BLUE}$source_dns_name${NC}）"
     echo -e "在同一个网络中只能被一个 Private Zone 绑定。"
     echo -e ""
-    echo -e "检测到源 Zone 绑定了 ${GREEN}$network_count${NC} 个网络："
-    IFS=';' read -ra network_display_array <<< "$source_networks"
-    for net in "${network_display_array[@]}"; do
-        net=$(echo "$net" | xargs)
-        if [ -n "$net" ]; then
-            local net_name=$(basename "$net")
-            echo -e "  - ${CYAN}$net_name${NC}"
-        fi
-    done
-    echo -e ""
     echo -e "接下来将执行以下操作："
-    echo -e "  1. 从源 Zone ${BLUE}'$source_zone'${NC} 解绑 ${GREEN}所有${NC} 网络"
+    echo -e "  1. 从源 Zone ${BLUE}'$source_zone'${NC} 解绑网络"
     echo -e "  2. 创建新 Zone ${BLUE}'$target_zone'${NC}"
-    echo -e "  3. 将 ${GREEN}相同的 $network_count 个${NC} 网络绑定到新 Zone"
+    echo -e "  3. 将网络绑定到新 Zone"
     echo -e ""
     read -p "是否继续? (y/N): " confirm
     if [[ ! $confirm =~ ^[Yy]$ ]]; then
