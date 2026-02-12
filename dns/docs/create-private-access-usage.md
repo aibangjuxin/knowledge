@@ -385,9 +385,15 @@ get_zone_networks() {
     fi
     
     echo -e "${GREEN}绑定的网络:${NC}"
-    echo "$networks" | while read network; do
-        local network_name=$(basename "$network")
-        echo -e "  - ${CYAN}$network_name${NC}"
+    # 处理分号分隔的网络 URL
+    IFS=';' read -ra network_array <<< "$networks"
+    for network in "${network_array[@]}"; do
+        # 去除可能的空格
+        network=$(echo "$network" | xargs)
+        if [ -n "$network" ]; then
+            local network_name=$(basename "$network")
+            echo -e "  - ${CYAN}$network_name${NC}"
+        fi
     done
     
     echo "$networks"
@@ -459,11 +465,18 @@ create_zone() {
         fi
     fi
     
-    # 构建网络参数
+    # 构建网络参数 - 处理分号分隔的网络 URL
     local network_args=""
-    for network in $networks; do
-        network_args="$network_args --networks=$network"
+    IFS=';' read -ra network_array <<< "$networks"
+    for network in "${network_array[@]}"; do
+        # 去除可能的空格
+        network=$(echo "$network" | xargs)
+        if [ -n "$network" ]; then
+            network_args="$network_args --networks=$network"
+        fi
     done
+    
+    echo -e "${BLUE}网络参数: $network_args${NC}"
     
     # 创建 Zone
     gcloud dns managed-zones create "$zone_name" \
