@@ -395,21 +395,35 @@ import_records() {
     echo -e "${BLUE}转换记录格式为 YAML...${NC}"
     
     # 使用 jq 将 JSON 转换为 gcloud dns 期望的 YAML 格式
-    # 正确的格式示例:
-    # ---
+    # 正确的格式示例（注意 --- 在记录之间，不是开头）:
     # kind: dns#resourceRecordSet
     # name: example.com.
     # rrdatas:
     # - 192.0.2.91
     # ttl: 300
     # type: A
+    # ---
+    # kind: dns#resourceRecordSet
+    # name: www.example.com.
+    # ...
     
-    jq -r '.[] | 
-        "---\nkind: dns#resourceRecordSet\nname: " + .name + 
+    # 生成第一条记录（不带前置 ---）
+    jq -r '.[0] | 
+        "kind: dns#resourceRecordSet\nname: " + .name + 
         "\nrrdatas:\n" + (.rrdatas | map("- " + .) | join("\n")) +
         "\nttl: " + (.ttl | tostring) + 
         "\ntype: " + .type
     ' "$filtered_file" > "$yaml_file"
+    
+    # 追加其余记录（每条前面加 ---）
+    if [ "$filtered_count" -gt 1 ]; then
+        jq -r '.[1:] | .[] | 
+            "---\nkind: dns#resourceRecordSet\nname: " + .name + 
+            "\nrrdatas:\n" + (.rrdatas | map("- " + .) | join("\n")) +
+            "\nttl: " + (.ttl | tostring) + 
+            "\ntype: " + .type
+        ' "$filtered_file" >> "$yaml_file"
+    fi
     
     if [ ! -s "$yaml_file" ]; then
         echo -e "${YELLOW}警告: YAML 文件生成失败${NC}"
