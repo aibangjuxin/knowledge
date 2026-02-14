@@ -1,6 +1,6 @@
 # Shell Scripts Collection
 
-Generated on: 2026-02-14 11:22:49
+Generated on: 2026-02-14 11:34:13
 Directory: /Users/lex/git/knowledge/gcp/gce
 
 ## `rolling-replace-instance-groups.sh`
@@ -21,7 +21,6 @@ KEYWORD="${KEYWORD:-}"
 # 滚动替换配置
 MAX_UNAVAILABLE="${MAX_UNAVAILABLE:-0}"    # 不允许不可用的实例
 MAX_SURGE="${MAX_SURGE:-3}"                # 允许超出目标数的实例数
-MIN_READY="${MIN_READY:-10s}"              # 新实例准备就绪的最短时间
 
 # 颜色输出
 RED='\033[0;31m'
@@ -36,23 +35,23 @@ NC='\033[0m' # No Color
 # ============================================
 
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1"
+    echo -e "${BLUE}[INFO]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1" >&2
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1"
+    echo -e "${GREEN}[SUCCESS]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1" >&2
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1"
+    echo -e "${YELLOW}[WARNING]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1" >&2
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1"
+    echo -e "${RED}[ERROR]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1" >&2
 }
 
 log_step() {
-    echo -e "${CYAN}[STEP]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1"
+    echo -e "${CYAN}[STEP]${NC} $(date '+%Y-%m-%d %H:%M:%S') - $1" >&2
 }
 
 # 显示使用说明
@@ -67,7 +66,6 @@ show_usage() {
     -k, --keyword KEYWORD           实例组名称关键字 (必需)
     -u, --max-unavailable NUM       最大不可用实例数 (默认: 0)
     -s, --max-surge NUM             最大超出实例数 (默认: 3)
-    -r, --min-ready TIME            最小就绪时间 (默认: 10s)
     --dry-run                       模拟运行，不实际执行
     -h, --help                      显示此帮助信息
 
@@ -76,7 +74,7 @@ show_usage() {
     $0 --project my-project --keyword squid
 
     # 自定义滚动替换参数
-    $0 -p my-project -k squid -u 1 -s 5 -r 30s
+    $0 -p my-project -k squid -u 1 -s 5
 
     # 模拟运行
     $0 --project my-project --keyword squid --dry-run
@@ -87,9 +85,6 @@ show_usage() {
     
     --max-surge:       滚动替换期间允许超出目标数的最大实例数
                        设置为 3 表示可以临时增加 3 个实例
-    
-    --min-ready:       新实例被视为就绪的最短等待时间
-                       设置为 10s 表示实例需在 10 秒内变为就绪状态
 
 EOF
     exit 0
@@ -190,18 +185,18 @@ display_instance_groups() {
     fi
     
     log_info "找到以下实例组:"
-    echo ""
-    echo "--------------------------------------------------------------------------------------------------------"
-    printf "%-40s %-20s %-15s %-10s\n" "名称" "位置" "类型" "实例数"
-    echo "--------------------------------------------------------------------------------------------------------"
+    echo "" >&2
+    echo "--------------------------------------------------------------------------------------------------------" >&2
+    printf "%-40s %-20s %-15s %-10s\n" "名称" "位置" "类型" "实例数" >&2
+    echo "--------------------------------------------------------------------------------------------------------" >&2
     
     echo "$instance_groups" | jq -r '.[] | "\(.name)|\(.zone // .region)|\(if .zone then "zonal" else "regional" end)|\(.targetSize)"' | \
     while IFS='|' read -r name location type size; do
-        printf "%-40s %-20s %-15s %-10s\n" "$name" "$location" "$type" "$size"
+        printf "%-40s %-20s %-15s %-10s\n" "$name" "$location" "$type" "$size" >&2
     done
     
-    echo "--------------------------------------------------------------------------------------------------------"
-    echo ""
+    echo "--------------------------------------------------------------------------------------------------------" >&2
+    echo "" >&2
 }
 
 # 获取实例组当前状态
@@ -281,8 +276,7 @@ rolling_replace() {
     local project=$4
     local max_unavailable=$5
     local max_surge=$6
-    local min_ready=$7
-    local dry_run=$8
+    local dry_run=$7
     
     log_step "开始滚动替换实例组: $name"
     
@@ -299,20 +293,18 @@ rolling_replace() {
         log_warning "  位置: $location ($location_type)"
         log_warning "  max-unavailable: $max_unavailable"
         log_warning "  max-surge: $max_surge"
-        log_warning "  min-ready: $min_ready"
         return 0
     fi
     
     # 执行滚动替换
     log_info "执行命令: gcloud compute instance-groups managed rolling-action replace $name"
-    log_info "  参数: --max-unavailable=$max_unavailable --max-surge=$max_surge --min-ready=$min_ready"
+    log_info "  参数: --max-unavailable=$max_unavailable --max-surge=$max_surge"
     
     if gcloud compute instance-groups managed rolling-action replace "$name" \
         --max-unavailable="$max_unavailable" \
         --max-surge="$max_surge" \
-        --min-ready="$min_ready" \
         $location_flag \
-        --project="$project" 2>&1; then
+        --project="$project" 2>&1 >&2; then
         
         log_success "实例组 [$name] 滚动替换命令已提交"
         return 0
@@ -328,8 +320,7 @@ process_instance_groups() {
     local project=$2
     local max_unavailable=$3
     local max_surge=$4
-    local min_ready=$5
-    local dry_run=$6
+    local dry_run=$5
     
     local total
     total=$(echo "$instance_groups" | jq '. | length')
@@ -381,7 +372,7 @@ process_instance_groups() {
         
         # 执行滚动替换
         if rolling_replace "$name" "$location" "$location_type" "$project" \
-            "$max_unavailable" "$max_surge" "$min_ready" "$dry_run"; then
+            "$max_unavailable" "$max_surge" "$dry_run"; then
             
             # 等待操作完成
             if [ "$dry_run" != "true" ]; then
@@ -392,6 +383,7 @@ process_instance_groups() {
                 else
                     log_warning "实例组 [$name] 滚动替换可能仍在进行中"
                     log_warning "请手动检查状态"
+                    success=$((success + 1))
                 fi
             else
                 success=$((success + 1))
@@ -450,10 +442,6 @@ main() {
                 MAX_SURGE="$2"
                 shift 2
                 ;;
-            -r|--min-ready)
-                MIN_READY="$2"
-                shift 2
-                ;;
             --dry-run)
                 DRY_RUN=true
                 shift
@@ -487,10 +475,9 @@ main() {
     log_info "关键字: $KEYWORD"
     log_info "最大不可用: $MAX_UNAVAILABLE"
     log_info "最大超出: $MAX_SURGE"
-    log_info "最小就绪: $MIN_READY"
     [ "$DRY_RUN" = "true" ] && log_warning "模式: DRY RUN (模拟运行)"
     log_info "========================================="
-    echo ""
+    echo "" >&2
     
     # 检查前置条件
     check_prerequisites
@@ -513,7 +500,8 @@ main() {
         log_warning "⚠️  警告: 此操作将对 $total 个实例组执行滚动替换"
         log_warning "⚠️  所有实例将被逐步替换为新实例"
         log_warning ""
-        read -p "确认继续? (输入 'yes' 确认): " CONFIRM
+        echo -n "确认继续? (输入 'yes' 确认): " >&2
+        read CONFIRM
         
         if [ "$CONFIRM" != "yes" ]; then
             log_info "操作已取消"
@@ -523,7 +511,7 @@ main() {
     
     # 处理所有实例组
     if process_instance_groups "$instance_groups" "$PROJECT_ID" \
-        "$MAX_UNAVAILABLE" "$MAX_SURGE" "$MIN_READY" "$DRY_RUN"; then
+        "$MAX_UNAVAILABLE" "$MAX_SURGE" "$DRY_RUN"; then
         
         log_success ""
         log_success "========================================="
