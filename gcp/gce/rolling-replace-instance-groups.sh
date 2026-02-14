@@ -147,7 +147,21 @@ get_instance_groups() {
     instance_groups=$(gcloud compute instance-groups managed list \
         --project="$project" \
         --filter="name~$keyword" \
-        --format="json" 2>/dev/null)
+        --format="json" 2>&1)
+    
+    # 检查命令是否执行成功
+    if [ $? -ne 0 ]; then
+        log_error "获取实例组列表失败"
+        log_error "$instance_groups"
+        exit 1
+    fi
+    
+    # 验证返回的是有效的 JSON
+    if ! echo "$instance_groups" | jq empty 2>/dev/null; then
+        log_error "返回的数据不是有效的 JSON 格式"
+        log_error "原始输出: $instance_groups"
+        exit 1
+    fi
     
     if [ -z "$instance_groups" ] || [ "$instance_groups" = "[]" ]; then
         log_error "未找到匹配关键字 [$keyword] 的实例组"
@@ -160,6 +174,12 @@ get_instance_groups() {
 # 显示实例组信息
 display_instance_groups() {
     local instance_groups=$1
+    
+    # 再次验证 JSON 格式
+    if ! echo "$instance_groups" | jq empty 2>/dev/null; then
+        log_error "display_instance_groups: 接收到的数据不是有效的 JSON"
+        return 1
+    fi
     
     log_info "找到以下实例组:"
     echo ""

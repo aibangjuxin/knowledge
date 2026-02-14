@@ -81,13 +81,13 @@ Domain Allowlist 不完整导致的间接访问失败
 ⸻
 
 流程示意图
-
+```mermaid
 graph TD
     A["Client"] --> B["microsoft.com"]
     B --> C["302 Redirect"]
     C --> D["www.office.com"]
     D --> E["Final Response 200"]
-
+```
 
 ⸻
 
@@ -129,7 +129,20 @@ Therefore, the recommended configuration approach is to expand the allowlist to 
 
 Best regards,
 
+我们发现，在某些情况下，仅允许主域名是不够的，因为在HTTP重定向链中，初始请求可能会被重定向到一个或多个次级域名。为确保通过代理的完整访问路径能正常工作，我们不仅需要允许主域名，还需要允许重定向链中出现的所有次级域名，以及服务间接需要的所有次级域名。
+
+换句话说，代理允许列表应包含：
+• 入口域名（主域名）
+• 任何下游或被重定向的域名（次级/重定向域名）
+• 在请求追踪过程中发现的间接域名依赖项
+
+如果不包含这些额外的域名，即使主域名已被允许，请求也可能失败。因此，建议的配置方法是扩展允许列表，将重定向链中观察到的所有域名都包含进来，以维持端到端的连接。
+
+
+
 如果只是口头或在聊天工具里一句话解释，可以用更短的版本：
 
 Short Version（口头/IM）：
 “We need to allow not only the primary domain but also any secondary domains in the HTTP redirect chain, otherwise the request may fail even though the main domain is already whitelisted.”
+
+我们不仅需要允许主域名，还需要允许HTTP重定向链中的任何次域名，否则即使主域名已被列入白名单，请求也可能失败。
