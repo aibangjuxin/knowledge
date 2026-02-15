@@ -1,0 +1,4 @@
+interface:
+  display_name: "Architectrue"
+  short_description: "Help with Architectrue tasks"
+  default_prompt: "Use $architectrue to design and implement a production-grade GKE and GCP architecture plan."
