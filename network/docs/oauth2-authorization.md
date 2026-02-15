@@ -140,3 +140,160 @@ sequenceDiagram
 
 *   **Token 交换失败** 是因为 Node.js 进程没走通代理 -> **修复代码中的 Agent 配置**。
 *   **SSL 错误** 是因为网络层连接被重置 -> **检查代理软件规则和连通性**。
+
+
+
+
+在 Loon 里，你的目标不是“让 Google 直连”（因为网络本身不可达），而是：
+
+让 OAuth 走「纯代理隧道」，不要走 MITM / HTTPS 解密。
+
+也就是：允许 Proxy，但禁止证书劫持。
+
+下面给你一个最稳的配置思路。
+
+⸻
+
+一、核心原则
+
+在 Loon 里需要满足两点：
+	1.	googleapis.com / accounts.google.com 必须走代理
+	2.	绝对不能进入 MITM 列表
+
+否则 Electron / Node 一定 TLS 握手失败。
+
+⸻
+
+二、规则层（Rule）配置
+
+在 Rule 里加一组 强制走代理 的域名规则（顺序要靠前）：
+
+DOMAIN-SUFFIX,googleapis.com,Proxy
+DOMAIN-SUFFIX,gstatic.com,Proxy
+DOMAIN-SUFFIX,google.com,Proxy
+DOMAIN-SUFFIX,accounts.google.com,Proxy
+
+说明：
+	•	Proxy 是你实际使用的策略组名（例如 🚀 Proxy）
+	•	这一步的意义是：保证能出国访问
+
+⸻
+
+三、MITM（最关键）
+
+进入：
+
+Loon → MITM → Domain
+
+必须确保 没有 以下域名：
+
+googleapis.com
+google.com
+gstatic.com
+accounts.google.com
+
+如果存在，删除。
+
+⸻
+
+四、HTTPS 解密开关
+
+路径：
+
+Loon → MITM → Enable HTTPS Decryption
+
+两种安全做法：
+
+做法 A（推荐）
+
+开启 MITM，但 Google 域名不在列表里
+
+做法 B（最干净）
+
+直接关闭 MITM：
+
+Disable HTTPS Decryption
+
+
+⸻
+
+五、为什么不能 MITM Google OAuth？
+
+OAuth Token 阶段是：
+
+Electron → TLS → oauth2.googleapis.com
+
+如果 MITM：
+
+Loon 伪造证书
+→ Electron 不信任
+→ TLS handshake fail
+→ net_error -101
+
+浏览器能过是因为：
+	•	iOS/macOS Keychain 信任
+	•	Electron/Node 不一定信任
+
+⸻
+
+六、验证是否成功
+
+可以用两种方式：
+
+方式 1：看 Loon 连接日志
+
+目标域名应显示：
+
+CONNECT oauth2.googleapis.com:443
+
+而不是：
+
+MITM oauth2.googleapis.com
+
+
+⸻
+
+方式 2：openssl 测试
+
+openssl s_client -connect oauth2.googleapis.com:443
+
+正常颁发者应包含：
+
+Google Trust Services
+
+如果看到：
+
+Loon CA
+
+说明仍在 MITM。
+
+⸻
+
+七、一个稳定配置模型
+
+可以理解为三层：
+
+Rule:     Google → Proxy
+MITM:     Google → 排除
+Proxy:    CONNECT 隧道
+
+
+⸻
+
+八、常见误区
+
+错误做法	结果
+Google 设为 DIRECT	直接连不上
+Google 加入 MITM	TLS 握手失败
+全局 MITM	Electron 登录必炸
+不写 Rule	可能走国内直连失败
+
+
+⸻
+
+一句话总结
+
+在 Loon 中的正确姿势不是“Google 直连”，而是：
+
+Google 走代理，但绝不走 MITM。
+只要看到的是 CONNECT 隧道而不是 MITM，OAuth 就能稳定工作。
