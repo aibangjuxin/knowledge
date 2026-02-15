@@ -7,7 +7,8 @@
 #        --max-surge=3 \
 #        --region=https://www.googleapis.com/compute/v1/projct/projectid/region/europe-west2 \
 #        --project="$project"
-
+# summary this script 
+#    
 set -e
 
 # ============================================
@@ -83,6 +84,7 @@ Description:
 
     --max-surge:       Maximum number of instances exceeding target count during rolling replacement
                        Set to 3 means 3 additional instances can be temporarily added
+                       
 
 EOF
     exit 0
