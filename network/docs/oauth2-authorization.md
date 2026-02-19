@@ -297,3 +297,82 @@ Google 加入 MITM	TLS 握手失败
 
 Google 走代理，但绝不走 MITM。
 只要看到的是 CONNECT 隧道而不是 MITM，OAuth 就能稳定工作。
+
+---
+
+## 勘误与补充（保持原文不变）
+
+下面是对“OAuth2 正确认证逻辑和过程”的补充说明，以及对原文中可能引发实现偏差的点做的纠正。该段仅追加用于对比，不修改原文内容。
+
+### 1) 先澄清：OAuth 2.0 不是“认证”，是“授权”
+
+- OAuth 2.0 Authorization Code Flow 的产物是 `access_token`（以及可选的 `refresh_token`），用于访问资源服务器 API，不等价于“用户已完成身份认证”。  
+- 如果你的业务目标是“确认用户是谁”（登录态/身份），通常应使用 OpenID Connect（OIDC）：在授权请求中加入 `scope=openid ...`，并在回调/换 token 后获取并校验 `id_token`（JWT），身份以 `id_token` 为准，`access_token` 用于调用 Google API。
+
+### 2) 原流程图里 `client_secret` 的位置容易误导（Native App 通常是 Public Client）
+
+你在第 10 步写了：
+
+`POST /token (code, code_verifier, client_id, client_secret)`
+
+对 RFC 8252 的 Native App（桌面/Electron）而言，更准确的逻辑是：
+
+- Native App 属于 **Public Client**：`client_secret` 无法保密，协议设计上不应依赖 `client_secret` 来证明客户端身份。
+- 正确的防护手段是 **PKCE**（建议视为必选）：`code_challenge(S256)` + `code_verifier`。
+
+更标准的 token 交换请求字段通常是（表单参数示例）：
+
+- `grant_type=authorization_code`
+- `code=...`
+- `redirect_uri=http://127.0.0.1:<port>/callback`（或你的实际 redirect URI）
+- `client_id=...`
+- `code_verifier=...`
+
+说明：
+
+- 某些厂商文档/SDK 仍会出现 `client_secret` 字段（历史兼容或控制台发放形式），但对 Native App 不应把它当成“秘密”或安全边界，更不应基于它做强安全假设。
+
+### 3) `redirect_uri`：`127.0.0.1` vs `localhost` 的建议需要加前提
+
+原文建议“避免使用 `localhost`，推荐显式 `127.0.0.1`”。补充更准确的表述：
+
+- RFC 8252 推荐 Loopback Redirect（`127.0.0.1` / `::1` + 随机端口）是对的。
+- 但**是否能用 `127.0.0.1`**取决于 OAuth 提供方的控制台/客户端类型配置与允许的 redirect URI 规则。
+- 对 Google 而言，很多情况下“Desktop App”客户端在控制台里默认/推荐的 redirect URI 是 `http://localhost`（允许动态端口）。如果你使用 `127.0.0.1`，需要确认 Google 控制台是否允许并已配置匹配（否则会在授权或换 token 阶段失败）。
+
+建议落地写法：
+
+- 以“提供方允许的 redirect URI 规则”为准；如果提供方支持 `127.0.0.1`，优先用 `127.0.0.1`/`::1`；如果控制台只支持 `localhost` 的模式，则按其要求使用 `localhost`。
+
+### 4) `state` 的作用不只 CSRF：也用于“会话绑定/防混淆”
+
+原文对 `state` 的描述方向是对的，补充两点实现要求：
+
+- `state` 应和“本次登录会话”绑定（例如只允许一次性使用），回调校验通过后立即作废。
+- 回调处理要覆盖拒绝授权/异常路径：例如 `error=access_denied`、`state` 缺失、`code` 缺失等。
+
+### 5) PKCE 落地细节（建议明确写成强制 S256）
+
+补充实现要点，避免“实现了但不安全”：
+
+- `code_challenge_method` 建议固定为 `S256`（不要用 plain）。
+- `code_verifier` 按 RFC 7636 生成（高熵随机，长度/字符集符合要求），不要用可预测字符串。
+
+### 6) 刷新令牌（Refresh Token）获取条件与存储建议
+
+原文第 11 步提到会返回 Refresh Token，但在 Google 实际落地中经常会踩坑，建议补充：
+
+- 需要 `access_type=offline` 才可能拿到 `refresh_token`（取决于提供方与账号策略）。
+- Google 场景下若用户已授权过，后续可能不再返回 `refresh_token`；通常需配合 `prompt=consent`（或清理授权）才能再次发放（具体受 Google 策略影响）。
+- `refresh_token` 必须安全存储（macOS Keychain / Windows DPAPI 等），不要明文落盘。
+
+### 7) 代理排障补充：别让 Loopback 回调也走代理
+
+你排障部分主要聚焦 “token 交换阶段走代理”，建议再补一句常见坑：
+
+- 为避免本地回调 `http://127.0.0.1` / `http://localhost` 被错误地代理出去，可设置 `NO_PROXY=127.0.0.1,localhost`（或对应语言/库的 no-proxy 机制）。
+
+### 8) 其他建议（可选）
+
+- 若你的目标是“登录并识别用户”，建议在文档里显式写清：`access_token` 用于调用 API，身份以 OIDC `id_token` 校验为准，并说明校验点（`iss/aud/exp/nonce` 等）。
+- 本地回调服务建议“单次请求后立刻关闭监听端口”，减少被同机其他进程探测/抢占的窗口。
