@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # rooling-mig-and-verify-status.sh
 # Combined workflow: rolling replace MIGs, then verify MIG instance status.
-
 set -Eeuo pipefail
 
 PROJECT_ID="${PROJECT_ID:-}"
