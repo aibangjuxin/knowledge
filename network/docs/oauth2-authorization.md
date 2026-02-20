@@ -35,7 +35,50 @@ sequenceDiagram
     
     Note over LocalServer: 12. 校验 ID Token (如有) <br/>& 安全存储 Token
 ```
+---
+```mermaid
+%%{init: {
+  'theme': 'base',
+  'themeVariables': {
+    'primaryColor': '#E8F0FE',
+    'primaryTextColor': '#1A73E8',
+    'primaryBorderColor': '#1A73E8',
+    'lineColor': '#5F6368',
+    'secondaryColor': '#E6F4EA',
+    'secondaryBorderColor': '#188038',
+    'tertiaryColor': '#FCE8E6',
+    'tertiaryBorderColor': '#D93025',
+    'noteBkgColor': '#FEF7E0',
+    'noteTextColor': '#3C4043',
+    'noteBorderColor': '#F9AB00',
+    'actorBkg': '#FFFFFF',
+    'actorTextColor': '#202124'
+  }
+}}%%
+sequenceDiagram
+    autonumber
+    participant User as 👤 用户
+    participant Browser as 🌐 系统浏览器
+    participant LocalServer as 💻 本地服务<br/>(Electron)
+    participant GoogleAuth as 🛡️ Google 授权服务器
+    participant GoogleToken as 🔑 Google 令牌端点
 
+    Note over LocalServer: 准备阶段<br/>1. 生成 PKCE (S256) code_verifier & challenge<br/>2. 生成随机 State (防 CSRF)
+    
+    LocalServer->>Browser: 打开系统默认浏览器<br/>(携带 scope, client_id, challenge, state 等)
+    Browser->>GoogleAuth: GET 请求授权页面
+    GoogleAuth->>User: 展示 Google 登录/授权页
+    User->>GoogleAuth: 用户点击同意授权
+    GoogleAuth->>Browser: 302 重定向到 Loopback 地址<br/>http://127.0.0.1:{port}/callback?code=...
+    Browser->>LocalServer: 浏览器请求本地服务 (携带 code & state)
+    
+    Note over LocalServer: 安全校验<br/>验证 state 并关闭本地 HTTP 服务
+    
+    LocalServer->>GoogleToken: POST /token 换取令牌<br/>(携带 code, code_verifier, client_id)
+    GoogleToken-->>LocalServer: 返回 Access / Refresh / ID Token
+    
+    Note over LocalServer: 最终处理<br/>校验 ID Token & 安全存储 Token (如 Keychain)
+```
 ### 1.2 关键组件与安全规范
 
 1.  **Public Client 身份**:
