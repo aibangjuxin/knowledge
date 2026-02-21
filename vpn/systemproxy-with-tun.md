@@ -35,7 +35,11 @@
   - 或应用手动配置代理
 
 ```bash
-App ──(HTTP/SOCKS proxy)──> VPN proxy ──> Remote
+```
+
+```mermaid
+flowchart LR
+    App[App] -->|"HTTP/SOCKS proxy"| VPN["VPN proxy"] --> Remote[Remote]
 ```
 
 ### 🔹 网络层级
@@ -95,15 +99,8 @@ App ──(HTTP/SOCKS proxy)──> VPN proxy ──> Remote
   - 再封装发送到远端
 
 ```mermaid
-App
- ↓
-OS TCP/IP
- ↓
-TUN 虚拟网卡
- ↓
-VPN 程序（用户态路由）
- ↓
-Remote
+flowchart TD
+    App[App] --> OS["OS TCP/IP"] --> TUN["TUN 虚拟网卡"] --> VPN["VPN 程序（用户态路由）"] --> Remote[Remote]
 ```
 
 ### 🔹 网络层级
@@ -148,12 +145,9 @@ Remote
 
 > TUN ≈ "把内核的网络出口变成一个文件描述符"
 
-```bash
-Kernel IP Packet
-   ↓
-/dev/tun
-   ↓
-VPN User-space Program
+```mermaid
+flowchart TD
+    Kernel["Kernel IP Packet"] --> Dev["/dev/tun"] --> VPNUser["VPN User-space Program"]
 ```
 
 ---
@@ -237,17 +231,8 @@ VPN User-space Program
 在 TUN 模式下，真实路径是：
 
 ```mermaid
-App
- ↓
-iOS TCP/IP
- ↓
-TUN / Packet Tunnel   ←（强制进入）
- ↓
-Rule Engine（规则匹配）
- ↓
-Policy（PROXY / DIRECT / REJECT）
- ↓
-真实出口
+flowchart TD
+    App[App] --> IOS["iOS TCP/IP"] --> TUN["TUN / Packet Tunnel   ←（强制进入）"] --> Rules["Rule Engine（规则匹配）"] --> Policy["Policy（PROXY / DIRECT / REJECT）"] --> Exit["真实出口"]
 ```
 
 ---
@@ -262,7 +247,7 @@ DOMAIN-SUFFIX,google.com,PROXY
 
 **结果：**
 
-```
+```text
 google.com → PROXY → 远端
 ```
 
@@ -272,7 +257,7 @@ google.com → PROXY → 远端
 
 而是走：
 
-```
+```text
 FINAL, <default-policy>
 ```
 
@@ -333,7 +318,7 @@ FINAL,DIRECT
 
 在 TUN 模式下：
 
-```
+```text
 DIRECT 仍然发生在 VPN 内部
 ```
 
@@ -355,10 +340,11 @@ DIRECT 仍然发生在 VPN 内部
 | FINAL    | default backend      |
 
 ```mermaid
-Request
- → Gateway
-   → match route? yes → upstream
-   → no match → default service
+flowchart LR
+    Req[Request] --> GW[Gateway]
+    GW --> Decision{"match route?"}
+    Decision -->|yes| Upstream[upstream]
+    Decision -->|no| Default[default service]
 ```
 
 ---
