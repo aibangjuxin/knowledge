@@ -1,5 +1,7 @@
 # Pull Request 知识点分析
 
+Analyze my git logs from the last week. Categorize modified files by technical domain. Summarize the key knowledge points and present everything in a Markdown document with a Mermaid mindmap.
+
 本文档基于最近的Pull Request和提交内容，分析并展示相关知识点。
 
 ## 最近提交内容分析

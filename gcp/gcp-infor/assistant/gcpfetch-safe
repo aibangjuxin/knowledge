@@ -1,0 +1,359 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+gcpfetch-safe: best-effort gcpfetch for Linux (bash)
+
+Purpose:
+  Mimic gcpfetch's fields, but do not abort the whole run when:
+  - APIs are disabled
+  - IAM permissions are missing
+  - optional tools (kubectl/gsutil) are absent
+
+Usage:
+  gcpfetch-safe [--project PROJECT_ID] [--full] [--no-logo] [--color|--no-color] [--help]
+
+Options:
+  --project PROJECT_ID  Use this project for all gcloud calls (does not mutate gcloud config).
+  --full                Include extra fields.
+  --no-logo             Do not print the ASCII logo.
+  --color               Force ANSI colors (even if stdout isn't a TTY).
+  --no-color            Disable ANSI colors.
+  --help                Show this help.
+EOF
+}
+
+project_override=""
+want_full=false
+want_logo=true
+want_color=auto
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --project) project_override="${2:-}"; shift ;;
+    --full) want_full=true ;;
+    --no-logo) want_logo=false ;;
+    --color) want_color=always ;;
+    --no-color) want_color=never ;;
+    --help|-h) usage; exit 0 ;;
+    *) echo "Unknown arg: $1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+supports_color() {
+  [[ "${want_color}" == "never" ]] && return 1
+  [[ "${TERM:-}" == "dumb" ]] && return 1
+  [[ "${want_color}" == "always" ]] && return 0
+  [[ -t 1 ]] || return 1
+  return 0
+}
+
+if supports_color; then
+  c_reset=$'\033[0m'
+  c_dim=$'\033[2m'
+  c_key=$'\033[1;33m'
+  c_value=$'\033[0;36m'
+else
+  c_reset=""
+  c_dim=""
+  c_key=""
+  c_value=""
+fi
+
+cmd_exists() { command -v "$1" >/dev/null 2>&1; }
+
+if ! cmd_exists gcloud; then
+  echo "Error: gcloud command not found. Please install Google Cloud SDK." >&2
+  exit 1
+fi
+
+gcloud_cmd() {
+  if [[ -n "$project_override" ]]; then
+    CLOUDSDK_CORE_PROJECT="$project_override" gcloud "$@"
+  else
+    gcloud "$@"
+  fi
+}
+
+safe_val() {
+  # Usage: safe_val DEFAULT -- command args...
+  local fallback="$1"; shift
+  local out=""
+  if out="$("$@" 2>/dev/null)" && [[ -n "$out" ]]; then
+    echo "$out"
+  else
+    echo "$fallback"
+  fi
+}
+
+safe_count_lines() {
+  # Usage: safe_count_lines DEFAULT -- command args...
+  local fallback="$1"; shift
+  local out=""
+  if out="$("$@" 2>/dev/null)"; then
+    echo "$out" | wc -l | tr -d ' '
+  else
+    echo "$fallback"
+  fi
+}
+
+get_project() { safe_val "N/A" gcloud_cmd config get-value project; }
+get_account() { safe_val "N/A" gcloud_cmd config get-value account; }
+get_region() { safe_val "N/A" gcloud_cmd config get-value compute/region; }
+get_zone() { safe_val "N/A" gcloud_cmd config get-value compute/zone; }
+
+get_gce_instances() {
+  local names count
+  names="$(gcloud_cmd compute instances list --format='value(name)' 2>/dev/null || true)"
+  count="$(echo "$names" | sed '/^$/d' | wc -l | tr -d ' ')"
+  if [[ "$count" == "0" ]]; then
+    echo "0"
+    return
+  fi
+  local first
+  first="$(echo "$names" | head -n 5 | paste -sd, - | sed 's/,/, /g')"
+  if [[ "$count" -gt 5 ]]; then echo "$count ($first, ...)"; else echo "$count ($first)"; fi
+}
+
+get_secrets() {
+  local names count
+  names="$(gcloud_cmd secrets list --format='value(name)' 2>/dev/null || true)"
+  count="$(echo "$names" | sed '/^$/d' | wc -l | tr -d ' ')"
+  if [[ "$count" == "0" ]]; then
+    echo "0"
+    return
+  fi
+  local first
+  first="$(echo "$names" | head -n 10 | paste -sd, - | sed 's/,/, /g')"
+  if [[ "$count" -gt 10 ]]; then echo "$count (first 10: $first, ...)"; else echo "$count ($first)"; fi
+}
+
+get_gke_clusters() {
+  local out count names
+  out="$(gcloud_cmd container clusters list --format='value(name)' 2>/dev/null || true)"
+  count="$(echo "$out" | sed '/^$/d' | wc -l | tr -d ' ')"
+  if [[ "$count" == "0" ]]; then
+    echo "0"
+    return
+  fi
+  names="$(echo "$out" | paste -sd, - | sed 's/,/, /g')"
+  echo "$count ($names)"
+}
+
+get_gke_nodes() {
+  local list total
+  list="$(gcloud_cmd container clusters list --format='value(name,location)' 2>/dev/null || true)"
+  if [[ -z "$list" ]]; then
+    echo "0 (no clusters)"
+    return
+  fi
+  total=0
+  while read -r name location; do
+    [[ -z "${name:-}" || -z "${location:-}" ]] && continue
+    nodes="$(gcloud_cmd container clusters describe "$name" --location="$location" --format='value(currentNodeCount)' 2>/dev/null || echo 0)"
+    [[ "$nodes" =~ ^[0-9]+$ ]] || nodes=0
+    total=$((total + nodes))
+  done <<< "$list"
+  echo "$total"
+}
+
+get_gke_deployments() {
+  if ! cmd_exists kubectl; then
+    echo "N/A (kubectl missing)"
+    return
+  fi
+  local list total
+  list="$(gcloud_cmd container clusters list --format='value(name,location)' 2>/dev/null || true)"
+  if [[ -z "$list" ]]; then
+    echo "0 (no clusters)"
+    return
+  fi
+  total=0
+  while read -r name location; do
+    [[ -z "${name:-}" || -z "${location:-}" ]] && continue
+    gcloud_cmd container clusters get-credentials "$name" --location="$location" --quiet >/dev/null 2>&1 || continue
+    deployments="$(kubectl get deployments --all-namespaces --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo 0)"
+    [[ "$deployments" =~ ^[0-9]+$ ]] || deployments=0
+    total=$((total + deployments))
+  done <<< "$list"
+  echo "$total"
+}
+
+get_buckets() {
+  if cmd_exists gsutil; then
+    safe_count_lines "0" gsutil ls
+  else
+    echo "N/A (gsutil missing)"
+  fi
+}
+
+get_vpcs() {
+  local out count names
+  out="$(gcloud_cmd compute networks list --format='value(name)' 2>/dev/null || true)"
+  count="$(echo "$out" | sed '/^$/d' | wc -l | tr -d ' ')"
+  if [[ "$count" == "0" ]]; then
+    echo "0"
+    return
+  fi
+  names="$(echo "$out" | paste -sd, - | sed 's/,/, /g')"
+  echo "$count ($names)"
+}
+
+get_subnets() {
+  safe_count_lines "0" gcloud_cmd compute networks subnets list --format='value(name)'
+}
+
+get_firewall_rules() {
+  safe_count_lines "0" gcloud_cmd compute firewall-rules list --format='value(name)'
+}
+
+get_load_balancers() {
+  safe_count_lines "0" gcloud_cmd compute forwarding-rules list --format='value(name)'
+}
+
+get_service_accounts() {
+  safe_count_lines "0" gcloud_cmd iam service-accounts list --format='value(email)'
+}
+
+get_cloud_sql() {
+  local out count names
+  out="$(gcloud_cmd sql instances list --format='value(name)' 2>/dev/null || true)"
+  count="$(echo "$out" | sed '/^$/d' | wc -l | tr -d ' ')"
+  if [[ "$count" == "0" ]]; then
+    echo "0"
+    return
+  fi
+  names="$(echo "$out" | paste -sd, - | sed 's/,/, /g')"
+  echo "$count ($names)"
+}
+
+get_cloud_run() {
+  safe_count_lines "0" gcloud_cmd run services list --format='value(metadata.name)'
+}
+
+get_cloud_functions() {
+  safe_count_lines "0" gcloud_cmd functions list --format='value(name)'
+}
+
+project="$(get_project)"
+account="$(get_account)"
+region="$(get_region)"
+zone="$(get_zone)"
+gce_instances="$(get_gce_instances)"
+secrets="$(get_secrets)"
+gke_clusters="$(get_gke_clusters)"
+gke_nodes="$(get_gke_nodes)"
+gke_deployments="$(get_gke_deployments)"
+buckets="$(get_buckets)"
+vpcs="$(get_vpcs)"
+subnets="$(get_subnets)"
+
+declare -a info_lines
+info_lines+=("${c_value}GCP Platform Info${c_reset}")
+info_lines+=("${c_dim}------------------${c_reset}")
+info_lines+=("${c_key}Project:${c_reset} ${project}")
+info_lines+=("${c_key}Account:${c_reset} ${account}")
+info_lines+=("${c_key}Region:${c_reset} ${region}")
+info_lines+=("${c_key}Zone:${c_reset} ${zone}")
+info_lines+=("")
+info_lines+=("${c_key}GCE Instances:${c_reset} ${gce_instances}")
+info_lines+=("${c_key}Secrets:${c_reset} ${secrets}")
+info_lines+=("${c_key}GKE Clusters:${c_reset} ${gke_clusters}")
+info_lines+=("${c_key}GKE Nodes:${c_reset} ${gke_nodes}")
+info_lines+=("${c_key}GKE Deployments:${c_reset} ${gke_deployments}")
+info_lines+=("${c_key}Storage Buckets:${c_reset} ${buckets}")
+info_lines+=("${c_key}VPCs:${c_reset} ${vpcs}")
+info_lines+=("${c_key}Subnets:${c_reset} ${subnets}")
+
+if $want_full; then
+  firewall_rules="$(get_firewall_rules)"
+  load_balancers="$(get_load_balancers)"
+  service_accounts="$(get_service_accounts)"
+  cloud_sql="$(get_cloud_sql)"
+  cloud_run="$(get_cloud_run)"
+  cloud_functions="$(get_cloud_functions)"
+
+  info_lines+=("")
+  info_lines+=("${c_key}Firewall Rules:${c_reset} ${firewall_rules}")
+  info_lines+=("${c_key}Load Balancers:${c_reset} ${load_balancers}")
+  info_lines+=("${c_key}Service Accounts:${c_reset} ${service_accounts}")
+  info_lines+=("${c_key}Cloud SQL:${c_reset} ${cloud_sql}")
+  info_lines+=("${c_key}Cloud Run:${c_reset} ${cloud_run}")
+  info_lines+=("${c_key}Cloud Functions:${c_reset} ${cloud_functions}")
+fi
+
+declare -a logo_lines_plain
+declare -a logo_lines
+if $want_logo; then
+  logo_lines_plain+=("        ___           ___      ")
+  logo_lines_plain+=("       /  /\\         /  /\\     ")
+  logo_lines_plain+=("      /  /:/_       /  /:/     ")
+  logo_lines_plain+=("     /  /:/ /\\     /  /:/      ")
+  logo_lines_plain+=("    /  /:/_/::\\   /  /:/  ___  ")
+  logo_lines_plain+=("   /__/:/__\\/\\:\\ /__/:/  /  /\\ ")
+  logo_lines_plain+=("   \\  \\:\\ /~~/:/ \\  \\:\\ /  /:/ ")
+  logo_lines_plain+=("    \\  \\:\\  /:/   \\  \\:\\  /:/  ")
+  logo_lines_plain+=("     \\  \\:\\/:/     \\  \\:\\/:/   ")
+  logo_lines_plain+=("      \\  \\::/       \\  \\::/    ")
+  logo_lines_plain+=("       \\__\\/         \\__\\/     ")
+  logo_lines_plain+=("                               ")
+  logo_lines_plain+=("   Google Cloud Platform       ")
+
+  if supports_color; then
+    declare -a logo_colors
+    logo_colors+=($'\033[38;5;33m')
+    logo_colors+=($'\033[38;5;33m')
+    logo_colors+=($'\033[38;5;39m')
+    logo_colors+=($'\033[38;5;39m')
+    logo_colors+=($'\033[38;5;45m')
+    logo_colors+=($'\033[38;5;45m')
+    logo_colors+=($'\033[38;5;51m')
+    logo_colors+=($'\033[38;5;51m')
+    logo_colors+=($'\033[38;5;87m')
+    logo_colors+=($'\033[38;5;87m')
+    logo_colors+=($'\033[38;5;123m')
+    logo_colors+=($'\033[38;5;123m')
+    logo_colors+=($'\033[1;37m')
+
+    for ((i=0; i<${#logo_lines_plain[@]}; i++)); do
+      logo_lines+=("${logo_colors[$i]}${logo_lines_plain[$i]}${c_reset}")
+    done
+  else
+    logo_lines=("${logo_lines_plain[@]}")
+  fi
+fi
+
+max_left=0
+if $want_logo; then
+  for line in "${logo_lines_plain[@]}"; do
+    ((${#line} > max_left)) && max_left=${#line}
+  done
+fi
+
+rows=${#info_lines[@]}
+if $want_logo && ((${#logo_lines[@]} > rows)); then rows=${#logo_lines[@]}; fi
+
+for ((i=0; i<rows; i++)); do
+  left=""
+  left_plain=""
+  right=""
+
+  if $want_logo && (( i < ${#logo_lines[@]} )); then
+    left="${logo_lines[$i]}"
+    left_plain="${logo_lines_plain[$i]}"
+  fi
+  if (( i < ${#info_lines[@]} )); then
+    right="${info_lines[$i]}"
+  fi
+
+  if $want_logo; then
+    pad=$((max_left - ${#left_plain}))
+    ((pad < 0)) && pad=0
+    printf "%s%*s  %s\n" "$left" "$pad" "" "$right"
+  else
+    printf "%s\n" "$right"
+  fi
+done
+
