@@ -1,5 +1,26 @@
 # GCPFetch - GCP Platform Information Tool
 
+gcp/gcpfetch - 主要工具，类似 neofetch 的 GCP 信息展示
+
+显示项目、账号、区域等基础配置
+GCE 实例、GKE 集群/节点/部署数量
+Secret Manager、存储桶、VPC、子网等
+--full 模式显示更多资源（防火墙、LB、Cloud SQL、Cloud Run 等）
+gcp-explore.sh
+ - 探索脚本，全面扫描 GCP 资源
+
+21 个资源类别的详细列表
+包括 Compute、GKE、网络、存储、数据库、安全、监控等
+适合做平台审计和资源盘点
+gcp-functions.sh
+ - 函数库（50+ 函数）
+
+可被其他脚本 source 复用
+涵盖所有主要 GCP 服务的查询函数
+包含工具函数（颜色输出、分隔符等）
+gcpfetch-README.md
+ - 完整文档
+
 类似 `neofetch` 风格的 GCP 平台信息获取工具，快速展示当前 GCP 项目的配置和资源概览。
 
 ## 功能特性

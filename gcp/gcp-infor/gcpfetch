@@ -155,11 +155,21 @@ get_gke_deployments() {
     return
   fi
   
+  # Check if kubectl is available
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo "N/A (kubectl not found)"
+    return
+  fi
+  
   cluster_count="$(gcloud container clusters list --format='value(name)' 2>/dev/null | wc -l | tr -d ' ')"
   if [[ "$cluster_count" == "0" ]]; then
     echo "0 (no clusters)"
     return
   fi
+  
+  # Save current kubectl context
+  local original_context
+  original_context="$(kubectl config current-context 2>/dev/null || true)"
   
   total_deployments=0
   while IFS= read -r cluster; do
@@ -174,6 +184,11 @@ get_gke_deployments() {
       total_deployments=$((total_deployments + deployments))
     fi
   done < <(gcloud container clusters list --format='value(name)' 2>/dev/null)
+  
+  # Restore original kubectl context
+  if [[ -n "$original_context" ]]; then
+    kubectl config use-context "$original_context" >/dev/null 2>&1 || true
+  fi
   
   echo "$total_deployments"
 }

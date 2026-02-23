@@ -129,6 +129,16 @@ gcp_get_cluster_nodes() {
 
 # 获取所有 GKE 集群的 Deployment 总数（需要 kubectl）
 gcp_count_gke_deployments() {
+  # Check if kubectl is available
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo "0"
+    return
+  fi
+  
+  # Save current kubectl context
+  local original_context
+  original_context="$(kubectl config current-context 2>/dev/null || true)"
+  
   local total_deployments=0
   while IFS= read -r cluster; do
     [[ -z "$cluster" ]] && continue
@@ -141,6 +151,12 @@ gcp_count_gke_deployments() {
       total_deployments=$((total_deployments + deployments))
     fi
   done < <(gcloud container clusters list --format='value(name)' 2>/dev/null)
+  
+  # Restore original kubectl context
+  if [[ -n "$original_context" ]]; then
+    kubectl config use-context "$original_context" >/dev/null 2>&1 || true
+  fi
+  
   echo "$total_deployments"
 }
 
@@ -150,8 +166,27 @@ gcp_count_cluster_deployments() {
   local location="$2"
   [[ -z "$cluster" ]] && { echo "Usage: gcp_count_cluster_deployments CLUSTER_NAME LOCATION" >&2; return 1; }
   [[ -z "$location" ]] && { echo "Usage: gcp_count_cluster_deployments CLUSTER_NAME LOCATION" >&2; return 1; }
+  
+  # Check if kubectl is available
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo "0"
+    return 1
+  fi
+  
+  # Save current kubectl context
+  local original_context
+  original_context="$(kubectl config current-context 2>/dev/null || true)"
+  
   gcloud container clusters get-credentials "$cluster" --location="$location" --quiet 2>/dev/null || return 1
-  kubectl get deployments --all-namespaces --no-headers 2>/dev/null | wc -l | tr -d ' '
+  local count
+  count=$(kubectl get deployments --all-namespaces --no-headers 2>/dev/null | wc -l | tr -d ' ')
+  
+  # Restore original kubectl context
+  if [[ -n "$original_context" ]]; then
+    kubectl config use-context "$original_context" >/dev/null 2>&1 || true
+  fi
+  
+  echo "$count"
 }
 
 # ============================================

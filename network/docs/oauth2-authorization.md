@@ -1,4 +1,37 @@
+- export NODE_TLS_REJECT_UNAUTHORIZED=0
+- `./Electron --open-url "antigravity://auth"`
+- `./Electron --open-url "antigravity://auth" --ignore-certificate-errors`
+- trace-warningsis这个好像没用
 # OAuth 2.0 Authorization Code Flow for Native Apps (RFC 8252)
+
+
+```bash
+# Clash/V2Ray 代理示例（端口7890）
+export HTTP_PROXY=http://127.0.0.1:7222
+export HTTPS_PROXY=http://127.0.0.1:7222
+export ALL_PROXY=socks5://127.0.0.1:7221  # 可选，SOCKS代理
+
+./Electron --open-url "antigravity://auth"
+
+
+./Electron \
+  --proxy-server="http://127.0.0.1:7222" \
+  --proxy-bypass-list="localhost;127.0.0.1;*.local" \
+  --ignore-certificate-errors \
+  --open-url "antigravity://auth"
+
+
+
+```
+
+
+./Electron \
+  --proxy-server="http://127.0.0.1:7890" \
+  --proxy-bypass-list="localhost;127.0.0.1;*.local" \
+  --ignore-certificate-errors \
+  --open-url "antigravity://auth"
+
+
 
 - [RFC 8252: OAuth 2.0 for Native Apps](https://datatracker.ietf.org/doc/html/rfc8252)
 
