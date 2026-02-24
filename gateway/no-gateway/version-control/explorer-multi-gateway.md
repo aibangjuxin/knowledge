@@ -1,6 +1,7 @@
 # 多 Gateway 入口架构设计与实现分析
 
 ## 目录
+
 - [1. 需求分析与架构目标](#1-需求分析与架构目标)
 - [2. 核心问题与架构挑战](#2-核心问题与架构挑战)
 - [3. 推荐架构方案](#3-推荐架构方案)
@@ -18,12 +19,14 @@
 你的平台需要支持两种不同的 API 访问模式：
 
 **标准 API 模式（短域名）**
+
 - 域名：`dev.aibang.com`
 - 路径模式：`/api-name/v1/...`
 - 后端端口：`8443`
 - 用户群：标准平台用户
 
 **非标准 API 模式（长域名）**
+
 - 域名：`*.project.dev.gcp.aibang.com`
 - 路径模式：自定义
 - 后端端口：`443`
@@ -50,12 +53,14 @@
 
 **问题描述**：
 Gateway 资源的 `listeners` 配置中，端口是唯一标识符。如果你需要：
+
 - Gateway-A 监听 443 端口（长域名入口）
 - Gateway-B 监听 8443 端口（短域名入口）
 
 那么这两个 Gateway **必须是独立的资源对象**。
 
 **架构影响**：
+
 ```yaml
 # Gateway-A（长域名）
 spec:
@@ -64,7 +69,6 @@ spec:
     port: 443
     protocol: HTTPS
 ```
-
 
 ```yaml
 # Gateway-B（短域名）
@@ -78,11 +82,13 @@ spec:
 ### 2.2 后端服务统一性挑战
 
 **核心矛盾**：
+
 - 非标准用户的 SVC 监听 443 端口
 - 标准用户的 SVC 监听 8443 端口
 - 你希望最终统一到 8443 端口
 
 **解决思路**：
+
 1. **短期方案**：两个 Gateway 分别指向不同端口的 Service
 2. **长期方案**：通过迁移，让所有用户的 SVC 统一使用 8443，Gateway 层做端口映射
 
@@ -90,10 +96,12 @@ spec:
 
 **场景分析**：
 如果两个 HTTPRoute 都配置了相同的 `hostname` 和 `path`：
+
 - HTTPRoute-A（指向 Gateway-A，443 端口）
 - HTTPRoute-B（指向 Gateway-B，8443 端口）
 
 **GKE Gateway 行为**：
+
 - 只要它们的 `parentRefs` 指向不同的 Gateway，就**不会冲突**
 - 每个 Gateway 独立管理自己的路由规则
 
@@ -470,11 +478,13 @@ gcloud compute backend-services get-health <backend-service-name> \
 **问题**：Gateway 监听 443，但 Service 是 8443，会不会有问题？
 
 **答案**：不会。GKE Gateway 的工作原理：
+
 1. Gateway 的 `listeners.port` 是**外部监听端口**（客户端连接的端口）
 2. HTTPRoute 的 `backendRefs.port` 是**后端服务端口**（Service 的端口）
 3. GCP Load Balancer 会自动处理端口映射
 
 **配置示例**：
+
 ```yaml
 # Gateway 监听 443
 listeners:
@@ -491,10 +501,12 @@ backendRefs:
 **问题**：两个 Gateway 需要不同的证书吗？
 
 **答案**：是的，因为域名不同：
+
 - Gateway-Short 需要 `dev.aibang.com` 的证书
 - Gateway-Long 需要 `*.project.dev.gcp.aibang.com` 的通配符证书
 
 **解决方案**：
+
 ```bash
 # 创建短域名证书 Secret
 kubectl create secret tls tls-cert-short-domain \
@@ -514,11 +526,13 @@ kubectl create secret tls tls-cert-long-domain \
 **问题**：如果一个请求同时匹配两个 HTTPRoute 怎么办？
 
 **答案**：不会发生，因为：
+
 1. 两个 HTTPRoute 的 `parentRefs` 指向不同的 Gateway
 2. 客户端请求只会到达一个 Gateway（基于域名和端口）
 3. 每个 Gateway 只会评估绑定到自己的 HTTPRoute
 
 **架构保证**：
+
 ```mermaid
 graph LR
     Client[客户端] -->|域名解析| Decision{DNS 解析}
@@ -538,11 +552,13 @@ graph LR
 **迁移策略**：
 
 **阶段 1：双栈运行**（当前方案）
+
 - Gateway-Long（443）→ Service-8443
 - Gateway-Short（8443）→ Service-8443
 - 两个入口共存，用户可以选择
 
 **阶段 2：引导迁移**
+
 ```yaml
 # 在 Gateway-Long 的 HTTPRoute 中添加响应头提示
 filters:
@@ -556,6 +572,7 @@ filters:
 ```
 
 **阶段 3：流量切换**
+
 ```yaml
 # 使用权重逐步引导流量
 backendRefs:
@@ -566,6 +583,7 @@ backendRefs:
 ```
 
 **阶段 4：下线旧入口**
+
 ```bash
 # 当 Gateway-Long 流量降至阈值以下时
 kubectl delete gateway gateway-long-domain -n abjx-int-common
@@ -624,6 +642,7 @@ kubectl patch httproute api-route-long-domain -n abjx-int-common --type=json -p=
 ```
 
 **关键点**：
+
 - 两个 HTTPRoute 需要**同步更新**，确保两个入口的版本一致
 - 可以使用 GitOps 工具（如 ArgoCD）自动化这个过程
 - 建议在 CI/CD 中添加验证步骤，确保两个 HTTPRoute 的 backendRefs 一致
@@ -662,12 +681,14 @@ timeline
 ### 7.2 实施检查清单
 
 #### 准备阶段
+
 - [ ] 确认 GKE 集群版本支持 Gateway API
 - [ ] 准备两个域名的 TLS 证书
 - [ ] 确认现有 Service 的端口配置
 - [ ] 评估非标准用户数量和迁移难度
 
 #### 部署阶段
+
 - [ ] 创建 Gateway-Short 资源
 - [ ] 创建 Gateway-Long 资源
 - [ ] 创建统一 Service（8443 端口）
@@ -677,6 +698,7 @@ timeline
 - [ ] 绑定 GCPBackendPolicy
 
 #### 验证阶段
+
 - [ ] 验证 Gateway 状态为 Ready
 - [ ] 验证 HTTPRoute 状态为 Accepted
 - [ ] 验证 Service Endpoints 非空
@@ -686,6 +708,7 @@ timeline
 - [ ] 验证响应头包含正确的 Gateway 类型标识
 
 #### 监控阶段
+
 - [ ] 配置 Prometheus 监控指标
 - [ ] 配置 Cloud Monitoring 告警
 - [ ] 监控 4xx/5xx 错误率
@@ -693,6 +716,7 @@ timeline
 - [ ] 监控 Gateway 和 HTTPRoute 状态变化
 
 #### 迁移阶段（可选）
+
 - [ ] 在长域名响应中添加迁移提示头
 - [ ] 通知非标准用户迁移计划
 - [ ] 监控长域名入口流量趋势
@@ -742,16 +766,19 @@ timeline
 ## 附录：参考资源
 
 ### A. GKE Gateway API 官方文档
+
 - [Gateway API Overview](https://cloud.google.com/kubernetes-engine/docs/concepts/gateway-api)
 - [HTTPRoute Configuration](https://gateway-api.sigs.k8s.io/api-types/httproute/)
 - [GCPBackendPolicy](https://cloud.google.com/kubernetes-engine/docs/how-to/configure-gateway-resources)
 
 ### B. 相关配置文件
+
 - `core-concepts.md`：GKE Gateway API 核心概念
 - `no-gateway-version-control-cn.md`：版本控制最佳实践
 - `no-gateway-version-smoth-switch.md`：平滑切换流程
 
 ### C. 监控指标
+
 ```promql
 # Gateway 健康状态
 gateway_api_gateway_status{namespace="abjx-int-common"}
