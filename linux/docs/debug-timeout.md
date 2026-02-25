@@ -474,3 +474,71 @@ sudo strace -f -tt -e trace=network -p <nginx-worker-pid>
 ### E.3 结论规则
 - 仅 Insomnia 失败、curl 稳定成功：优先判定为客户端工具配置问题。  
 - Insomnia 与 curl 同时失败且时刻一致：优先看链路配置问题。  
+
+---
+
+## Appendix F: 本次问题最终 RCA（2026-02-25）
+
+### F.1 最终根因
+
+根因不在 A/B/C/D 链路超时配置，而在 **终端用户应用容器启动参数**：
+
+- 用户在构建镜像时注入了 `GUNICORN_CMD_ARGS`，覆盖了平台默认 gunicorn 配置。
+- 覆盖后的启动参数未包含 `timeout`，导致未继承模板里的 `timeout = 0`（无限等待）。
+- 同时 `workers=3` 覆盖了平台期望值 `workers=4`，现场进程表现为 `3+1`，而不是期望的 `4+1`。
+
+### F.2 现场证据
+
+用户 Pod 内环境变量：
+
+```bash
+env | grep GUNICORN
+# GUNICORN_CMD_ARGS=--bind=0.0.0.0:8443 --workers=3 --keyfile=/opt/keystore/aibang-sbrt-key.pem --certfile=/opt/keystore/aibang-sbrt-cert.pem
+```
+
+平台模板（期望配置）：
+
+```python
+# /opt/conf/gunicorn.conf.py
+import os
+
+workers = 4
+bind = "0.0.0.0:8443"
+keyfile = "/opt/keystore/aibang-sbrt-key.pem"
+certfile = "/opt/keystore/aibang-sbrt-cert.pem"
+timeout = 0
+
+os.environ["SCRIPT_NAME"] = "/" + os.getenv("apiName") + "/v" + os.getenv("minorVersion")
+```
+
+进程侧验证（错误 Pod）：
+- worker 数表现为 `3+1`（主进程 + 3 worker），与期望 `4+1` 不一致。
+
+镜像侧验证（确认构建期注入）：
+
+```bash
+# 建议命令（修正拼写）
+gcrane config <image-ref> | jq
+```
+
+### F.3 修复步骤（已验证有效）
+
+1. 从用户镜像/启动参数中移除或修正 `GUNICORN_CMD_ARGS`，避免覆盖平台模板关键项。  
+2. 若必须自定义，显式补齐平台基线参数：
+   - `--workers=4`
+   - `--timeout=0`（或平台统一值）
+3. 重新构建并发布镜像，滚动重启 Pod。  
+4. Pod 内复核：
+   - `env | grep GUNICORN`
+   - `ps -ef | grep gunicorn`
+5. 重新执行 `summary` 长耗时接口验证，确认不再出现提前关闭。
+
+### F.4 预防机制（建议纳入平台规范）
+
+- 在 CI 加镜像策略检查：若检测到 `GUNICORN_CMD_ARGS`，必须校验是否包含平台必选参数（`workers`、`timeout`、证书路径）。  
+- 在部署准入（Admission/OPA）加规则：禁止业务随意覆盖运行时关键参数，或要求通过白名单方式覆盖。  
+- 在运行时巡检脚本中加入以下项：
+  - `gunicorn` 实际命令行参数
+  - worker 数是否符合模板
+  - timeout 是否符合平台基线
+- 在变更单中记录“是否覆盖平台启动参数”作为必填项。  
