@@ -65,6 +65,8 @@ graph TB
         C2[Subnet-C1<br/>10.2.1.0/24]
     end
 
+    W[⚠️ VPC Peering 不是传递的<br/>A 无法直接访问 C]
+
     A1 -.->|VPC Peering| B1
     B1 -.->|VPC Peering| C1
 
@@ -77,8 +79,7 @@ graph TB
     style A1 fill:#e3f2fd
     style B1 fill:#fff3e0
     style C1 fill:#f3e5f5
-
-    note right of A1: ⚠️ VPC Peering 不是传递的\nA 无法直接访问 C
+    style W fill:#ffebee,stroke:#c62828,stroke-width:2px
 ```
 
 **重要说明：**
@@ -402,6 +403,7 @@ graph TB
         S1[Spoke 1<br/>生产环境<br/>10.0.0.0/16]
         S2[Spoke 2<br/>测试环境<br/>10.1.0.0/16]
         S3[Spoke 3<br/>开发环境<br/>10.2.0.0/16]
+        N[💡 Hub-Spoke 架构<br/>所有 Spoke 通过 Hub 通信]
     end
 
     H --> S1
@@ -412,8 +414,7 @@ graph TB
     style S1 fill:#fff3e0
     style S2 fill:#f3e5f5
     style S3 fill:#e8f5e8
-
-    note right of H: Hub-Spoke 架构<br/>所有 Spoke 通过 Hub 通信
+    style N fill:#e8f5e9,stroke:#4caf50,stroke-width:2px
 ```
 
 **Hub-Spoke 架构优势：**
