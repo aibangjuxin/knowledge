@@ -326,6 +326,72 @@ gcloud projects add-iam-policy-binding <MASTER_PROJECT_ID> \
 - 如果你的核心诉求是 **Tenant 独立计费 + Cloud Armor 自治**，应优先推进方案 A 或 PSC 方案
 
 
+# studio
+
+
+
+针对你在 Shared VPC 环境下进行多租户架构设计（Internal HTTPS LB 跨项目挂载后端）的疑问，基于 Google Cloud 官方最新的架构支持和网络限制，以下是深入的探索结果和可行性确认。
+
+### 1. 核心问题确认：Backend Service（Project A）绑定 MIG/NEG（Project B）是否官方支持？
+
+**结论：官方不支持这种架构方向。**
+
+Google Cloud 官方文档中有明确的硬性限制：
+> **“对于实例组 (MIG) 和可用区级 NEG (Zonal NEGs)，所有后端（Backend）都必须与后端服务 (Backend Service) 位于同一个项目和同一个区域中。”**
+
+这意味着，如果你想将后端的 MIG 或 GKE NEG 放在 Master 项目，那么 **Backend Service 也必须强制建在 Master 项目**。因此，“方案一（将 Backend Service 放在 Tenant 项目中，直接指向 Master 的 MIG/NEG）”在底层 API 层面是无法实现的。
+
+---
+
+### 2. 方案二（当前实现方案）的评估与最佳实践
+
+你当前实现的**方案二**（Frontend / URL Map 在 Tenant 项目 $\rightarrow$ Backend Service 在 Master 项目 $\rightarrow$ MIG 在 Master 项目），这在 GCP 中被称为 **Cross-project service referencing（跨项目服务引用）**。**这是官方完全支持并推荐的架构模式**。
+
+如果你决定继续沿用此架构，以下是相关的最佳实践与限制：
+
+*   **跨项目 IAM 权限管控（非常重要）**：
+    你提到“放在 tenant 好像必须得给 tenant project 的 sa compute.instances.admin”。**这是不安全且不需要的**。
+    在官方支持的“跨项目引用”中，你只需要赋予 Tenant 项目的负载均衡管理员/服务账号在目标 Backend Service（Master侧）上 **`roles/compute.loadBalancerServiceUser`（负载均衡器服务用户）** 的权限即可。这使得 Tenant 只能将流量路由到该 Backend Service，而绝对无法管理或重启 Master 项目的底层虚机和 GKE。
+*   **Health Check 归属与可见性**：
+    健康检查（Health Check）必须与 Backend Service 位于同一个项目（即 Master 项目）。这意味着 Tenant 侧无法在其 GCP Console 中直观地看到后端的健康状态，发生 `502 Bad Gateway` 时排障依赖平台方。
+*   **生命周期管理限制**：
+    Tenant 销毁其项目时，无法自动级联删除 Master 项目中的 Backend Service。Master 侧必须建立完善的自动化回收机制，防止僵尸 Backend Service 长期消耗配额。
+*   **计费架构痛点**：
+    如你所忧虑的，因为 **Cloud Armor 必须绑定在 Backend Service 上**，而 Backend Service 位于 Master 项目，这意味着**所有的 Cloud Armor 请求费用、DDoS 防护费用均会出在 Master 项目的账单上**。如果仅仅依赖 GCP 原始账单，无法做到多租户直接分账。
+
+---
+
+### 3. 从多租户隔离、授权与独立计费角度，推荐何种架构？
+
+面对你希望**“租户独立管理 Cloud Armor 并自担费用”**以及**“高度网络和权限安全管控”**的需求，单纯的 Shared VPC 跨项目引用存在计费和耦合缺陷。
+
+为此，**强烈推荐 Google Cloud 的 Private Service Connect (PSC) 架构模式。**
+
+#### 推荐方案：基于 PSC 的多租户架构（Google 官方最推荐的 SaaS/多租户方案）
+通过 Private Service Connect，你可以将 Master 中的 GKE 或 MIG 打包发布为一个“内部服务”，供各 Tenant 消费：
+
+1.  **Master 项目（服务提供方）**：
+    *   在 MIG/GKE 前面部署一个 Internal Load Balancer（充当发布层）。
+    *   通过创建 **Service Attachment** 将这个服务暴露出来。此时不需要给任何 Tenant 授予底层 Compute 相关的 IAM 权限。
+2.  **Tenant 项目（服务消费方）**：
+    *   在 Tenant 项目中创建 **PSC NEG（Private Service Connect NEG）**。这个 NEG 直接指向 Master 项目的 Service Attachment。
+    *   **关键点来了**：因为 PSC NEG 属于 Tenant 项目，所以 **Backend Service 就可以创建在 Tenant 项目中了！**
+    *   Tenant 项目的完整链路：Tenant 自己的 ILB $\rightarrow$ Tenant 自己的 Backend Service $\rightarrow$ Tenant 自己的 Cloud Armor $\rightarrow$ Tenant 自己的 PSC NEG $\rightarrow$ (PSC 魔法隧道) $\rightarrow$ Master 项目的 GKE。
+
+**采用 PSC 架构的核心优势：**
+*   **完美解决计费痛点**：Backend Service 和 Cloud Armor 全部落在了 Tenant 项目内。GCP 原生就会将针对该入口的所有 Cloud Armor 防护费用、安全扫描费用和 Load Balancer 流量费用精准计入 Tenant 项目。
+*   **权限管控做到极致（Zero IAM Crossing）**：Master 和 Tenant 之间不需要跨项目授予任何 IAM 角色（甚至不再依赖 Shared VPC）。Tenant 的故障或恶意操作完全被隔离在 Tenant 项目边界内，彻底消除了越权隐患。
+*   **扩展性**：每个 Tenant 可以独立申请属于自己的 SSL 证书、自定义 URL Map 路由规则，随意修改属于自己的 WAF 拦截策略，而无需与 Master 平台方产生任何运维交集。
+
+### 总结建议
+
+如果你希望尽早进入生产环境且**预算允许一定的开发改造**：
+请立刻评估并向 **Private Service Connect (PSC) NEG** 模式转型。这是唯一能满足“Cloud Armor 配置与计费完全下放给 Tenant”，同时“后端重负载完全归属 Master”的 Google Cloud 官方最佳实践。
+
+如果你决定**维持现状的方案 B（Cross-project referencing）**：
+1.  收回 Tenant 项目对 Master 项目高危的 `compute.instances.admin` 授权，改为使用最低权限策略的 `roles/compute.loadBalancerServiceUser`。
+2.  为了解决计费问题，在通过 IaC（如 Terraform）为 Tenant 创建 Master 项目下的 Backend Service 时，必须打上 GCP 资源 Label（例如 `tenant: company-a`）。随后通过将 GCP 账单导出至 BigQuery，基于 Label 按资源维度进行二次成本摊派（Chargeback）。
+
 # Gemini
 
 This is a classic "Platform vs. Tenant" architectural challenge. In a Shared VPC environment, Google Cloud provides several paths, but the choice between Cross-Project Backend Attachment and Private Service Connect (PSC) hinges on how much "trust" you have between the Master and Tenant projects.
