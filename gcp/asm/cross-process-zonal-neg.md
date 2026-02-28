@@ -325,6 +325,444 @@ gcloud projects add-iam-policy-binding <MASTER_PROJECT_ID> \
 - 方案 B（当前实现）**工程最简单**，但计费和权限隔离需要额外工程保障
 - 如果你的核心诉求是 **Tenant 独立计费 + Cloud Armor 自治**，应优先推进方案 A 或 PSC 方案
 
+# PSC 大规模多租户可行性分析与落地指南
+
+## 🔍 问题分析
+
+核心评估维度：
+1. PSC 的网络/IP/Quota 限制
+2. 100+ Tenant 连接单一 Master 的可行性
+3. 具体落地操作步骤
+
+---
+
+## 📊 PSC 核心限制速查
+
+### Quota & 规模限制
+
+| 限制项 | 默认值 | 是否可申请提升 | 100 Tenant 影响 |
+|--------|--------|---------------|----------------|
+| PSC Endpoints per VPC | 20 | ✅ 可提升 | **每个 Tenant VPC 消耗 1 个** → 需确认每个 Tenant VPC 配额 |
+| PSC Service Attachments per Region | 20 | ✅ 可提升 | **Master 侧消耗**，100 Tenant 共用 1 个 SA 即可 |
+| NAT Subnets per Service Attachment | 10 | ✅ 可提升 | Master 侧 NAT 子网规划关键项 |
+| Consumer Connections per Service Attachment | **250** | ✅ 可提升 | ✅ 100 Tenant 默认可满足 |
+| Forwarding Rules per Project | 15（内部） | ✅ 可提升 | 每个 Tenant 消耗 1 个 PSC Endpoint（Forwarding Rule） |
+
+> **关键结论**：100 Tenant 连接 1 个 Master PSC Service Attachment，**默认 Quota 250 Consumer Connections 已够用**，但需要关注每个 Tenant 项目的 Forwarding Rule 配额。
+
+---
+
+### IP 地址规划限制
+
+```
+PSC Endpoint（Consumer 侧）：
+  - 每个 Tenant 项目需要 1 个 Internal IP（来自 Tenant 的子网）
+  - IP 由 Tenant 自行管理，不消耗 Master 的 IP 空间
+  - ✅ 完全独立，互不影响
+
+PSC NAT Subnet（Producer/Master 侧）：
+  - 需要专用 NAT 子网，与业务子网严格隔离
+  - 每个 NAT 子网支持的并发连接数 = 子网 IP 数量 × 64000 端口
+  - 推荐：/24 子网（254 IP × 64000 = ~1600 万并发连接）
+  - ⚠️ NAT 子网不能用于其他 VM 或服务
+```
+
+**NAT Subnet 容量规划**：
+
+| 子网大小 | 可用 IP | 最大并发连接 | 适用 Tenant 规模 |
+|----------|---------|------------|----------------|
+| /28 | 11 | ~700K | < 20 Tenant |
+| /24 | 254 | ~16M | 100~500 Tenant ✅ |
+| /22 | 1022 | ~65M | 1000+ Tenant |
+
+---
+
+## 📐 100 Tenant PSC 架构设计
+
+```mermaid
+graph TD
+    subgraph MasterProject[Master Project]
+        GKE[GKE Cluster]
+        ILB_MASTER["Internal LB (ILB) - Producer"]
+        SA["PSC Service Attachment\n(1个或按Region多个)"]
+        NAT_SUBNET["NAT Subnet /24\n(专用，不可复用)"]
+        AcceptList["Accept List\n(Tenant Project 白名单)"]
+    end
+
+    subgraph TenantA[Tenant A Project]
+        EP_A["PSC Endpoint (Forwarding Rule)\nInternal IP: 10.1.0.5"]
+        ILB_A["Internal HTTPS LB"]
+        BS_A["Backend Service"]
+        CA_A["Cloud Armor (Tenant A)"]
+        PSC_NEG_A["PSC NEG\n指向 EP_A"]
+    end
+
+    subgraph TenantB[Tenant B Project]
+        EP_B["PSC Endpoint (Forwarding Rule)\nInternal IP: 10.2.0.5"]
+        ILB_B["Internal HTTPS LB"]
+        BS_B["Backend Service"]
+        CA_B["Cloud Armor (Tenant B)"]
+        PSC_NEG_B["PSC NEG\n指向 EP_B"]
+    end
+
+    subgraph TenantN[Tenant N Project ...]
+        EP_N["PSC Endpoint N"]
+    end
+
+    GKE --> ILB_MASTER
+    ILB_MASTER --> SA
+    SA --> NAT_SUBNET
+    SA --> AcceptList
+
+    EP_A -->|"PSC Connection"| SA
+    EP_B -->|"PSC Connection"| SA
+    EP_N -->|"PSC Connection"| SA
+
+    ILB_A --> BS_A --> CA_A --> PSC_NEG_A --> EP_A
+    ILB_B --> BS_B --> CA_B --> PSC_NEG_B --> EP_B
+```
+
+---
+
+## 🛠 详细操作步骤
+
+### Step 1：Master 项目 - 创建 NAT 专用子网
+
+```bash
+# NAT 子网必须专用，purpose=PRIVATE_SERVICE_CONNECT
+gcloud compute networks subnets create psc-nat-subnet \
+  --network=<SHARED_VPC_OR_MASTER_VPC> \
+  --region=<REGION> \
+  --range=10.100.0.0/24 \
+  --purpose=PRIVATE_SERVICE_CONNECT \
+  --project=<MASTER_PROJECT_ID>
+
+# 验证
+gcloud compute networks subnets describe psc-nat-subnet \
+  --region=<REGION> \
+  --project=<MASTER_PROJECT_ID> \
+  --format="value(purpose)"
+# 期望输出: PRIVATE_SERVICE_CONNECT
+```
+
+### Step 2：Master 项目 - 创建 Producer 侧 Internal LB
+
+```bash
+# 2.1 创建 Health Check
+gcloud compute health-checks create http gke-backend-hc \
+  --port=8080 \
+  --request-path=/healthz \
+  --region=<REGION> \
+  --project=<MASTER_PROJECT_ID>
+
+# 2.2 创建 Backend Service（指向 GKE NEG）
+gcloud compute backend-services create gke-producer-bs \
+  --load-balancing-scheme=INTERNAL_MANAGED \
+  --protocol=HTTP \
+  --region=<REGION> \
+  --health-checks=gke-backend-hc \
+  --health-checks-region=<REGION> \
+  --project=<MASTER_PROJECT_ID>
+
+# 2.3 添加 GKE NEG 到 Backend Service
+gcloud compute backend-services add-backend gke-producer-bs \
+  --network-endpoint-group=<GKE_NEG_NAME> \
+  --network-endpoint-group-zone=<ZONE> \
+  --region=<REGION> \
+  --project=<MASTER_PROJECT_ID>
+
+# 2.4 创建 URL Map
+gcloud compute url-maps create gke-producer-urlmap \
+  --default-service=gke-producer-bs \
+  --region=<REGION> \
+  --project=<MASTER_PROJECT_ID>
+
+# 2.5 创建 Target HTTP Proxy
+gcloud compute target-http-proxies create gke-producer-proxy \
+  --url-map=gke-producer-urlmap \
+  --region=<REGION> \
+  --project=<MASTER_PROJECT_ID>
+
+# 2.6 创建 Forwarding Rule（ILB，仅内部，不暴露外部）
+gcloud compute forwarding-rules create gke-producer-ilb \
+  --load-balancing-scheme=INTERNAL_MANAGED \
+  --network=<VPC_NETWORK> \
+  --subnet=<BACKEND_SUBNET> \
+  --address=<RESERVED_INTERNAL_IP> \
+  --region=<REGION> \
+  --target-http-proxy=gke-producer-proxy \
+  --target-http-proxy-region=<REGION> \
+  --ports=80 \
+  --project=<MASTER_PROJECT_ID>
+```
+
+### Step 3：Master 项目 - 创建 PSC Service Attachment
+
+```bash
+# 关键参数说明：
+# --nat-subnets: 上面创建的专用 NAT 子网
+# --connection-preference: ACCEPT_MANUAL 手动审批（推荐，安全可控）
+# --consumer-accept-list: 预填写已知 Tenant 项目，后续可动态添加
+
+gcloud compute service-attachments create gke-psc-service-attachment \
+  --region=<REGION> \
+  --producer-forwarding-rule=gke-producer-ilb \
+  --connection-preference=ACCEPT_MANUAL \
+  --nat-subnets=psc-nat-subnet \
+  --consumer-accept-list=<TENANT_PROJECT_1>=10,<TENANT_PROJECT_2>=10 \
+  --project=<MASTER_PROJECT_ID>
+
+# 获取 Service Attachment URI（后续 Tenant 需要用到）
+gcloud compute service-attachments describe gke-psc-service-attachment \
+  --region=<REGION> \
+  --project=<MASTER_PROJECT_ID> \
+  --format="value(selfLink)"
+# 输出示例: projects/master-project/regions/us-central1/serviceAttachments/gke-psc-service-attachment
+```
+
+### Step 4：动态添加新 Tenant 到白名单
+
+```bash
+# 每当新增一个 Tenant，执行此操作
+TENANT_PROJECT_ID="new-tenant-project-id"
+
+gcloud compute service-attachments update gke-psc-service-attachment \
+  --region=<REGION> \
+  --add-consumer-accept-list=${TENANT_PROJECT_ID}=10 \
+  --project=<MASTER_PROJECT_ID>
+
+# 查看当前 Accept List
+gcloud compute service-attachments describe gke-psc-service-attachment \
+  --region=<REGION> \
+  --project=<MASTER_PROJECT_ID> \
+  --format="json(consumerAcceptLists)"
+```
+
+### Step 5：Tenant 项目 - 创建 PSC Endpoint
+
+```bash
+# 在每个 Tenant 项目执行（可自动化/Terraform 模板化）
+SA_URI="projects/<MASTER_PROJECT_ID>/regions/<REGION>/serviceAttachments/gke-psc-service-attachment"
+
+# 5.1 预留内部 IP（PSC Endpoint IP）
+gcloud compute addresses create psc-endpoint-ip \
+  --region=<REGION> \
+  --subnet=<TENANT_SUBNET> \
+  --project=<TENANT_PROJECT_ID>
+
+# 获取 IP
+PSC_EP_IP=$(gcloud compute addresses describe psc-endpoint-ip \
+  --region=<REGION> \
+  --project=<TENANT_PROJECT_ID> \
+  --format="value(address)")
+
+# 5.2 创建 PSC Endpoint（Forwarding Rule 指向 SA）
+gcloud compute forwarding-rules create psc-endpoint-to-master \
+  --region=<REGION> \
+  --network=<TENANT_VPC> \
+  --address=psc-endpoint-ip \
+  --target-service-attachment=${SA_URI} \
+  --project=<TENANT_PROJECT_ID>
+
+echo "PSC Endpoint IP: ${PSC_EP_IP}"
+```
+
+### Step 6：Master 项目 - 审批 PSC 连接请求
+
+```bash
+# 查看待审批的连接
+gcloud compute service-attachments describe gke-psc-service-attachment \
+  --region=<REGION> \
+  --project=<MASTER_PROJECT_ID> \
+  --format="json(connectedEndpoints)"
+
+# 审批指定连接（取 connectedEndpoints 中的 pscConnectionId）
+gcloud compute service-attachments accept-psc-connections \
+  gke-psc-service-attachment \
+  --region=<REGION> \
+  --consumer-forwarding-rules=projects/<TENANT_PROJECT>/regions/<REGION>/forwardingRules/psc-endpoint-to-master \
+  --project=<MASTER_PROJECT_ID>
+```
+
+### Step 7：Tenant 项目 - 创建 PSC NEG 并绑定到 Backend Service
+
+```bash
+# 7.1 创建 PSC NEG（指向 PSC Endpoint IP）
+gcloud compute network-endpoint-groups create psc-neg \
+  --network-endpoint-type=PRIVATE_SERVICE_CONNECT \
+  --psc-target-service=${SA_URI} \
+  --network=<TENANT_VPC> \
+  --subnet=<TENANT_SUBNET> \
+  --region=<REGION> \
+  --project=<TENANT_PROJECT_ID>
+
+# 7.2 创建 Tenant 侧 Backend Service
+gcloud compute backend-services create tenant-backend-service \
+  --load-balancing-scheme=INTERNAL_MANAGED \
+  --protocol=HTTPS \
+  --region=<REGION> \
+  --no-health-checks \
+  --project=<TENANT_PROJECT_ID>
+
+# 7.3 添加 PSC NEG 到 Backend Service
+gcloud compute backend-services add-backend tenant-backend-service \
+  --network-endpoint-group=psc-neg \
+  --network-endpoint-group-region=<REGION> \
+  --region=<REGION> \
+  --project=<TENANT_PROJECT_ID>
+
+# 7.4 绑定 Cloud Armor（Tenant 自主管理）
+gcloud compute backend-services update tenant-backend-service \
+  --security-policy=<TENANT_CLOUD_ARMOR_POLICY> \
+  --region=<REGION> \
+  --project=<TENANT_PROJECT_ID>
+```
+
+---
+
+## 🔄 完整连接流程
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant TenantILB as Tenant ILB + Cloud Armor
+    participant TenantBS as Tenant Backend Service
+    participant PSC_NEG as PSC NEG (Tenant)
+    participant PSC_EP as PSC Endpoint IP
+    participant SA as Service Attachment (Master)
+    participant MasterILB as Master Internal LB
+    participant GKE as GKE Backend
+
+    Client->>TenantILB: HTTPS Request
+    TenantILB->>TenantBS: 路由匹配
+    TenantBS->>TenantBS: Cloud Armor 检查
+    TenantBS->>PSC_NEG: 转发到 PSC NEG
+    PSC_NEG->>PSC_EP: 内部 IP 解析
+    PSC_EP->>SA: PSC Tunnel
+    SA->>MasterILB: NAT 转换后到达 Master ILB
+    MasterILB->>GKE: 转发到 GKE Pod
+    GKE-->>Client: Response 原路返回
+```
+
+---
+
+## 🤖 100 Tenant 自动化 Onboarding 脚本模板
+
+```bash
+#!/bin/bash
+# onboard_tenant_psc.sh - 新 Tenant PSC 接入自动化
+
+set -euo pipefail
+
+MASTER_PROJECT="<MASTER_PROJECT_ID>"
+REGION="<REGION>"
+SA_NAME="gke-psc-service-attachment"
+SA_URI="projects/${MASTER_PROJECT}/regions/${REGION}/serviceAttachments/${SA_NAME}"
+
+TENANT_PROJECT="$1"
+TENANT_VPC="$2"
+TENANT_SUBNET="$3"
+
+echo "=== [1/4] 添加 Tenant 到 PSC Accept List ==="
+gcloud compute service-attachments update ${SA_NAME} \
+  --region=${REGION} \
+  --add-consumer-accept-list=${TENANT_PROJECT}=10 \
+  --project=${MASTER_PROJECT}
+
+echo "=== [2/4] Tenant 侧创建 PSC Endpoint ==="
+gcloud compute addresses create psc-endpoint-ip \
+  --region=${REGION} \
+  --subnet=${TENANT_SUBNET} \
+  --project=${TENANT_PROJECT}
+
+gcloud compute forwarding-rules create psc-endpoint-to-master \
+  --region=${REGION} \
+  --network=${TENANT_VPC} \
+  --address=psc-endpoint-ip \
+  --target-service-attachment=${SA_URI} \
+  --project=${TENANT_PROJECT}
+
+echo "=== [3/4] 等待连接请求并自动审批 ==="
+sleep 10
+gcloud compute service-attachments accept-psc-connections ${SA_NAME} \
+  --region=${REGION} \
+  --consumer-forwarding-rules=projects/${TENANT_PROJECT}/regions/${REGION}/forwardingRules/psc-endpoint-to-master \
+  --project=${MASTER_PROJECT}
+
+echo "=== [4/4] Tenant 侧创建 PSC NEG + Backend Service ==="
+gcloud compute network-endpoint-groups create psc-neg \
+  --network-endpoint-type=PRIVATE_SERVICE_CONNECT \
+  --psc-target-service=${SA_URI} \
+  --network=${TENANT_VPC} \
+  --subnet=${TENANT_SUBNET} \
+  --region=${REGION} \
+  --project=${TENANT_PROJECT}
+
+gcloud compute backend-services create tenant-backend-service \
+  --load-balancing-scheme=INTERNAL_MANAGED \
+  --protocol=HTTPS \
+  --region=${REGION} \
+  --no-health-checks \
+  --project=${TENANT_PROJECT}
+
+gcloud compute backend-services add-backend tenant-backend-service \
+  --network-endpoint-group=psc-neg \
+  --network-endpoint-group-region=${REGION} \
+  --region=${REGION} \
+  --project=${TENANT_PROJECT}
+
+echo "✅ Tenant ${TENANT_PROJECT} PSC 接入完成"
+echo "   PSC Endpoint IP: $(gcloud compute addresses describe psc-endpoint-ip --region=${REGION} --project=${TENANT_PROJECT} --format='value(address)')"
+```
+
+---
+
+## ⚠️ 注意事项与生产建议
+
+### Quota 提前申请清单
+
+```
+Master 项目：
+□ compute.serviceAttachments per region: 申请 10+（按 Region 多活需求）
+□ NAT subnet IP 容量：确认 /24 满足并发需求
+
+每个 Tenant 项目：
+□ compute.forwardingRules（internal）: 默认 15，100+ Tenant 各自消耗 1 个，通常够用
+□ compute.addresses（internal）: 默认 200，充足
+```
+
+### 安全加固
+
+```bash
+# 1. Service Attachment 使用 ACCEPT_MANUAL，禁止任意 Consumer 接入
+# 2. 为每个 Tenant 设置独立的 connection limit（=10 防止滥用）
+gcloud compute service-attachments update ${SA_NAME} \
+  --region=${REGION} \
+  --add-consumer-accept-list=${TENANT_PROJECT}=5 \  # 按需调整连接上限
+  --project=${MASTER_PROJECT}
+
+# 3. Master ILB 前置 Cloud Armor（平台级防护）
+# 4. 开启 PSC 连接日志审计
+gcloud compute service-attachments update ${SA_NAME} \
+  --region=${REGION} \
+  --enable-proxy-protocol \
+  --project=${MASTER_PROJECT}
+```
+
+### 已知边界情况
+
+| 问题 | 说明 |
+|------|------|
+| 跨 Region | PSC Endpoint 与 SA 必须**同 Region**，跨 Region 需在每个 Region 独立部署 SA |
+| IPv6 | PSC 目前仅支持 IPv4 |
+| UDP | PSC 不支持 UDP，仅 TCP |
+| 连接断开重连 | PSC 连接建立后，Consumer 端 IP 固定，Master 侧扩缩容对 Consumer 透明 |
+| Shared VPC Consumer | 若 Tenant 使用 Shared VPC，PSC Endpoint 需创建在 Host Project 的子网 |
+
+---
+
+**最终推荐**：100 Tenant 接入单一 Master PSC Service Attachment **完全可行**，默认 250 Consumer Connections 配额满足需求，核心工作在于 **NAT 子网 /24 规划** + **Tenant Onboarding 自动化脚本** + **提前申请 Quota**。
+
 
 # studio
 
@@ -391,6 +829,74 @@ Google Cloud 官方文档中有明确的硬性限制：
 如果你决定**维持现状的方案 B（Cross-project referencing）**：
 1.  收回 Tenant 项目对 Master 项目高危的 `compute.instances.admin` 授权，改为使用最低权限策略的 `roles/compute.loadBalancerServiceUser`。
 2.  为了解决计费问题，在通过 IaC（如 Terraform）为 Tenant 创建 Master 项目下的 Backend Service 时，必须打上 GCP 资源 Label（例如 `tenant: company-a`）。随后通过将 GCP 账单导出至 BigQuery，基于 Label 按资源维度进行二次成本摊派（Chargeback）。
+
+
+
+
+
+针对你的问题，**结论是非常明确的：这不仅完全可行，而且是 Google Cloud 官方、以及各大 SaaS 厂商（如 Elastic, Databricks, MongoDB 等）在 GCP 上实现多租户互联的“事实标准”架构。**
+
+面对 100 个甚至更多 Tenant 连接到 1 个 Master Project 的场景，Private Service Connect (PSC) 展现出了极强的伸缩性和架构优势。
+
+以下是针对网络限制、IP 规划、配额（Quota）以及多租户扩展性的深入分析：
+
+### 1. 核心网络与 IP 限制（极大简化了网络规划）
+
+传统 VPC Peering 最大痛点是**不允许 IP 地址冲突**，如果有 100 个 Tenant，管理不重叠的 IP 网段简直是灾难。**PSC 完美解决了这个问题，它允许所有 Tenant 甚至使用完全相同的 IP 网段。**
+
+*   **Master 侧的 IP 消耗（PSC NAT Subnet）：**
+    *   在 Master 项目中创建 Service Attachment 时，你需要为其分配一个专用的 **PSC NAT 子网**。
+    *   **消耗规则**：**1 个 Tenant 的 PSC NEG 连接，只占用 Master NAT 子网中的 1 个 IP 地址**。不论这个 Tenant 背后有多少百万级的并发请求，都只占 1 个 IP。
+    *   **容量规划**：如果你规划一个 `/24` 的 PSC NAT 子网（可用 IP 约 252 个），就足以支撑 250 多个独立的 Tenant 项目连接。如果你有更多租户，分配一个 `/22` 即可支持上千个 Tenant。
+*   **Tenant 侧的 IP 消耗：**
+    *   Tenant 侧只需要正常的 IP 资源来部署他们自己的 Internal HTTPS LB，PSC NEG 本身几乎不额外占用复杂的路由 IP。
+
+### 2. 核心 Quota (配额) 考量
+
+Google Cloud 对 PSC 有默认配额，但对于“多对一”的架构，默认配额通常已经足够，且可以通过提交工单轻易提升：
+
+*   **Master 侧配额（生产者）：**
+    *   **Service Attachments 数量**：每个 Region 每个 Project 默认上限是 75 个。由于你所有的 100+ 个 Tenant 都会指向 **同一个（或少数几个）** Service Attachment，所以这个配额对你完全没有压力。
+    *   **并发连接数**：单个 Producer VM（底层 Master 节点）可以接受来自单个 Tenant 的 64,512 个并发 TCP 连接。这对于绝大部分 HTTPS 流量已经绰绰有余。
+*   **Tenant 侧配额（消费者）：**
+    *   **PSC 转发规则/后端数 (Forwarding Rules / NEGs)**：每个 Tenant Project 每 Region 默认限额 75 个。由于每个 Tenant 只需要建 1 个 PSC NEG 指向 Master，因此也完全不会触碰限额。
+
+### 3. 多租户架构下的控制与安全性（Consumer Accept List）
+
+当你有 100+ 个外部 Tenant 时，如何防止恶意用户恶意连接你的 Master 服务？
+
+*   **项目级白名单 (Project-based Accept List)**：Service Attachment 支持配置“消费者接受列表”。你可以精确配置**只允许指定的 Tenant Project IDs** 发起连接。
+*   **连接数限制**：你可以在白名单中为每个 Tenant Project 设定连接数上限（例如：限制 Project A 只能建立 1 个 PSC 连接），防止单个租户耗尽你的 PSC NAT IP 资源。
+*   **断开隔离**：如果某个 Tenant 欠费或者有违规操作，Master 平台方可以在 Service Attachment 的控制台中直接“Reject”该租户的连接，实现秒级物理隔离。
+
+### 4. 架构实施中必须注意的“限制与盲区”
+
+虽然该方案极其优秀，但在工程落地时，你需要注意以下几个技术边界：
+
+**A. 真实客户端 IP 丢失问题 (SNAT 效应)**
+*   **现象**：因为流量在进入 Master 项目时会经过 PSC NAT 子网的源地址转换 (SNAT)，Master 项目的 GKE/MIG 收到的所有请求，其 Source IP 都会变成 Master 侧 NAT 子网的内部 IP，而不再是 Tenant 用户的真实 IP。
+*   **解决方案**：
+    1. Tenant 侧的 Internal HTTPS LB 默认会在 HTTP Header 中自动注入 `X-Forwarded-For`。Master 侧的 GKE 业务代码直接读取该 Header 获取真实 IP 即可。
+    2. 如果是纯四层 TCP 流量，Master 侧的内部负载均衡器必须开启 **PROXY Protocol** 功能来透传真实 IP。
+
+**B. Region（区域）严格限制**
+*   **限制**：PSC NEG 连接属于**区域级 (Regional)** 资源。Tenant 的 PSC NEG 与 Master 的 Service Attachment **必须在同一个 GCP Region**（例如都必须在 `asia-northeast1`）。
+*   **应对**：如果你的 Master 服务部署在多区域，你需要在每个区域建立一个 Service Attachment。Tenant 可以在其全局负载均衡（Global External ALB）后挂载多个区域的 PSC NEGs，实现跨可用区高可用。
+
+**C. Health Check（健康检查）的隔离可见性**
+*   **限制**：在 PSC 架构中，Tenant 的 Backend Service **不支持**配置指向 Master 的直接 Health Check（因为跨越了信任边界）。
+*   **应对**：Tenant 侧只需将请求盲转给 PSC NEG，实际的健康检查由 Master 项目自己的 Internal Load Balancer 在 Master 内部完成。如果 Master 服务完全宕机，Tenant 的 LB 会直接返回 `502 Bad Gateway`。
+
+### 总结：是否可行？
+
+**绝对可行，且是 Google 最推荐的方案。**
+
+针对 100 个甚至几百个 Tenant：
+1. **计费完美拆分**：Tenant 自己付他们 LB 和 Cloud Armor 的钱，独立出账单；Master 只付底层算力集群的钱。
+2. **零权限交叉**：不再需要授予 Tenant 任何 Master 项目的 `compute` 权限，仅靠 Project ID 白名单完成握手。
+3. **极简网络**：没有复杂的 VPC Peering 路由表，不用管 100 个 Tenant 的 IP 段是否互相冲突。
+
+你目前的团队如果准备实施，只需在 Master 划出一个 `/24` 的 `purpose=PRIVATE_SERVICE_CONNECT` 子网，并通过 Terraform 为每个 Tenant 自动注册 Accept List 即可进入生产。
 
 # Gemini
 
