@@ -326,6 +326,56 @@ gcloud projects add-iam-policy-binding <MASTER_PROJECT_ID> \
 - 如果你的核心诉求是 **Tenant 独立计费 + Cloud Armor 自治**，应优先推进方案 A 或 PSC 方案
 
 
+# Gemini
+
+This is a classic "Platform vs. Tenant" architectural challenge. In a Shared VPC environment, Google Cloud provides several paths, but the choice between Cross-Project Backend Attachment and Private Service Connect (PSC) hinges on how much "trust" you have between the Master and Tenant projects.
+As your Technical Partner, here is the architectural breakdown and feasibility confirmation.
+1. Feasibility Confirmation
+Is it officially supported?
+Yes. In a Shared VPC environment, a Regional Internal HTTP(S) Load Balancer (Project A) can officially reference Backends (NEGs or MIGs) located in Project B, provided both projects are service projects attached to the same Shared VPC Host Project.
+Implementation Logic
+ * The Network context: Since both projects share the same VPC, the underlying IP reachability is native.
+ * The Resource context: The Backend Service (in Tenant Project) points to the self_link of the NEG or MIG (in Master Project).
+ * The Region constraint: The ILB, Backend Service, and the NEGs/MIGs must reside in the same GCP Region. Cross-region backend binding is not supported for Internal HTTPS LBs.
+2. Architecture Comparison: Option A vs. Option B vs. PSC
+Based on your requirements for independent billing and Tenant-level Cloud Armor, here is how the options stack up:
+| Feature | Option A: Backend Service in Tenant (Your Current) | Option B: Backend Service in Master | Option C: Private Service Connect (Recommended) |
+|---|---|---|---|
+| Cloud Armor Policy | Owned by Tenant | Owned by Master (Hard to split) | Owned by Tenant |
+| Billing (LB + WAF) | Tenant Project | Master Project | Tenant Project |
+| IAM Complexity | High (Cross-project perms) | Low | Medium |
+| Security Isolation | Network-level (Shared VPC) | Shared | Consumer-Provider Abstraction |
+| Scalability | Good | Hard to manage at scale | Best (Cleanest handoff) |
+Why Private Service Connect (PSC) might be your "North Star"
+While your current cross-project binding works, PSC is the Google-recommended way for multi-tenant platforms.
+ * Producer (Master): You create a "Service Attachment" pointing to your GKE internal load balancer.
+ * Consumer (Tenant): The tenant creates a PSC NEG in their project.
+ * Result: The Tenant’s ILB points to the PSC NEG. The Tenant pays for their own ILB and Cloud Armor. You (Master) only pay for the GKE resources. No cross-project IAM on MIGs/NEGs is required.
+3. Deep Dive: Cross-Project IAM & Permissions
+If you stick with Option A (Backend Service in Tenant), you must solve the "Permission Leakage" issue you mentioned.
+Required Roles
+To allow the Tenant Project to "see" and "use" the Master Project's backends:
+ * LB Service Agent: The service-PROJECT_NUMBER@gcp-sa-compute.iam.gserviceaccount.com in the Tenant Project needs:
+   * roles/compute.networkUser on the Shared VPC Host subnet.
+   * roles/compute.loadBalancerServiceUser on the Master Project (to bind NEGs).
+ * Automation/User Identity: The principal creating the Backend Service needs compute.instances.use or compute.networkEndpointGroups.use on the Master resources.
+> Risk Warning: Giving a Tenant Project Service Account compute.instanceAdmin on the Master project is a critical security risk. You should use a custom role or strictly scoped compute.loadBalancerServiceUser to ensure the Tenant cannot delete or modify your GKE nodes.
+> 
+4. Billing & Cost Attribution
+In Option A (Tenant-side ILB/Backend Service):
+ * Load Balancing Fees: Charged to the Tenant Project.
+ * Cloud Armor Fees: Charged to the Tenant Project.
+ * Data Processing: Charged to the project where the LB is defined (Tenant).
+ * Compute (GKE Nodes): Charged to the Master Project.
+This aligns perfectly with your goal of independent billing for security and traffic-heavy features (WAF).
+5. Summary & Recommendation
+Which Backend type?
+ * Use NEGs (Network Endpoint Groups): Since you are on GKE, standalone NEGs are superior to MIGs. They allow container-native load balancing (skipping the NodePort hop), reducing latency and simplifying health checks.
+Final Verdict
+ * Immediate Fix (Current Path): Continue with Cross-Project NEG binding. Refine IAM: Remove instanceAdmin and replace it with compute.loadBalancerServiceUser at the project level, or better, granted only on specific NEGs via IAM conditions.
+ * Structural Improvement (Long-term): Move to Private Service Connect (PSC). It removes the need for the Tenant to have any direct IAM visibility into your Master Project. The interface becomes a "Service Attachment" URL.
+Next Step
+Would you like me to provide the Terraform/YAML manifest for setting up a PSC Service Attachment in the Master project and a PSC NEG in the Tenant project to see how that simplifies your security boundary?
 
 
 
