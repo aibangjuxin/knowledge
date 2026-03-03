@@ -21,7 +21,7 @@
 flowchart TD
     A[客户端] --> B[Tenant L7 ILB<br/>Internal HTTPS LB]
     B --> C{URL Map}
-    C -->|/test1/...| D[Tenant Backend Service<br/>(lex-test)]
+    C -->|/test1/...| D[Tenant Backend Service<br/>"(lex-test)"]
     
     D --> E[ZONAL NEG<br/>NON_GCP_PRIVATE_IP_PORT<br/>lex-test-tenant-to-tier2-neg]
     E --> F[Master Tier-2 ILB<br/>VIP:PORT 10.91.88.88:443]
