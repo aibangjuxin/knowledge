@@ -1,5 +1,10 @@
 • 1 客户端 → Tenant（第一级）Internal HTTPS LB (L7 ILB，持有 VIP / 证书 / URL Map / Cloud Armor)，由 URL Map 把 /test1/ 等路径指向 Tenant Backend Service (例：lex-test)。
-
+ Backend type
+1 Zonal netwrork endpoint group ==> GCE && GKE backends
+2  Internet network endpoint groupd ==> external backends
+3 Private Service Connect network endpoint group 
+4 Serverless netwrok endpoint group ==> Cloud Run
+5 Hybird connectivity network endpoint group(Zonal) ==> Backends that are on-premise or on-other clouds via private connectivity 
 • 2 Tenant Backend Service 的后端是 ZONAL NEG (类型为 NON_GCP_PRIVATE_IP_PORT，例如 lex-test-tenant-to-tier2-neg，由 create-neg.sh 创建)，NEG 中的 endpoint 为 Master 的 Tier-2 ILB VIP:PORT (例如 10.91.88.88:443)。
 
 • 3 Tenant 的 HealthCheck 会探测 NEG 指向的 Tier-2 VIP，Tenant 将 Cloud Armor 策略绑定到 Tenant Backend Service (WAF 评估与日志归 Tenant)。
