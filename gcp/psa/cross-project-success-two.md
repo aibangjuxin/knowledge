@@ -80,3 +80,287 @@ gcloud compute network-endpoint-groups update ${NEG_NAME} \
 gcloud compute network-endpoint-groups describe ${NEG_NAME} \
   --project=${TENANT_PROJECT_ID} --zone=${ZONE}
 ```
+
+
+
+很好 👍
+你现在这个架构已经不是“PSC 标准模式”，而是：
+
+Tier-1 (Tenant ILB) → ZONAL NEG (NON_GCP_PRIVATE_IP_PORT) → Tier-2 ILB (Master)
+也就是 LB-to-LB 私网级联模型
+
+这是一种可行但“边界较多”的架构。
+我帮你做一个概念级总结 + 风险评估。
+
+⸻
+
+一、你现在的架构本质
+
+flowchart TD
+    A["Client"] --> B["Tenant L7 ILB"]
+    B --> C["Tenant Backend Service"]
+    C --> D["ZONAL NEG (NON_GCP_PRIVATE_IP_PORT)"]
+    D --> E["Master Tier-2 ILB VIP"]
+    E --> F["Master Backend (GKE/MIG)"]
+
+这不是 PSC Endpoint 模型。
+
+而是：
+
+用 NEG 把一个 Internal LB VIP 当作“外部私网服务”来接入。
+
+等价理解：
+
+Tenant LB 把 Master ILB 当作一个私有IP后端
+
+
+⸻
+
+二、这个模型和 PSC 的差异
+
+维度	你当前 NEG 模型	PSC 模型
+官方定位	可用但非推荐多租户模式	官方推荐 Producer/Consumer
+安全隔离	网络级	服务级
+IAM	无需跨项目 use 权限	无需跨项目 use 权限
+扩展规模	受 NEG/HC 限制	受 PSC endpoint quota 限制
+源 IP	会被 ILB 替换	统一由 PSC endpoint 控制
+推荐度	⭐⭐⭐	⭐⭐⭐⭐⭐
+
+
+⸻
+
+三、域名问题在你当前架构里的定位
+
+你现在：
+	•	Tier-1 终止 TLS
+	•	Tier-1 控制 URL Map
+	•	Tier-2 只接收 HTTPS
+
+因此：
+
+Master 不需要公网域名
+
+但：
+
+⚠️ Master 仍然是 L7 ILB
+⚠️ Host header 会被保留
+
+所以：
+
+Master 仍然可以基于 host/path 分流。
+
+⸻
+
+四、你当前架构的关键风险点
+
+⸻
+
+1️⃣ Health Check 风险
+
+你现在：
+
+Tenant HealthCheck → Master Tier-2 VIP
+
+问题：
+	•	如果 Master Tier-2 挂
+	•	Tenant HC 会直接失败
+	•	所有流量中断
+
+而且：
+
+每个 Tenant 都会独立发 HC。
+
+100 Tenant = 100 组 HC。
+
+⸻
+
+2️⃣ 双层 ILB 放大延迟
+
+你现在是：
+
+Client → L7 ILB → L7 ILB → Backend
+
+每层都会：
+	•	TLS 处理
+	•	Header 处理
+	•	Proxy hop
+
+延迟 ≈ +3~5ms
+
+在高 QPS 情况下会放大。
+
+⸻
+
+3️⃣ NEG 类型 NON_GCP_PRIVATE_IP_PORT 的限制
+
+这种 NEG：
+	•	不感知 GKE
+	•	不感知 MIG
+	•	只是静态 IP:PORT
+
+如果 Tier-2 VIP 变更：
+
+需要重新 update NEG。
+
+PSC 不会有这个问题。
+
+⸻
+
+4️⃣ 源 IP 问题
+
+Tier-2 看到的 source IP：
+
+不是客户端 IP。
+
+而是：
+
+Tier-1 ILB proxy IP。
+
+如果你：
+	•	未来做租户级限流
+	•	或做审计
+
+需要依赖：
+
+X-Forwarded-For
+
+
+⸻
+
+五、规模分析（100+ Tenant）
+
+⸻
+
+当前 NEG 模型规模评估
+
+假设：
+	•	100 Tenant
+	•	每个 3 个 zone
+	•	每个 zone 1 个 NEG
+
+= 300 NEG
+
+默认 quota：
+
+Zonal NEGs per project per region ≈ 50-100
+
+可能需要提升。
+
+⸻
+
+Health Check 数量
+
+每个 Backend Service 一个 HC。
+
+100 Tenant = 100 HC。
+
+默认 quota 也是有限的。
+
+⸻
+
+六、和 PSC 的规模对比
+
+PSC：
+	•	每个 Tenant 一个 Endpoint
+	•	不需要 HC（Producer LB 自己负责）
+	•	不需要 NEG per zone
+
+架构更干净。
+
+⸻
+
+七、重要判断
+
+你现在这个模型：
+
+更像是“过渡架构”
+
+而不是最终多租户架构。
+
+⸻
+
+八、概念级总结（关于域名）
+
+在你当前架构里：
+
+层	是否需要域名
+Client → Tenant	必须
+Tenant → Master	不需要公网域名
+Master → Backend	Kubernetes service 名
+
+域名完全属于 Tenant。
+
+Master 只做流量接收。
+
+⸻
+
+九、如果改成 PSC 架构
+
+结构会变成：
+
+flowchart TD
+    A["Client"] --> B["Tenant L7 ILB"]
+    B --> C["PSC Endpoint"]
+    C --> D["Service Attachment"]
+    D --> E["Master Internal LB"]
+    E --> F["Backend"]
+
+好处：
+	•	不需要 NEG
+	•	不需要 Tenant HC
+	•	不需要放开 HC FW
+	•	Master 更干净
+	•	隔离更强
+
+⸻
+
+十、关键回答你
+
+你现在这个实现：
+
+✅ 官方支持
+✅ 可生产
+⚠️ 不适合 500+ tenant 长期规模
+
+PSC：
+
+✅ 更适合平台级
+✅ 更清晰
+✅ 更标准
+
+⸻
+
+十一、你现在要做的决策
+
+你要判断：
+	1.	这是长期架构吗？
+	2.	未来是否会 > 200 Tenant？
+	3.	是否 multi-region？
+	4.	是否未来要支持 mTLS？
+
+如果答案是“是”：
+
+建议迁移 PSC。
+
+⸻
+
+十二、最终一句话总结
+
+你当前 NEG + ILB 级联模型：
+
+是技术上可行的“LB-to-LB 代理模式”
+
+PSC：
+
+是 Google 官方设计的“私有服务消费模式”
+
+对于多租户平台：
+
+PSC 更合理。
+
+⸻
+
+如果你愿意，我可以下一步帮你：
+	•	画一张 NEG vs PSC 的架构演进路线图
+	•	或帮你推导 3 年容量规划
+	•	或帮你算 100 / 300 / 1000 tenant 的 quota 规模模型
