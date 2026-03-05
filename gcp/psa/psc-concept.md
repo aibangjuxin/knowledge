@@ -1,17 +1,21 @@
 # Private Service Connect (PSC) 概念指南
 
-## 核心概念
+## 1. 核心概念
 
-### 什么是 PSC？
+### 1.1 什么是 PSC？
 
-**Private Service Connect (PSC)** 是 Google Cloud 的一项网络功能，允许消费者在其 VPC 网络内部私密地访问托管服务。PSC 的核心特点是：
+**Private Service Connect (PSC)** 是 Google Cloud 的一项网络功能，允许消费者在其 VPC 网络内部私密地访问托管服务。
+
+**PSC 的核心特点：**
 
 1. **私有连接**：消费者使用自己的内部 IP 地址访问服务，无需离开其 VPC 网络或使用外部 IP 地址
 2. **流量隔离**：流量完全保留在 Google Cloud 内部，不经过公网
 3. **服务暴露**：服务提供者可以控制哪些消费者项目可以访问其服务
 4. **跨项目支持**：完全支持跨项目、跨组织的服务访问
 
-### PSC 的核心组件
+---
+
+### 1.2 PSC 的核心组件
 
 | 组件 | 说明 |
 |------|------|
@@ -23,9 +27,248 @@
 
 ---
 
-## Cross-Project（跨项目）PSC 网络要求
+## 2. Cross-Project（跨项目）PSC 网络要求
 
-### 1. VPC 网络要求
+### 2.1 VPC 网络要求
+
+你的总结整体是正确的，而且已经抓住了 PSC + Service Attachment 的几个关键限制。我帮你逐条做一个 **架构级确认 + 小补充**，这样以后你在设计 PSC 拓扑时会更清晰。
+
+---
+
+#### 规则 1：NAT Subnet 与 Forwarding Rule 必须在同一个 VPC
+
+✅ **你的结论：正确**
+
+**规则：**
+
+```
+Service Attachment
+ ├─ target-service = Internal Load Balancer forwarding rule
+ └─ nat-subnets    = PSC NAT subnet
+```
+
+**限制：**
+
+- `nat-subnets`
+- `forwarding-rule`
+
+必须属于 **同一个 VPC network**，否则创建 `service-attachment` 会直接失败。
+
+**示例：**
+
+```bash
+gcloud compute service-attachments create sa-test \
+  --region=asia-northeast1 \
+  --producer-forwarding-rule=my-ilb-fr \
+  --nat-subnets=psc-nat-subnet
+```
+
+**要求：**
+
+| 资源 | 必须 |
+|------|------|
+| `forwarding rule` | VPC-A |
+| `nat-subnet` | VPC-A |
+
+**不能：**
+
+| 资源 | 错误 |
+|------|------|
+| `forwarding rule` | VPC-A |
+| `nat-subnet` | VPC-B |
+
+---
+
+#### 规则 2：`purpose=PRIVATE_SERVICE_CONNECT` 子网不能用于 IP Reservation
+
+✅ **你的结论：正确**
+
+PSC NAT subnet 只能用于 Service Attachment NAT。
+
+**不能用于：**
+
+| 操作 | 是否允许 |
+|------|----------|
+| `gcloud compute addresses create` | ❌ |
+| Endpoint IP | ❌ |
+| VM IP | ❌ |
+| PSC NAT | ✅ |
+
+**原因：**
+
+```
+Consumer -> PSC Endpoint
+              |
+              v
+Producer Service Attachment
+              |
+              v
+        NAT Subnet (purpose PSC)
+```
+
+这个 subnet 只用于 Producer 侧 NAT 地址池。
+
+---
+
+#### 规则 3：Consumer Forwarding Rule 的 Network 必须能访问 Producer VPC
+
+⚠️ **基本正确，但要稍微精确一点**
+
+PSC 实际上 **不要求直接路由互通**，因为：
+
+```
+Consumer VPC
+     |
+     v
+PSC Endpoint
+     |
+Google backbone
+     |
+Producer Service Attachment
+     |
+ILB
+```
+
+**但是需要满足：**
+
+Producer 必须允许 Consumer project / network
+
+Service Attachment 中必须允许：
+
+```bash
+--consumer-accept-list
+```
+
+**例如：**
+
+- `project=consumer-project`
+- 或 `network=consumer-vpc`
+
+如果是 **自动接受模式**：
+
+```bash
+connection-preference=ACCEPT_AUTOMATIC
+```
+
+否则 connection 会停在 `PENDING`。
+
+**所以更准确说：**
+
+| 条件 | 必须 |
+|------|------|
+| Consumer network 可达 Producer VPC | ❌ 不需要 |
+| Consumer project/network 被允许 | ✅ 必须 |
+
+---
+
+#### 规则 4：Forwarding Rule 所在 Network 决定流量在哪个 VPC
+
+✅ **你的理解是正确的**
+
+Forwarding Rule 本质就是 VPC 内的入口点。
+
+**例如：**
+
+```
+VPC-A
+  |
+  | forwarding rule
+  v
+ILB
+```
+
+**那么：**
+
+- 只有 VPC-A 内部可以访问
+- 或 PSC endpoint 指向这个 forwarding rule
+
+它不会自动跨 VPC。
+
+---
+
+#### 规则 5：一个 PSC NAT Subnet 只能被一个 Service Attachment 使用
+
+✅ **完全正确**
+
+**Google Cloud 限制：**
+
+```
+PSC NAT subnet
+   └── 只能绑定一个 Service Attachment
+```
+
+否则创建时会报类似错误：
+
+```
+subnet already in use by another service attachment
+```
+
+**原因是：**
+
+PSC NAT subnet 本质上是：
+
+```
+Consumer connection
+        |
+        v
+Producer NAT IP (来自该 subnet)
+```
+
+一个 Service Attachment 需要 **独占 NAT 地址池**。
+
+---
+
+### 2.2 PSC Producer 规则总结表
+
+| 规则 | 是否必须 |
+|------|----------|
+| NAT subnet 与 forwarding rule 同一 VPC | ✅ |
+| NAT subnet purpose 必须 PRIVATE_SERVICE_CONNECT | ✅ |
+| PSC NAT subnet 不能分配 endpoint IP | ✅ |
+| PSC NAT subnet 只能被一个 Service Attachment 使用 | ✅ |
+| Consumer 不需要与 Producer VPC 路由互通 | ✅ |
+| Consumer 必须被 Service Attachment allow | ✅ |
+
+---
+
+### 2.3 推荐的 PSC 架构模型
+
+**Producer 侧：**
+
+```
+Producer VPC
+   |
+   | Internal Load Balancer
+   v
+Forwarding Rule
+   |
+   v
+Service Attachment
+   |
+   v
+PSC NAT Subnet
+```
+
+**Consumer 侧：**
+
+```
+Consumer VPC
+   |
+PSC Endpoint (Forwarding Rule)
+   |
+   v
+Producer Service Attachment
+```
+
+---
+
+💡 **如果你愿意，我可以帮你画一张 GCP Private Service Connect 完整架构图（Producer / Consumer / NAT / ILB）**
+
+很多 GCP 架构师都是靠这张图理解 PSC 的，一次看懂所有限制。
+
+---
+
+### 2.4 VPC 网络要求总结
 
 | 要求 | 说明 |
 |------|------|
@@ -33,7 +276,9 @@
 | **独立路由空间** | ✅ 每个 VPC 保持独立的路由表，不需要配置路由打通 |
 | **无需 Peering** | ✅ PSC 基于 Private Endpoint 技术，不需要 VPC Peering |
 
-### 2. 网络连接流程
+---
+
+### 2.5 网络连接流程
 
 ```mermaid
 sequenceDiagram
@@ -61,7 +306,9 @@ sequenceDiagram
     Producer-->>Consumer: 返回服务响应
 ```
 
-### 3. 具体命令示例
+---
+
+### 2.6 具体命令示例
 
 #### Producer 端（服务提供者）
 
@@ -84,9 +331,14 @@ gcloud compute service-attachments create ${SERVICE_ATTACHMENT_NAME} \
 ```
 
 **关键参数说明：**
-- `--consumer-accept-list`：定义哪些项目 ID 被允许连接，以及每个项目的连接数限制
-- `--connection-preference=ACCEPT_MANUAL`：强制要求手动批准每一个连接请求，增强安全性
-- `--nat-subnets`：指定专用于 PSC NAT 的子网
+
+| 参数 | 说明 |
+|------|------|
+| `--consumer-accept-list` | 定义哪些项目 ID 被允许连接，以及每个项目的连接数限制 |
+| `--connection-preference=ACCEPT_MANUAL` | 强制要求手动批准每一个连接请求，增强安全性 |
+| `--nat-subnets` | 指定专用于 PSC NAT 的子网 |
+
+---
 
 #### Consumer 端（服务消费者）
 
@@ -133,9 +385,9 @@ gcloud compute firewall-rules create ${FIREWALL_RULE_NAME} \
 
 ---
 
-## IP Range 定义
+## 3. IP Range 定义
 
-### IP 地址冲突问题
+### 3.1 IP 地址冲突问题
 
 **关键结论：IP 地址可以重叠，不需要担心冲突。**
 
@@ -144,13 +396,17 @@ gcloud compute firewall-rules create ${FIREWALL_RULE_NAME} \
 | **PSC 连接** | ✅ **可以重叠** | PSC 不使用 VPC Peering，两个 VPC 的路由空间完全独立 |
 | **VPC Peering** | ❌ **不能重叠** | VPC Peering 共享路由空间，CIDR 必须不重叠 |
 
-### 为什么 PSC 允许 IP 重叠？
+---
+
+### 3.2 为什么 PSC 允许 IP 重叠？
 
 1. **独立路由空间**：PSC 基于 Private Endpoint 技术，Consumer 和 Producer 的 VPC 路由表完全独立
 2. **点对点连接**：PSC 创建的是一个专用的隧道，不共享 VPC 路由
 3. **端点 IP 隔离**：Consumer 端的 PSC 端点 IP 只在 Consumer VPC 内有效，Producer 无法访问
 
-### IP 规划建议
+---
+
+### 3.3 IP 规划建议
 
 尽管 PSC 允许 IP 重叠，但仍建议：
 
@@ -160,20 +416,24 @@ gcloud compute firewall-rules create ${FIREWALL_RULE_NAME} \
 
 ---
 
-## PSC 与 Load Balancing 的关系
+## 4. PSC 与 Load Balancing 的关系
 
-### 核心结论
+### 4.1 核心结论
 
 **你的理解是正确的：PSC 本身不是 Load Balancing，它只是一种网络连接方式。**
 
-### 详细解释
+---
+
+### 4.2 详细解释
 
 | 概念 | 说明 |
 |------|------|
 | **PSC** | 是一种**网络连接机制**，用于在 VPC 之间建立私有连接通道 |
 | **Load Balancing** | 是一种**服务暴露方式**，用于将流量分发到多个后端实例 |
 
-### 架构关系
+---
+
+### 4.3 架构关系
 
 ```mermaid
 graph TB
@@ -205,7 +465,9 @@ graph TB
 2. **Load Balancing 的作用**：在 Producer 端，Internal Load Balancer 将流量分发到多个后端实例
 3. **两者关系**：PSC 是"通道"，Load Balancing 是"服务暴露方式"，两者可以配合使用
 
-### 典型架构模式
+---
+
+### 4.4 典型架构模式
 
 #### 模式 1：PSC + Internal Load Balancer
 
@@ -213,7 +475,7 @@ graph TB
 Consumer → PSC Endpoint → Internal LB → Backend Services
 ```
 
-- 适用于：Producer 有多个后端实例，需要负载均衡
+- **适用于**：Producer 有多个后端实例，需要负载均衡
 
 #### 模式 2：PSC + 单一服务
 
@@ -221,35 +483,35 @@ Consumer → PSC Endpoint → Internal LB → Backend Services
 Consumer → PSC Endpoint → Single Service
 ```
 
-- 适用于：简单场景，如 Cloud SQL、Redis 等托管服务
+- **适用于**：简单场景，如 Cloud SQL、Redis 等托管服务
 
 ---
 
-## PSC 使用场景
+## 5. PSC 使用场景
 
-### 1. 跨项目数据库访问
+### 5.1 跨项目数据库访问
 
 - **Producer**：托管 Cloud SQL 或 Memorystore (Redis)
 - **Consumer**：运行应用程序，需要访问数据库
 
-### 2. 跨项目 API 服务暴露
+### 5.2 跨项目 API 服务暴露
 
 - **Producer**：托管 GKE、Cloud Run 或 GCE 应用
 - **Consumer**：调用 API 的客户端应用
 
-### 3. 第三方服务访问
+### 5.3 第三方服务访问
 
 - **Producer**：第三方服务提供者
 - **Consumer**：访问第三方服务的企业应用
 
-### 4. 多租户架构
+### 5.4 多租户架构
 
 - **Producer**：共享服务（如认证、日志、监控）
 - **Consumer**：各个租户项目
 
 ---
 
-## PSC vs PSA 对比
+## 6. PSC vs PSA 对比
 
 | 特性 | PSA (Private Service Access) | PSC (Private Service Connect) |
 |------|-----------------------------|------------------------------|
@@ -259,15 +521,15 @@ Consumer → PSC Endpoint → Single Service
 | **IP 重叠** | ❌ 不允许 | ✅ 允许 |
 | **跨项目支持** | 有限支持 | 完全支持 |
 | **安全隔离** | 中等（共享路由） | 高（完全隔离） |
-| **DNS 管理** | private.googleapis.com | 自定义域名或自动生成 |
+| **DNS 管理** | `private.googleapis.com` | 自定义域名或自动生成 |
 | **计费模式** | 免费（仅 VPC Peering 成本） | 按带宽和连接数计费 |
 | **配置复杂度** | 简单 | 中等 |
 
 ---
 
-## 验证检查列表
+## 7. 验证检查列表
 
-### Producer 端验证
+### 7.1 Producer 端验证
 
 - [ ] 服务附件创建成功
 - [ ] Consumer 项目已添加到接受列表
@@ -276,7 +538,7 @@ Consumer → PSC Endpoint → Single Service
 - [ ] PSC 子网配置正确
 - [ ] 防火墙规则允许 PSC 流量
 
-### Consumer 端验证
+### 7.2 Consumer 端验证
 
 - [ ] 静态 IP 地址创建成功
 - [ ] PSC 端点创建成功
@@ -284,7 +546,7 @@ Consumer → PSC Endpoint → Single Service
 - [ ] 能够解析 PSC 端点的 IP 地址
 - [ ] 网络路由配置正确
 
-### 连接测试
+### 7.3 连接测试
 
 - [ ] 从 Consumer VM ping PSC 端点 IP
 - [ ] 使用 telnet/nc 测试端口连接
@@ -293,9 +555,9 @@ Consumer → PSC Endpoint → Single Service
 
 ---
 
-## 总结
+## 8. 总结
 
-### 核心要点
+### 8.1 核心要点
 
 1. **PSC 是什么**：一种私有网络连接机制，允许 Consumer 通过内部 IP 访问 Producer 的服务
 2. **跨项目网络要求**：
@@ -311,7 +573,7 @@ Consumer → PSC Endpoint → Single Service
    - PSC 是"通道"，Load Balancing 是"服务暴露方式"
    - 两者可以配合使用（PSC + Internal LB）
 
-### 最佳实践
+### 8.2 最佳实践
 
 1. **安全性**：使用 `ACCEPT_MANUAL` 模式，手动批准每个连接请求
 2. **IP 规划**：尽管可以重叠，仍建议使用不同的 IP 范围便于管理
