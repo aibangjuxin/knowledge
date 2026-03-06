@@ -1,3 +1,33 @@
+- [CNAME](#cname)
+- [**一、CNAME 的基本原理**](#一cname-的基本原理)
+- [**二、企业使用 CNAME 的核心原因**](#二企业使用-cname-的核心原因)
+  - [**1 解耦服务地址**](#1-解耦服务地址)
+    - [**没有 CNAME**](#没有-cname)
+    - [**使用 CNAME**](#使用-cname)
+  - [**2 平台统一入口（API Gateway / LB）**](#2-平台统一入口api-gateway--lb)
+  - [**3 跨系统 / 跨平台集成**](#3-跨系统--跨平台集成)
+  - [**4 环境切换（非常常见）**](#4-环境切换非常常见)
+  - [**5 多层架构抽象**](#5-多层架构抽象)
+- [**五、CNAME 的限制**](#五cname-的限制)
+- [**六、GCP 场景（与你的架构相关）**](#六gcp-场景与你的架构相关)
+    - [**API 域名统一入口**](#api-域名统一入口)
+- [**七、什么时候**](#七什么时候)
+- [**不建议使用 CNAME**](#不建议使用-cname)
+- [**八、企业 DNS 设计总结**](#八企业-dns-设计总结)
+- [**一、典型架构**](#一典型架构)
+- [**二、请求过程中的 Host header**](#二请求过程中的-host-header)
+- [**三、TLS 证书使用哪个**](#三tls-证书使用哪个)
+- [**四、Nginx 应该监听什么 Host**](#四nginx-应该监听什么-host)
+- [**五、为什么不能监听 CDN 域名**](#五为什么不能监听-cdn-域名)
+- [**六、CDN 可选配置（Origin Host Header）**](#六cdn-可选配置origin-host-header)
+- [**七、证书部署的两种常见模式**](#七证书部署的两种常见模式)
+  - [**模式1（最常见）**](#模式1最常见)
+  - [**模式2（企业安全）**](#模式2企业安全)
+- [**八、Google Cloud + CDN 常见配置**](#八google-cloud--cdn-常见配置)
+- [**九、企业最佳实践总结**](#九企业最佳实践总结)
+- [**十、一个很多人会忽略的坑（非常重要）**](#十一个很多人会忽略的坑非常重要)
+
+# CNAME
 
 企业 DNS 中大量使用 **CNAME（Canonical Name）** 是非常常见的设计，它的核心目的不是增加解析层级，而是 **解耦域名与真实服务地址，提升可维护性和灵活性**。下面从 DNS 工作原理和企业架构实践两个角度解释。
 
@@ -433,7 +463,11 @@ api.company.com
 
 ---
 
+
+
 # **四、Nginx 应该监听什么 Host**
+
+
 
 Nginx server block 应该配置：
 
@@ -458,6 +492,357 @@ server {
 ```
 
 ---
+
+这个问题涉及 **DNS 解析、HTTP Host Header、TLS SNI、Nginx vhost 匹配** 四个层面。关键结论先说：
+
+  
+
+> **客户端访问的原始域名才是 Host Header 和 TLS SNI，CNAME 目标不会出现在 HTTP 请求中。**
+
+  
+
+所以 **Nginx 应该监听的是用户访问的域名，而不是 CNAME 指向的域名**。
+
+  
+
+下面按请求链路解释。
+
+---
+
+# **一、DNS CNAME 只发生在解析阶段**
+
+  
+
+假设 DNS：
+
+```
+api.team1.aibang     CNAME    glb-entry.company.net
+glb-entry.company.net    A    34.120.10.5
+```
+
+DNS 解析流程：
+
+```
+graph TD
+    A["Client Query api.team1.aibang"] --> B["DNS 返回 CNAME glb-entry.company.net"]
+    B --> C["Client 再查询 glb-entry.company.net"]
+    C --> D["DNS 返回 IP 34.120.10.5"]
+    D --> E["Client 连接 34.120.10.5"]
+```
+
+**注意**
+
+  
+
+此时客户端只是拿到了 IP。
+
+  
+
+客户端仍然认为自己访问的是：
+
+```
+api.team1.aibang
+```
+
+---
+
+# **二、TLS SNI 使用的是原始域名**
+
+  
+
+客户端建立 TLS 时会发送 **SNI(Server Name Indication)**：
+
+```
+SNI: api.team1.aibang
+```
+
+Load Balancer / Nginx 根据这个选择证书。
+
+  
+
+因此：
+
+|**项目**|**值**|
+|---|---|
+|DNS CNAME|glb-entry.company.net|
+|TLS SNI|api.team1.aibang|
+|证书 CN|api.team1.aibang 或 *.team1.api.aibang|
+
+---
+
+# **三、HTTP Host Header 也是原始域名**
+
+  
+
+HTTP 请求：
+
+```
+GET /order HTTP/1.1
+Host: api.team1.aibang
+```
+
+不会变成：
+
+```
+Host: glb-entry.company.net
+```
+
+---
+
+# **四、Nginx 实际看到的请求**
+
+  
+
+假设流量：
+
+```
+Client → GLB → Nginx
+```
+
+Nginx 收到的请求：
+
+```
+GET / HTTP/1.1
+Host: api.team1.aibang
+```
+
+因此 Nginx server block 应该是：
+
+```
+server {
+    listen 443 ssl;
+
+    server_name api.team1.aibang;
+
+    ssl_certificate /certs/team1.pem;
+}
+```
+
+---
+
+# **五、什么时候才需要监听 CNAME 目标**
+
+  
+
+只有一种情况：
+
+  
+
+用户 **直接访问 CNAME 目标域名**
+
+  
+
+例如：
+
+```
+https://glb-entry.company.net
+```
+
+这种情况下：
+
+```
+Host: glb-entry.company.net
+```
+
+Nginx 才需要监听它。
+
+  
+
+否则不需要。
+
+---
+
+# **六、GLB + Nginx + CNAME 的真实企业架构**
+
+  
+
+典型结构：
+
+```
+order.team1.api.aibang
+payment.team1.api.aibang
+```
+
+DNS：
+
+```
+order.team1.api.aibang    CNAME    api-gateway.company.net
+payment.team1.api.aibang  CNAME    api-gateway.company.net
+```
+
+GLB：
+
+```
+certificate:
+*.team1.api.aibang
+```
+
+流量：
+
+```
+graph TD
+    A["Client order.team1.api.aibang"] --> B["DNS CNAME api-gateway.company.net"]
+    B --> C["Google Cloud Load Balancer"]
+    C --> D["Nginx / Kong"]
+    D --> E["Backend Service"]
+```
+
+Nginx：
+
+```
+server {
+    server_name *.team1.api.aibang;
+}
+```
+
+---
+
+# **七、证书应该绑定在哪里（重要）**
+
+  
+
+如果 TLS 在 **GLB terminate**：
+
+  
+
+证书在 GLB：
+
+```
+*.team1.api.aibang
+```
+
+Nginx：
+
+```
+HTTP (内部)
+```
+
+如果 TLS **pass-through 到 Nginx**：
+
+  
+
+证书在 Nginx：
+
+```
+*.team1.api.aibang
+```
+
+---
+
+# **八、很多人会误解的一点**
+
+  
+
+很多人认为：
+
+```
+api.team1.aibang CNAME glb-entry.company.net
+```
+
+请求会变成：
+
+```
+Host: glb-entry.company.net
+```
+
+其实 **不会发生**。
+
+  
+
+CNAME **只是 DNS alias，不是 HTTP redirect**。
+
+---
+
+# **九、一个真实生产例子（CDN）**
+
+  
+
+例如：
+
+```
+www.example.com CNAME d123.cloudfront.net
+```
+
+用户访问：
+
+```
+https://www.example.com
+```
+
+CloudFront 收到：
+
+```
+Host: www.example.com
+```
+
+证书：
+
+```
+www.example.com
+```
+
+而不是：
+
+```
+d123.cloudfront.net
+```
+
+---
+
+# **十、在你这个 GKE + Kong + GLB 架构里的建议**
+
+  
+
+结合你现在的架构：
+
+```
+Client
+   ↓
+DNS (CNAME)
+   ↓
+GLB
+   ↓
+Nginx
+   ↓
+Kong
+   ↓
+RT Service
+```
+
+建议：
+
+  
+
+证书统一放在 **GLB**
+
+  
+
+例如：
+
+```
+*.team1.api.aibang
+*.team2.api.aibang
+```
+
+Nginx/Kong 只根据：
+
+```
+Host Header
+```
+
+做路由。
+
+---
+
+如果你愿意，我可以再给你讲一个 **很多大型 API 平台都会踩的坑**：
+
+  
+
+**CNAME + Wildcard 证书 + GLB 多证书选择时的 SNI 匹配问题。**
+
+  
+
+这个问题在 **GCP + Kong API Gateway 架构里非常常见，而且会导致随机证书错误**。
 
 # **五、为什么不能监听 CDN 域名**
 
