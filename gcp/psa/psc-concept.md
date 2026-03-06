@@ -17,13 +17,13 @@
 
 ### 1.2 PSC 的核心组件
 
-| 组件 | 说明 |
-|------|------|
-| **Producer (生产者)** | 托管服务的项目，创建服务附件 (Service Attachment) 来发布服务 |
-| **Consumer (消费者)** | 访问服务的项目，创建 PSC 端点 (Endpoint) 来连接服务 |
-| **Service Attachment (服务附件)** | Producer 端创建的接入点，允许被授权的消费者访问其服务 |
-| **PSC Endpoint (PSC 端点)** | Consumer 端创建的端点，在消费者 VPC 中有一个内部 IP 地址 |
-| **Internal Load Balancer (内部负载均衡器)** | Producer 端用于暴露服务的负载均衡器 |
+| 组件                                        | 说明                                                         |
+| ------------------------------------------- | ------------------------------------------------------------ |
+| **Producer (生产者)**                       | 托管服务的项目，创建服务附件 (Service Attachment) 来发布服务 |
+| **Consumer (消费者)**                       | 访问服务的项目，创建 PSC 端点 (Endpoint) 来连接服务          |
+| **Service Attachment (服务附件)**           | Producer 端创建的接入点，允许被授权的消费者访问其服务        |
+| **PSC Endpoint (PSC 端点)**                 | Consumer 端创建的端点，在消费者 VPC 中有一个内部 IP 地址     |
+| **Internal Load Balancer (内部负载均衡器)** | Producer 端用于暴露服务的负载均衡器                          |
 
 ---
 
@@ -65,17 +65,17 @@ gcloud compute service-attachments create sa-test \
 
 **要求：**
 
-| 资源 | 必须 |
-|------|------|
+| 资源              | 必须  |
+| ----------------- | ----- |
 | `forwarding rule` | VPC-A |
-| `nat-subnet` | VPC-A |
+| `nat-subnet`      | VPC-A |
 
 **不能：**
 
-| 资源 | 错误 |
-|------|------|
+| 资源              | 错误  |
+| ----------------- | ----- |
 | `forwarding rule` | VPC-A |
-| `nat-subnet` | VPC-B |
+| `nat-subnet`      | VPC-B |
 
 ---
 
@@ -87,12 +87,12 @@ PSC NAT subnet 只能用于 Service Attachment NAT。
 
 **不能用于：**
 
-| 操作 | 是否允许 |
-|------|----------|
-| `gcloud compute addresses create` | ❌ |
-| Endpoint IP | ❌ |
-| VM IP | ❌ |
-| PSC NAT | ✅ |
+| 操作                              | 是否允许 |
+| --------------------------------- | -------- |
+| `gcloud compute addresses create` | ❌        |
+| Endpoint IP                       | ❌        |
+| VM IP                             | ❌        |
+| PSC NAT                           | ✅        |
 
 **原因：**
 
@@ -154,10 +154,10 @@ connection-preference=ACCEPT_AUTOMATIC
 
 **所以更准确说：**
 
-| 条件 | 必须 |
-|------|------|
+| 条件                               | 必须     |
+| ---------------------------------- | -------- |
 | Consumer network 可达 Producer VPC | ❌ 不需要 |
-| Consumer project/network 被允许 | ✅ 必须 |
+| Consumer project/network 被允许    | ✅ 必须   |
 
 ---
 
@@ -187,6 +187,7 @@ ILB
 ---
 
 #### 规则 5：一个 PSC NAT Subnet 只能被一个 Service Attachment 使用
+在 Private Service Connect (PSC) 的架构中，“一个 NAT 子网只能被一个 Service Attachment 使用” 是一个硬性限制（Hard Limit）
 
 ✅ **完全正确**
 
@@ -220,14 +221,14 @@ Producer NAT IP (来自该 subnet)
 
 ### 2.2 PSC Producer 规则总结表
 
-| 规则 | 是否必须 |
-|------|----------|
-| NAT subnet 与 forwarding rule 同一 VPC | ✅ |
-| NAT subnet purpose 必须 PRIVATE_SERVICE_CONNECT | ✅ |
-| PSC NAT subnet 不能分配 endpoint IP | ✅ |
-| PSC NAT subnet 只能被一个 Service Attachment 使用 | ✅ |
-| Consumer 不需要与 Producer VPC 路由互通 | ✅ |
-| Consumer 必须被 Service Attachment allow | ✅ |
+| 规则                                              | 是否必须 |
+| ------------------------------------------------- | -------- |
+| NAT subnet 与 forwarding rule 同一 VPC            | ✅        |
+| NAT subnet purpose 必须 PRIVATE_SERVICE_CONNECT   | ✅        |
+| PSC NAT subnet 不能分配 endpoint IP               | ✅        |
+| PSC NAT subnet 只能被一个 Service Attachment 使用 | ✅        |
+| Consumer 不需要与 Producer VPC 路由互通           | ✅        |
+| Consumer 必须被 Service Attachment allow          | ✅        |
 
 ---
 
@@ -270,11 +271,11 @@ Producer Service Attachment
 
 ### 2.4 VPC 网络要求总结
 
-| 要求 | 说明 |
-|------|------|
+| 要求             | 说明                                                                              |
+| ---------------- | --------------------------------------------------------------------------------- |
 | **VPC 可以重叠** | ✅ 两个项目的 VPC IP 地址范围**可以重叠**，因为 PSC 不使用 VPC Peering，路由不共享 |
-| **独立路由空间** | ✅ 每个 VPC 保持独立的路由表，不需要配置路由打通 |
-| **无需 Peering** | ✅ PSC 基于 Private Endpoint 技术，不需要 VPC Peering |
+| **独立路由空间** | ✅ 每个 VPC 保持独立的路由表，不需要配置路由打通                                   |
+| **无需 Peering** | ✅ PSC 基于 Private Endpoint 技术，不需要 VPC Peering                              |
 
 ---
 
@@ -332,11 +333,11 @@ gcloud compute service-attachments create ${SERVICE_ATTACHMENT_NAME} \
 
 **关键参数说明：**
 
-| 参数 | 说明 |
-|------|------|
-| `--consumer-accept-list` | 定义哪些项目 ID 被允许连接，以及每个项目的连接数限制 |
-| `--connection-preference=ACCEPT_MANUAL` | 强制要求手动批准每一个连接请求，增强安全性 |
-| `--nat-subnets` | 指定专用于 PSC NAT 的子网 |
+| 参数                                    | 说明                                                 |
+| --------------------------------------- | ---------------------------------------------------- |
+| `--consumer-accept-list`                | 定义哪些项目 ID 被允许连接，以及每个项目的连接数限制 |
+| `--connection-preference=ACCEPT_MANUAL` | 强制要求手动批准每一个连接请求，增强安全性           |
+| `--nat-subnets`                         | 指定专用于 PSC NAT 的子网                            |
 
 ---
 
@@ -391,10 +392,10 @@ gcloud compute firewall-rules create ${FIREWALL_RULE_NAME} \
 
 **关键结论：IP 地址可以重叠，不需要担心冲突。**
 
-| 场景 | IP 重叠要求 | 原因 |
-|------|-----------|------|
-| **PSC 连接** | ✅ **可以重叠** | PSC 不使用 VPC Peering，两个 VPC 的路由空间完全独立 |
-| **VPC Peering** | ❌ **不能重叠** | VPC Peering 共享路由空间，CIDR 必须不重叠 |
+| 场景            | IP 重叠要求    | 原因                                                |
+| --------------- | -------------- | --------------------------------------------------- |
+| **PSC 连接**    | ✅ **可以重叠** | PSC 不使用 VPC Peering，两个 VPC 的路由空间完全独立 |
+| **VPC Peering** | ❌ **不能重叠** | VPC Peering 共享路由空间，CIDR 必须不重叠           |
 
 ---
 
@@ -426,10 +427,10 @@ gcloud compute firewall-rules create ${FIREWALL_RULE_NAME} \
 
 ### 4.2 详细解释
 
-| 概念 | 说明 |
-|------|------|
-| **PSC** | 是一种**网络连接机制**，用于在 VPC 之间建立私有连接通道 |
-| **Load Balancing** | 是一种**服务暴露方式**，用于将流量分发到多个后端实例 |
+| 概念               | 说明                                                    |
+| ------------------ | ------------------------------------------------------- |
+| **PSC**            | 是一种**网络连接机制**，用于在 VPC 之间建立私有连接通道 |
+| **Load Balancing** | 是一种**服务暴露方式**，用于将流量分发到多个后端实例    |
 
 ---
 
@@ -513,17 +514,17 @@ Consumer → PSC Endpoint → Single Service
 
 ## 6. PSC vs PSA 对比
 
-| 特性 | PSA (Private Service Access) | PSC (Private Service Connect) |
-|------|-----------------------------|------------------------------|
-| **主要用途** | 访问 Google 托管服务（Cloud SQL、AI、BigQuery） | 访问自建/第三方服务 |
-| **底层技术** | VPC Peering + DNS Peering | Private Endpoint + Internal Load Balancer |
-| **网络模型** | 共享路由空间 | 独立路由，完全隔离 |
-| **IP 重叠** | ❌ 不允许 | ✅ 允许 |
-| **跨项目支持** | 有限支持 | 完全支持 |
-| **安全隔离** | 中等（共享路由） | 高（完全隔离） |
-| **DNS 管理** | `private.googleapis.com` | 自定义域名或自动生成 |
-| **计费模式** | 免费（仅 VPC Peering 成本） | 按带宽和连接数计费 |
-| **配置复杂度** | 简单 | 中等 |
+| 特性           | PSA (Private Service Access)                    | PSC (Private Service Connect)             |
+| -------------- | ----------------------------------------------- | ----------------------------------------- |
+| **主要用途**   | 访问 Google 托管服务（Cloud SQL、AI、BigQuery） | 访问自建/第三方服务                       |
+| **底层技术**   | VPC Peering + DNS Peering                       | Private Endpoint + Internal Load Balancer |
+| **网络模型**   | 共享路由空间                                    | 独立路由，完全隔离                        |
+| **IP 重叠**    | ❌ 不允许                                        | ✅ 允许                                    |
+| **跨项目支持** | 有限支持                                        | 完全支持                                  |
+| **安全隔离**   | 中等（共享路由）                                | 高（完全隔离）                            |
+| **DNS 管理**   | `private.googleapis.com`                        | 自定义域名或自动生成                      |
+| **计费模式**   | 免费（仅 VPC Peering 成本）                     | 按带宽和连接数计费                        |
+| **配置复杂度** | 简单                                            | 中等                                      |
 
 ---
 
