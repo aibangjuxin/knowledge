@@ -1,0 +1,41 @@
+{
+    "name": "abjx-env-uk-lex-poc-urlmap",
+    "defaultService": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendservices/abjx-abjx-lex-default-bs",
+    "routeRules": [
+        {
+            "priority": 0,
+            "matchRules": [
+                {
+                    "prefixMatch": "/",
+                    "host": "springboot-app.aibang-id.uk.aibang"
+                }
+            ],
+            "routeAction": {
+                "urlRewrite": {
+                    "hostRewrite": "env-shortname.gcp.google.aibang",
+                    "pathPrefixRewrite": "/springboot-app"
+                },
+                "weightedBackendServices": [
+                    {
+                        "backendService": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/lex-terminal-po-backend-service",
+                        "weight": 100
+                    }
+                ]
+            }
+        }
+    ],
+    "hostRules": [
+        {
+            "hosts": [
+                "env-shortname.gcp.google.aibang"
+            ],
+            "pathMatcher": "myenv-default-matcher"
+        }
+    ],
+    "pathMatchers": [
+        {
+            "name": "myenv-default-matcher",
+            "defaultService": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/abjx-abjx-lex-default-bs"
+        }
+    ]
+}
