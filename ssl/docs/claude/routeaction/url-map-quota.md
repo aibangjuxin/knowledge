@@ -38,12 +38,12 @@
 ### 1.2 单个 URL Map 内部限制 (Hard Limits)
 这些通常是**硬限制（System Limits）**，通过控制台申请调整通常非常困难或不支持。
 
-| 限制项                      | 内部负载均衡 (Internal)  | 外部负载均衡 (External) | 评估建议                                           |
-| :-------------------------- | :----------------------- | :---------------------- | :------------------------------------------------- |
-| **URL Map 配置大小**        | **128 KB**               | **64 KB**               | 核心限制。限制的是整个配置对象的序列化字节数。     |
-| **主机规则数 (Host Rules)** | **2000 个**              | 1000 个                 | 决定了你能配置多少个独立域名入口。                 |
-| **单 Matcher 路由规则数**   | **1000 个**              | **1000 个**             | 官方限制项是 `path rules or route rules per path matcher`。 |
-| **单 Matcher predicates**   | **1000 个**              | **1000 个**             | `headerMatches` / `queryParameterMatches` 会额外计数。 |
+| 限制项                      | 内部负载均衡 (Internal) | 外部负载均衡 (External) | 评估建议                                                    |
+| :-------------------------- | :---------------------- | :---------------------- | :---------------------------------------------------------- |
+| **URL Map 配置大小**        | **128 KB**              | **64 KB**               | 核心限制。限制的是整个配置对象的序列化字节数。              |
+| **主机规则数 (Host Rules)** | **2000 个**             | 1000 个                 | 决定了你能配置多少个独立域名入口。                          |
+| **单 Matcher 路由规则数**   | **1000 个**             | **1000 个**             | 官方限制项是 `path rules or route rules per path matcher`。 |
+| **单 Matcher predicates**   | **1000 个**             | **1000 个**             | `headerMatches` / `queryParameterMatches` 会额外计数。      |
 
 单 Matcher 路由规则数约 200 / 50 这个说法不应作为官方结论。
 官方文档的限制需要拆开看：
@@ -178,8 +178,6 @@
 ## 参考资料
 - [GCP Load Balancing Quotas - URL Maps](https://cloud.cloud.google.com/load-balancing/docs/quotas#url_maps)
 - [URL Masking vs Transparent Proxy Patterns](./flow-url-map.md)
-
-## 补充参考资料（官方核查来源）
 - [Google Cloud Load Balancing quotas and limits](https://cloud.google.com/load-balancing/docs/quotas)
 - [Google Cloud URL map concepts](https://cloud.google.com/load-balancing/docs/url-map-concepts)
 - [Google Cloud Internal Application Load Balancer traffic management](https://cloud.google.com/load-balancing/docs/l7-internal/traffic-management)
