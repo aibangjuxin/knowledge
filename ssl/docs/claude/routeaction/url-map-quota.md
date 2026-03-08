@@ -178,3 +178,8 @@
 ## 参考资料
 - [GCP Load Balancing Quotas - URL Maps](https://cloud.cloud.google.com/load-balancing/docs/quotas#url_maps)
 - [URL Masking vs Transparent Proxy Patterns](./flow-url-map.md)
+
+## 补充参考资料（官方核查来源）
+- [Google Cloud Load Balancing quotas and limits](https://cloud.google.com/load-balancing/docs/quotas)
+- [Google Cloud URL map concepts](https://cloud.google.com/load-balancing/docs/url-map-concepts)
+- [Google Cloud Internal Application Load Balancer traffic management](https://cloud.google.com/load-balancing/docs/l7-internal/traffic-management)
