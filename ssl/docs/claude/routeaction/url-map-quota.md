@@ -1,11 +1,27 @@
+**GCP GLB URL Map 核心限制与配额深度指南**
+*（修订版 · 基于 2026-03 官方文档复核）*
+## 编者按：这篇文章里哪些点需要修正
+
+这篇文章的主线判断是对的：`URL maps per project` 属于项目级软配额，而单个 URL Map 的容量瓶颈主要来自系统限制。但原稿把几类限制混在了一起，导致几个关键结论不够严谨。最需要修正的是这 6 点：
+
+1. `128 KB` 不是所有 GLB 通用值。官方口径是 `Size of URL maps` 对 External ALB 为 `64 KB`，对 Internal ALB 为 `128 KB`，而且这是不可提升的系统限制。
+2. `Internal ALB 最多 2000 个 Host Rules` 不是“无法验证”，官方 Quotas 页面明确写的是 `Host rules, path matchers per URL map`：External 为 `1000`，Internal 为 `2000`。
+3. `单 matcher 大约 200 / 50 条 route rules` 这个说法不应再作为正式结论。官方限制分成两层：`Path rules or route rules per path matcher = 1000`，同时 `Predicates per path matcher = 1000`。对透明代理这类 `1 prefixMatch + 1 headerMatch` 的规则来说，实际更接近“单 matcher 约 500 条规则先撞到 predicates 限制”，不是 200 或 50。
+4. `match conditions` / `predicates` 才是 routeRules 设计时更容易忽略的真正瓶颈，尤其是你用了 `headerMatches`、`queryParameterMatches` 之后，规则数和条件数不再是一回事。
+5. `务必配置 tests 数组` 只适用于支持 URL map tests 的产品。官方 Quotas 页面明确写了 Internal ALB `N/A`，也就是内部 ALB 不支持 URL map tests，这条建议需要限定适用范围。
+6. `证书池默认 15，扩容后约 100` 需要拆开写。官方区分了三种证书挂载方式：`Compute Engine SSL certificates per target proxy = 15`、`Certificate Manager certificates per target proxy = 100`、`Certificate Manager certificate maps per target proxy = 1`。这不是简单的“15 扩到 100”，而是取决于你采用哪种证书配置方式。
+
+一句话总结：原稿在“URL Map 会先撞大小与 matcher 维度限制、需要尽早做分片”这个方向上是对的，但要把 `配置大小`、`host/path matcher 数量`、`route rules 数量`、`predicates 数量`、`证书挂载方式` 这些限制拆开看，否则很容易把设计容量估小或估错。
+
 # GCP GLB URL Map 核心限制与配额 (Quotas & Limits) 深度指南
 
 > [!IMPORTANT]
 > **核心结论摘要 (Core Summary)**：
 > 1. **配额性质**：`URL maps per project` (默认 250) 是**软配额**，可以在控制台申请扩展（无特殊硬性上限）。
-> 2. **物理瓶颈**：**128KB 序列化大小**是针对单个 URL Map 配置文件（JSON/YAML）的**硬限制**，通常不可扩容。当 API 规则接近 1000 条时，配置字节数比规则数量更先达到瓶颈。
-> 3. **能力上限**：内部负载均衡 (Internal ALB) 支持多达 **2000 个 Host Rules**（多于外部 GLB 的 1000 个）。
-> 4. **推荐架构**：针对大规模 API，建议采用 **“泛域名匹配 + 统一 Matcher”** 方案，通过请求头 (Header Matches) 分发流量，以最大化利用 128KB 的配置空间。
+> 2. **物理瓶颈**：`Size of URL maps` 对 **Internal ALB = 128 KB**、对 **External ALB = 64 KB**，这是系统限制
+> 3. **能力上限**：`Host rules, path matchers per URL map` 对 **Internal ALB = 2000**、对 **External ALB = 1000**；`Path rules or route rules per path matcher = 1000`；`Predicates per path matcher = 1000`。
+> 4. **设计含义**：对 `prefixMatch + headerMatch` 这类透明代理规则，实践中的瓶颈通常先落在 `predicates` 和 URL Map 大小，而不是“单 matcher 只有 200 或 50 条 route rules”。
+> 5. **推荐架构**：针对大规模 API，建议采用 **“泛域名匹配 + 统一 Matcher”** 方案，通过请求头 (Header Matches) 分发流量，并在 `predicates` 或 URL Map 大小接近阈值时做分片。
 
 在构建生产级、多租户或复杂的 API 流量链路时，对 URL Map 的配额（Quotas）和系统限制（Limits）的理解至关重要。本文针对 Internal HTTP(S) Load Balancing（内部负载均衡）进行专项探索。
 
@@ -24,18 +40,24 @@
 
 | 限制项                      | 内部负载均衡 (Internal)  | 外部负载均衡 (External) | 评估建议                                           |
 | :-------------------------- | :----------------------- | :---------------------- | :------------------------------------------------- |
-| **URL Map 配置大小**        | **128 KB** (部分为 64KB) | **64 KB**               | 核心限制。限制的是整个配置对象的序列化字节数。     |
+| **URL Map 配置大小**        | **128 KB**               | **64 KB**               | 核心限制。限制的是整个配置对象的序列化字节数。     |
 | **主机规则数 (Host Rules)** | **2000 个**              | 1000 个                 | 决定了你能配置多少个独立域名入口。                 |
-| **路径规则数 (Path Rules)** | 受限于配置总大小         | 受限于配置总大小        | 建议使用泛域名或正则表达式（如果支持）减少规则数。 |
-| **单 Matcher 路由规则数**   | 约 **200 个**            | 约 50 个                | 超过此值建议拆分 Matcher。                         |
+| **单 Matcher 路由规则数**   | **1000 个**              | **1000 个**             | 官方限制项是 `path rules or route rules per path matcher`。 |
+| **单 Matcher predicates**   | **1000 个**              | **1000 个**             | `headerMatches` / `queryParameterMatches` 会额外计数。 |
 
+单 Matcher 路由规则数约 200 / 50 这个说法不应作为官方结论。
+官方文档的限制需要拆开看：
+每条 routeRule 的 predicates = 1（`prefixMatch` 或 `fullPathMatch`）
+                        + `headerMatches` 数量
+                        + `queryParameterMatches` 数量
+因此规则数上限和 predicates 上限是两个不同维度。
 ---
 
 ## 2. URL Map 大小限制 (128KB) 深入解析
 
 ### 2.1 这个大小限制针对什么？
 - **定义**：它指的是 **URL Map 资源对象的 JSON/YAML 序列化后的总字节数**。
-- **包含内容**：所有的 `hostRules`、`pathMatchers`、`routeRules`、`urlRewrite` 以及 `tests` 数组。
+- **包含内容**：所有的 `hostRules`、`pathMatchers`、`routeRules`、`urlRewrite`，以及在产品支持时可用的 `tests` 数组。
 - **影响因子**：
     - 域名和路径的字符串长度。
     - 规则的数量。
