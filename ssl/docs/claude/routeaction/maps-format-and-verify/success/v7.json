@@ -1,0 +1,132 @@
+{
+    "name": "ajbx-ppd01-uk-lex-poc-urlmap-v7",
+    "defaultService": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds",
+    "hostRules": [
+        {
+            "hosts": [
+                "lex-long-fqdn.projectID.env.aliyun.cloud.region.aibang"
+            ],
+            "pathMatcher": "lex-long-fqdn-matcher"
+        },
+        {
+            "hosts": [
+                "gg-env-region.projectID.env.aliyun.cloud.region.aibang"
+            ],
+            "pathMatcher": "gg-env-region-matcher"
+        },
+        {
+            "hosts": [
+                "ppd01-ajbx.short.fqdn.aibang"
+            ],
+            "pathMatcher": "ppd01-default-matcher"
+        }
+    ],
+    "pathMatchers": [
+        {
+            "name": "lex-long-fqdn-matcher",
+            "defaultService": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds",
+            "pathRules": [
+                {
+                    "paths": [
+                        "/"
+                    ],
+                    "service": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds",
+                    "routeAction": {
+                        "urlRewrite": {
+                            "pathPrefixRewrite": "/lex-long-fqdn"
+                        },
+                        "requestHeadersToAdd": [
+                            {
+                                "headerName": "Host",
+                                "headerValue": "ppd01-ajbx.short.fqdn.aibang",
+                                "replace": true
+                            }
+                        ]
+                    }
+                },
+                {
+                    "paths": [
+                        "/*"
+                    ],
+                    "service": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds",
+                    "routeAction": {
+                        "urlRewrite": {
+                            "pathPrefixRewrite": "/lex-long-fqdn"
+                        },
+                        "requestHeadersToAdd": [
+                            {
+                                "headerName": "Host",
+                                "headerValue": "ppd01-ajbx.short.fqdn.aibang",
+                                "replace": true
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "gg-env-region-matcher",
+            "defaultService": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds",
+            "pathRules": [
+                {
+                    "paths": [
+                        "/jccl/v1/callbackup"
+                    ],
+                    "service": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds",
+                    "routeAction": {
+                        "urlRewrite": {
+                            "pathPrefixRewrite": "/v1-sit"
+                        },
+                        "requestHeadersToAdd": [
+                            {
+                                "headerName": "Host",
+                                "headerValue": "ppd01-ajbx.short.fqdn.aibang",
+                                "replace": true
+                            }
+                        ]
+                    }
+                },
+                {
+                    "paths": [
+                        "/"
+                    ],
+                    "service": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds",
+                    "routeAction": {
+                        "urlRewrite": {
+                            "pathPrefixRewrite": "/gg-env-region"
+                        },
+                        "requestHeadersToAdd": [
+                            {
+                                "headerName": "Host",
+                                "headerValue": "ppd01-ajbx.short.fqdn.aibang",
+                                "replace": true
+                            }
+                        ]
+                    }
+                },
+                {
+                    "paths": [
+                        "/*"
+                    ],
+                    "service": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds",
+                    "routeAction": {
+                        "urlRewrite": {
+                            "pathPrefixRewrite": "/gg-env-region"
+                        },
+                        "requestHeadersToAdd": [
+                            {
+                                "headerName": "Host",
+                                "headerValue": "ppd01-ajbx.short.fqdn.aibang",
+                                "replace": true
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "ppd01-default-matcher",
+            "defaultService": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds"
+        }
+    ]
+}

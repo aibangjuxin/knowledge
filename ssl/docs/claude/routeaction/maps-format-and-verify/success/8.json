@@ -1,0 +1,29 @@
+{
+    "name": "ajbx-ppd01-uk-lex-poc-urlmap-v8",
+    "description": "Simplified wildcard host routing. Generic host-to-path mapping is delegated to Nginx or Kong because Google Cloud URL maps cannot abjture a wildcard hostname segment and reuse it in a path rewrite.",
+    "defaultService": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds",
+    "hostRules": [
+        {
+            "hosts": [
+                "*.projectID.env.aliyun.cloud.region.aibang"
+            ],
+            "pathMatcher": "wildcard-pass-through-matcher"
+        },
+        {
+            "hosts": [
+                "ppd01-ajbx.short.fqdn.aibang"
+            ],
+            "pathMatcher": "ppd01-default-matcher"
+        }
+    ],
+    "pathMatchers": [
+        {
+            "name": "wildcard-pass-through-matcher",
+            "defaultService": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds"
+        },
+        {
+            "name": "ppd01-default-matcher",
+            "defaultService": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds"
+        }
+    ]
+}

@@ -1,0 +1,85 @@
+{
+    "name": "ajbx-ppd01-uk-lex-poc-urlmap-v6",
+    "defaultService": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds",
+    "hostRules": [
+        {
+            "hosts": [
+                "springboot-app.projectID.env.aliyun.cloud.region.aibang"
+            ],
+            "pathMatcher": "springboot-app-matcher"
+        },
+        {
+            "hosts": [
+                "api2.projectID.env.aliyun.cloud.region.aibang"
+            ],
+            "pathMatcher": "api2-matcher"
+        },
+        {
+            "hosts": [
+                "ppd01-ajbx.short.fqdn.aibang"
+            ],
+            "pathMatcher": "ppd01-default-matcher"
+        }
+    ],
+    "pathMatchers": [
+        {
+            "name": "springboot-app-matcher",
+            "defaultService": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds",
+            "pathRules": [
+                {
+                    "paths": [
+                        "/hello"
+                    ],
+                    "service": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/lex-terminal-po-backend-service",
+                    "routeAction": {
+                        "urlRewrite": {
+                            "pathPrefixRewrite": "/springboot-app/hello"
+                        },
+                        "requestHeadersToAdd": [
+                            {
+                                "headerName": "Host",
+                                "headerValue": "ppd01-ajbx.short.fqdn.aibang",
+                                "replace": true
+                            }
+                        ]
+                    }
+                },
+                {
+                    "paths": [
+                        "/hello/*"
+                    ],
+                    "service": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/lex-terminal-po-backend-service",
+                    "routeAction": {
+                        "urlRewrite": {
+                            "pathPrefixRewrite": "/springboot-app/hello"
+                        },
+                        "requestHeadersToAdd": [
+                            {
+                                "headerName": "Host",
+                                "headerValue": "ppd01-ajbx.short.fqdn.aibang",
+                                "replace": true
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "api2-matcher",
+            "defaultService": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds",
+            "pathRules": [
+                {
+                    "paths": [
+                        "/api2",
+                        "/api2/*"
+                    ],
+                    "service": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds"
+                }
+            ]
+        },
+        {
+            "name": "ppd01-default-matcher",
+            "defaultService": "https://www.googleapis.com/compute/v1/projects/projectID/regions/europe-west2/backendServices/ajbx-env-region-nginxl7-ilb-http-bds"
+        }
+    ]
+}
