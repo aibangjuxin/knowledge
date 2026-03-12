@@ -1,14 +1,183 @@
-# Q
+# 跨项目 PSC NEG 实现方案
 
-帮我看一下下面这个方案怎么实现 1 总体目标 希望实现一个 跨 Project 的 API 访问架构： A Project (入口层) ↓ Global Load Balancer ↓ PSC NEG (Consumer) ↓ B Project Service Attachment (Producer) ↓ Internal Load Balancer ↓ Backend Service (GKE / VM / MIG) 核心目标： 让 A Project 的 GLB 通过 PSC 访问 B Project 的私有服务。 ⸻ 2 当前网络环境 网络结构包含 两个 Project 和两种网络类型。 A Project • 部署 Global Load Balancer • 使用 Shared VPC • 作为 PSC Consumer A Project Shared VPC └── GLB └── PSC NEG ⸻ B Project • 有自己的 Private VPC • 部署业务服务 • 作为 PSC Producer B Project Private VPC └── Service Attachment └── Internal Load Balancer └── Backend (GKE / VM) ⸻ 3 想解决的问题 希望 替换当前的跨 Project 访问方式。 当前方案 你已经实现： GLB ↓ NON_GCP_PRIVATE_IP_PORT NEG ↓ ILB IP ↓ Backend 特点： • 直接访问 IP + Port • Producer IP 暴露 • Producer 无法控制 consumer ⸻ 目标方案 你希望改成： GLB ↓ PSC NEG ↓ Service Attachment ↓ ILB ↓ Backend 特点： • 访问 Service • 不暴露 backend IP • Producer 可以控制访问权限 ⸻ 4 核心问题 在实现这个架构时，主要在确认 PSC 的依赖关系和创建条件。 你重点关注的问题包括： 1 PSC NEG 创建条件 你想确认： • 是否需要 network • 是否需要 subnet • 是否必须在 Shared VPC ⸻ 2 Producer Service Attachment 条件 你想理解： • 是否必须在 Shared VPC • 是否可以在 Private VPC • 是否必须有 PSC NAT subnet ⸻ 3 跨 Project 访问机制 想确认： GLB (Shared VPC) ↓ PSC NEG ↓ B Project Private VPC Service Attachment 是否 官方支持并可行。 ⸻ 4 PSC 与当前方案对比 想弄清楚： NON_GCP_PRIVATE_IP_PORT NEG 和 PSC NEG 之间的区别： • 网络依赖 • 安全性 • 架构设计 ⸻ 5 最终目标架构 ↓ GLB (A Project Shared VPC) ↓ Cloud Armor ↓ Backend Service ↓ PSC NEG ↓ Service Attachment (B Project) ↓ Internal Load Balancer ↓ Backend Service 并具备： 能力 目标 跨 Project 访问 ✔ 不暴露 backend IP ✔ Producer 控制 consumer ✔ 服务级别隔离 ✔ ⸻ 6 需求一句话总结 你的需求可以总结为： 在 A Project 的 Shared VPC 中部署 GLB，并通过 PSC NEG 作为 Consumer，访问 B Project Private VPC 中通过 Service Attachment 发布的内部服务。 ⸻ 7 真实关注点（更深层） 从你问的问题来看，你真正想搞清楚的是 PSC 的三个核心机制： 1️⃣ 网络归属机制 PSC NEG 不需要 network / subnet 2️⃣ Producer 网络要求 Service Attachment 必须绑定 ILB + PSC subnet 3️⃣ 跨 VPC 通信机制 Consumer VPC ≠ Producer VPC PSC 会自动建立连接。
+## 问题描述
 
-## 🔍 问题分析
+### 总体目标
+
+希望实现一个跨 Project 的 API 访问架构：
+
+```
+A Project (入口层)
+  ↓
+Global Load Balancer
+  ↓
+PSC NEG (Consumer)
+  ↓
+B Project Service Attachment (Producer)
+  ↓
+Internal Load Balancer
+  ↓
+Backend Service (GKE / VM / MIG)
+```
+
+**核心目标**：让 A Project 的 GLB 通过 PSC 访问 B Project 的私有服务。
+
+---
+
+### 当前网络环境
+
+网络结构包含两个 Project 和两种网络类型。
+
+**A Project**
+- 部署 Global Load Balancer
+- 使用 Shared VPC
+- 作为 PSC Consumer
+
+```
+A Project Shared VPC
+└── GLB
+    └── PSC NEG
+```
+
+**B Project**
+- 有自己的 Private VPC
+- 部署业务服务
+- 作为 PSC Producer
+
+```
+B Project Private VPC
+└── Service Attachment
+    └── Internal Load Balancer
+        └── Backend (GKE / VM)
+```
+
+---
+
+### 想解决的问题
+
+希望替换当前的跨 Project 访问方式。
+
+**当前方案**（已实现）：
+
+```
+GLB
+  ↓
+NON_GCP_PRIVATE_IP_PORT NEG
+  ↓
+ILB IP
+  ↓
+Backend
+```
+
+特点：
+- 直接访问 IP + Port
+- Producer IP 暴露
+- Producer 无法控制 consumer
+
+**目标方案**：
+
+```
+GLB
+  ↓
+PSC NEG
+  ↓
+Service Attachment
+  ↓
+ILB
+  ↓
+Backend
+```
+
+特点：
+- 访问 Service
+- 不暴露 backend IP
+- Producer 可以控制访问权限
+
+---
+
+### 核心问题
+
+在实现这个架构时，主要在确认 PSC 的依赖关系和创建条件。
+
+1. **PSC NEG 创建条件**
+   - 是否需要 network
+   - 是否需要 subnet
+   - 是否必须在 Shared VPC
+
+2. **Producer Service Attachment 条件**
+   - 是否必须在 Shared VPC
+   - 是否可以在 Private VPC
+   - 是否必须有 PSC NAT subnet
+
+3. **跨 Project 访问机制**
+
+```
+GLB (Shared VPC)
+  ↓
+PSC NEG
+  ↓
+B Project Private VPC Service Attachment
+```
+
+是否官方支持并可行。
+
+4. **PSC 与当前方案对比**
+
+NON_GCP_PRIVATE_IP_PORT NEG 和 PSC NEG 之间的区别：
+- 网络依赖
+- 安全性
+- 架构设计
+
+---
+
+### 最终目标架构
+
+```
+GLB (A Project Shared VPC)
+  ↓
+Cloud Armor
+  ↓
+Backend Service
+  ↓
+PSC NEG
+  ↓
+Service Attachment (B Project)
+  ↓
+Internal Load Balancer
+  ↓
+Backend Service
+```
+
+| 能力 | 目标 |
+|------|------|
+| 跨 Project 访问 | ✔ |
+| 不暴露 backend IP | ✔ |
+| Producer 控制 consumer | ✔ |
+| 服务级别隔离 | ✔ |
+
+---
+
+### 需求总结
+
+在 A Project 的 Shared VPC 中部署 GLB，并通过 PSC NEG 作为 Consumer，访问 B Project Private VPC 中通过 Service Attachment 发布的内部服务。
+
+---
+
+### PSC 核心机制
+
+1. **网络归属机制**：PSC NEG 不需要 network / subnet
+2. **Producer 网络要求**：Service Attachment 必须绑定 ILB + PSC subnet
+3. **跨 VPC 通信机制**：Consumer VPC ≠ Producer VPC，PSC 会自动建立连接
+
+---
+
+## 问题分析
 
 你的方案本质是：**用 PSC（Private Service Connect）替换裸 IP NEG，实现跨 Project 的服务级访问隔离**。核心涉及三个层面：PSC NEG 创建条件、Producer Service Attachment 要求、以及跨 VPC 通信机制。
 
 ---
 
-## 📊 架构全景图
+## 架构全景图
 
 ```mermaid
 graph TD
@@ -38,11 +207,11 @@ graph TD
 
 ---
 
-## 🛠 实现步骤
+## 实现步骤
 
 ### Step 1：B Project - 准备 PSC Producer
 
-#### 1.1 创建 PSC NAT Subnet（**必须**）
+#### 1.1 创建 PSC NAT Subnet（必须）
 
 ```bash
 gcloud compute networks subnets create psc-nat-subnet \
@@ -53,7 +222,7 @@ gcloud compute networks subnets create psc-nat-subnet \
   --purpose=PRIVATE_SERVICE_CONNECT
 ```
 
-> ⚠️ `purpose=PRIVATE_SERVICE_CONNECT`  是 Producer 侧的硬性要求，该 subnet 专用于 PSC NAT 地址转换，不能复用普通 subnet。
+> 注意：`purpose=PRIVATE_SERVICE_CONNECT` 是 Producer 侧的硬性要求，该 subnet 专用于 PSC NAT 地址转换，不能复用普通 subnet。
 
 #### 1.2 确认 ILB 已存在
 
@@ -98,7 +267,7 @@ gcloud compute network-endpoint-groups create psc-neg \
   --subnetwork=shared-vpc-subnet
 ```
 
-> ⚠️ PSC NEG 需要指定  `network`  和  `subnetwork`，用于分配 Consumer 侧的 PSC 接入 IP（该 IP 仅在 Consumer VPC 内可路由）。
+> 注意：PSC NEG 需要指定 `network` 和 `subnetwork`，用于分配 Consumer 侧的 PSC 接入 IP（该 IP 仅在 Consumer VPC 内可路由）。
 
 #### 2.2 将 PSC NEG 加入 Backend Service
 
@@ -152,32 +321,32 @@ gcloud compute forwarding-rules create psc-glb-rule \
 
 ---
 
-## 📊 PSC NEG vs NON_GCP_PRIVATE_IP_PORT NEG 对比
+## PSC NEG vs NON_GCP_PRIVATE_IP_PORT NEG 对比
 
-| 维度                       | `NON_GCP_PRIVATE_IP_PORT` NEG | PSC NEG                    |
-| -------------------------- | ----------------------------- | -------------------------- |
-| 访问目标                   | 裸 IP + Port                  | Service Attachment URI     |
-| Backend IP 是否暴露        | ✅ 暴露                       | ❌ 不暴露                  |
-| Producer 访问控制          | ❌ 无                         | ✅ 支持 allowlist/手动审批 |
-| 网络依赖                   | 需要 VPC Peering 或共享路由   | PSC 自动建立隔离通道       |
-| 跨 Project 支持            | 需要额外网络打通              | 原生支持                   |
-| 服务级别隔离               | ❌                            | ✅                         |
-| Consumer 侧需要 subnet     | ❌                            | ✅ 分配接入 IP 用          |
-| Producer 侧需要 PSC subnet | -                             | ✅ **必须**                |
+| 维度 | `NON_GCP_PRIVATE_IP_PORT` NEG | PSC NEG |
+|------|-------------------------------|---------|
+| 访问目标 | 裸 IP + Port | Service Attachment URI |
+| Backend IP 是否暴露 | 是 | 否 |
+| Producer 访问控制 | 无 | 支持 allowlist/手动审批 |
+| 网络依赖 | 需要 VPC Peering 或共享路由 | PSC 自动建立隔离通道 |
+| 跨 Project 支持 | 需要额外网络打通 | 原生支持 |
+| 服务级别隔离 | 否 | 是 |
+| Consumer 侧需要 subnet | 否 | 是，分配接入 IP 用 |
+| Producer 侧需要 PSC subnet | - | 必须 |
 
 ---
 
-## 🔑 三大核心机制澄清
+## 三大核心机制澄清
 
-### 1️⃣ PSC NEG 的网络归属
+### 1. PSC NEG 的网络归属
 
-PSC NEG 创建时**需要指定 network + subnetwork**，原因是 GCP 需要在 Consumer VPC 内分配一个私有 IP 作为 PSC 接入点（Forwarding Rule IP）。这个 IP 仅用于 Consumer 内部路由，**不是** Backend 的真实 IP。
+PSC NEG 创建时**需要指定 network + subnetwork**，原因是 GCP 需要在 Consumer VPC 内分配一个私有 IP 作为 PSC 接入点（Forwarding Rule IP）。这个 IP 仅用于 Consumer 内部路由，**不是** Backend 的真实 IP。
 
-### 2️⃣ Producer 必须有 PSC NAT Subnet
+### 2. Producer 必须有 PSC NAT Subnet
 
-Service Attachment 强制绑定  `purpose=PRIVATE_SERVICE_CONNECT`  的 subnet，这个 subnet 的 IP 用于做  **SNAT**，使 Consumer 的流量进入 Producer VPC 时源 IP 被替换，实现双向隔离。
+Service Attachment 强制绑定 `purpose=PRIVATE_SERVICE_CONNECT` 的 subnet，这个 subnet 的 IP 用于做 **SNAT**，使 Consumer 的流量进入 Producer VPC 时源 IP 被替换，实现双向隔离。
 
-### 3️⃣ 跨 VPC 通信机制
+### 3. 跨 VPC 通信机制
 
 ```
 Consumer VPC (A Project Shared VPC)
@@ -189,35 +358,37 @@ Producer VPC (B Project Private VPC)
     ILB → Backend
 ```
 
-两个 VPC **完全不需要 Peering**，PSC 通过 Google 内部网络建立单向连接通道，IP 空间可以重叠。
+两个 VPC **完全不需要 Peering**，PSC 通过 Google 内部网络建立单向连接通道，IP 空间可以重叠。
 
 ---
 
-## ⚠️ 注意事项
+## 注意事项
 
 1. **区域一致性**：PSC NEG、Service Attachment、ILB 必须在**同一 Region**
-2. **GLB 是全球资源，但 PSC NEG 是区域资源**，Backend Service 绑定时注意  `--region` vs `--global`  区别
-3. **`ACCEPT_MANUAL`  模式下**，Producer 需要在 Service Attachment 上手动 approve Consumer 的连接请求：
+2. **GLB 是全球资源，但 PSC NEG 是区域资源**，Backend Service 绑定时注意 `--region` vs `--global` 区别
+3. **`ACCEPT_MANUAL` 模式下**，Producer 需要在 Service Attachment 上手动 approve Consumer 的连接请求：
 
     ```bash
     gcloud compute service-attachments describe my-service-attachment \  --project=b-project --region=asia-east1# 查看 connectedEndpoints 状态，手动 approve
     ```
 
 4. **健康检查**：GLB 的 Health Check 流量也会经过 PSC 通道，需确保 B Project ILB 的健康检查端口对外可达
-5. **Shared VPC 权限**：A Project 若使用 Shared VPC，PSC NEG 的 subnet 需要在 Host Project 的网络中，确认 Service Project 有  `compute.networkUser`  角色
+5. **Shared VPC 权限**：A Project 若使用 Shared VPC，PSC NEG 的 subnet 需要在 Host Project 的网络中，确认 Service Project 有 `compute.networkUser` 角色
 
-# Why need subnet
+---
 
-## 🔍 问题分析
+## 为什么需要 Subnet
+
+## 问题分析
 
 你有两个疑问：
 
 1. PSC NEG 为什么必须指定 Shared VPC 的 network/subnet？
-2. Consumer 侧的 subnet 是否也需要  `purpose=PRIVATE_SERVICE_CONNECT`？
+2. Consumer 侧的 subnet 是否也需要 `purpose=PRIVATE_SERVICE_CONNECT`？
 
 ---
 
-## 📊 PSC 连接建立机制
+## PSC 连接建立机制
 
 ```mermaid
 graph TD
@@ -245,7 +416,7 @@ graph TD
 
 ---
 
-## ✅ 回答问题 1：为什么 PSC NEG 要指定 network/subnet？
+## 回答问题 1：为什么 PSC NEG 要指定 network/subnet？
 
 **本质原因：GCP 需要在 Consumer VPC 内分配一个真实的私有 IP，作为 PSC 的本地接入端点。**
 
@@ -267,14 +438,14 @@ GCP 识别这是 PSC 端点，转发到 B Project Service Attachment
 
 ---
 
-## ✅ 回答问题 2：Consumer 的 subnet 需要  `PRIVATE_SERVICE_CONNECT`purpose 吗？
+## 回答问题 2：Consumer 的 subnet 需要 `PRIVATE_SERVICE_CONNECT` purpose 吗？
 
 **不需要。Consumer 侧用普通 subnet 即可。**
 
-| 侧                        | Subnet Purpose 要求                   | 原因                             |
-| ------------------------- | ------------------------------------- | -------------------------------- |
-| **Producer**（B Project） | ✅ **必须** `PRIVATE_SERVICE_CONNECT` | 用于 SNAT，隔离 Consumer 真实 IP |
-| **Consumer**（A Project） | ❌ **普通 subnet 即可**               | 仅用于分配 PSC 接入 IP           |
+| 侧 | Subnet Purpose 要求 | 原因 |
+|----|---------------------|------|
+| **Producer**（B Project） | 必须 `PRIVATE_SERVICE_CONNECT` | 用于 SNAT，隔离 Consumer 真实 IP |
+| **Consumer**（A Project） | 普通 subnet 即可 | 仅用于分配 PSC 接入 IP |
 
 ```bash
 # Consumer 侧 subnet 就是普通 subnet，无需特殊 purpose
@@ -299,7 +470,7 @@ gcloud compute network-endpoint-groups create psc-neg \
 
 ---
 
-## 🔑 关于 Shared VPC 的补充说明
+## 关于 Shared VPC 的补充说明
 
 你说"不理解为什么一定要在 Shared VPC 里创建"——其实**不是强制必须在 Shared VPC**，而是因为你的 A Project 本身就使用 Shared VPC，所以 PSC NEG 只能用 A Project 能访问到的网络，即 Shared VPC 的 subnet。
 
@@ -308,27 +479,29 @@ gcloud compute network-endpoint-groups create psc-neg \
 如果 A Project 用的是 Shared VPC → 指定 Host Project 的 subnet
 ```
 
-> ⚠️ **Shared VPC 下的权限注意**：PSC NEG 创建在 Service Project（A Project），但 subnet 属于 Host Project，需要确认 A Project 的 Service Account 有 Host Project 网络的  `compute.networkUser`  角色，否则创建会报权限错误。
+> 注意：**Shared VPC 下的权限注意**：PSC NEG 创建在 Service Project（A Project），但 subnet 属于 Host Project，需要确认 A Project 的 Service Account 有 Host Project 网络的 `compute.networkUser` 角色，否则创建会报权限错误。
 
 ---
 
-## 一句话总结
+## 总结
 
-| 问题                                             | 结论                                                |
-| ------------------------------------------------ | --------------------------------------------------- |
-| 为什么要指定 subnet？                            | GCP 需要从该 subnet 分配一个本地 IP 作为 PSC 接入点 |
-| Consumer subnet 需要特殊 purpose 吗？            | **不需要**，普通 subnet 即可                        |
-| `PRIVATE_SERVICE_CONNECT` purpose 只在哪侧需要？ | **仅 Producer 侧**的 NAT subnet 需要                |
-
-# How to switch another method
-
-## 🔍 问题分析
-
-你说的完全正确。PSC Consumer 侧有  **两种接入方式**，PSC NEG 只是其中一种。另一种就是直接创建  **PSC Forwarding Rule**（也叫 Consumer Endpoint）。
+| 问题 | 结论 |
+|------|------|
+| 为什么要指定 subnet？ | GCP 需要从该 subnet 分配一个本地 IP 作为 PSC 接入点 |
+| Consumer subnet 需要特殊 purpose 吗？ | **不需要**，普通 subnet 即可 |
+| `PRIVATE_SERVICE_CONNECT` purpose 只在哪侧需要？ | **仅 Producer 侧**的 NAT subnet 需要 |
 
 ---
 
-## 📊 两种方案对比
+## 如何切换到其他方式
+
+## 问题分析
+
+你说的完全正确。PSC Consumer 侧有 **两种接入方式**，PSC NEG 只是其中一种。另一种就是直接创建 **PSC Forwarding Rule**（也叫 Consumer Endpoint）。
+
+---
+
+## 两种方案对比
 
 ```mermaid
 graph TD
@@ -346,19 +519,19 @@ graph TD
 
 ---
 
-## ✅ 两种方式核心区别
+## 两种方式核心区别
 
-| 维度           | PSC NEG                     | PSC Forwarding Rule     |
-| -------------- | --------------------------- | ----------------------- |
-| 适用场景       | **GLB 作为入口**            | **内部服务直接访问**    |
-| 能否挂载到 GLB | ✅ 可以                     | ❌ **不能**             |
-| 访问方式       | GLB → Backend Service → NEG | 直接访问分配的私有 IP   |
-| 创建复杂度     | 稍高                        | 简单                    |
-| DNS 集成       | 通过 GLB 域名               | 可配合 Cloud DNS 私有域 |
+| 维度 | PSC NEG | PSC Forwarding Rule |
+|------|---------|---------------------|
+| 适用场景 | **GLB 作为入口** | **内部服务直接访问** |
+| 能否挂载到 GLB | 可以 | **不能** |
+| 访问方式 | GLB → Backend Service → NEG | 直接访问分配的私有 IP |
+| 创建复杂度 | 稍高 | 简单 |
+| DNS 集成 | 通过 GLB 域名 | 可配合 Cloud DNS 私有域 |
 
 ---
 
-## 🛠 PSC Forwarding Rule 创建方式
+## PSC Forwarding Rule 创建方式
 
 ```bash
 # 第一步：在 Consumer subnet 预留一个静态内部 IP
@@ -377,11 +550,11 @@ gcloud compute forwarding-rules create psc-consumer-endpoint \
   --target-service-attachment=projects/b-project/regions/asia-east1/serviceAttachments/my-service-attachment
 ```
 
-创建成功后，A Project 内的任何资源（VM、GKE Pod）都可以直接通过  `psc-consumer-ip`  访问 B Project 的服务。
+创建成功后，A Project 内的任何资源（VM、GKE Pod）都可以直接通过 `psc-consumer-ip` 访问 B Project 的服务。
 
 ---
 
-## ⚠️ 关键限制
+## 关键限制
 
 **PSC Forwarding Rule 无法作为 GLB 的 Backend。**
 
@@ -391,7 +564,7 @@ gcloud compute forwarding-rules create psc-consumer-endpoint \
 外部流量 → GLB → PSC → B Project
 ```
 
-PSC Forwarding Rule **不满足需求**，必须用 PSC NEG。
+PSC Forwarding Rule **不满足需求**，必须用 PSC NEG。
 
 PSC Forwarding Rule 适合的场景是：
 
@@ -401,7 +574,7 @@ A Project 内部服务（Kong DP / VM / GKE）→ PSC IP → B Project
 
 ---
 
-## 🔑 结论
+## 结论
 
 你的目标架构（GLB 作入口）只有 PSC NEG 这一条路。如果 PSC NEG 创建失败，需要先排查失败原因：
 
@@ -419,16 +592,15 @@ gcloud compute service-attachments describe my-service-attachment \
 
 常见失败原因：
 
-1. **Service Attachment 未 approve** Consumer Project
+1. **Service Attachment 未 approve** Consumer Project
 2. **subnet 不在同一 region**
-3. **Shared VPC 权限不足**（`compute.networkUser`  缺失）
+3. **Shared VPC 权限不足**（`compute.networkUser` 缺失）
 
+---
 
+# Cross-Project Success Three - PSC NEG 实现方案
 
-
-# Cross-Project Success Three - PSC NEG Implementation
-
-## 🔍 问题分析
+## 问题分析
 
 你当前已通过 **NON_GCP_PRIVATE_IP_PORT ZONAL NEG** 方式实现了 Tenant ILB → Master Tier-2 ILB 的跨项目流量转发。现在评估 **Private Service Connect (PSC) NEG** 方案作为替代或补充，核心诉求是：
 
@@ -438,7 +610,7 @@ gcloud compute service-attachments describe my-service-attachment \
 
 ---
 
-## 🛠 PSC NEG 方案核心原理
+## PSC NEG 方案核心原理
 
 PSC 方案将 Master 的服务封装成一个 **Private Service Connect Service Attachment**，Tenant 通过创建 **PSC NEG** 连接该 Attachment，流量走 GCP 内部私有通道，无需暴露真实 VIP。
 
@@ -448,7 +620,7 @@ Tenant ILB → Tenant Backend Service → PSC NEG → PSC Endpoint → Master Se
 
 ---
 
-## 🛠 详细实施步骤
+## 详细实施步骤
 
 ### Step 1：Master 项目 — 创建内部负载均衡器（Tier-2 ILB）
 
@@ -486,7 +658,7 @@ gcloud compute networks subnets create psc-nat-subnet-master \
   --purpose=PRIVATE_SERVICE_CONNECT
 ```
 
-> ⚠️ 此子网 **只能用于 PSC NAT**，不可部署 VM。
+> 注意：此子网 **只能用于 PSC NAT**，不可部署 VM。
 
 ---
 
@@ -545,7 +717,7 @@ gcloud compute network-endpoint-groups create tenant-psc-neg \
   --subnet=projects/shared-host-project/regions/europe-west2/subnetworks/tenant-subnet
 ```
 
-> ⚠️ PSC NEG 是 **Regional** 级别，不是 Zonal，这与 NON_GCP_PRIVATE_IP_PORT NEG 不同。
+> 注意：PSC NEG 是 **Regional** 级别，不是 Zonal，这与 NON_GCP_PRIVATE_IP_PORT NEG 不同。
 
 ---
 
@@ -595,7 +767,7 @@ gcloud compute health-checks create https tenant-hc \
   --request-path=/healthz
 ```
 
-> ⚠️ Master 侧需放行健康检查源 IP（GCP 健康检查探针范围：`35.191.0.0/16`, `130.211.0.0/22`）。
+> 注意：Master 侧需放行健康检查源 IP（GCP 健康检查探针范围：`35.191.0.0/16`, `130.211.0.0/22`）。
 
 ---
 
@@ -613,7 +785,7 @@ gcloud compute firewall-rules create allow-psc-from-nat \
 
 ---
 
-## 📊 PSC NEG 完整架构流程
+## PSC NEG 完整架构流程
 
 ```mermaid
 graph TD
@@ -651,7 +823,7 @@ graph TD
 
 ---
 
-## 🔄 PSC NEG vs NON_GCP_PRIVATE_IP_PORT NEG 对比
+## PSC NEG vs NON_GCP_PRIVATE_IP_PORT NEG 对比
 
 | 维度 | NON_GCP_PRIVATE_IP_PORT NEG（当前） | PSC NEG（新方案） |
 |------|-------------------------------------|-------------------|
@@ -660,14 +832,14 @@ graph TD
 | **IAM 控制** | Shared VPC 级别 | Service Attachment 级别，更精细 |
 | **HA 配置** | 需手动创建多个 Zonal NEG | Regional NEG，GCP 自动处理 |
 | **健康检查** | 探测 Tier-2 VIP | 探测 PSC Endpoint |
-| **Cloud Armor** | 绑定在 Tenant BS，✅ 计费归 Tenant | 绑定在 Tenant BS，✅ 计费归 Tenant |
+| **Cloud Armor** | 绑定在 Tenant BS，计费归 Tenant | 绑定在 Tenant BS，计费归 Tenant |
 | **连接审批** | 无需，直接网络可达即可 | 支持 ACCEPT_MANUAL 逐 Tenant 审批 |
 | **源 IP 保留** | 需 X-Forwarded-For | 支持 Proxy Protocol 传递 |
 | **复杂度** | 低，需维护多 Zone NEG | 中，需维护 Service Attachment |
 
 ---
 
-## ⚠️ 注意事项
+## 注意事项
 
 ### 1. ACCEPT_MANUAL 生产建议
 
@@ -708,7 +880,7 @@ gcloud compute service-attachments update master-psc-attachment \
 
 ## 评估
 
-### ❗ 问题 3：NAT Subnet /29 可能不够
+### 问题 3：NAT Subnet /29 可能不够
 
 你写：
 
@@ -728,7 +900,7 @@ gcloud compute service-attachments update master-psc-attachment \
 
 特别是在多 Tenant 场景。
 
-### 4️⃣ 计费维度是否更清晰？
+### 计费维度是否更清晰？
 
 是的。
 
@@ -740,7 +912,7 @@ gcloud compute service-attachments update master-psc-attachment \
 
 费用：
 
-- ✔ 归 Tenant
+- 归 Tenant
 
 **PSC 流量费用**
 
@@ -750,11 +922,11 @@ PSC 是：
 
 所以：
 
-- ✔ 可以实现真正 per-tenant 流量成本归属
+- 可以实现真正 per-tenant 流量成本归属
 
 这比当前 NEG 直连更清晰。
 
-### 5️⃣ 安全性是否更强？
+### 安全性是否更强？
 
 是的。
 
@@ -776,11 +948,11 @@ PSC 是：
 
 这对多租户平台非常有价值。
 
-### 6️⃣ 你方案的真正风险点
+### 你方案的真正风险点
 
 现在讲平台级视角。
 
-#### ⚠️ 风险 1：增加一跳 LB
+#### 风险 1：增加一跳 LB
 
 **原来：**
 
@@ -805,7 +977,7 @@ Tenant ILB → PSC Endpoint → Master ILB
 
 但极高 QPS 下需要压测。
 
-#### ⚠️ 风险 2：连接上限问题
+#### 风险 2：连接上限问题
 
 PSC 每个 Consumer 有 connection limit。
 
@@ -818,7 +990,7 @@ PSC 每个 Consumer 有 connection limit。
 
 - max connections per consumer
 
-#### ⚠️ 风险 3：调试复杂度上升
+#### 风险 3：调试复杂度上升
 
 **当前：**
 
@@ -837,7 +1009,7 @@ curl VIP
 
 运维复杂度上升。
 
-### 7️⃣ 是否值得替换当前架构？
+### 是否值得替换当前架构？
 
 从平台演进角度：
 
@@ -849,7 +1021,7 @@ curl VIP
 | 强调安全边界 | PSC 更合适 |
 | 追求简单 | 继续现有 |
 
-### 8️⃣ 我给你的真实建议
+### 我给你的真实建议
 
 结合你之前的所有架构：
 
@@ -859,19 +1031,19 @@ curl VIP
 - 希望 Tenant 独立安全策略
 - 不希望 Master 承担 Cloud Armor 费用
 
-👉 从长期平台化角度
+从长期平台化角度
 
 **PSC 是更干净的设计**
 
 但：
 
-⚠️ 前提是你确认：
+前提是你确认：
 
 1. Master Tier-2 是否可用 L4 ILB（否则需改造）
 2. NAT subnet 规模提前规划
 3. 不依赖传统 HealthCheck 模型
 
-### 9️⃣ 你现在的决策关键点
+### 你现在的决策关键点
 
 你需要回答一个问题：
 
@@ -895,33 +1067,33 @@ PSC 是更正确的抽象。
 
 ---
 
-## 1️⃣ 问题分析
+## 问题分析
 
 你已确认：
 
-- ✅ Backend Service 在 **Tenant 项目**
-- ✅ Tenant 拥有：
+- Backend Service 在 **Tenant 项目**
+- Tenant 拥有：
     - Internal HTTPS LB
     - URL Map
     - Cloud Armor
     - TLS 证书
-- ✅ Master 拥有：
+- Master 拥有：
     - GKE / MIG
     - 核心计算资源
-- ✅ 同一个 Shared VPC（同 Host Project）
-- ✅ 多 Tenant → 单 Master
+- 同一个 Shared VPC（同 Host Project）
+- 多 Tenant → 单 Master
 
 你希望：
 
 > 使用 PSC 替代 NON_GCP_PRIVATE_IP_PORT NEG
-> 
+>
 > 实现更标准的跨项目内部服务暴露方式
-> 
+>
 > 保持 Tenant 控制入口与安全策略
 
 ---
 
-## 2️⃣ PSC 架构模型（目标形态）
+## PSC 架构模型（目标形态）
 
 ```mermaid
 flowchart TD
@@ -936,7 +1108,7 @@ flowchart TD
 
 ---
 
-## 3️⃣ 设计原则
+## 设计原则
 
 | 维度 | 归属 |
 |------|------|
@@ -949,7 +1121,7 @@ flowchart TD
 
 ---
 
-## 4️⃣ 实施步骤（完整落地流程）
+## 实施步骤（完整落地流程）
 
 ---
 
@@ -1022,7 +1194,7 @@ gcloud compute service-attachments add-iam-policy-binding ${SERVICE_ATTACHMENT_N
 - Tenant 是 **Service Project（挂载到 Shared VPC）**
 - ILB 的 forwarding rule 在 Shared VPC 子网里
 - PSC NEG 必须使用 Shared VPC 的 subnet（例如 10.72.x.x）
-- ❌ 不能使用 Tenant 自己 192.168.x.x 的 VPC
+- 不能使用 Tenant 自己 192.168.x.x 的 VPC
 
 **关于 PRIVATE_SERVICE_CONNECT：**
 
@@ -1100,7 +1272,7 @@ gcloud compute service-attachments update master-tier2-psc \
 
 ---
 
-## 5️⃣ 流量完整路径
+## 流量完整路径
 
 ```mermaid
 flowchart TD
@@ -1116,11 +1288,11 @@ flowchart TD
 
 ---
 
-## 6️⃣ 和你当前方案对比
+## 和当前方案对比
 
 | 维度 | 当前 VIP NEG | PSC |
 |------|--------------|-----|
-| 跨项目官方支持 | ⚠️ 变通方式 | ✅ 官方 |
+| 跨项目官方支持 | 变通方式 | 官方 |
 | 安全隔离 | 一般 | 强 |
 | IAM 控制 | 复杂 | 清晰 |
 | HealthCheck 复杂度 | 高 | 简化 |
@@ -1129,7 +1301,7 @@ flowchart TD
 
 ---
 
-## 7️⃣ 权限模型
+## 权限模型
 
 PSC 模式下：
 
@@ -1152,7 +1324,7 @@ roles/compute.networkUser
 
 ---
 
-## 8️⃣ 计费边界
+## 计费边界
 
 | 费用类型 | 归属 |
 |----------|------|
@@ -1166,18 +1338,18 @@ roles/compute.networkUser
 
 ---
 
-## 9️⃣ 复杂度评估
+## 复杂度评估
 
 | 维度 | 等级 |
 |------|------|
 | 技术复杂度 | Moderate |
 | 企业架构成熟度 | 高 |
 | 多租户支持 | 强 |
-| 推荐指数 | ⭐⭐⭐⭐ |
+| 推荐指数 | ★★★★ |
 
 ---
 
-## 🔟 建议
+## 建议
 
 如果你：
 
@@ -1186,7 +1358,7 @@ roles/compute.networkUser
 - 需要清晰计费拆分
 - 需要企业级标准模型
 
-👉 建议迁移 PSC。
+建议迁移 PSC。
 
 ---
 
