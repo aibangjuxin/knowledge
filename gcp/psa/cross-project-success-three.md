@@ -269,6 +269,77 @@ gcloud compute network-endpoint-groups create psc-neg \
 
 > 注意：PSC NEG 需要指定 `network` 和 `subnetwork`，用于分配 Consumer 侧的 PSC 接入 IP（该 IP 仅在 Consumer VPC 内可路由）。
 
+## 🔍 问题分析
+
+你发现了一个很有意思的现象：**删掉 `--network` 后反而创建成功了**。这背后的原因确实和 Shared VPC 的 IAM 授权粒度有关。
+
+---
+
+## ✅ 核心原因
+
+Shared VPC 的 IAM 授权有两种粒度：
+
+| 授权粒度 | 命令 | 效果 |
+|----------|------|------|
+| **整个网络级别** | 绑定到 Host Project | Service Project 可用所有 subnet |
+| **单独 Subnet 级别** | 绑定到具体 subnet | Service Project **只能用被授权的 subnet** |
+
+你的环境是 **subnet 级别授权**，所以：
+
+```
+--network=shared-vpc-network   ← GCP 尝试验证整个 network 的访问权限 → 权限不足 → 失败
+--subnetwork=shared-vpc-subnet ← GCP 只验证该 subnet 的访问权限     → 有权限   → 成功
+```
+
+---
+
+## 📊 权限验证路径差异
+
+```mermaid
+graph TD
+    subgraph 失败路径 [指定 --network 的验证路径]
+        CMD_A["gcloud ... --network=shared-vpc-network"] 
+        CHECK_A["GCP 检查:\nprojects/host-project/global/networks/shared-vpc-network\n的 compute.networkUser 权限"]
+        RESULT_A["❌ 失败\nIAM 只绑定在 subnet 级别\n没有 network 级别权限"]
+        CMD_A --> CHECK_A --> RESULT_A
+    end
+
+    subgraph 成功路径 [只指定 --subnetwork 的验证路径]
+        CMD_B["gcloud ... --subnetwork=shared-vpc-subnet"]
+        CHECK_B["GCP 检查:\nprojects/host-project/regions/xxx/subnetworks/shared-vpc-subnet\n的 compute.networkUser 权限"]
+        RESULT_B["✅ 成功\n该 subnet 上有授权"]
+        CMD_B --> CHECK_B --> RESULT_B
+    end
+```
+
+---
+
+## 🔑 Shared VPC IAM 授权粒度原理
+
+```bash
+# 网络级别授权（你的环境没有这个）
+gcloud projects add-iam-policy-binding host-project \
+  --member=serviceAccount:a-project@... \
+  --role=roles/compute.networkUser
+# 效果：A Project 可以使用 Host Project 所有 subnet
+
+# Subnet 级别授权（你的环境是这个）
+gcloud compute networks subnets add-iam-policy-binding shared-vpc-subnet \
+  --project=host-project \
+  --region=asia-east1 \
+  --member=serviceAccount:a-project@... \
+  --role=roles/compute.networkUser
+# 效果：A Project 只能使用这一个 subnet
+```
+
+当你指定 `--network` 时，GCP 在 API 层面会做 **network 级别的权限校验**，你没有这个级别的授权，所以失败。只指定 `--subnetwork` 时，GCP **只校验该 subnet 的权限**，授权存在，所以成功。
+
+---
+
+## 一句话总结
+
+> 你的 Shared VPC IAM 是 **subnet 级别精细授权**，不是 network 级别授权。指定 `--network` 触发了 network 级别的权限检查，而你只有 subnet 级别的权限，所以只写 `--subnetwork` 才能绕过 network 级别检查直接通过。这是 Shared VPC **最小权限原则**的典型配置。
+
 #### 2.2 将 PSC NEG 加入 Backend Service
 
 ```bash
