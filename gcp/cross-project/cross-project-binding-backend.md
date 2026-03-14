@@ -709,7 +709,7 @@ I've learned certificates are supported on the Internal Application Load Balance
 
 **Clarifying Cross-Project Referencing**
 
-I'm now zeroing in on the cross-project service referencing capabilities. It seems Cloud Armor policies are tied to the Backend Service, which complicates matters, since I now believe Backend Services can exist in either project. A user wanting WAF rules in the Tenant project likely needs to create the Backend Service there, referencing NEGs in the Master project. I'm exploring whether this configuration is feasible, given cross-project referencing allows Backend Services to reference NEGs in other projects.
+I'm now zeroing in on the cross-project service referencing abjabilities. It seems Cloud Armor policies are tied to the Backend Service, which complicates matters, since I now believe Backend Services can exist in either project. A user wanting WAF rules in the Tenant project likely needs to create the Backend Service there, referencing NEGs in the Master project. I'm exploring whether this configuration is feasible, given cross-project referencing allows Backend Services to reference NEGs in other projects.
 
 **Evaluating Project Configurations**
 

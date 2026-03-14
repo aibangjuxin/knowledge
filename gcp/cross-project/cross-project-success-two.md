@@ -5,7 +5,7 @@
 3 Private Service Connect network endpoint group 
 4 Serverless netwrok endpoint group ==> Cloud Run
 5 Hybird connectivity network endpoint group(Zonal) ==> Backends that are on-premise or on-other clouds via private connectivity 
-• 2 Tenant Backend Service 的后端是 ZONAL NEG (类型为 NON_GCP_PRIVATE_IP_PORT，例如 lex-test-tenant-to-tier2-neg，由 create-neg.sh 创建)，NEG 中的 endpoint 为 Master 的 Tier-2 ILB VIP:PORT (例如 10.91.88.88:443)。
+• 2 Tenant Backend Service 的后端是 ZONAL NEG (类型为 NON_GCP_PRIVATE_IP_PORT，例如 lex-test-tenant-to-tier2-neg，由 create-neg.sh 创建)，NEG 中的 endpoint 为 Master 的 Tier-2 ILB VIP:PORT (例如 10.88.88.88:443)。
 
 • 3 Tenant 的 HealthCheck 会探测 NEG 指向的 Tier-2 VIP，Tenant 将 Cloud Armor 策略绑定到 Tenant Backend Service (WAF 评估与日志归 Tenant)。
 
@@ -29,7 +29,7 @@ flowchart TD
     C -->|/test1/...| D[Tenant Backend Service<br/>lex-test]
     
     D --> E[ZONAL NEG<br/>NON_GCP_PRIVATE_IP_PORT<br/>lex-test-tenant-to-tier2-neg]
-    E --> F[Master Tier-2 ILB<br/>VIP:PORT 10.91.88.88:443]
+    E --> F[Master Tier-2 ILB<br/>VIP:PORT 10.88.88.88:443]
     
     F --> G[Master Tier-2 LB]
     G --> H[真实后端<br/>MIG / GKE NEG / Instances]
@@ -57,7 +57,7 @@ REGION="europe-west2"                   # 若后续需要 region 保留
 NEG_NAME="lex-test-tenant-to-tier2-neg"
 NETWORK="projects/project-shared-dev/global/networks/project-shared-dev-cinternal-vpc1"
 SUBNET="projects/project-shared-dev/regions/europe-west2/subnetworks/cinternal-vpc1-europe-west2"
-MASTER_TIER2_VIP="10.91.88.88"
+MASTER_TIER2_VIP="10.88.88.88"
 MASTER_TIER2_PORT="443"
 
 # 切换项目（可选）

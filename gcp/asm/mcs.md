@@ -51,7 +51,7 @@ graph LR
 ``` 
 此Mermaid图表示了一个通过Google Kubernetes Engine（GKE）管理的Google MCS来连接两个集群的示例架构。在这个架构中，Cluster A和Cluster B都有各自内部的ClusterIP服务，它们用来在各自集群内部选择后端Pods。通过Google MCS（在图中表现为连接两个ClusterIP服务的组件），两个集群之间可以相互通信和跨集群提供服务。
 
-```bash
+```mermaid
 graph LR
   subgraph "Cluster A"
     CR1[("ClusterIP Service A\ncluster.local")] -- "Selects backend pods" --> PODA1[("Pod A1\napp=A")]
