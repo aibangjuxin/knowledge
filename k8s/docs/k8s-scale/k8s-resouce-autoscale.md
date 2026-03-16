@@ -28,6 +28,8 @@
 | **超出时行为（内存）** | N/A | OOMKill（Pod 被 Kill，然后重启） |
 | **影响 QoS 等级** | 是 | 是 |
 
+> **关键点**：Scheduler **不会**因为"Node 当前真实内存快满了"就自动迁走你的 Pod。它做的是"承诺式（requests）装箱"——只看 requests 的账本，不看真实使用量。
+
 ---
 
 ## 2. QoS 等级决定你的 Pod 有多"高贵"
@@ -36,11 +38,11 @@ QoS 等级是 K8s 在节点资源紧张时，决定**先驱逐谁**的标准：
 
 | QoS 等级 | 条件 | 被驱逐优先级 | 你的场景（request 4G / limit 8G） |
 | :--- | :--- | :---: | :--- |
-| **Guaranteed** | requests == limits | 最后被驱逐 | ❌ 不满足（4G ≠ 8G） |
-| **Burstable** | requests < limits，且任一有设置 | 中等 | ✅ **你的 Pod 是这个** |
+| **Guaranteed** | requests == limits（CPU 和内存均设置） | 最后被驱逐 | ❌ 不满足（4G ≠ 8G） |
+| **Burstable** | requests < limits，且至少一项有设置 | 中等 | ✅ **你的 Pod 是这个** |
 | **BestEffort** | requests 和 limits 均未设置 | **最先** 被驱逐 | ❌ 不适用 |
 
-> **注意**：你的 Pod 是 `Burstable`。当节点内存不足时，`BestEffort` 先被 Kill，然后才轮到你的 Pod。
+> **注意**：你的 Pod 是 `Burstable`。当节点内存不足时，`BestEffort` 先被 Kill，然后才轮到你的 Pod。Kubelet 会在 Burstable 中按**实际使用量超过 requests 的程度**排序，用的越多越先被驱逐。
 
 ---
 
@@ -59,7 +61,8 @@ Node 上的其他 Pod 也在扩张，
 这里有个重要认知：
 
 > **Pod 用 6G 没有超过 limit（8G），所以这个 Pod 本身不会因为"超限"被 OOMKill。**
-> 但是它可能因为"Node 级别内存压力（Memory Pressure）"而被驱逐。
+> 但是它可能因为"Node 级别内存压力（Memory Pressure）"而被 Kubelet Evict（驱逐）。
+> **这是两套完全不同的机制！**
 
 ### 3.2 Node 内存压力触发机制
 
@@ -68,11 +71,11 @@ flowchart TD
     A["Node 内存持续增长"] --> B{"Node 可用内存\n< eviction-threshold?"}
     B -->|否| C["正常运行，监控中"]
     B -->|是| D["Kubelet 触发 Pod 驱逐\n（Eviction）"]
-    D --> E{"按 QoS 顺序驱逐"}
+    D --> E{"按 QoS 顺序选择驱逐对象"}
     E --> F["BestEffort Pod 先被驱逐"]
     F --> G{"内存是否释放?"}
     G -->|是| H["Node 恢复正常"]
-    G -->|否| I["Burstable Pod 按使用量排序驱逐\n你的 Pod 在此列"]
+    G -->|否| I["Burstable Pod 按\n超出 requests 使用量排序驱逐\n你的 Pod 在此列 (用6G > request 4G)"]
     I --> J{"内存是否释放?"}
     J -->|是| H
     J -->|否| K["Guaranteed Pod 最后被驱逐"]
@@ -81,8 +84,8 @@ flowchart TD
     style I fill:#ffcc66,stroke:#cc9900
 ```
 
-**Kubelet 的默认 Eviction 阈值**（硬驱逐）：
-- `memory.available < 100Mi` → 开始强制驱逐
+**Kubelet 的默认 Eviction 阈值**（硬驱逐，可在 kubelet 配置中修改）：
+- `memory.available < 100Mi` → 开始强制驱逐（GKE 中此值可能不同）
 - `nodefs.available < 10%` → 磁盘不足驱逐
 
 ---
@@ -102,17 +105,18 @@ graph LR
     subgraph Vertical["垂直扩展 VPA（调整单个 Pod 的 request/limit）"]
         V1["Pod 1\nOriginal: 4G/8G"]
         V2["Pod 1\nAdjusted: 6G/12G"]
-        V1 -->|VPA 介入重启| V2
+        V1 -->|VPA 驱逐原 Pod，新建 Pod 使用新规格| V2
     end
 ```
 
 | 维度 | **HPA 水平扩展** | **VPA 垂直扩展** | **CA 节点扩展** |
 | :--- | :--- | :--- | :--- |
 | **扩什么** | 增加 Pod 副本数 | 调整单个 Pod 的资源规格 | 增加 Node 节点数 |
-| **触发信号** | Pod CPU/内存使用率超阈值 | Pod 实际需求超出 request 一段时间 | Pending Pod 无法被调度 |
-| **对现有 Pod 影响** | 不重启，新建 Pod | **需要重启 Pod**（当前 K8s 限制） | 不影响 |
-| **是否 K8s 原生默认启用** | ❌ 需手动配置 | ❌ 需安装 VPA 组件 | ❌ GKE 需启用 CA |
-| **何时适合** | 无状态服务，流量弹性 | 资源规格难以估算的服务 | Pod 调度失败时 |
+| **触发信号** | Pod CPU/内存使用率超 HPA 阈值 | Pod 实际需求超出 request 一段时间（历史数据） | 有 Pending Pod 且当前节点无法调度 |
+| **对现有 Pod 影响** | 不重启，新建 Pod | **必须 Evict 后重建 Pod**（当前 K8s 限制） | 不影响现有 Pod |
+| **是否 K8s 原生默认启用** | ❌ 需手动配置 | ❌ 需安装 VPA 组件 | ❌ GKE 需显式开启 |
+| **能与对方同时使用?** | ⚠️ VPA + HPA（CPU/内存）不能同时用，会冲突 | ⚠️ 同上 | ✅ 与 HPA/VPA 配合 |
+| **何时适合** | 无状态服务，流量弹性 | 资源规格难以提前估算的服务 | Pod 调度失败时扩节点 |
 
 ---
 
@@ -125,35 +129,34 @@ sequenceDiagram
     participant User as 用户流量
     participant Pod as 你的 Pod (req:4G/lim:8G)
     participant Kubelet as Kubelet
+    participant RS as ReplicaSet Controller
     participant Scheduler as K8s Scheduler
-    participant HPA as HPA Controller
     participant CA as Cluster Autoscaler
-    participant Node as 新 Node (GKE)
+    participant NewNode as 新 Node (GKE)
 
-    Note over Pod: 实际内存使用: 6G (未超 limit)
+    Note over Pod: 实际内存使用: 6G (未超 limit 8G，正常)
     User ->> Pod: 持续请求，内存稳定在 6G
 
-    Note over Kubelet: 检测到 Node 内存压力
-    Kubelet ->> Kubelet: Node 可用内存 < 100Mi (默认阈值)
-    Kubelet ->> Pod: ⚠️ Eviction 评估开始 (Pod 是 Burstable QoS)
+    Note over Kubelet: 检测到 Node 整体内存不足
+    Kubelet ->> Kubelet: Node memory.available < 阈值 (如 100Mi)
+    Kubelet ->> Pod: ⚠️ Eviction (Burstable QoS, 超出 requests 最多)
+    Note over Pod: Pod 被驱逐 (Evicted，状态变 Failed)
 
-    alt 节点内存极度不足
-        Kubelet ->> Pod: 驱逐 Pod (Evicted)
-        Pod ->> Scheduler: Pod 处于 Pending 状态
-        Scheduler ->> Scheduler: 尝试在现有 Node 调度 (需要 4G request 空位)
-        Scheduler ->> CA: 所有 Node 无法满足 request=4G
-        CA ->> Node: 触发扩容，创建新 Node
-        Node ->> Scheduler: 新 Node Ready
+    RS ->> RS: 检测到副本数不足
+    RS ->> Scheduler: 创建新 Pod (requests=4G)
+
+    alt 现有 Node 仍有 4G 可调度空间
+        Scheduler ->> Pod: 调度到现有 Node
+        Note over Pod: ⚠️ 危险：该 Node 可能仍有压力\n下次再被驱逐 → 形成抖动循环
+    else 所有 Node 无法满足 requests=4G
+        Scheduler ->> Scheduler: FailedScheduling，Pod 进入 Pending
+        Note over CA: CA 每 10s 扫描一次 Pending Pod
+        CA ->> CA: 评估：新增节点后能否解决 Pending?
+        CA ->> NewNode: 向 GKE 请求新节点
+        NewNode ->> NewNode: VM 启动 (约 2-5min)
+        NewNode ->> Scheduler: 新 Node Ready
         Scheduler ->> Pod: 将 Pod 调度到新 Node
-
-    else HPA 先触发 (CPU/内存使用率超阈值)
-        HPA ->> Scheduler: 请求增加 Pod 副本
-        Scheduler ->> Scheduler: 检查是否有 Node 满足 request=4G
-        Note over Scheduler: 无满足的 Node
-        Scheduler ->> CA: Pod Pending, 触发 CA 扩容
-        CA ->> Node: 创建新 Node
-        Node ->> Scheduler: 新 Node Ready
-        Scheduler ->> Pod: 新 Pod 调度到新 Node
+        Note over Pod: Pod Running ✅
     end
 ```
 
@@ -162,20 +165,28 @@ sequenceDiagram
 ```
 T+0s   Pod 使用 6G 内存（正常，limit=8G，未超）
 T+Xs   Node 其他 Pod 也在涨，Node 整体内存耗尽
-T+Xs   Kubelet 检测到 memory pressure
-T+Xs   Kubelet 开始 Eviction：BestEffort → Burstable (你的 Pod)
-T+Xs   你的 Pod 被驱逐，状态变为 Pending
-T+10s  Scheduler 尝试调度 Pending Pod（需要找到有 4G 空余的 Node）
-T+10s  所有 Node 都没有足够空间 → Pod 继续 Pending
-T+15s  CA 检测到 Pending Pod（CA 扫描间隔约 10-15s）
-T+15s  CA 决定扩容，向 GKE API 请求新节点
+T+Xs   Kubelet 检测到 memory pressure，开始 Eviction
+T+Xs   BestEffort Pod 先被驱逐（如有）
+T+Xs   你的 Burstable Pod 被驱逐（用了 6G > request 4G，属于"欠账最多"）
+T+Xs   Pod 状态变为 Failed，ReplicaSet Controller 检测到副本不足
+T+Xs   ReplicaSet 创建一个新 Pod（requests 仍然是 4G）
+T+10s  Scheduler 尝试调度新 Pod（需要找到有 4G allocatable 空余的 Node）
+
+    情况 A：有 Node 能容纳 4G → 调度成功
+            ⚠️ 但如果那个 Node 也在压力中，可能再次被驱逐（死亡循环！）
+    情况 B：所有 Node 都满了 → Pod 处于 Pending (FailedScheduling)
+
+T+15s  CA 检测到 Pending Pod（CA 扫描间隔约 10s）
+T+15s  CA 模拟调度，确认新增节点后 Pod 可调度
+T+15s  CA 向 GKE API 请求新节点
 T+4min 新 Node 创建完成，状态变 Ready（GKE 通常 2-5 分钟）
 T+4min Scheduler 将 Pending Pod 调度到新 Node
-T+4min Pod 拉镜像、启动、通过 readinessProbe
 T+5min Pod Running，业务恢复
 ```
 
-> ⚠️ **关键认知**：你的 Pod 使用 6G 内存（未超 limit 8G）**不会被 OOMKill**，但会因为 **Node 级别的内存压力被 Kubelet Evict**。这两个是完全不同的机制！
+> ⚠️ **关键认知 1**：你的 Pod 使用 6G 内存（未超 limit 8G）**不会被 OOMKill**，但会因为 **Node 级别的内存压力被 Kubelet Evict**。
+>
+> ⚠️ **关键认知 2**：CA 扩容的前提是 **Pod 进入 Pending (FailedScheduling)**。如果被驱逐的 Pod 找到了其他节点的空间而正常调度，就**不会触发 CA**，但可能在新节点上再次遭遇压力，形成"驱逐 → 重调度 → 再驱逐"的抖动死亡循环。
 
 ---
 
@@ -185,23 +196,25 @@ T+5min Pod Running，业务恢复
 flowchart TD
     A["Pod 内存使用量增加"] --> B{"是否超过 limit (8G)?"}
 
-    B -->|超过 limit| C["🔴 OOMKill\nPod 被强制终止\nDeployment Controller 重新创建"]
-    B -->|未超过 limit| D{"Node 是否有内存压力?"}
+    B -->|超过 limit| C["🔴 OOMKill\n容器被 cgroup 强制终止\nDeployment Controller 重新创建 Pod"]
+    B -->|未超过 limit| D{"Node 是否有内存压力\n(MemoryPressure)?"}
 
     D -->|无压力| E["✅ 正常运行\n可继续用到 limit"]
     D -->|有压力| F{"Pod 的 QoS 等级?"}
 
     F -->|Guaranteed| G["最不容易被驱逐\n只有极端情况才被 Evict"]
-    F -->|Burstable| H["🟡 你的 Pod 在此\n按实际内存降序驱逐"]
-    F -->|BestEffort| I["🔴 最先被驱逐"]
+    F -->|Burstable| H["🟡 你的 Pod 在此\n按超出 requests 的使用量排序驱逐"]
+    F -->|BestEffort| I["🔴 最先被驱逐（无 request/limit）"]
 
-    H --> J{"Pod 被驱逐后\n能被重新调度吗?"}
-    J -->|有节点满足 request| K["调度到其他 Node ✅"]
-    J -->|无节点满足 request| L["Pod Pending"]
+    H --> J{"ReplicaSet 重建 Pod\n能被重新调度吗?"}
+    J -->|"有节点满足 request=4G\n(但该节点可能也有压力)"| K["调度到其他 Node\n⚠️ 可能再次被驱逐\n形成抖动循环"]
+    J -->|"所有节点都无法满足\nFailedScheduling"| L["Pod 进入 Pending"]
     L --> M{"CA 是否开启?"}
     M -->|是| N["CA 触发 Node 扩容\n等待新节点 (2-5min)"]
     M -->|否| O["Pod 一直 Pending\n直到手动扩容或资源释放"]
-    N --> K
+    N --> P["Pod 调度到新 Node ✅"]
+
+    C --> Q["新 Pod 重新走调度流程"]
 ```
 
 ---
@@ -217,11 +230,12 @@ HPA 计算公式:
 desiredReplicas = ceil(currentReplicas × (currentMetricValue / desiredMetricValue))
 
 示例:
-- 当前 2 个 Pod，每个 Pod CPU request = 1 core
-- 2 个 Pod CPU 总用量 = 1.6 core
-- 平均使用率 = (1.6 / 2) / 1.0 × 100% = 80%
-- HPA 目标 = 70%
-- 期望副本数 = ceil(2 × (80% / 70%)) = ceil(2.28) = 3 个 Pod
+- 当前 2 个 Pod，每个 Pod memory request = 4G
+- 2 个 Pod 实际内存总用量 = 12G（每个用 6G）
+- 平均使用率 = (12G / 2) / 4G × 100% = 150%
+- HPA 目标 = 75%
+- 期望副本数 = ceil(2 × (150% / 75%)) = ceil(4) = 4 个 Pod
+                                              ↑ HPA 早就该扩了！
 ```
 
 ### 7.2 HPA 最小配置（兼顾内存与 CPU）
@@ -253,29 +267,29 @@ spec:
         averageUtilization: 75    # Pod 内存超过 request 的 75% 时扩
   behavior:
     scaleUp:
-      stabilizationWindowSeconds: 60    # 避免启动峰值误扩容
+      stabilizationWindowSeconds: 60    # 避免启动峰值误扩容（等 60s 才确认扩容）
       policies:
       - type: Pods
         value: 2
         periodSeconds: 60             # 每分钟最多增加 2 个 Pod
     scaleDown:
-      stabilizationWindowSeconds: 300   # 缩容前保持 5 分钟稳定期
+      stabilizationWindowSeconds: 300   # 缩容前保持 5 分钟稳定期，防止误缩
 ```
 
-> **⚠️ 关键提示**：HPA 的内存使用率是基于 **request** 的百分比，不是 limit。你的 Pod request=4G，如果实际用了 6G，使用率 = 6/4 = `150%`。如果你设 `averageUtilization: 75`，那 150% > 75%，HPA 早就会触发扩容了！
+> **⚠️ 关键提示**：HPA 的内存使用率分母是 **request**，不是 limit。你的场景中 request=4G，实际用了 6G，使用率 = 6/4 = `150%`。如果你设 `averageUtilization: 75`，那 150% >> 75%，**在 Node 压力产生之前，HPA 就应该早已触发扩容**，增加副本分散负载，理想情况下会避免 Node 内存耗尽的场景。
 
 ---
 
 ## 8. CA 节点扩容的触发条件与时序
 
-GKE 的 Cluster Autoscaler 不是基于 CPU 使用率工作的，而是基于**Pod 调度状态**：
+GKE 的 Cluster Autoscaler **不是基于 CPU/内存使用率**工作的，而是基于 **Pod 调度状态（是否有 Pending Pod）**：
 
 ```mermaid
 flowchart LR
-    A["Pod 进入 Pending 状态"] --> B["CA 开始评估\n(每 10s 扫描一次)"]
+    A["Pod 进入 Pending 状态\n(FailedScheduling)"] --> B["CA 扫描\n(每 10s 一次)"]
     B --> C{"模拟调度:\n假设新节点加入后\n能否解决 Pending?"}
     C -->|能| D["向 GKE 请求新节点"]
-    C -->|不能| E["不扩容\n(等待其他条件满足)"]
+    C -->|不能| E["不扩容\n(检查是否被 taint/affinity 阻挡)"]
     D --> F["GKE 启动新 VM (2-5min)"]
     F --> G["新 Node Ready"]
     G --> H["Scheduler 调度 Pending Pod"]
@@ -286,10 +300,10 @@ flowchart LR
 
 | 情况 | 原因 | 解决方法 |
 | :--- | :--- | :--- |
-| Pod 有 `nodeSelector` 但没有匹配节点 | CA 无法找到合适的 Pool 扩容 | 确认 Node Pool 满足 Pod 的亲和性要求 |
-| Pod 有 `PodAntiAffinity` 强规则 | 新节点加入也满足不了 Anti-affinity | 放松 Anti-affinity 或增加更多 Node Pool |
-| 已达到 Node Pool 的 `maxNodes` | CA 已达上限 | 提高 `--max-nodes` 或申请配额 |
-| Pod 有 `safe-to-evict: false` 注解 | CA 认为节点无法被缩容，也就不会积极扩 | 仅对关键 Pod 使用此注解 |
+| Pod 有 `nodeSelector` 但没有匹配节点 | CA 模拟调度时找不到合适的 Node Pool 扩容 | 确认 Node Pool 的 Label 满足 Pod 的 `nodeSelector` |
+| Pod 有 `PodAntiAffinity` 强规则 | 新节点加入也无法满足 Anti-affinity 约束 | 放松 Anti-affinity（从 required 改为 preferred） |
+| 已达到 Node Pool 的 `maxNodes` | CA 已达配置上限，无法扩容 | 提高 `--max-nodes` 或申请 GCP 配额 |
+| Pod 有 `cluster-autoscaler.kubernetes.io/safe-to-evict: "false"` | 该注解会阻止 CA 将该 Pod 所在节点缩容，但**不影响扩容** | 仅对真正不可驱逐的关键 Pod 设置 |
 
 ---
 
@@ -297,13 +311,14 @@ flowchart LR
 
 如果你**什么都没配置**，K8s 的默认行为是：
 
-| 场景 | 默认行为 |
-| :--- | :--- |
-| Pod 使用量增加，超出 CPU request | Pod 可以借用节点空闲 CPU，但超过 limit 后被 throttle |
-| Pod 内存增加，超出 limit | OOMKill（立即 Kill，Deployment Controller 重新创建） |
-| Node 内存被压满 | Kubelet 按 QoS/使用量驱逐 Pod，被驱逐的 Pod 进入 Pending |
-| Pod 进入 Pending，没有节点满足调度 | Pod **永久 Pending**，直到人工扩容或其他 Pod 释放资源 |
-| 流量增大，单个 Pod 处理不过来 | **没有自动扩容**，响应延迟增加，直到熔断或超时 |
+| 场景 | 默认行为 | 影响 |
+| :--- | :--- | :--- |
+| Pod CPU 超出 request，但未超 limit | 借用节点空闲 CPU，被 throttle 到 limit | 性能抖动，但不 Kill |
+| Pod CPU 超出 limit | CPU Throttling（降速，不 Kill） | 延迟增加 |
+| Pod 内存超出 limit | **OOMKill（立即 Kill）**，Deployment Controller 重建 | 服务中断，重启 |
+| Node 内存被压满 | Kubelet 按 QoS/超量使用排序驱逐 Pod | 被驱逐 Pod 进入 Pending |
+| Pod Pending，无节点满足调度 | Pod **永久 Pending**（CA 未开启） | 业务无法恢复，需人工介入 |
+| 流量增大，单个 Pod 处理不过来 | **没有自动扩容 Pod**，响应延迟增加 | 最终导致超时、熔断 |
 
 ---
 
@@ -312,42 +327,67 @@ flowchart LR
 ### 10.1 QoS 选择建议
 
 ```
-你的 Pod: request=4G, limit=8G → Burstable
+你的 Pod: request=4G, limit=8G → Burstable QoS
 
 建议评估:
 - 如果你的服务是核心服务（如 Ingress Gateway，Payment API）
   → 考虑把 request 提高到 8G，使 request=limit，QoS 变 Guaranteed
-  → 代价：节点需要有 8G 的空位，调度更难，但不会被 Evict
+  → 代价：节点需要有 8G 连续空位，调度更难，但绝不会被 Evict
 
 - 如果服务允许偶尔重启（如批处理，内部工具）
   → 保持 Burstable 即可，request=4G, limit=8G 是合理的
+  → 注意：request 不要设太低！用了 6G 但 request 只有 1G，
+           Eviction 风险极高（超出比例最大）
 ```
 
-### 10.2 监控与告警配置（建议必备）
+### 10.2 避免"抖动死亡循环"的关键配置
+
+这是你场景中最容易被忽视的陷阱：Pod 被驱逐 → 重新调度到其他节点 → 其他节点也有压力 → 再次被驱逐。
+
+解决方案是**在 Node 内存压力产生之前，已经通过 HPA 将负载分散到更多 Pod**：
+
+```
+错误顺序（被动）：
+  Node 压满 → Eviction → Pending → CA 扩容 → 节点就绪（5-10分钟后）
+
+正确顺序（主动 + HPA）：
+  内存使用率 > 75% → HPA 扩 Pod → 新 Pod Pending → CA 扩 Node（提前准备）
+                        ↑ 在节点被压垮之前就分散了负载
+```
+
+### 10.3 监控与告警配置（建议必备）
 
 ```bash
 # 查看当前 Pod 资源实际使用
 kubectl top pods -n <namespace> --sort-by=memory
 
-# 查看某节点的资源分配情况
+# 查看某节点的资源分配情况（重点看 Allocated resources）
 kubectl describe node <node-name> | grep -A 10 "Allocated resources"
+
+# 确认 Pod 是被 OOMKilled 还是被 Evicted
+kubectl describe pod <pod-name> -n <ns>
+kubectl get events -n <ns> --sort-by=.lastTimestamp | tail -n 50
+# 重点看: OOMKilled / Evicted / FailedScheduling
 
 # 查看集群 CA 状态（是否在扩容）
 kubectl -n kube-system describe configmap cluster-autoscaler-status
 ```
 
-### 10.3 建议配置三原则
+### 10.4 建议配置三原则
 
 ```
-原则 1：request 要设置成你"确定需要"的量，不要太低
-         ↳ request 太低 → Pod 容易被别人抢占，也容易被 Evict
+原则 1：request 要设置成你"稳态或启动后典型值"的附近
+         ↳ request 太低 → Eviction 风险极高（超额比例越大越先被驱逐）
+         ↳ request 太高 → 调度困难，节点利用率低
 
 原则 2：limit 最多设置为 request 的 2 倍
-         ↳ request:4G / limit:8G 是合理的
-         ↳ request:1G / limit:16G 就很危险（16G 杠杆太高）
+         ↳ request:4G / limit:8G → 合理
+         ↳ request:1G / limit:16G → 危险（杠杆极高，Eviction 排序首位）
 
-原则 3：高可用服务开启 HPA + PodDisruptionBudget
-         ↳ HPA 保证弹性，PDB 保证升级/驱逐时始终有副本在线
+原则 3：高可用服务务必配齐 HPA + PodDisruptionBudget + CA
+         ↳ HPA 提前分散负载（主动）
+         ↳ PDB 保证驱逐/升级时始终有副本在线
+         ↳ CA 保证有充足节点承载 HPA 扩出来的 Pod
 ```
 
 ---
@@ -356,13 +396,13 @@ kubectl -n kube-system describe configmap cluster-autoscaler-status
 
 ```mermaid
 flowchart TD
-    A["新 Pod 被创建"] --> B["Scheduler 检查 requests"]
+    A["新 Pod 被创建\nor 被驱逐后 ReplicaSet 重建"] --> B["Scheduler 检查 requests"]
     B --> C{"有 Node 满足 requests?"}
-    C -->|否| D["Pod 进入 Pending"]
+    C -->|否, FailedScheduling| D["Pod 进入 Pending"]
     C -->|是| E["Pod 调度到 Node，开始运行"]
 
     D --> CA{"CA 是否开启?"}
-    CA -->|是| F["CA 扩容新 Node"]
+    CA -->|是| F["CA 模拟调度，\n确认扩容有效后\n向 GKE 请求新节点"]
     CA -->|否| G["Pod 一直 Pending\n需人工介入"]
     F --> E
 
@@ -370,19 +410,19 @@ flowchart TD
 
     H --> I{"CPU 超过 limit?"}
     I -->|是| J["CPU Throttling\n（降速，不 Kill）"]
-    I -->|否| K
+    I -->|否| K{" "}
 
     H --> K{"内存超过 limit?"}
-    K -->|是| L["OOMKill\n(Pod 被 Kill)"]
-    K -->|否| M{"Node 整体内存压力?"}
+    K -->|是| L["🔴 OOMKill\nPod 被 cgroup 强制 Kill"]
+    K -->|否| M{"Node 整体内存压力\n(MemoryPressure)?"}
     L --> A
 
     M -->|无压力| N["✅ 正常运行"]
-    M -->|有压力| O["Kubelet Eviction\n按 QoS 顺序驱逐"]
-    O --> D
+    M -->|有压力| O["Kubelet Eviction\n按 QoS + 超量排序驱逐"]
+    O --> A
 
-    H --> P{"HPA 是否超触发阈值?"}
-    P -->|是| Q["HPA 增加副本数\n新 Pod 创建 → 走调度流程"]
+    H --> P{"HPA 是否超触发阈值\n(基于 requests 的使用率)?"}
+    P -->|是| Q["HPA 增加副本数\n新 Pod 创建 → 走调度流程\n(理想情况提前防止 Eviction)"]
     P -->|否| N
 ```
 
