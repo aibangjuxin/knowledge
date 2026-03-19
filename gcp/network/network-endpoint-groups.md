@@ -1,4 +1,159 @@
 
+network-endpoint-groups
+
+## 问题分析
+
+GKE Gateway 创建的 NEG 是 **GCP 层面的资源**，删除 K8s 侧的 HTTPRoute/Gateway 资源后，GCP 侧的 NEG 不一定会自动清理，原因：
+
+| 原因             | 说明                                      |
+| ---------------- | ----------------------------------------- |
+| 控制器还在运行   | GKE Gateway Controller 可能还在 reconcile |
+| 资源依赖未解除   | NEG 被 Backend Service 引用时无法删除     |
+| Finalizer 未清理 | K8s 资源有 finalizer 阻止级联删除         |
+| 控制器 Bug       | GKE 已知问题，NEG 有时需要手动清理        |
+
+---
+
+## 清理步骤
+
+### Step 1：理清 NEG 的依赖链
+
+NEG 被删除前必须先从 Backend Service 解绑：
+
+```mermaid
+graph LR
+    A[Forwarding Rule] --> B[Target HTTP/HTTPS Proxy]
+    B --> C[URL Map]
+    C --> D[Backend Service]
+    D --> E[NEG]
+    E --> F[Pod IP Endpoints]
+
+    style E fill:#ff6b6b
+    style D fill:#ffa94d
+```
+
+```bash
+# 1. 列出所有相关 NEG
+gcloud compute network-endpoint-groups list \
+  --format="table(name,zone,networkEndpointType,size)" \
+  | grep <your-namespace-or-keyword>
+
+# 2. 查看 NEG 被哪些 Backend Service 引用
+NEG_NAME="your-neg-name"
+ZONE="asia-east2-a"  # 替换为你的 zone
+
+gcloud compute backend-services list --global \
+  --format="table(name)" | while read BS; do
+  gcloud compute backend-services describe $BS --global \
+    --format="yaml(name,backends)" 2>/dev/null | grep -l "$NEG_NAME" && echo "Found in: $BS"
+done
+
+# 更直接的方式
+gcloud compute backend-services list --global --format=json | \
+  python3 -c "
+import json,sys
+data=json.load(sys.stdin)
+neg='$NEG_NAME'
+for bs in data:
+  for b in bs.get('backends',[]):
+    if neg in b.get('group',''):
+      print(bs['name'])
+"
+```
+
+### Step 2：从 Backend Service 移除 NEG
+
+```bash
+# 查看 Backend Service 的完整 backends 列表
+gcloud compute backend-services describe <backend-service-name> \
+  --global --format=yaml | grep -A5 "backends"
+
+# 从 Backend Service 中移除该 NEG
+gcloud compute backend-services remove-backend <backend-service-name> \
+  --global \
+  --network-endpoint-group=$NEG_NAME \
+  --network-endpoint-group-zone=$ZONE
+```
+
+### Step 3：删除 NEG
+
+```bash
+# 单个删除
+gcloud compute network-endpoint-groups delete $NEG_NAME \
+  --zone=$ZONE \
+  --quiet
+
+# 批量删除（按 namespace 关键字过滤）
+gcloud compute network-endpoint-groups list \
+  --format="value(name,zone)" | grep <keyword> | \
+  while read NAME ZONE; do
+    echo "Deleting NEG: $NAME in $ZONE"
+    gcloud compute network-endpoint-groups delete $NAME \
+      --zone=$ZONE --quiet
+  done
+```
+
+### Step 4：检查 K8s 侧 Finalizer 残留
+
+```bash
+# 检查是否有资源卡在 Terminating 状态
+kubectl get httproute,gateway,gcpbackendpolicy -n <namespace> -A
+
+# 如果有 Terminating 卡住的资源，强制移除 finalizer
+kubectl patch httproute <name> -n <namespace> \
+  --type=json \
+  -p='[{"op":"remove","path":"/metadata/finalizers"}]'
+
+kubectl patch gateway <name> -n <namespace> \
+  --type=json \
+  -p='[{"op":"remove","path":"/metadata/finalizers"}]'
+```
+
+### Step 5：验证清理完成
+
+```bash
+# 确认 NEG 已删除
+gcloud compute network-endpoint-groups list | grep <keyword>
+
+# 确认 Backend Service 无孤立 backend
+gcloud compute backend-services list --global --format=json | \
+  python3 -c "
+import json,sys
+data=json.load(sys.stdin)
+for bs in data:
+  backends = bs.get('backends',[])
+  if not backends:
+    print(f'Empty backends: {bs[\"name\"]}')
+"
+
+# 确认响应头 istio-envoy 消失
+curl -sv http://<LB-IP>/ 2>&1 | grep -i "server\|transfer-encoding"
+```
+
+---
+
+## 注意事项
+
+```bash
+# 如果 NEG 删除报错 "resourceInUseByAnotherResource"
+# 说明还有 Backend Service 引用，先执行 Step 2
+
+# 查看完整错误依赖
+gcloud compute network-endpoint-groups delete $NEG_NAME \
+  --zone=$ZONE 2>&1 | grep -i "used by\|referenced by"
+```
+
+| 清理顺序 | 资源                      | 原因               |
+| -------- | ------------------------- | ------------------ |
+| 1st      | HTTPRoute / Gateway (K8s) | 防止控制器重建 NEG |
+| 2nd      | Backend Service 解绑 NEG  | 解除依赖           |
+| 3rd      | NEG                       | 此时才能删除       |
+| 4th      | 空的 Backend Service      | 可选清理           |
+
+- **先删 K8s 资源**，否则 GKE Gateway Controller 会持续重建 NEG
+- 删除前确认 NEG size 为 0，避免误删仍在服务的资源
+
+
 不是。Ingress 和 Network Endpoint Groups 是两个不同的概念。
 
 Ingress 是一个 Kubernetes 资源，用于将外部流量路由到 Kubernetes 集群中的 Pod。Ingress 可以使用各种规则来匹配请求，并将请求路由到特定的 Pod。
@@ -11,12 +166,12 @@ Network Endpoint Groups 是一个 Google Cloud 资源，用于将一组虚拟机
 
 以下是 Ingress 和 Network Endpoint Groups 之间一些关键区别：
 
-| 特征 | Ingress | Network Endpoint Group |
-|---|---|---|
-| 类型 | Kubernetes 资源 | Google Cloud 资源 |
-| 用途 | 将外部流量路由到 Kubernetes 集群中的 Pod | 将一组虚拟机或容器集群中的 IP 地址映射到一个 DNS 名称 |
-| 功能 | 匹配请求并将请求路由到特定的 Pod | 将 IP 地址映射到 DNS 名称 |
-| 可用性 | Kubernetes 集群 | Google Cloud Platform |
+| 特征   | Ingress                                  | Network Endpoint Group                                |
+| ------ | ---------------------------------------- | ----------------------------------------------------- |
+| 类型   | Kubernetes 资源                          | Google Cloud 资源                                     |
+| 用途   | 将外部流量路由到 Kubernetes 集群中的 Pod | 将一组虚拟机或容器集群中的 IP 地址映射到一个 DNS 名称 |
+| 功能   | 匹配请求并将请求路由到特定的 Pod         | 将 IP 地址映射到 DNS 名称                             |
+| 可用性 | Kubernetes 集群                          | Google Cloud Platform                                 |
 
 
 以下是一个使用 Ingress 和 Network Endpoint Groups 的示例：

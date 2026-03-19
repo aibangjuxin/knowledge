@@ -34,6 +34,14 @@
     - [方案 B：直接删除 HTTPRoute（如旧路径已不需要）](#方案-b直接删除-httproute如旧路径已不需要)
     - [方案 C：检查并清理 BackendPolicy 残留](#方案-c检查并清理-backendpolicy-残留)
   - [注意事项](#注意事项-2)
+  - [直接结论](#直接结论)
+  - [实际流量路径（与你预期不符）](#实际流量路径与你预期不符)
+  - [为什么会这样：NEG 路由问题](#为什么会这样neg-路由问题)
+  - [关键验证：确认 Envoy Pod IP](#关键验证确认-envoy-pod-ip)
+  - [解决方案](#解决方案-1)
+    - [立即止血：强制 SVC 走 NodePort 模式而非 NEG](#立即止血强制-svc-走-nodeport-模式而非-neg)
+    - [根治：删除旧 HTTPRoute 切断 Gateway 对这批 Pod 的引用](#根治删除旧-httproute-切断-gateway-对这批-pod-的引用)
+  - [预期修复后的响应头](#预期修复后的响应头)
 
 #  Phenomenon
 ```bash
@@ -546,3 +554,174 @@ kubectl get gcpbackendpolicy -n <namespace> -o yaml | grep -A5 "targetRef"
 
 - **迁移期间最危险的状态**就是你现在的状态：两条路径共享同一批 Pod，流量命中哪条路径具有随机性，导致问题难以稳定复现
 - 建议优先执行 **Step 1 的 HTTPRoute 检查**，大概率会发现旧 HTTPRoute 仍然存在并引用你的 SVC
+
+
+
+下面结果是我从 Nginx上请求的头
+```bash
+* We are completely uploaded and fine
+< HTTP/1.1200
+< Date: Thu, 19 Mar 2026 00:55:32 GMT
+< Server: istio-envoy
+< X-Frame-Options: SAMEORIGIN
+< X-Frame-Options: DENY
+< Strict-Transport-Security: max-age=31536000；
+includeSubDomains; preload
+< X-RateLimit-Remaining-Minute: 99
+< RateLimit-Reset: 28
+< RateLimit-Remaining: 99
+< RateLimit-Limit: 100
+< X-RateLimit-Limit-Minute: 100
+< x-content-type-options: nosniff
+< x-Xss-protection: 1; mode=block
+< cache-control: max-age=0, no-store
+< pragma: no-cache
+< pragma: no-cache
+< expires: 0
+< X-envoy-upstream-service-time: 447
+<x-request-id: d9fa3055-f1c0-4a08-a79f-249c86ff2087：-：-：-
+< x-aibang-request-correlation-id: 123456
+< Content-Security-Policy: default-src 'self'；
+< S: rproxy_hkg3v|7600
+< Keep-Alive: timeout=5, max=100
+< Connection: Keep-Alive
+< Transfer-Encoding: chunked
+< Content-Type: application/json
+< Transfer-Encoding: chunked
+
+｛ ［7364 bytes data］
+* Connection #O to host 192.168.95.152 left intact
+```
+特别是这几个
+< Server: istio-envoy
+< X-Frame-Options: SAMEORIGIN
+< X-Frame-Options: DENY
+我环境里没有装istio的东西为什么会有这些 而且明显是Transfer-Encoding: chunked 重复了
+
+
+## 直接结论
+
+你的响应头已经**实锤**了问题所在，三个关键证据：
+
+| 异常 Header                           | 说明                                         |
+| ------------------------------------- | -------------------------------------------- |
+| `Server: istio-envoy`                 | 流量**确实经过了 Envoy**，不管你装没装 Istio |
+| `X-Frame-Options` 出现两次            | 两层代理各自追加了一次                       |
+| `Transfer-Encoding: chunked` 出现两次 | 同上，两层各追加一次                         |
+
+**你没有装 Istio，但 `Server: istio-envoy` 出现了** —— 这只有一个解释：
+
+> **GKE Gateway 的数据面就是 Envoy，它自己标注 `Server: istio-envoy`**，你的流量仍然在经过 GKE Gateway 的 Envoy 代理层，而不是直连 Pod。
+
+---
+
+## 实际流量路径（与你预期不符）
+
+```mermaid
+graph LR
+    A[Nginx] -->|请求 LB-SVC IP| B[GCP Internal LB]
+    B -->|你以为到这里| C[Pod 直连]
+    B -->|实际到这里| D[GKE Gateway Envoy Pod]
+    D -->|Envoy 追加 Headers| E[你的 App Pod]
+    E -->|返回单条 chunked\n单条 X-Frame-Options| D
+    D -->|再追加一次 chunked\n再追加一次 X-Frame-Options| A
+    A -->|双重 header → 502| F[GLB]
+```
+
+---
+
+## 为什么会这样：NEG 路由问题
+
+你新建的 LoadBalancer SVC，其背后的 **GCP Backend** 很可能指向的不是 Pod 的 NodePort，而是被 GKE Gateway 创建的 **NEG（Network Endpoint Group）** 复用了，导致流量兜回 Envoy。
+
+```bash
+# 立即执行：确认你的 LB SVC 背后的 NEG 类型
+kubectl describe svc <your-svc-name> -n <namespace>
+# 重点看 Annotations 里是否有：
+# cloud.google.com/neg: '{"ingress":true}' 或类似 NEG 注解
+
+# 查看该 SVC 对应的 NEG
+gcloud compute network-endpoint-groups list \
+  --format="table(name,networkEndpointType,region,size)" \
+  | grep <namespace>
+
+# 查看 NEG 里的实际 endpoint 是 Pod IP 还是 Envoy Pod IP
+gcloud compute network-endpoint-groups list-network-endpoints \
+  <neg-name> --zone=<zone> \
+  --format="table(networkEndpoint.ipAddress,networkEndpoint.port)"
+```
+
+---
+
+## 关键验证：确认 Envoy Pod IP
+
+```bash
+# 找到 GKE Gateway 的 Envoy Pod IP
+kubectl get pods -n <gateway-namespace> -o wide | grep -i "gateway\|envoy"
+
+# 在你的 App Pod 内抓包，看请求来源 IP
+kubectl exec -it <your-pod> -n <namespace> -- \
+  tcpdump -i eth0 -nn 'tcp port 8080' -e 2>/dev/null | head -20
+
+# 如果来源 IP 是上面 Envoy Pod 的 IP → 确认流量经过 Gateway
+# 如果来源 IP 是 Nginx 的 IP → 说明是直连，问题在别处
+```
+
+---
+
+## 解决方案
+
+### 立即止血：强制 SVC 走 NodePort 模式而非 NEG
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: your-svc
+  namespace: <namespace>
+  annotations:
+    # 明确禁用 NEG，强制走 kube-proxy/iptables 路径
+    cloud.google.com/neg: '{"ingress": false}'
+spec:
+  type: LoadBalancer
+  selector:
+    app: your-app
+  ports:
+    - port: 80
+      targetPort: 8080
+```
+
+```bash
+# 应用后重建 SVC
+kubectl apply -f your-svc.yaml
+
+# 验证 NEG 是否消失
+gcloud compute network-endpoint-groups list | grep <namespace>
+```
+
+### 根治：删除旧 HTTPRoute 切断 Gateway 对这批 Pod 的引用
+
+```bash
+# 查看还存在的 HTTPRoute
+kubectl get httproute -n <namespace> -o yaml | grep -B5 -A15 "backendRefs"
+
+# 删除仍指向你 Pod/SVC 的 HTTPRoute
+kubectl delete httproute <old-route-name> -n <namespace>
+
+# 等待 GKE Gateway 控制面同步（约 30-60s），再测试
+curl -sv http://<LB-IP>/ 2>&1 | grep -i "server\|transfer\|x-frame"
+```
+
+---
+
+## 预期修复后的响应头
+
+修复后你应该看到：
+
+```
+< Server: nginx  （或你 App 自己的 Server header）
+< X-Frame-Options: DENY   （只出现一次）
+< Transfer-Encoding: chunked  （只出现一次）
+```
+
+`Server: istio-envoy` 消失是验证修复成功的**最直接标志**。
