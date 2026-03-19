@@ -1,5 +1,35 @@
 - [Phenomenon](#phenomenon)
+- [重复 Transfer-Encoding Header 问题分析](#重复-transfer-encoding-header-问题分析)
   - [问题分析](#问题分析)
+  - [问题定位流程](#问题定位流程)
+  - [可能原因分析](#可能原因分析)
+    - [1. Kong API Gateway 问题](#1-kong-api-gateway-问题)
+      - [排查步骤](#排查步骤)
+      - [Kong 常见配置问题](#kong-常见配置问题)
+    - [2. Envoy/Istio Sidecar 问题](#2-envoyistio-sidecar-问题)
+      - [排查步骤](#排查步骤-1)
+    - [3. Java HTTP Client 问题](#3-java-http-client-问题)
+      - [常见客户端库检查](#常见客户端库检查)
+    - [4. 上游服务本身返回重复 Header](#4-上游服务本身返回重复-header)
+      - [验证方法](#验证方法)
+  - [诊断完整流程](#诊断完整流程)
+  - [解决方案](#解决方案)
+    - [方案 1: Kong 配置修复](#方案-1-kong-配置修复)
+      - [检查并移除 response-transformer 插件](#检查并移除-response-transformer-插件)
+      - [修复示例配置](#修复示例配置)
+      - [或者禁用相关插件测试](#或者禁用相关插件测试)
+    - [方案 2: Java 代码层面处理](#方案-2-java-代码层面处理)
+      - [在 Java 中过滤重复 Header](#在-java-中过滤重复-header)
+      - [使用自定义 Interceptor](#使用自定义-interceptor)
+    - [方案 3: Kong 上游配置优化](#方案-3-kong-上游配置优化)
+    - [方案 4: Envoy 配置修复 (如果使用 Istio)](#方案-4-envoy-配置修复-如果使用-istio)
+  - [快速诊断脚本](#快速诊断脚本)
+  - [注意事项](#注意事项)
+    - [HTTP/1.1 规范](#http11-规范)
+    - [潜在影响](#潜在影响)
+  - [建议排查顺序](#建议排查顺序)
+  - [总结](#总结)
+  - [问题分析](#问题分析-1)
   - [可能原因逐层排查](#可能原因逐层排查)
     - [原因 1：GKE 集群内存在 Envoy/Istio Sidecar（最高嫌疑）](#原因-1gke-集群内存在-envoyistio-sidecar最高嫌疑)
     - [原因 2：GKE Gateway 的 BackendPolicy / HTTPRoute 仍在影响流量](#原因-2gke-gateway-的-backendpolicy--httproute-仍在影响流量)
@@ -8,8 +38,8 @@
   - [推荐排查步骤](#推荐排查步骤)
     - [关键抓包命令](#关键抓包命令)
   - [快速验证方法](#快速验证方法)
-  - [注意事项](#注意事项)
-  - [问题分析](#问题分析-1)
+  - [注意事项](#注意事项-1)
+  - [问题分析](#问题分析-2)
   - [GKE Enterprise CSM 的正确 Sidecar 控制方式](#gke-enterprise-csm-的正确-sidecar-控制方式)
     - [方式 1：Namespace 级别控制（标准方式）](#方式-1namespace-级别控制标准方式)
     - [方式 2：Pod 级别控制（GKE Enterprise 标准 Annotation）](#方式-2pod-级别控制gke-enterprise-标准-annotation)
@@ -19,7 +49,7 @@
     - [方案 A：对问题 Deployment 禁用注入（最小影响）](#方案-a对问题-deployment-禁用注入最小影响)
     - [方案 B：确认 CSM revision 标签（Enterprise 多版本场景）](#方案-b确认-csm-revision-标签enterprise-多版本场景)
   - [快速诊断命令汇总](#快速诊断命令汇总)
-  - [注意事项](#注意事项-1)
+  - [注意事项](#注意事项-2)
   - [背景理解](#背景理解)
   - [GKE Enterprise 下的双重引用机制分析](#gke-enterprise-下的双重引用机制分析)
     - [GKE Gateway 如何"引用" Pod](#gke-gateway-如何引用-pod)
@@ -29,19 +59,32 @@
     - [Step 2：确认 Pod 实际收到的请求来源 IP](#step-2确认-pod-实际收到的请求来源-ip)
     - [Step 3：对比 EndpointSlice 被谁消费](#step-3对比-endpointslice-被谁消费)
   - [问题根因：NEG 与 SVC 的双重绑定](#问题根因neg-与-svc-的双重绑定)
-  - [解决方案](#解决方案)
+  - [解决方案](#解决方案-1)
     - [方案 A：迁移期间隔离 Pod（推荐）](#方案-a迁移期间隔离-pod推荐)
     - [方案 B：直接删除 HTTPRoute（如旧路径已不需要）](#方案-b直接删除-httproute如旧路径已不需要)
     - [方案 C：检查并清理 BackendPolicy 残留](#方案-c检查并清理-backendpolicy-残留)
-  - [注意事项](#注意事项-2)
+  - [注意事项](#注意事项-3)
   - [直接结论](#直接结论)
   - [实际流量路径（与你预期不符）](#实际流量路径与你预期不符)
   - [为什么会这样：NEG 路由问题](#为什么会这样neg-路由问题)
   - [关键验证：确认 Envoy Pod IP](#关键验证确认-envoy-pod-ip)
-  - [解决方案](#解决方案-1)
+  - [解决方案](#解决方案-2)
     - [立即止血：强制 SVC 走 NodePort 模式而非 NEG](#立即止血强制-svc-走-nodeport-模式而非-neg)
     - [根治：删除旧 HTTPRoute 切断 Gateway 对这批 Pod 的引用](#根治删除旧-httproute-切断-gateway-对这批-pod-的引用)
   - [预期修复后的响应头](#预期修复后的响应头)
+  - [关键发现](#关键发现)
+  - [实际流量路径（重新定位）](#实际流量路径重新定位)
+  - [根本原因](#根本原因)
+  - [排查步骤](#排查步骤-2)
+    - [Step 1：确认目标 App Container 原始响应](#step-1确认目标-app-container-原始响应)
+    - [Step 2：确认 Sidecar 的 Envoy 版本和配置](#step-2确认-sidecar-的-envoy-版本和配置)
+    - [Step 3：检查 App 响应是否同时有 Content-Length](#step-3检查-app-响应是否同时有-content-length)
+  - [解决方案](#解决方案-3)
+    - [方案 A：修复 App 本身的响应 Header（根治）](#方案-a修复-app-本身的响应-header根治)
+    - [方案 B：通过 EnvoyFilter 修复 Sidecar 行为（GKE Enterprise CSM 方式）](#方案-b通过-envoyfilter-修复-sidecar-行为gke-enterprise-csm-方式)
+    - [方案 C：对目标 Pod 禁用 Sidecar（最快验证方式）](#方案-c对目标-pod-禁用-sidecar最快验证方式)
+  - [验证修复效果](#验证修复效果)
+  - [重要结论](#重要结论)
 
 #  Phenomenon
 ```bash
@@ -61,6 +104,500 @@ chunked"
 
 其实我已经尝试绕开GKE Gateway,直接通过GKE里面的一个SVC来暴露我的服务,当然我暴露这个服务用的是load balance的IP,但是看起来只要从外部访问,经过我的NGX,就会出现这种问题,那么可能的原因还有哪些呢?因为我的集群里边既有GKE的Gateway,又有普通的没有经过GKE Gateway的一些deployment。
 ```
+
+# 重复 Transfer-Encoding Header 问题分析
+
+## 问题分析
+
+您的 Java API 应用在访问上游服务时，响应中出现了**重复的 Transfer-Encoding header**：
+
+```http
+Transfer-Encoding: chunked
+Content-Type: application/json
+Transfer-Encoding: chunked    ← 重复出现
+```
+
+这是一个 **HTTP 协议层面的问题**，与之前讨论的 K8S 配置关系不大。
+
+---
+
+## 问题定位流程
+
+```mermaid
+graph TD
+    A[Java API] --> B[发起 HTTP 请求]
+    B --> C{经过哪些组件?}
+    C --> D[Kong API Gateway]
+    C --> E[K8S Service]
+    C --> F[Istio/Envoy]
+    
+    D --> G[上游服务]
+    E --> G
+    F --> G
+    
+    G --> H[返回响应]
+    H --> I{哪里添加了重复 Header?}
+    
+    I --> I1[上游服务本身]
+    I --> I2[Kong 插件]
+    I --> I3[Envoy Sidecar]
+    I --> I4[K8S Ingress]
+    
+    style I fill:#ffcccb
+```
+
+---
+
+## 可能原因分析
+
+### 1. Kong API Gateway 问题
+
+Kong 在某些配置下可能会**重复添加** Transfer-Encoding header。
+
+#### 排查步骤
+
+```bash
+# 1. 检查 Kong 路由配置
+kubectl get service -n kong-namespace
+kubectl describe kongplugin PLUGIN_NAME -n NAMESPACE
+
+# 2. 查看 Kong 日志
+kubectl logs -f kong-POD-NAME -n kong-namespace | grep "Transfer-Encoding"
+
+# 3. 直接绕过 Kong 测试上游
+kubectl run test-curl --rm -it --image=curlimages/curl -- sh
+# 在容器内执行
+curl -v http://UPSTREAM_SERVICE:PORT/api/endpoint
+```
+
+#### Kong 常见配置问题
+
+```yaml
+# Kong Route 配置示例
+apiVersion: configuration.konghq.com/v1
+kind: KongIngress
+metadata:
+  name: api-ingress
+route:
+  preserve_host: true
+  strip_path: false
+proxy:
+  # ⚠️ 检查这些配置
+  protocol: http
+  connect_timeout: 60000
+  retries: 3
+```
+
+**已知问题**：
+- Kong 某些版本的 **response-transformer** 插件会重复添加 header
+- **upstream** 插件与原始响应冲突
+
+---
+
+### 2. Envoy/Istio Sidecar 问题
+
+如果集群启用了 Service Mesh，Envoy 可能在转发时添加重复 header。
+
+#### 排查步骤
+
+```bash
+# 检查 Pod 是否注入了 Istio Sidecar
+kubectl get pod POD_NAME -n NAMESPACE -o jsonpath='{.spec.containers[*].name}'
+# 输出包含 "istio-proxy" 则启用了 Istio
+
+# 查看 Envoy 配置
+kubectl exec POD_NAME -c istio-proxy -n NAMESPACE -- pilot-agent request GET config_dump
+
+# 临时禁用 Sidecar 测试
+kubectl patch deployment DEPLOYMENT_NAME -n NAMESPACE \
+  --type='json' -p='[{"op": "add", "path": "/spec/template/metadata/annotations/sidecar.istio.io~1inject", "value":"false"}]'
+```
+
+---
+
+### 3. Java HTTP Client 问题
+
+某些 Java HTTP 客户端库在处理 chunked 响应时可能出现 header 重复。
+
+#### 常见客户端库检查
+
+**场景 A: 使用 Apache HttpClient**
+
+```java
+// 可能导致重复 header 的代码
+CloseableHttpClient client = HttpClients.createDefault();
+HttpGet request = new HttpGet("http://upstream-service/api");
+
+// 检查响应处理
+CloseableHttpResponse response = client.execute(request);
+Header[] headers = response.getAllHeaders();  // 查看是否有重复
+
+for (Header header : headers) {
+    System.out.println(header.getName() + ": " + header.getValue());
+}
+```
+
+**场景 B: 使用 Spring RestTemplate**
+
+```java
+RestTemplate restTemplate = new RestTemplate();
+
+// ⚠️ 可能的问题点：自定义 Interceptor
+restTemplate.setInterceptors(Arrays.asList(new ClientHttpRequestInterceptor() {
+    @Override
+    public ClientHttpResponse intercept(HttpRequest request, byte[] body, 
+                                        ClientHttpRequestExecution execution) {
+        ClientHttpResponse response = execution.execute(request, body);
+        // 检查是否有代码在这里添加 header
+        return response;
+    }
+}));
+```
+
+**场景 C: 使用 OkHttp**
+
+```java
+OkHttpClient client = new OkHttpClient.Builder()
+    .addInterceptor(chain -> {
+        Response response = chain.proceed(chain.request());
+        // 检查拦截器是否修改了 header
+        return response;
+    })
+    .build();
+```
+
+---
+
+### 4. 上游服务本身返回重复 Header
+
+上游服务可能本身就返回了重复的 header。
+
+#### 验证方法
+
+```bash
+# 方法 1: 从 Java Pod 内直接测试
+kubectl exec -it JAVA_POD_NAME -n NAMESPACE -- sh
+
+# 安装 curl (如果镜像中没有)
+apk add curl  # Alpine
+apt-get update && apt-get install -y curl  # Debian/Ubuntu
+
+# 直接请求上游
+curl -v http://UPSTREAM_SERVICE:PORT/api/endpoint 2>&1 | grep -i "transfer-encoding"
+
+# 方法 2: 使用 tcpdump 抓包
+kubectl exec -it JAVA_POD_NAME -n NAMESPACE -- tcpdump -i any -A -s 0 'tcp port 8080' -w /tmp/abjture.pabj
+# 下载并分析
+kubectl cp NAMESPACE/JAVA_POD_NAME:/tmp/abjture.pabj ./abjture.pabj
+wireshark abjture.pabj
+```
+
+---
+
+## 诊断完整流程
+
+```mermaid
+sequenceDiagram
+    participant J as Java API
+    participant K as Kong
+    participant E as Envoy (可选)
+    participant U as 上游服务
+    
+    J->>K: HTTP Request
+    Note over K: 检查 Kong 插件配置
+    K->>E: Forward Request
+    Note over E: 检查 Sidecar 配置
+    E->>U: 到达上游
+    
+    U-->>E: Response + Headers
+    Note over U: 检查上游原始响应
+    E-->>K: Response (可能添加 Header)
+    Note over E: ⚠️ Envoy 可能修改
+    K-->>J: Response (可能再次添加)
+    Note over K: ⚠️ Kong 插件可能修改
+    
+    Note over J: 最终收到重复 Header
+```
+
+---
+
+## 解决方案
+
+### 方案 1: Kong 配置修复
+
+#### 检查并移除 response-transformer 插件
+
+```bash
+# 查看当前 Kong 插件
+kubectl get kongplugin -n NAMESPACE
+
+# 查看具体插件配置
+kubectl get kongplugin PLUGIN_NAME -n NAMESPACE -o yaml
+```
+
+#### 修复示例配置
+
+```yaml
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: response-transformer
+config:
+  # ❌ 错误配置 - 可能导致重复 header
+  add:
+    headers:
+    - "Transfer-Encoding: chunked"
+  
+  # ✅ 正确配置 - 移除或使用 replace
+  replace:
+    headers: []
+  remove:
+    headers: []
+```
+
+#### 或者禁用相关插件测试
+
+```bash
+# 临时禁用插件
+kubectl patch kongplugin PLUGIN_NAME -n NAMESPACE \
+  --type='json' -p='[{"op": "replace", "path": "/disabled", "value":true}]'
+
+# 重新测试请求
+```
+
+---
+
+### 方案 2: Java 代码层面处理
+
+#### 在 Java 中过滤重复 Header
+
+```java
+import org.springframework.http.*;
+import org.springframework.web.client.RestTemplate;
+
+public class SafeRestTemplate {
+    
+    public ResponseEntity<String> callUpstream(String url) {
+        RestTemplate restTemplate = new RestTemplate();
+        ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+        
+        // 清理重复的 Transfer-Encoding header
+        HttpHeaders cleanHeaders = new HttpHeaders();
+        response.getHeaders().forEach((key, values) -> {
+            if ("Transfer-Encoding".equalsIgnoreCase(key)) {
+                // 只保留第一个值
+                cleanHeaders.add(key, values.get(0));
+            } else {
+                cleanHeaders.addAll(key, values);
+            }
+        });
+        
+        return new ResponseEntity<>(response.getBody(), cleanHeaders, response.getStatusCode());
+    }
+}
+```
+
+#### 使用自定义 Interceptor
+
+```java
+import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.http.client.ClientHttpResponse;
+
+public class HeaderDeduplicationInterceptor implements ClientHttpRequestInterceptor {
+    
+    @Override
+    public ClientHttpResponse intercept(HttpRequest request, byte[] body, 
+                                        ClientHttpRequestExecution execution) throws IOException {
+        ClientHttpResponse response = execution.execute(request, body);
+        
+        return new ClientHttpResponseWrapper(response) {
+            @Override
+            public HttpHeaders getHeaders() {
+                HttpHeaders headers = super.getHeaders();
+                HttpHeaders deduped = new HttpHeaders();
+                
+                headers.forEach((key, values) -> {
+                    // 去重逻辑
+                    List<String> uniqueValues = values.stream()
+                        .distinct()
+                        .collect(Collectors.toList());
+                    deduped.addAll(key, uniqueValues);
+                });
+                
+                return deduped;
+            }
+        };
+    }
+}
+
+// 应用到 RestTemplate
+RestTemplate restTemplate = new RestTemplate();
+restTemplate.setInterceptors(Collections.singletonList(new HeaderDeduplicationInterceptor()));
+```
+
+---
+
+### 方案 3: Kong 上游配置优化
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: upstream-service
+  annotations:
+    # 明确指定 upstream 协议
+    konghq.com/protocol: "http"
+    # 禁用 Kong 自动添加 header
+    konghq.com/preserve-host: "true"
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+```
+
+---
+
+### 方案 4: Envoy 配置修复 (如果使用 Istio)
+
+```yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: upstream-service-vs
+spec:
+  hosts:
+  - upstream-service
+  http:
+  - route:
+    - destination:
+        host: upstream-service
+    headers:
+      response:
+        # 移除重复的 header
+        remove:
+        - "transfer-encoding"
+```
+
+---
+
+## 快速诊断脚本
+
+```bash
+#!/bin/bash
+
+NAMESPACE="your-namespace"
+JAVA_POD="your-java-pod"
+UPSTREAM_URL="http://upstream-service:8080/api/endpoint"
+
+echo "===== 1. 检查 Pod 是否有 Sidecar ====="
+kubectl get pod $JAVA_POD -n $NAMESPACE -o jsonpath='{.spec.containers[*].name}'
+echo ""
+
+echo "===== 2. 检查 Kong 插件 ====="
+kubectl get kongplugin -n $NAMESPACE
+echo ""
+
+echo "===== 3. 直接从 Pod 测试上游 ====="
+kubectl exec -it $JAVA_POD -n $NAMESPACE -- \
+  curl -v $UPSTREAM_URL 2>&1 | grep -i "transfer-encoding"
+echo ""
+
+echo "===== 4. 绕过 Kong 直接测试 ====="
+kubectl run test-curl --rm -it --image=curlimages/curl -n $NAMESPACE -- \
+  curl -v $UPSTREAM_URL 2>&1 | grep -i "transfer-encoding"
+echo ""
+
+echo "===== 5. 查看 Java 应用日志 ====="
+kubectl logs $JAVA_POD -n $NAMESPACE --tail=50 | grep -i "transfer-encoding"
+```
+
+---
+
+## 注意事项
+
+### HTTP/1.1 规范
+
+根据 RFC 7230：
+- **Transfer-Encoding** header 可以有多个值（用逗号分隔）
+- **不应该**重复出现同一个 header 名称
+
+```http
+# ✅ 正确格式
+Transfer-Encoding: chunked, gzip
+
+# ❌ 错误格式（但某些服务器会容忍）
+Transfer-Encoding: chunked
+Transfer-Encoding: chunked
+```
+
+### 潜在影响
+
+```mermaid
+graph LR
+    A[重复 Header] --> B[客户端解析错误]
+    A --> C[中间件处理异常]
+    A --> D[缓存失效]
+    
+    B --> B1[部分 HTTP 客户端崩溃]
+    C --> C1[Kong/Nginx 转发失败]
+    D --> D1[CDN 缓存绕过]
+    
+    style A fill:#ffcccb
+```
+
+---
+
+## 建议排查顺序
+
+1. ✅ **先确认问题来源**
+   ```bash
+   # 直接从 Java Pod 请求上游，绕过所有中间件
+   kubectl exec JAVA_POD -- curl -v http://upstream:8080/api
+   ```
+
+2. ✅ **检查 Kong 配置**
+   ```bash
+   kubectl get kongplugin -A
+   kubectl describe kongingress YOUR_INGRESS
+   ```
+
+3. ✅ **检查是否有 Service Mesh**
+   ```bash
+   kubectl get pod -n NAMESPACE -o jsonpath='{.items[*].spec.containers[*].name}' | grep istio
+   ```
+
+4. ✅ **审查 Java 代码**
+   - 检查 HTTP 客户端配置
+   - 查看是否有自定义 Interceptor
+
+5. ✅ **联系上游服务负责人**
+   - 确认他们的服务是否返回重复 header
+
+---
+
+## 总结
+
+**与之前 K8S 配置的关系**：
+
+| 配置项                 | 与此问题的关系 |
+| ---------------------- | -------------- |
+| **ServiceAccount**     | ❌ 无关         |
+| **Pod Security Label** | ❌ 无关         |
+| **Workload Identity**  | ❌ 无关         |
+
+**实际问题域**：
+- ✅ Kong API Gateway 配置
+- ✅ Envoy/Istio Sidecar 配置  
+- ✅ Java HTTP Client 实现
+- ✅ 上游服务响应格式
+
+**建议优先操作**：
+1. 使用上面的诊断脚本定位问题源头
+2. 如果是 Kong 问题，检查并修复插件配置
+3. 如果是代码问题，在 Java 层面过滤重复 header
+
+需要我提供更具体的 Kong 配置示例或 Java 代码修复方案吗？
 
 ## 问题分析
 
@@ -725,3 +1262,223 @@ curl -sv http://<LB-IP>/ 2>&1 | grep -i "server\|transfer\|x-frame"
 ```
 
 `Server: istio-envoy` 消失是验证修复成功的**最直接标志**。
+
+- pod 
+```
+curl-sS -D- -0- -X POST 'http://100.64.21.22:8080/my-api/
+compose-documents'\
+-H'Content-Type: application/json"\
+-H 'X-AIBNG-Work-Stream-Name: IN_PP_MTG'\
+-H "x-aibang-e2e-trust-token： $token" \
+-H'Expect：'\
+--data-binary @compose_payload.json
+HTTP/1.1 200
+Date: Thu, 19 Mar 2026 02:48:57 GMT
+Server:istio-envoy
+X-Frame-Options: SAMEORIGIN
+X-Frame-Options: DENY
+Strict-Transport-Security: max-age=31536000；
+includeSubDomains; preload
+X-RateLimit-Remaining-Minute: 99
+RateLimit-Reset: 4
+RateLimit-Remaining: 99
+RateLimit-Limit: 100
+X-RateLimit-Limit-Minute: 100
+x-content-type-options: nosniff
+x-xss-protection: 1; mode=block
+cache-control: max-age=0, no-store
+pragma: no-cache
+pragma: no-cache
+expires: 0
+x-envoy-upstream-service-time: 523
+x-request-id:123456789：-：-：-
+x-abjx-request-correlation-id: 123456
+Content-Security-Policy: default-src 'self！；
+S: rproxy_myproxy
+Keep-Alive: timeout=5, max=100
+Connection: Keep-Alive
+Transfer-Encoding: chunked
+Content-Type: application/json
+Transfer-Encoding:chunked
+```
+
+## 关键发现
+
+这个现象直接改变了问题定位：
+
+**你在 Pod 内部用 Sidecar 模式 curl 另一个 Pod 的 IP（`100.64.21.22:8080`），响应里就已经有了：**
+
+| 异常                              | 说明                         |
+| --------------------------------- | ---------------------------- |
+| `Server: istio-envoy`             | Sidecar Envoy 在处理响应     |
+| 双重 `Transfer-Encoding: chunked` | 问题**在集群内部就已经发生** |
+| 双重 `X-Frame-Options`            | 两层各自注入一次             |
+
+**结论：问题与 Nginx、GLB、GKE Gateway 完全无关，根源在 Pod 内部的 Sidecar。**
+
+---
+
+## 实际流量路径（重新定位）
+
+```mermaid
+graph LR
+    A[你的 Pod\nSidecar Envoy A] -->|出流量被 Envoy 拦截| B[目标 Pod IP\n100.64.21.22]
+    B --> C[目标 Pod\nSidecar Envoy B]
+    C --> D[目标 App Container]
+    D -->|返回单条 chunked| C
+    C -->|Envoy B 追加 chunked| B
+    B -->|已有双重 chunked| A
+    A -->|Envoy A 可能再处理| E[curl 看到双重 header]
+
+    style C fill:#ff6b6b
+    style A fill:#ffa94d
+```
+
+---
+
+## 根本原因
+
+你的目标 Pod（`100.64.21.22`）的 **Sidecar Envoy** 在转发 App 响应时，**没有正确处理已存在的 `Transfer-Encoding: chunked`**，而是直接追加了一条，导致：
+
+```
+App Container 返回:  Transfer-Encoding: chunked   (1条)
+Sidecar Envoy 追加: Transfer-Encoding: chunked   (变成2条)
+```
+
+这是一个经典的 **Envoy + HTTP/1.1 chunked 兼容性问题**，根因是：
+
+> App 返回的响应已经是 chunked，但同时设置了某些触发 Envoy 重新封装的条件（如 `Content-Length` 缺失 + 特定 header 组合），导致 Envoy 认为需要自己追加 `Transfer-Encoding`。
+
+---
+
+## 排查步骤
+
+### Step 1：确认目标 App Container 原始响应
+
+```bash
+# 用 kubectl exec 进入目标 Pod，但绕过 Sidecar 直接访问
+# Sidecar 默认不拦截 localhost
+kubectl exec -it <target-pod> -n <namespace> -c <app-container-name> -- \
+  curl -sv http://localhost:8080/otx-compose/compose-documents \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --data '{}' 2>&1 | grep -i "transfer-encoding\|server\|x-frame"
+```
+
+**预期**：如果这里只有一条 `Transfer-Encoding: chunked` 且无 `Server: istio-envoy`，则 App 本身没问题，问题在 Sidecar。
+
+### Step 2：确认 Sidecar 的 Envoy 版本和配置
+
+```bash
+# 查看目标 Pod 的 Sidecar 版本
+kubectl exec -it <target-pod> -n <namespace> -c istio-proxy -- \
+  pilot-agent request GET server_info | python3 -m json.tool | grep version
+
+# 查看 Envoy 对该 listener 的处理配置
+kubectl exec -it <target-pod> -n <namespace> -c istio-proxy -- \
+  pilot-agent request GET listeners | python3 -m json.tool | \
+  grep -A5 "transfer_encoding\|chunk"
+```
+
+### Step 3：检查 App 响应是否同时有 Content-Length
+
+```bash
+# 关键：检查 App 原始响应是否同时返回了 Content-Length
+kubectl exec -it <target-pod> -n <namespace> -c <app-container> -- \
+  curl -sv http://localhost:8080/otx-compose/compose-documents \
+  -X POST -H 'Content-Type: application/json' --data '{}' \
+  2>&1 | grep -iE "content-length|transfer-encoding|connection"
+```
+
+> 如果 App 同时返回了 `Content-Length` 和 `Transfer-Encoding: chunked`，这本身就违反 HTTP/1.1 规范，Envoy 的行为会更加不可预测。
+
+---
+
+## 解决方案
+
+### 方案 A：修复 App 本身的响应 Header（根治）
+
+App 不应该同时返回 `Transfer-Encoding: chunked` 和不必要的重复 header，检查 App 框架配置：
+
+```bash
+# 如果是 Java Spring Boot
+# 检查是否有多余的 Filter 在追加 Transfer-Encoding
+
+# 如果是 Node.js
+# 检查是否有 res.setHeader('Transfer-Encoding', 'chunked') 的显式调用
+
+# 如果是 Python/Flask
+# 检查 stream=True 的使用是否合理
+```
+
+### 方案 B：通过 EnvoyFilter 修复 Sidecar 行为（GKE Enterprise CSM 方式）
+
+```yaml
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: fix-duplicate-transfer-encoding
+  namespace: <namespace>
+spec:
+  workloadSelector:
+    labels:
+      app: <your-target-app-label>
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: SIDECAR_INBOUND
+        listener:
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+      patch:
+        operation: MERGE
+        value:
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+            common_http_protocol_options:
+              # 禁止 Envoy 追加 Transfer-Encoding
+              chunked_body_for_head_requests: false
+```
+
+### 方案 C：对目标 Pod 禁用 Sidecar（最快验证方式）
+
+```bash
+# 先禁用 Sidecar 验证问题是否消失
+kubectl patch deployment <target-deployment> -n <namespace> \
+  --type=json \
+  -p='[{"op":"add","path":"/spec/template/metadata/annotations","value":{"sidecar.istio.io/inject":"false"}}]'
+
+kubectl rollout restart deployment/<target-deployment> -n <namespace>
+
+# 再次从 Pod 内 curl 验证
+kubectl exec -it <your-pod> -n <namespace> -- \
+  curl -sv http://100.64.21.22:8080/otx-compose/compose-documents \
+  2>&1 | grep -iE "transfer-encoding|server|x-frame"
+```
+
+---
+
+## 验证修复效果
+
+```bash
+# 修复后预期响应头
+# Server: <your-app-server>        ← 不再是 istio-envoy
+# X-Frame-Options: DENY            ← 只出现一次
+# Transfer-Encoding: chunked       ← 只出现一次
+```
+
+| 验证点              | 修复前        | 修复后            |
+| ------------------- | ------------- | ----------------- |
+| `Server` header     | `istio-envoy` | App 自身的 Server |
+| `Transfer-Encoding` | 出现 2 次     | 出现 1 次         |
+| `X-Frame-Options`   | 出现 2 次     | 出现 1 次         |
+| Nginx 502           | 存在          | 消失              |
+
+---
+
+## 重要结论
+
+> **你的 Nginx 502 不是 Nginx 的问题，也不是 GLB 的问题，而是目标服务的 Sidecar Envoy 在集群内部就已经产生了双重 Header，任何经过 HTTP 规范校验的代理（包括 Nginx）收到这个响应都会报错。**
+
+优先执行 **方案 C** 快速验证，确认后再决定是修 App 还是修 EnvoyFilter。
