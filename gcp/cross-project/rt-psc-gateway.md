@@ -541,3 +541,71 @@ graph TD
 
 ### 总结
 对于您的困惑：**您所采用的“通过 DNS Response Policy 将 HTTPS 域名定向到本地 PSC IP” 的方法，是当前云原生工程架构中最纯净、最标准的最佳解法**。它充分利用了云提供的基础设施抽象，把复杂性推给了 DNS 系统，让上层业务系统完全感知不到底层“暗渡陈仓”的跨号 PSC 网络穿透隧道。请放心并以此在团队内推广这一架构范式！
+
+---
+
+## 11. To Do List（生产化后续事项）
+
+下面这些事项建议作为从 `POC 可用` 走向 `生产可运营` 的后续工作清单。
+
+### A. 可观测性与性能监控
+
+- [ ] 定义端到端 SLI/SLO：至少覆盖成功率、P95/P99 延迟、5xx 比例、DNS 解析成功率、PSC 连接状态。
+- [ ] 明确监控分层：Consumer 侧（Kong / 调用方）、PSC 层、Producer 侧（GKE Gateway / HTTPRoute / 后端服务）分别采集什么指标。
+- [ ] 为 Kong 增加 upstream 维度监控：连接超时、上游重试次数、TLS 握手失败、按 hostname/upstream/service 维度的请求量与错误率。
+- [ ] 为 GKE Gateway / LB 补齐日志与指标采集，确认请求日志、后端响应码分布、延迟分布可以进入 Cloud Logging / Cloud Monitoring。
+- [ ] 为后端服务补齐应用指标：QPS、并发、CPU、内存、Pod 重启、应用级 4xx/5xx、下游依赖耗时。
+- [ ] 建立基础告警：PSC 连接非 `ACCEPTED`、LB 5xx 突增、后端无健康实例、DNS 解析异常、证书临期、延迟超阈值。
+- [ ] 规划链路追踪方案：确认是否需要 OpenTelemetry，把调用从 Kong 一直串到 Producer 应用。
+
+### B. 运行管理与日常运维
+
+- [ ] 形成资源清单与归属关系：Forwarding Rule、Service Attachment、PSC NAT Subnet、DNS Zone/Record、Gateway、HTTPRoute、Service、Namespace。
+- [ ] 明确运维边界：Project A 与 Project B 分别由谁负责，谁有 accept PSC connection、改 DNS、改 Gateway、发版后端的权限。
+- [ ] 为关键资源补齐命名规范、Label 和文档索引，避免后续出现多个 Gateway / forwarding rule 时无法快速定位。
+- [ ] 建立变更流程：新增 consumer、变更域名、替换证书、切换后端服务、调整路由规则时的审批与执行顺序。
+- [ ] 补一份标准排障 Runbook：按 DNS、PSC、LB/Gateway、HTTPRoute、Pod 五层拆开，写清检查命令和预期结果。
+- [ ] 评估是否需要 Terraform / Config Connector / Helm 化，避免 PSC、DNS、Gateway 资源长期靠手工维护。
+
+### C. 容量、扩容与高可用
+
+- [ ] 确认容量评估口径：峰值 QPS、并发连接数、连接复用率、单请求包体大小、超时模型。
+- [ ] 评估后端是否需要 HPA / VPA / Cluster Autoscaler，并给出最小副本数与扩容上限。
+- [ ] 为关键 Deployment 增加 PDB、readinessProbe、livenessProbe、反亲和或拓扑分布约束，确保滚动升级不掉量。
+- [ ] 评估 Gateway 和后端是否需要多 Zone 高可用验证，确认单 Zone 故障时请求是否仍可转发。
+- [ ] 检查 PSC NAT Subnet 规划是否足够，避免未来 consumer 数量增加后地址池过小。
+- [ ] 盘点相关 GCP 配额与限制：forwarding rules、service attachments、Cloud DNS records、LB 相关 quota，避免扩容时被 quota 卡住。
+- [ ] 建立“何时需要扩容”的触发条件，例如 P95 持续升高、Pod CPU/内存长期高水位、5xx 增长、连接队列积压。
+
+### D. HTTPS / SNI / 证书治理
+
+- [ ] 明确最终生产流量是否全部升级为 HTTPS，而不是只停留在当前 HTTP POC。
+- [ ] 确认 Producer 侧 TLS 终止位置：GKE Gateway、Kong、还是应用自身；避免后续双重终止或证书职责不清。
+- [ ] 确认证书来源与轮换机制：Google-managed、Certificate Manager、或企业 CA，自签证书不要直接进入生产。
+- [ ] 验证 Consumer 侧经 PSC 访问 HTTPS 时，SNI、Host、证书 SAN 是否完全一致，避免只在 curl 层面能通、业务 SDK 层面失败。
+- [ ] 决定是否需要双向 TLS（mTLS），并先明确证书分发、轮换、吊销与故障回退方案，再实施。
+- [ ] 评估是否要把 `Private DNS Zone` 和 `Response Policy` 的使用边界文档化，避免后续多个团队做出冲突解析。
+
+### E. 安全与访问控制
+
+- [ ] 收紧 Service Attachment consumer accept list，避免测试项目或错误 project 意外接入。
+- [ ] 审核相关 IAM：谁可以创建 / 更新 service attachment、forwarding rule、DNS record、Gateway 资源。
+- [ ] 评估是否需要 Cloud Armor、WAF、速率限制或 Kong plugin 级别限流，特别是跨租户或高暴露面场景。
+- [ ] 校验 Producer 侧 hostname/path 路由是否存在越权访问面，避免多个内部服务共用 Gateway 时发生误路由。
+- [ ] 确认日志中不会泄漏敏感 header、token、PII，并定义日志保留周期与审计要求。
+
+### F. 发布、回滚与变更验证
+
+- [ ] 设计变更前检查清单：Gateway Programmed、HTTPRoute ResolvedRefs、SA 状态、DNS 生效、证书状态、后端健康。
+- [ ] 补齐发布后验证矩阵：从 Pod 内、Kong 内、Consumer VPC 内、Producer VPC 内分别验证。
+- [ ] 定义回滚路径：DNS 回切、Kong upstream 回切、HTTPRoute 回退、后端 Deployment 回滚，各自谁执行、多久恢复。
+- [ ] 为 Producer 侧升级做零停机验证，包括滚动发布、证书替换、Gateway/Route 变更。
+- [ ] 评估是否需要金丝雀或灰度路由，特别是在后续从 HTTP 切到 HTTPS、或引入 mTLS 时。
+
+### G. 故障演练与长期演进
+
+- [ ] 做一次故障演练：模拟 DNS 误配置、PSC 连接未接受、后端 Pod 全挂、证书过期、单 Zone 故障。
+- [ ] 明确跨项目责任分界后的 on-call 流程，保证 Consumer 团队与 Producer 团队知道告警先找谁。
+- [ ] 评估是否需要多区域容灾，如果 Producer 是关键共享入口，单 Region 方案通常还不够。
+- [ ] 规划后续标准化模板：新接入一个 consumer 项目时，是否能复用 Terraform module / Helm chart / 操作手册。
+- [ ] 补一份架构决策记录（ADR）：说明为什么选择 PSC + Private DNS，而不是 VPC Peering、VPN、或 Consumer 侧代理桥接。
