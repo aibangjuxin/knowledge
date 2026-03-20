@@ -1,5 +1,45 @@
 我来仔细 Review 一下这份文档，然后给你一个结构化的理解输出。好，我已经读完这份文档了。下面是我的完整 Review 和一份可以直接用于执行 POC 的梳理文档。
 
+
+```mermaid
+flowchart LR
+    subgraph A["☁️ Project A — Consumer"]
+        direction TB
+        KONG["🔁 Kong Runtime\nAPI Gateway"]
+        DNS["🔍 Private DNS\nStatic PSC record"]
+        PSC_EP["🔗 PSC Endpoint\nForwarding Rule · Internal IP"]
+        KONG --> DNS --> PSC_EP
+    end
+
+    subgraph B["☁️ Project B — Producer / Master"]
+        direction TB
+        subgraph PSC_LAYER["PSC Layer"]
+            SA["📎 Service Attachment\nAccept list: Project A"]
+            PSC_SUBNET["🧱 PSC NAT Subnet\npurpose = PRIVATE_SERVICE_CONNECT"]
+        end
+        subgraph GKE_LAYER["GKE Gateway Layer"]
+            GW["⚙️ GKE Gateway\nclass: gke-l7-rilb"]
+            ROUTE["🗺️ HTTPRoute\nhost + path matching"]
+        end
+        subgraph APP_LAYER["Application Layer"]
+            SVC["🔌 Kubernetes Service\nClusterIP"]
+            APP["📦 Backend Pod\ndemo-echo"]
+        end
+
+        SA --> GW --> ROUTE --> SVC --> APP
+        PSC_SUBNET -.->|NAT pool| SA
+    end
+
+    PSC_EP -->|"PSC tunnel\n跨 Project 私网"| SA
+
+    style A fill:#EBF4FF,stroke:#3B82F6,stroke-width:1.5px,color:#1E3A5F
+    style B fill:#ECFDF5,stroke:#10B981,stroke-width:1.5px,color:#064E3B
+    style PSC_LAYER fill:#F5F3FF,stroke:#8B5CF6,stroke-width:1px,color:#4C1D95
+    style GKE_LAYER fill:#F0FDF4,stroke:#22C55E,stroke-width:1px,color:#14532D
+    style APP_LAYER fill:#FFFBEB,stroke:#F59E0B,stroke-width:1px,color:#78350F
+```
+![alt text](./psc_gke_gateway_architecture.svg)
+
 ---
 
 ## 🔍 Review 总评
