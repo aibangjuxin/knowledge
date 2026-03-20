@@ -490,3 +490,54 @@ graph TD
 1. 你的 Kong Runtime 是跑在 GKE Pod 里还是 GCE VM 上？（影响 Phase 8 的验证命令）
 2. Project A 侧的 GKE 集群有没有已经配好的私有 DNS Zone？
 3. `gke-l7-rilb` GatewayClass 在 Project B 的集群里已经可用了吗？
+
+---
+
+## 10. 深度探讨：Consumer 侧通过 PSC 访问 HTTPS / SNI 服务的最佳实践
+
+您观察到的现象非常敏锐！当 Producer 侧（例如您的 Kong Gateway）是一个严格要求 HTTPS TLS 握手并强校验 `Host` 或 `SNI (Server Name Indication)` 的前端资源时，Consumer 端如何优雅且合法地发起请求，是跨项目架构中非常关键的一环。
+
+在这里给出明确的结论：**您通过 Response Policy 或 Private DNS Zone 将 Producer 域名（形如 `api.example.com`）绑定到 PSC Endpoint IP（例如 `10.x.x.x`）的做法，不仅完全可行，而且是针对“GKE/VM 内联消费者”这个场景下 GCP 官方最为推崇的 黄金级最佳实践（Best Practice）。**
+
+为了让您对整体行业的常规解法有一个体系化的认知，以下是业界处理此类 HTTPS 暴露请求的 **三大主要架构演进模型**：
+
+### 模型一：原生“域名挟持” / DNS 解析拦截（您当前的做法，★★★★★）
+
+**实现方式**：在 Consumer 侧（Project A）的 VPC 网络中，利用 Cloud DNS Private Zone 或是 DNS Response Policy，强制劫持需要访问的公网/内网域名，令其直接解析为 **PSC Endpoint 的内网 IP**。
+
+**为什么它能完美支持 HTTPS：**
+当 GKE Pod 内的进程发起如 `curl https://api.project-b.com/demo` 的请求时，底层发生了两件非常巧妙的事：
+1. **L3/L4 网络层欺骗**：DNS 告诉客户端，“这个域名的服务器就坐在 `10.10.20.10` (PSC Endpoint IP)”，客户端信以为真，向这个 IP 发起 TCP 连接，实际上数据包已经顺着 PSC 隧道过桥到了 Project B 的边界 LB 和 Kong。
+2. **L7 应用层保真**：由于客户端代码层面发起的依然是基于 `api.project-b.com` 域名的请求，它的 TLS 加密握手组件（如 OpenSSL）会自动将 `api.project-b.com` 作为 `SNI` 塞入 Client Hello 报文。连接建立后，HTTP(s) 报文的 `Host` 头也自然保留了该域名。
+对于对端的 Kong Gateway 而言，它收到的是一个带着标准 SNI、带着标准 Host Header 的完好无缺的真实请求，完全符合校验规则。
+
+**最佳实践评价**：
+这是最轻量化、最透明的做法，无需引入任何额外网关代理。客户端代码无需适配“连接 IP + 修改 Host”这样极其反模式的操作（即无需在代码级写死对 PSC Endpoint 的处理）。可以说是 **大道至简的最佳选择**。
+
+---
+
+### 模型二：客户端定制与硬编码（作为 Debug 和应急手段，★★☆☆☆）
+
+**实现方式**：环境不允许动 VPC DNS，或者某个开发者试图在没有正确配置的网络里临时跑通测试。必须强制客户端程序手动控制 L3/L4 与 L7 的分离。
+*   **Curl 中的做法**：利用 `--resolve` 参数。例如：`curl -v --resolve api.project-b.com:443:10.10.20.10 https://api.project-b.com/demo`
+*   **代码中的做法（Python/Go）**：手动创建一个指向 10.10.20.10 的 TLS Socket 拨号器，但给 Socket 连接器手动塞入目标域名的 `ServerName` 属性用于完成 SNI 握手。
+
+**最佳实践评价**：
+仅能作为本地排障技巧，**绝对不要引入到生产环境代码中**。因为一旦 PSC 架构有所变动（比如 IP 变动），排查和修改硬编码会极其痛苦。
+
+---
+
+### 模型三：引入 Consumer 侧全量七层代理（适用于高级流量治理，★★★★☆）
+
+**实现方式**：当 Consumer 侧不仅是个单纯发起调用的发起者，还是一个具有雄心壮志的管控域——这在一些安全规范极度严格的跨国大厂中很常见。
+此时，单凭一个没有 L7 能力的 L4 PSC Endpoint (Forwarding Rule) 满足不了治理需要。
+*   **方案 A (Load Balancer 桥接)**：在 Consumer Project A 中，建立您的一个 **Internal Application Load Balancer**，并在这个 LB 的后端创建一个特殊的 **PSC NEG** 实体，直连 Project B 的 Service Attachment。因为这个 LB 具备了七层卸载与代理能力，您可以通过 LB 给去往后端的请求“发包时动态篡改请求头或强塞入 SNI”。
+*   **方案 B (Service Mesh 劫持)**：使用 Istio 等架构。在 Project A 的 Consumer GKE 里定义一个 `ServiceEntry`。业务代码只需直接发起一个 HTTP 请求：`http://api.project-b.com/demo`，Pod 旁边的 Envoy Sidecar 捕获该请求后，可以由 Sidecar 自动建立 TLS 加密信道，修改请求头，最终代发往预设的 PSC IP 中。
+
+**最佳实践评价**：
+此模型拥有最高的灵活性，能获得在 Consumer 端针对请求进行熔断、限流、审计以及二次网关封包的能力。但它的架构复杂度急剧升高、财务成本也会显著增加。**如果您的核心诉求纯粹只是“完成调用”，这个架构就显得用力过猛了**。
+
+---
+
+### 总结
+对于您的困惑：**您所采用的“通过 DNS Response Policy 将 HTTPS 域名定向到本地 PSC IP” 的方法，是当前云原生工程架构中最纯净、最标准的最佳解法**。它充分利用了云提供的基础设施抽象，把复杂性推给了 DNS 系统，让上层业务系统完全感知不到底层“暗渡陈仓”的跨号 PSC 网络穿透隧道。请放心并以此在团队内推广这一架构范式！
