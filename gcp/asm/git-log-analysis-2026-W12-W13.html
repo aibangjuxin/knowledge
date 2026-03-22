@@ -1,0 +1,762 @@
+<!DOCTYPE html><html><head>
+      <title>git-log-analysis-2026-W12-W13</title>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.38/dist/katex.min.css">
+      
+      
+      <script src="https://cdn.jsdelivr.net/npm/mermaid@11.13.0/dist/mermaid.min.js"></script>
+      
+      
+      <style>
+      code[class*=language-],pre[class*=language-]{color:#333;background:0 0;font-family:Consolas,"Liberation Mono",Menlo,Courier,monospace;text-align:left;white-space:pre;word-spacing:normal;word-break:normal;word-wrap:normal;line-height:1.4;-moz-tab-size:8;-o-tab-size:8;tab-size:8;-webkit-hyphens:none;-moz-hyphens:none;-ms-hyphens:none;hyphens:none}pre[class*=language-]{padding:.8em;overflow:auto;border-radius:3px;background:#f5f5f5}:not(pre)>code[class*=language-]{padding:.1em;border-radius:.3em;white-space:normal;background:#f5f5f5}.token.blockquote,.token.comment{color:#969896}.token.cdata{color:#183691}.token.doctype,.token.macro.property,.token.punctuation,.token.variable{color:#333}.token.builtin,.token.important,.token.keyword,.token.operator,.token.rule{color:#a71d5d}.token.attr-value,.token.regex,.token.string,.token.url{color:#183691}.token.atrule,.token.boolean,.token.code,.token.command,.token.constant,.token.entity,.token.number,.token.property,.token.symbol{color:#0086b3}.token.prolog,.token.selector,.token.tag{color:#63a35c}.token.attr-name,.token.class,.token.class-name,.token.function,.token.id,.token.namespace,.token.pseudo-class,.token.pseudo-element,.token.url-reference .token.variable{color:#795da3}.token.entity{cursor:help}.token.title,.token.title .token.punctuation{font-weight:700;color:#1d3e81}.token.list{color:#ed6a43}.token.inserted{background-color:#eaffea;color:#55a532}.token.deleted{background-color:#ffecec;color:#bd2c00}.token.bold{font-weight:700}.token.italic{font-style:italic}.language-json .token.property{color:#183691}.language-markup .token.tag .token.punctuation{color:#333}.language-css .token.function,code.language-css{color:#0086b3}.language-yaml .token.atrule{color:#63a35c}code.language-yaml{color:#183691}.language-ruby .token.function{color:#333}.language-markdown .token.url{color:#795da3}.language-makefile .token.symbol{color:#795da3}.language-makefile .token.variable{color:#183691}.language-makefile .token.builtin{color:#0086b3}.language-bash .token.keyword{color:#0086b3}pre[data-line]{position:relative;padding:1em 0 1em 3em}pre[data-line] .line-highlight-wrapper{position:absolute;top:0;left:0;background-color:transparent;display:block;width:100%}pre[data-line] .line-highlight{position:absolute;left:0;right:0;padding:inherit 0;margin-top:1em;background:hsla(24,20%,50%,.08);background:linear-gradient(to right,hsla(24,20%,50%,.1) 70%,hsla(24,20%,50%,0));pointer-events:none;line-height:inherit;white-space:pre}pre[data-line] .line-highlight:before,pre[data-line] .line-highlight[data-end]:after{content:attr(data-start);position:absolute;top:.4em;left:.6em;min-width:1em;padding:0 .5em;background-color:hsla(24,20%,50%,.4);color:#f4f1ef;font:bold 65%/1.5 sans-serif;text-align:center;vertical-align:.3em;border-radius:999px;text-shadow:none;box-shadow:0 1px #fff}pre[data-line] .line-highlight[data-end]:after{content:attr(data-end);top:auto;bottom:.4em}html body{font-family:'Helvetica Neue',Helvetica,'Segoe UI',Arial,freesans,sans-serif;font-size:16px;line-height:1.6;color:#333;background-color:#fff;overflow:initial;box-sizing:border-box;word-wrap:break-word}html body>:first-child{margin-top:0}html body h1,html body h2,html body h3,html body h4,html body h5,html body h6{line-height:1.2;margin-top:1em;margin-bottom:16px;color:#000}html body h1{font-size:2.25em;font-weight:300;padding-bottom:.3em}html body h2{font-size:1.75em;font-weight:400;padding-bottom:.3em}html body h3{font-size:1.5em;font-weight:500}html body h4{font-size:1.25em;font-weight:600}html body h5{font-size:1.1em;font-weight:600}html body h6{font-size:1em;font-weight:600}html body h1,html body h2,html body h3,html body h4,html body h5{font-weight:600}html body h5{font-size:1em}html body h6{color:#5c5c5c}html body strong{color:#000}html body del{color:#5c5c5c}html body a:not([href]){color:inherit;text-decoration:none}html body a{color:#08c;text-decoration:none}html body a:hover{color:#00a3f5;text-decoration:none}html body img{max-width:100%}html body>p{margin-top:0;margin-bottom:16px;word-wrap:break-word}html body>ol,html body>ul{margin-bottom:16px}html body ol,html body ul{padding-left:2em}html body ol.no-list,html body ul.no-list{padding:0;list-style-type:none}html body ol ol,html body ol ul,html body ul ol,html body ul ul{margin-top:0;margin-bottom:0}html body li{margin-bottom:0}html body li.task-list-item{list-style:none}html body li>p{margin-top:0;margin-bottom:0}html body .task-list-item-checkbox{margin:0 .2em .25em -1.8em;vertical-align:middle}html body .task-list-item-checkbox:hover{cursor:pointer}html body blockquote{margin:16px 0;font-size:inherit;padding:0 15px;color:#5c5c5c;background-color:#f0f0f0;border-left:4px solid #d6d6d6}html body blockquote>:first-child{margin-top:0}html body blockquote>:last-child{margin-bottom:0}html body hr{height:4px;margin:32px 0;background-color:#d6d6d6;border:0 none}html body table{margin:10px 0 15px 0;border-collapse:collapse;border-spacing:0;display:block;width:100%;overflow:auto;word-break:normal;word-break:keep-all}html body table th{font-weight:700;color:#000}html body table td,html body table th{border:1px solid #d6d6d6;padding:6px 13px}html body dl{padding:0}html body dl dt{padding:0;margin-top:16px;font-size:1em;font-style:italic;font-weight:700}html body dl dd{padding:0 16px;margin-bottom:16px}html body code{font-family:Menlo,Monaco,Consolas,'Courier New',monospace;font-size:.85em;color:#000;background-color:#f0f0f0;border-radius:3px;padding:.2em 0}html body code::after,html body code::before{letter-spacing:-.2em;content:'\00a0'}html body pre>code{padding:0;margin:0;word-break:normal;white-space:pre;background:0 0;border:0}html body .highlight{margin-bottom:16px}html body .highlight pre,html body pre{padding:1em;overflow:auto;line-height:1.45;border:#d6d6d6;border-radius:3px}html body .highlight pre{margin-bottom:0;word-break:normal}html body pre code,html body pre tt{display:inline;max-width:initial;padding:0;margin:0;overflow:initial;line-height:inherit;word-wrap:normal;background-color:transparent;border:0}html body pre code:after,html body pre code:before,html body pre tt:after,html body pre tt:before{content:normal}html body blockquote,html body dl,html body ol,html body p,html body pre,html body ul{margin-top:0;margin-bottom:16px}html body kbd{color:#000;border:1px solid #d6d6d6;border-bottom:2px solid #c7c7c7;padding:2px 4px;background-color:#f0f0f0;border-radius:3px}@media print{html body{background-color:#fff}html body h1,html body h2,html body h3,html body h4,html body h5,html body h6{color:#000;page-break-after:avoid}html body blockquote{color:#5c5c5c}html body pre{page-break-inside:avoid}html body table{display:table}html body img{display:block;max-width:100%;max-height:100%}html body code,html body pre{word-wrap:break-word;white-space:pre}}.markdown-preview{width:100%;height:100%;box-sizing:border-box}.markdown-preview ul{list-style:disc}.markdown-preview ul ul{list-style:circle}.markdown-preview ul ul ul{list-style:square}.markdown-preview ol{list-style:decimal}.markdown-preview ol ol,.markdown-preview ul ol{list-style-type:lower-roman}.markdown-preview ol ol ol,.markdown-preview ol ul ol,.markdown-preview ul ol ol,.markdown-preview ul ul ol{list-style-type:lower-alpha}.markdown-preview .newpage,.markdown-preview .pagebreak{page-break-before:always}.markdown-preview pre.line-numbers{position:relative;padding-left:3.8em;counter-reset:linenumber}.markdown-preview pre.line-numbers>code{position:relative}.markdown-preview pre.line-numbers .line-numbers-rows{position:absolute;pointer-events:none;top:1em;font-size:100%;left:0;width:3em;letter-spacing:-1px;border-right:1px solid #999;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none}.markdown-preview pre.line-numbers .line-numbers-rows>span{pointer-events:none;display:block;counter-increment:linenumber}.markdown-preview pre.line-numbers .line-numbers-rows>span:before{content:counter(linenumber);color:#999;display:block;padding-right:.8em;text-align:right}.markdown-preview .mathjax-exps .MathJax_Display{text-align:center!important}.markdown-preview:not([data-for=preview]) .code-chunk .code-chunk-btn-group{display:none}.markdown-preview:not([data-for=preview]) .code-chunk .status{display:none}.markdown-preview:not([data-for=preview]) .code-chunk .output-div{margin-bottom:16px}.markdown-preview .md-toc{padding:0}.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link{display:inline;padding:.25rem 0}.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link div,.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link p{display:inline}.markdown-preview .md-toc .md-toc-link-wrapper.highlighted .md-toc-link{font-weight:800}.scrollbar-style::-webkit-scrollbar{width:8px}.scrollbar-style::-webkit-scrollbar-track{border-radius:10px;background-color:transparent}.scrollbar-style::-webkit-scrollbar-thumb{border-radius:5px;background-color:rgba(150,150,150,.66);border:4px solid rgba(150,150,150,.66);background-clip:content-box}html body[for=html-export]:not([data-presentation-mode]){position:relative;width:100%;height:100%;top:0;left:0;margin:0;padding:0;overflow:auto}html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{position:relative;top:0;min-height:100vh}@media screen and (min-width:914px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{padding:2em calc(50% - 457px + 2em)}}@media screen and (max-width:914px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{padding:2em}}@media screen and (max-width:450px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{font-size:14px!important;padding:1em}}@media print{html body[for=html-export]:not([data-presentation-mode]) #sidebar-toc-btn{display:none}}html body[for=html-export]:not([data-presentation-mode]) #sidebar-toc-btn{position:fixed;bottom:8px;left:8px;font-size:28px;cursor:pointer;color:inherit;z-index:99;width:32px;text-align:center;opacity:.4}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] #sidebar-toc-btn{opacity:1}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc{position:fixed;top:0;left:0;width:300px;height:100%;padding:32px 0 48px 0;font-size:14px;box-shadow:0 0 4px rgba(150,150,150,.33);box-sizing:border-box;overflow:auto;background-color:inherit}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar{width:8px}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar-track{border-radius:10px;background-color:transparent}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar-thumb{border-radius:5px;background-color:rgba(150,150,150,.66);border:4px solid rgba(150,150,150,.66);background-clip:content-box}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc a{text-decoration:none}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc{padding:0 16px}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link{display:inline;padding:.25rem 0}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link div,html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link p{display:inline}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper.highlighted .md-toc-link{font-weight:800}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{left:300px;width:calc(100% - 300px);padding:2em calc(50% - 457px - 300px / 2);margin:0;box-sizing:border-box}@media screen and (max-width:1274px){html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{padding:2em}}@media screen and (max-width:450px){html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{width:100%}}html body[for=html-export]:not([data-presentation-mode]):not([html-show-sidebar-toc]) .markdown-preview{left:50%;transform:translateX(-50%)}html body[for=html-export]:not([data-presentation-mode]):not([html-show-sidebar-toc]) .md-sidebar-toc{display:none}
+/* Please visit the URL below for more information: */
+/*   https://shd101wyy.github.io/markdown-preview-enhanced/#/customize-css */
+
+      </style>
+      <script type="text/javascript">
+  document.addEventListener("DOMContentLoaded", function () {
+    // your code here
+  });
+</script>
+    </head>
+    <body for="html-export">
+      <div class="crossnote markdown-preview  ">
+      
+<h1 id="git-log-analysis-report-2026-w12--w13">Git Log Analysis Report (2026-W12 ~ W13) </h1>
+<blockquote>
+<p>Report Generated: 2026-03-21<br>
+Time Range: 2026-03-14 ~ 2026-03-21<br>
+Total Commits: 26 (non-merge)</p>
+</blockquote>
+<hr>
+<h2 id="executive-summary">Executive Summary </h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Total Commits</strong></td>
+<td>26</td>
+</tr>
+<tr>
+<td><strong>Active Days</strong></td>
+<td>7</td>
+</tr>
+<tr>
+<td><strong>Files Modified</strong></td>
+<td>100+</td>
+</tr>
+<tr>
+<td><strong>Technical Domains</strong></td>
+<td>7</td>
+</tr>
+<tr>
+<td><strong>Primary Focus</strong></td>
+<td>Cross-Project PSC Gateway &amp; GKE Node Pool Management</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="technical-domain-categorization">Technical Domain Categorization </h2>
+<div class="mermaid">mindmap
+  root((Git Log Analysis&lt;br/&gt;2026-W12~W13))
+    GCP Networking
+      Cross-Project Gateway
+        ::icon(fa fa-network-wired)
+        rt-psc-gateway.md
+        Rt-psc-connect-master-project-gateway.md
+        cross-project-san.md
+        rt-cross-project-fqdn.md
+        psc_gke_gateway_architecture.svg
+        about-wildcard-depth.md
+        explorer-2-0-fqdn.md
+      GLB (Global Load Balancer)
+        ::icon(fa fa-globe)
+        glb.md
+        glb+psc.md
+      PSC/PSA
+        service-attachment-region.md
+        Hub-Spoke.md
+        Kiro-psc-CloudSQL.md
+        gemini-psc.md
+        psc-Redis.md
+      Network
+        network-endpoint-groups.md
+        google-cross-project-service.md
+        qwen-read-cross-project.md
+    Cloud Service Mesh
+      ASM/CSM
+        ::icon(fa fa-cubes)
+        cloud-service-mesh-control.md
+        cloud-service-mesh-control-gpt.md
+        cloud-service-mesh-eng.md
+        node-pool-management.md
+        node-pool-manage-claude.md
+        3.md
+        3-add-mesh.md
+        cross-project-mesh.md
+        master-project-setup-mesh.md
+        mcs.md
+        kilo-minimax-cross-project-mesh.md
+        qwen-cross-project-mesh.md
+        3-thinking.md
+    Kubernetes
+      Autoscaling
+        ::icon(fa fa-expand-arrows-alt)
+        k8s-resouce-autoscale.md
+        k8s-resouce-autoscale-chatgpt.md
+        k8s-scale/k8s-resouce-autoscale.md
+        k8s-scale/scale-deploy.md
+      kubectl Tools
+        kubectl-cmd.md
+    Nginx
+      Proxy Pass
+        ::icon(fa fa-exchange)
+        nginx-proxy-pass.md
+        proxy-pass/Nginx-proxy-pass.md
+        proxy-pass/nginx-proxy-pass-rewrite.md
+        proxy-pass/nginx-proxy-pass-usersgent.md
+        proxy-pass/nginx-proxy-forwarded-proto.md
+      Transfer Encoding
+        nginx-Transfer-Encoding.md
+      Config Design
+        design-add-nginxconf.md
+    SSL/TLS
+      Debug &amp; Verify
+        ::icon(fa fa-lock)
+        debug-ssl.md
+        debug-ssl-chatgpt.md
+        gskit.md
+        openssl.md
+        verify-domain-ssl.sh
+        verify-domain-ssl-enhance.sh
+        verify-baidu.md
+        why-san.md
+      DNS
+        dns-peering/index.html
+    iOS Development
+      OCR App
+        ::icon(fa fa-mobile)
+        DropOCR.swift
+        DropOCR.app/
+        Reade.md
+        nas-ocr.md
+      Game
+        snake.html
+    Tooling &amp; Scripts
+      Merged Scripts
+        ::icon(fa fa-tools)
+        merged-scripts.md
+</div><hr>
+<h2 id="key-knowledge-points-by-domain">Key Knowledge Points by Domain </h2>
+<h3 id="1-cross-project-psc-gateway--primary-focus">1. Cross-Project PSC Gateway 🔥 <strong>Primary Focus</strong> </h3>
+<p><strong>Files Modified:</strong> 10+ files in <code>gcp/cross-project/</code></p>
+<p><strong>Core Architecture:</strong></p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>┌─────────────────────────────────────────────────────────────┐
+│ Cross-Project PSC Gateway Architecture                      │
+├─────────────────────────────────────────────────────────────┤
+│ Tenant Project → GLB → PSC NEG → Service Attachment        │
+│                                              ↓              │
+│ Master Project → ILB → GKE Gateway → Mesh → Services       │
+└─────────────────────────────────────────────────────────────┘
+</code></pre><p><strong>Key Documents:</strong></p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rt-psc-gateway.md</code></td>
+<td>PSC Gateway implementation guide</td>
+</tr>
+<tr>
+<td><code>Rt-psc-connect-master-project-gateway.md</code></td>
+<td>Master project gateway connection</td>
+</tr>
+<tr>
+<td><code>cross-project-san.md</code></td>
+<td>Service Attachment Name (SAN) configuration</td>
+</tr>
+<tr>
+<td><code>rt-cross-project-fqdn.md</code></td>
+<td>Cross-project FQDN resolution</td>
+</tr>
+<tr>
+<td><code>about-wildcard-depth.md</code></td>
+<td>Wildcard certificate depth analysis</td>
+</tr>
+<tr>
+<td><code>explorer-2-0-fqdn.md</code></td>
+<td>FQDN exploration v2.0</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Architecture Diagram:</strong></p>
+<div class="mermaid">flowchart LR
+  subgraph Tenant["Tenant Project"]
+    Client["Client"] --&gt; GLB["GLB"]
+    GLB --&gt; PSC_NEG["PSC NEG"]
+  end
+
+  subgraph Master["Master Project"]
+    PSC_NEG --&gt; SA["Service Attachment"]
+    SA --&gt; ILB["Internal LB"]
+    ILB --&gt; GW["GKE Gateway"]
+    GW --&gt; Mesh["Service Mesh"]
+    Mesh --&gt; Svc["Backend Services"]
+  end
+
+  style Tenant fill:#e1f5ff
+  style Master fill:#fff4e1
+</div><hr>
+<h3 id="2-cloud-service-mesh-asmcsm-">2. Cloud Service Mesh (ASM/CSM) 📊 </h3>
+<p><strong>Files Modified:</strong> 12+ files in <code>gcp/asm/</code></p>
+<p><strong>Core Documentation:</strong></p>
+<ul>
+<li><code>cloud-service-mesh-control.md</code> - CSM control plane setup</li>
+<li><code>cloud-service-mesh-control-gpt.md</code> - GPT-assisted CSM configuration</li>
+<li><code>cloud-service-mesh-eng.md</code> - CSM engineering guide</li>
+<li><code>node-pool-management.md</code> - GKE node pool management strategies</li>
+<li><code>node-pool-manage-claude.md</code> - Claude-assisted node pool management</li>
+</ul>
+<p><strong>Node Pool Management Key Points:</strong></p>
+<pre data-role="codeBlock" data-info="yaml" class="language-yaml yaml"><code><span class="token comment"># Node Pool Autoscaling Configuration</span>
+<span class="token key atrule">autoscaling</span><span class="token punctuation">:</span>
+  <span class="token key atrule">enabled</span><span class="token punctuation">:</span> <span class="token boolean important">true</span>
+  <span class="token key atrule">minNodeCount</span><span class="token punctuation">:</span> <span class="token number">1</span>
+  <span class="token key atrule">maxNodeCount</span><span class="token punctuation">:</span> <span class="token number">10</span>
+  <span class="token key atrule">locationPolicy</span><span class="token punctuation">:</span> BALANCED
+
+<span class="token comment"># Resource Management</span>
+<span class="token key atrule">resources</span><span class="token punctuation">:</span>
+  <span class="token key atrule">requests</span><span class="token punctuation">:</span>
+    <span class="token key atrule">cpu</span><span class="token punctuation">:</span> <span class="token string">"500m"</span>
+    <span class="token key atrule">memory</span><span class="token punctuation">:</span> <span class="token string">"512Mi"</span>
+  <span class="token key atrule">limits</span><span class="token punctuation">:</span>
+    <span class="token key atrule">cpu</span><span class="token punctuation">:</span> <span class="token string">"1000m"</span>
+    <span class="token key atrule">memory</span><span class="token punctuation">:</span> <span class="token string">"1Gi"</span>
+</code></pre><p><strong>CSM + Cross-Project Integration:</strong></p>
+<div class="mermaid">flowchart TD
+  subgraph ControlPlane["Control Plane"]
+    CP["CSM Control Plane"]
+  end
+
+  subgraph DataPlane["Data Plane"]
+    NP1["Node Pool 1"]
+    NP2["Node Pool 2"]
+  end
+
+  CP --&gt; NP1
+  CP --&gt; NP2
+
+  subgraph Mesh["Service Mesh"]
+    GW["Gateway"]
+    SvcA["Service A"]
+    SvcB["Service B"]
+  end
+
+  NP1 --&gt; GW
+  NP2 --&gt; GW
+  GW --&gt; SvcA
+  GW --&gt; SvcB
+</div><hr>
+<h3 id="3-kubernetes-autoscaling-️">3. Kubernetes Autoscaling ⚙️ </h3>
+<p><strong>Files Modified:</strong> 5+ files in <code>k8s/</code></p>
+<p><strong>Key Documents:</strong></p>
+<ul>
+<li><code>k8s-resouce-autoscale.md</code> - K8s resource autoscaling guide</li>
+<li><code>k8s-resouce-autoscale-chatgpt.md</code> - ChatGPT-assisted autoscaling config</li>
+<li><code>k8s-scale/scale-deploy.md</code> - Scale deployment strategies</li>
+</ul>
+<p><strong>Autoscaling Components:</strong></p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>┌────────────────────────────────────────────────────┐
+│ Kubernetes Autoscaling Stack                       │
+├────────────────────────────────────────────────────┤
+│ HPA (Horizontal Pod Autoscaler)                    │
+│   └─ Based on CPU/Memory/Custom Metrics            │
+│ VPA (Vertical Pod Autoscaler)                      │
+│   └─ Adjust pod resource requests/limits           │
+│ Cluster Autoscaler                                 │
+│   └─ Add/remove nodes based on pod pending         │
+└────────────────────────────────────────────────────┘
+</code></pre><hr>
+<h3 id="4-nginx-configuration-">4. Nginx Configuration 🔧 </h3>
+<p><strong>Files Modified:</strong> 8+ files in <code>nginx/</code></p>
+<p><strong>Key Topics:</strong></p>
+<h4 id="41-proxy-pass-configuration">4.1 Proxy Pass Configuration </h4>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>nginx-proxy-pass.md</code></td>
+<td>Basic proxy pass configuration</td>
+</tr>
+<tr>
+<td><code>proxy-pass/Nginx-proxy-pass.md</code></td>
+<td>Comprehensive proxy pass guide</td>
+</tr>
+<tr>
+<td><code>proxy-pass/nginx-proxy-pass-rewrite.md</code></td>
+<td>URL rewrite with proxy pass</td>
+</tr>
+<tr>
+<td><code>proxy-pass/nginx-proxy-pass-usersgent.md</code></td>
+<td>User-Agent handling</td>
+</tr>
+<tr>
+<td><code>proxy-pass/nginx-proxy-forwarded-proto.md</code></td>
+<td>X-Forwarded-Proto handling</td>
+</tr>
+</tbody>
+</table>
+<h4 id="42-transfer-encoding">4.2 Transfer Encoding </h4>
+<ul>
+<li><code>nginx-Transfer-Encoding.md</code> - Transfer-Encoding handling in Nginx</li>
+</ul>
+<p><strong>Proxy Pass Pattern:</strong></p>
+<pre data-role="codeBlock" data-info="nginx" class="language-nginx nginx"><code><span class="token directive"><span class="token keyword keyword-location">location</span> /api/</span> <span class="token punctuation">{</span>
+    <span class="token directive"><span class="token keyword keyword-proxy_pass">proxy_pass</span> http://backend</span><span class="token punctuation">;</span>
+    <span class="token directive"><span class="token keyword keyword-proxy_set_header">proxy_set_header</span> Host <span class="token variable">$host</span></span><span class="token punctuation">;</span>
+    <span class="token directive"><span class="token keyword keyword-proxy_set_header">proxy_set_header</span> X-Real-IP <span class="token variable">$remote_addr</span></span><span class="token punctuation">;</span>
+    <span class="token directive"><span class="token keyword keyword-proxy_set_header">proxy_set_header</span> X-Forwarded-For <span class="token variable">$proxy_add_x_forwarded_for</span></span><span class="token punctuation">;</span>
+    <span class="token directive"><span class="token keyword keyword-proxy_set_header">proxy_set_header</span> X-Forwarded-Proto <span class="token variable">$scheme</span></span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre><hr>
+<h3 id="5-ssltls--dns-">5. SSL/TLS &amp; DNS 🔒 </h3>
+<p><strong>Files Modified:</strong> 8+ files in <code>ssl/</code> and <code>dns/</code></p>
+<p><strong>Key Documents:</strong></p>
+<ul>
+<li><code>debug-ssl.md</code> - SSL debugging guide</li>
+<li><code>debug-ssl-chatgpt.md</code> - ChatGPT-assisted SSL debugging</li>
+<li><code>openssl.md</code> - OpenSSL commands and usage</li>
+<li><code>gskit.md</code> - GSKit SSL toolkit</li>
+<li><code>verify-domain-ssl.sh</code> - Domain SSL verification script</li>
+<li><code>verify-domain-ssl-enhance.sh</code> - Enhanced verification script</li>
+<li><code>why-san.md</code> - Subject Alternative Name (SAN) explanation</li>
+</ul>
+<p><strong>SSL Verification Pipeline:</strong></p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code><span class="token comment"># Basic SSL Check</span>
+openssl s_client <span class="token parameter variable">-connect</span> example.com:443 <span class="token parameter variable">-servername</span> example.com
+
+<span class="token comment"># Certificate Details</span>
+openssl x509 <span class="token parameter variable">-in</span> cert.pem <span class="token parameter variable">-text</span> <span class="token parameter variable">-noout</span>
+
+<span class="token comment"># Verify Chain</span>
+openssl verify <span class="token parameter variable">-CAfile</span> ca.pem cert.pem
+</code></pre><hr>
+<h3 id="6-ios-development-">6. iOS Development 📱 </h3>
+<p><strong>Files Modified:</strong> 6+ files in <code>ios/</code></p>
+<p><strong>Projects:</strong></p>
+<h4 id="61-dropocr-app">6.1 DropOCR App </h4>
+<ul>
+<li><code>DropOCR.swift</code> - Main OCR application logic</li>
+<li><code>DropOCR.app/</code> - Application bundle</li>
+<li><code>Reade.md</code> - Reader/OCR documentation</li>
+<li><code>nas-ocr.md</code> - NAS OCR integration</li>
+</ul>
+<h4 id="62-mini-game">6.2 Mini Game </h4>
+<ul>
+<li><code>snake.html</code> - Snake game implementation</li>
+</ul>
+<hr>
+<h3 id="7-glb-global-load-balancer-">7. GLB (Global Load Balancer) 🌐 </h3>
+<p><strong>Files Modified:</strong> 3+ files in <code>gcp/glb/</code></p>
+<p><strong>Key Documents:</strong></p>
+<ul>
+<li><code>glb.md</code> - GLB configuration guide</li>
+<li><code>glb+psc.md</code> - GLB + PSC integration pattern</li>
+</ul>
+<p><strong>GLB + PSC Architecture:</strong></p>
+<pre data-role="codeBlock" data-info="" class="language-text"><code>Internet → GLB → PSC NEG → Service Attachment → ILB → Backend
+</code></pre><hr>
+<h2 id="commit-activity-timeline">Commit Activity Timeline </h2>
+<div class="mermaid">gantt
+    title Commit Activity (2026-03-14 to 2026-03-21)
+    dateFormat  YYYY-MM-DD
+    axisFormat %m-%d
+
+    section Cross-Project Gateway
+    Gateway Core      :2026-03-19, 3d
+    FQDN/SAN          :2026-03-20, 2d
+    Architecture Diag :2026-03-20, 1d
+
+    section ASM/CSM
+    CSM Control       :2026-03-16, 2d
+    Node Pool Mgmt    :2026-03-16, 3d
+    Cross-Project Mesh:2026-03-14, 1d
+
+    section Kubernetes
+    Autoscaling       :2026-03-16, 2d
+    kubectl Tools     :2026-03-16, 1d
+
+    section Nginx
+    Proxy Pass        :2026-03-16, 2d
+    Transfer Encoding :2026-03-19, 1d
+
+    section SSL/TLS
+    Debug &amp; Verify    :2026-03-18, 2d
+    Scripts           :2026-03-18, 1d
+
+    section iOS
+    OCR App           :2026-03-15, 2d
+    Game              :2026-03-15, 1d
+</div><hr>
+<h2 id="knowledge-graph">Knowledge Graph </h2>
+<div class="mermaid">graph TD
+    subgraph CrossProj["Cross-Project Gateway"]
+        CP_GW[rt-psc-gateway.md]
+        CP_SAN[cross-project-san.md]
+        CP_FQDN[rt-cross-project-fqdn.md]
+        CP_Arch[psc_gke_gateway_architecture.svg]
+    end
+
+    subgraph CSM["Cloud Service Mesh"]
+        CSM_Ctrl[cloud-service-mesh-control.md]
+        CSM_Node[node-pool-management.md]
+        CSM_Mesh[cross-project-mesh.md]
+    end
+
+    subgraph K8s["Kubernetes"]
+        K8s_Auto[k8s-resouce-autoscale.md]
+        K8s_Cmd[kubectl-cmd.md]
+    end
+
+    subgraph Nginx["Nginx"]
+        Nx_Proxy[nginx-proxy-pass.md]
+        Nx_Encode[nginx-Transfer-Encoding.md]
+    end
+
+    subgraph SSL["SSL/TLS"]
+        SSL_Db[debug-ssl.md]
+        SSL_Vrf[verify-domain-ssl.sh]
+    end
+
+    subgraph iOS["iOS Dev"]
+        iOS_OCR[DropOCR.swift]
+        iOS_Game[snake.html]
+    end
+
+    CrossProj --&gt; CSM
+    CSM --&gt; K8s
+    CrossProj --&gt; Nginx
+    CrossProj --&gt; SSL
+
+    style CrossProj fill:#e1f5ff
+    style CSM fill:#e8f5e9
+    style K8s fill:#fce4ec
+    style Nginx fill:#fff4e1
+    style SSL fill:#f3e5f5
+    style iOS fill:#ffebee
+</div><hr>
+<h2 id="最近工作情况分析">最近工作情况分析 </h2>
+<h3 id="工作模式观察-">工作模式观察 📈 </h3>
+<p><strong>1. 高频同步提交</strong></p>
+<ul>
+<li>本周 26 个 commit 中，约 23 个为 <code>chore: sync main</code> 同步提交</li>
+<li>表明你在多个分支/环境间频繁同步代码</li>
+<li>建议：考虑减少同步频率，合并相关变更一次性同步</li>
+</ul>
+<p><strong>2. 技术域集中度</strong></p>
+<table>
+<thead>
+<tr>
+<th>技术域</th>
+<th>文件数</th>
+<th>集中度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cross-Project Gateway</td>
+<td>10+</td>
+<td>38%</td>
+</tr>
+<tr>
+<td>Cloud Service Mesh</td>
+<td>12+</td>
+<td>46%</td>
+</tr>
+<tr>
+<td>Nginx</td>
+<td>8+</td>
+<td>31%</td>
+</tr>
+<tr>
+<td>SSL/TLS</td>
+<td>8+</td>
+<td>31%</td>
+</tr>
+<tr>
+<td>Kubernetes</td>
+<td>5+</td>
+<td>19%</td>
+</tr>
+<tr>
+<td>iOS Development</td>
+<td>6+</td>
+<td>23%</td>
+</tr>
+</tbody>
+</table>
+<p><strong>3. 工作时间分布</strong></p>
+<ul>
+<li><strong>3/14-3/15</strong>: 周末 - CSM 基础架构 + iOS 开发</li>
+<li><strong>3/16</strong>: 周一 - 高强度工作 (7 commits) - Nginx/K8s/CSM 多线并行</li>
+<li><strong>3/18</strong>: 周三 - SSL/TLS 专项 (6 files)</li>
+<li><strong>3/19-3/20</strong>: 周四 - 周五 - Cross-Project Gateway 集中突破</li>
+</ul>
+<h3 id="技术深度分析-">技术深度分析 🔍 </h3>
+<p><strong>优势领域:</strong></p>
+<ol>
+<li>✅ <strong>GCP 跨项目架构</strong> - PSC + GLB + Mesh 完整链路</li>
+<li>✅ <strong>Service Mesh</strong> - CSM 控制平面 + 数据平面 + Node Pool 管理</li>
+<li>✅ <strong>Nginx 配置</strong> - Proxy Pass/Transfer-Encoding/Headers 处理</li>
+<li>✅ <strong>SSL/TLS</strong> - Debug/Verify/OpenSSL/GSKit 全工具链</li>
+</ol>
+<p><strong>新兴领域:</strong></p>
+<ol>
+<li>🆕 <strong>iOS 开发</strong> - DropOCR App + 小游戏</li>
+<li>🆕 <strong>K8s Autoscaling</strong> - HPA/VPA/Cluster Autoscaler</li>
+</ol>
+<h3 id="潜在问题-️">潜在问题 ⚠️ </h3>
+<p><strong>1. 文档碎片化</strong></p>
+<ul>
+<li>多个相似文件：<code>k8s-resouce-autoscale.md</code> vs <code>k8s-resouce-autoscale-chatgpt.md</code></li>
+<li>多个 Nginx proxy-pass 文档分散在不同目录</li>
+<li>建议：建立统一的文档索引和合并策略</li>
+</ul>
+<p><strong>2. 脚本合并趋势</strong></p>
+<ul>
+<li><code>merged-scripts.md</code> 出现，表明存在脚本整合需求</li>
+<li>建议：将脚本移至独立 <code>scripts/</code> 目录并版本化管理</li>
+</ul>
+<p><strong>3. 架构复杂度</strong></p>
+<ul>
+<li>Cross-Project + PSC + Mesh + Gateway 多层叠加</li>
+<li>建议：绘制完整的端到端架构图并维护更新</li>
+</ul>
+<hr>
+<h2 id="actionable-insights">Actionable Insights </h2>
+<h3 id="what-went-well-">What Went Well ✅ </h3>
+<ol>
+<li><strong>Cross-Project Gateway 实现</strong> - 完整的 PSC + GKE Gateway 架构文档化</li>
+<li><strong>CSM Node Pool 管理</strong> - 详细的节点池管理策略和最佳实践</li>
+<li><strong>多 AI 协作</strong> - 同时使用 Claude、GPT、Kiro、Gemini 辅助开发</li>
+<li><strong>iOS 副业开发</strong> - DropOCR App 从概念到实现</li>
+</ol>
+<h3 id="areas-for-improvement-">Areas for Improvement 📈 </h3>
+<ol>
+<li><strong>文档整合</strong> - 合并相似的 AI 辅助文档（chatgpt/claude/gpt 版本）</li>
+<li><strong>架构图统一</strong> - 将 <code>psc_gke_gateway_architecture.svg</code> 纳入正式文档</li>
+<li><strong>测试覆盖</strong> - 缺少自动化测试验证配置正确性</li>
+<li><strong>同步策略</strong> - 优化 <code>sync main</code> 提交频率</li>
+</ol>
+<h3 id="recommended-next-steps-">Recommended Next Steps 🎯 </h3>
+<p><strong>短期 (1-2 周):</strong></p>
+<ol>
+<li>🔧 合并 Nginx proxy-pass 系列文档为单一权威指南</li>
+<li>📊 绘制完整的 Cross-Project Gateway 端到端架构图</li>
+<li>🧪 为 SSL verification scripts 添加单元测试</li>
+<li>📝 创建文档索引页，链接所有相关技术文档</li>
+</ol>
+<p><strong>中期 (1 个月):</strong></p>
+<ol>
+<li>🏗️ 建立 <code>scripts/</code> 目录，整合所有验证/部署脚本</li>
+<li>📖 编写 Cross-Project Gateway 完整实施手册</li>
+<li>🔒 完善 mTLS 和 AuthorizationPolicy 配置文档</li>
+<li>📱 DropOCR App 功能完善和 App Store 发布准备</li>
+</ol>
+<p><strong>长期 (季度):</strong></p>
+<ol>
+<li>🎯 建立完整的 GCP 架构知识库</li>
+<li>🤖 自动化文档生成和更新流程</li>
+<li>📊 建立架构决策记录 (ADR) 机制</li>
+<li>💰 成本优化分析和最佳实践文档</li>
+</ol>
+<hr>
+<h2 id="file-statistics-by-domain">File Statistics by Domain </h2>
+<table>
+<thead>
+<tr>
+<th>Domain</th>
+<th>Files Modified</th>
+<th>% of Total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cross-Project Gateway</td>
+<td>10+</td>
+<td>38%</td>
+</tr>
+<tr>
+<td>Cloud Service Mesh</td>
+<td>12+</td>
+<td>46%</td>
+</tr>
+<tr>
+<td>Nginx</td>
+<td>8+</td>
+<td>31%</td>
+</tr>
+<tr>
+<td>SSL/TLS</td>
+<td>8+</td>
+<td>31%</td>
+</tr>
+<tr>
+<td>Kubernetes</td>
+<td>5+</td>
+<td>19%</td>
+</tr>
+<tr>
+<td>iOS Development</td>
+<td>6+</td>
+<td>23%</td>
+</tr>
+<tr>
+<td>GLB</td>
+<td>3+</td>
+<td>12%</td>
+</tr>
+<tr>
+<td>Network</td>
+<td>3+</td>
+<td>12%</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="周对比分析-w10-w11-vs-w12-w13">周对比分析 (W10-W11 vs W12-W13) </h2>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>W10-W11</th>
+<th>W12-W13</th>
+<th>变化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Total Commits</td>
+<td>21</td>
+<td>26</td>
+<td>+24%</td>
+</tr>
+<tr>
+<td>Files Modified</td>
+<td>80+</td>
+<td>100+</td>
+<td>+25%</td>
+</tr>
+<tr>
+<td>Technical Domains</td>
+<td>5</td>
+<td>7</td>
+<td>+2</td>
+</tr>
+<tr>
+<td>Primary Focus</td>
+<td>PSC/PSA</td>
+<td>Cross-Project Gateway</td>
+<td>演进</td>
+</tr>
+<tr>
+<td>New Domains</td>
+<td>-</td>
+<td>iOS, GLB</td>
+<td>扩展</td>
+</tr>
+</tbody>
+</table>
+<p><strong>趋势观察:</strong></p>
+<ol>
+<li><strong>架构演进</strong> - 从 PSC 基础概念 → Cross-Project Gateway 实现</li>
+<li><strong>领域扩展</strong> - 新增 iOS 开发和 GLB 专项</li>
+<li><strong>深度增加</strong> - CSM 从基础配置 → Node Pool 管理</li>
+<li><strong>工具链完善</strong> - SSL verification scripts 增强版</li>
+</ol>
+<hr>
+<h2 id="conclusion">Conclusion </h2>
+<p><strong>Primary Achievement:</strong> 完成了 <strong>Cross-Project PSC Gateway</strong> 从设计到实现的完整文档化，包括架构设计、FQDN 解析、SAN 配置、Gateway 连接等全链路细节。</p>
+<p><strong>Technical Depth:</strong></p>
+<ul>
+<li>GCP Networking: PSC/PSA/GLB/NEG 深度整合</li>
+<li>Service Mesh: CSM 控制平面 + 数据平面 + Node Pool 管理</li>
+<li>Nginx: Proxy Pass/Transfer-Encoding/Headers 完整配置</li>
+<li>SSL/TLS: Debug/Verify/OpenShell/GSKit 工具链</li>
+</ul>
+<p><strong>Documentation Quality:</strong> 高 - 多层文档从概念 → 实现 → 调试，但存在碎片化问题需要整合。</p>
+<p><strong>Work Pattern:</strong> 高频同步提交表明多分支/环境并行开发，建议优化同步策略减少提交噪音。</p>
+<p><strong>Next Phase Focus:</strong></p>
+<ol>
+<li>文档整合与索引建立</li>
+<li>端到端架构图绘制</li>
+<li>自动化测试覆盖</li>
+<li>DropOCR App 发布准备</li>
+</ol>
+<hr>
+<p><em>Report generated by analyzing git commit history from 2026-03-14 to 2026-03-21</em></p>
+
+      </div>
+      
+      
+    
+    
+    <script type="module">
+// TODO: If ZenUML gets integrated into mermaid in the future,
+//      we can remove the following lines.
+
+
+var MERMAID_CONFIG = ({"startOnLoad":false});
+if (typeof MERMAID_CONFIG !== 'undefined') {
+  MERMAID_CONFIG.startOnLoad = false
+  MERMAID_CONFIG.cloneCssStyles = false
+  MERMAID_CONFIG.theme = "default"
+}
+
+mermaid.initialize(MERMAID_CONFIG || {})
+if (typeof(window['Reveal']) !== 'undefined') {
+  function mermaidRevealHelper(event) {
+    var currentSlide = event.currentSlide
+    var diagrams = currentSlide.querySelectorAll('div.mermaid')
+    for (var i = 0; i < diagrams.length; i++) {
+      var diagram = diagrams[i]
+      if (!diagram.hasAttribute('data-processed')) {
+        mermaid.init(null, diagram, ()=> {
+          Reveal.slide(event.indexh, event.indexv)
+        })
+      }
+    }
+  }
+  Reveal.addEventListener('slidetransitionend', mermaidRevealHelper)
+  Reveal.addEventListener('ready', mermaidRevealHelper)
+  await mermaid.run({
+    nodes: document.querySelectorAll('div.mermaid')
+  })
+} else {
+  await mermaid.run({
+    nodes: document.querySelectorAll('div.mermaid')
+  })
+}
+</script>
+    
+    
+    
+  
+    </body></html>
