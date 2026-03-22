@@ -1,4 +1,6 @@
-
+- /Users/lex/git/knowledge/ai/ocr-ollama-3.py 目前这个最稳定
+- /Users/lex/git/knowledge/ai/last.py 可用了
+- /Users/lex/python/openai/bin/python3 /Users/lex/git/knowledge/ai/last.py 1.png
 /Users/lex/.local/bin/ocr
 
 ```bash
