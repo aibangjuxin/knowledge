@@ -45,7 +45,10 @@ OCR_MODEL = "glm-ocr"
 ENHANCE_MODEL = os.environ.get("ENHANCE_MODEL", "gemma3:270m")
 SUPPORTED_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 
-CPU_THREADS = max(1, os.cpu_count() or 4)
+# 如果你的 10 核 Mac 包含 8 个性能核 + 2 个能效核，设置为 8 通常比 10 更快！
+# 可以通过环境变量 OLLAMA_NUM_THREAD=8 来外部覆盖，默认仍然使用系统总核心数
+CPU_THREADS = int(os.environ.get("OLLAMA_NUM_THREAD", max(1, os.cpu_count() or 4)))
+# CPU_THREADS = max(1, os.cpu_count() or 4) # 默认使用系统总核心数
 ENHANCE_KEEP_ALIVE = os.environ.get("ENHANCE_KEEP_ALIVE", "15m")
 ENHANCE_NUM_CTX = int(os.environ.get("ENHANCE_NUM_CTX", "2048"))
 ENHANCE_NUM_PREDICT = int(os.environ.get("ENHANCE_NUM_PREDICT", "1024"))
