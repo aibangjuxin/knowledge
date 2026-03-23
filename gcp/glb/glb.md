@@ -77,8 +77,41 @@ GLB → Global，但其 Backend NEG 是 Regional
   - 1.  需要分析如果是 Forwarding Rule,那么如何开启 allowGlobalAccess
   - 2.  如果是 GKE Gateway,那么如何开启 allowGlobalAccess
   - 3.  如果是 Cloud Service Mesh,那么如何开启 allowGlobalAccess
-- 
+-
 
+- `Can we create a GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS GLB?`
+```bash
+Message:
+We are testing a PSC NEG-based architecture.  
+Our current classic Application Load Balancer does not support PSC NEG, so modifying the existing GLB is not enough for this test.
+
+We need to create a `GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS` Global external Application Load Balancer, but it appears this is currently blocked by Org Policy:
+`GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS is not allowed`
+
+Could you please confirm:
+1. Whether our project/folder is allowed to create this LB type
+2. If not, whether you can enable/allow it for our testing scope
+3. If there is a preferred approved path or exception process
+```
+- `Are we allowed to create a Regional external Application Load Balancer, and if proxy-only subnet migration is required, what would be the impact?`
+```bash
+Create regional external Application Load Balancer
+In order to proceed with this region and VPC network, the purpose of your proxy-only subnet needs to be migrated from
+"INTERNAL_HTTPS_LOAD_BALANCER"
+
+
+We are evaluating whether a Regional external Application Load Balancer can be used for this test.
+During creation, the console indicates that, for the current region and VPC, the proxy-only subnet purpose would need to be migrated from INTERNAL_HTTPS_LOAD_BALANCER before we can proceed.
+
+Could you please help confirm:
+
+Whether we are allowed to create a Regional external Application Load Balancer
+If creation is allowed, for the current region / VPC:
+Whether the proxy-only subnet purpose migration is mandatory
+What impact this migration could have on existing load balancers, live traffic, or other resources using that subnet
+Whether there is a recommended and safe implementation path or standard process
+
+```
 
 # create error anaylze
 ```bash
