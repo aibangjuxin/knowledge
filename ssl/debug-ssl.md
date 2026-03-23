@@ -6,7 +6,7 @@ GSKit Error: 6000 - Certificate is not signed by a trusted certificate authority
 ```
 
 - curl my api 
-- https://my-domain-fqdn.com/api/v1/health
+- https://my-domain-fqdn.com/api/v1/heal    th
 
 ```bash
 curl -v https://my-domain.com/api/v1/health

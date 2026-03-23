@@ -110,7 +110,7 @@ If creation is allowed, for the current region / VPC:
 Whether the proxy-only subnet purpose migration is mandatory
 What impact this migration could have on existing load balancers, live traffic, or other resources using that subnet
 Whether there is a recommended and safe implementation path or standard process
-
+We would like to confirm these prerequisites before deciding whether to proceed with the Regional external ALB option.
 ```
 
 # create error anaylze
