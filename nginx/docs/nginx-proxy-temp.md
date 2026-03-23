@@ -271,7 +271,137 @@ curl http://localhost/nginx_status
 
 **最快的解法：** 对该流式API的 location 块加上 `proxy_buffering off;`，从根本上避免写入 `proxy_temp`，同时修复目录权限作为兜底。
 
+# `proxy_buffering off` 影响评估
 
+## 核心机制变化
+
+```mermaid
+graph LR
+    subgraph [Buffering ON - 默认]
+        A1[Client] --> B1[Nginx Worker]
+        B1 --> C1[Upstream]
+        C1 -->|完整响应| B1
+        B1 -->|写proxy_temp| D1[磁盘]
+        B1 -->|全部就绪后| A1
+    end
+
+    subgraph [Buffering OFF - 修改后]
+        A2[Client] --> B2[Nginx Worker]
+        B2 --> C2[Upstream]
+        C2 -->|chunk| B2
+        B2 -->|立即转发chunk| A2
+    end
+```
+
+---
+
+## 系统资源影响分析
+
+### 1. 内存（最主要影响）
+
+```
+Buffering ON:
+  每个请求内存占用 = proxy_buffers 配置值（通常 128k~512k）
+  超出后溢出到磁盘，内存压力可控
+
+Buffering OFF:
+  每个请求需要维持两个连接的 socket buffer（内核层）
+  = upstream socket buffer + client socket buffer
+  = 约 128k ~ 256k per 并发连接（取决于内核 net.core.rmem_default）
+```
+
+**关键差异：** buffering off 时内存占用反而**更可预测、更低**，因为不需要先把完整响应攒在内存/磁盘里。
+
+### 2. 连接持有时间（最大风险点）
+
+```mermaid
+sequenceDiagram
+    participant Client as 慢速 Client
+    participant Nginx
+    participant Upstream as Java Runtime
+
+    Note over Nginx,Upstream: Buffering ON
+    Upstream-->>Nginx: 快速写完响应 (1s)
+    Nginx->>Nginx: 缓存到本地
+    Upstream->>Upstream: 连接释放 ✅
+    Nginx-->>Client: 慢速传输 (30s)
+
+    Note over Nginx,Upstream: Buffering OFF
+    Upstream-->>Nginx: 开始流式传输
+    Note over Nginx,Upstream: 连接持续占用中...
+    Nginx-->>Client: 同步转发
+    Client-->>Nginx: 慢速消费 (30s)
+    Note over Upstream: 连接被慢客户端拖住 ⚠️
+    Upstream->>Upstream: 30s 后才释放
+```
+
+**这是最大的风险：** 如果 Client 消费慢，upstream 的连接和线程会被长时间占用。
+
+### 3. 资源占用对比表
+
+| 资源项 | Buffering ON | Buffering OFF | 风险等级 |
+|--------|-------------|---------------|----------|
+| Nginx 内存 | 较高（需缓冲完整响应） | 较低（只需转发buffer） | 🟢 改善 |
+| 磁盘 I/O | 有（proxy_temp写盘） | 无 | 🟢 改善 |
+| Upstream 连接占用时长 | 短（写完即释放） | 长（等client消费完） | 🔴 变差 |
+| Nginx Worker 连接数 | 正常 | 正常 | 🟡 持平 |
+| 内核 socket buffer | 正常 | 略增（双向维持） | 🟡 轻微 |
+| GKE Pod 线程/连接池 | 压力小 | **压力增大** | 🔴 需关注 |
+
+---
+
+## 针对你的架构的具体评估
+
+```
+Client → Nginx(GCE) → GKE Gateway → Java Runtime
+```
+
+### 最大影响：Java Runtime 连接池压力
+
+```
+场景：100个并发慢客户端请求该流式API
+
+Buffering ON：
+  Java 处理完 → 写给Nginx → 连接释放
+  Java Runtime 连接占用时间 ≈ 业务处理时间（短）
+
+Buffering OFF：
+  Java 处理完 → 开始流式输出 → 等待所有Client消费完
+  Java Runtime 连接占用时间 ≈ 业务处理时间 + Client消费时间（长）
+  
+  如果Java Runtime 连接池=100，全被慢客户端占住
+  → 新请求进来 → 连接池耗尽 → 503 ⚠️
+```
+
+### 配置建议：加上超时保护
+
+```nginx
+location /your-api {
+    proxy_buffering off;
+    
+    # 必须配套加上这些保护
+    proxy_read_timeout    120s;  # 根据你的流式响应最大时长设置
+    proxy_send_timeout    120s;
+    proxy_connect_timeout 10s;
+    
+    # 如果是SSE或长连接流式
+    proxy_http_version 1.1;
+    proxy_set_header Connection '';
+    
+    # 可选：限制该API的并发连接数，保护upstream
+    limit_conn your_conn_zone 50;  # 需提前定义zone
+}
+```
+
+---
+
+## 结论
+
+**单条API做 `proxy_buffering off` 的影响是局部且可控的**，真正需要关注的只有一点：
+
+> ⚠️ **Upstream（Java Runtime）连接会被客户端消费速度拖住**，在高并发+慢客户端场景下可能导致 GKE 连接池耗尽。
+
+由于这本来就是流式API，客户端本身就预期慢消费，所以这个风险是**业务固有的**，`proxy_buffering off` 只是让它提前暴露而不是引入新问题。配合合理的 `proxy_read_timeout` 和必要时的 `limit_conn` 即可控制风险。
 
 # Nginx `proxy_temp` Permission Denied 深度探索
 
