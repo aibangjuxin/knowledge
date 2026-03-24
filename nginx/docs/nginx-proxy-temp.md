@@ -1,16 +1,15 @@
-Nginx proxy_temp Permission Denied 深度探索 nginx 运行在gce instance 
+Nginx proxy_temp Permission Denied 深度探索 nginx 运行在gce instance
+
 1. 问题现象
+```bash
 典型报错如下：
 open() "/etc/nginx/proxy_temp/4/34/000000..." failed (13: Permission denied) while reading upstream
-	•	这是不是和 Nginx 启动用户有关？
-	•	比如配置里有：
+ • 这是不是和 Nginx 启动用户有关？
+ • 比如配置里有：
 user nxadm nxgrp;
 这是我们一个通用配置。我们现在发现的问题是，针对单个API会有这样的情况产生。但是，这个目录也能看到有成功的。
 某个api，处理了请求后是返回流式内容回去，但是现在gke java runtime 处理完请求后，就connection reset by peer，broken pipe，看了nginx报错/etc/nginx/proxy_temp permission denied，运行nginx的用户是nxadm ，而且是有过少量的成功buffered到/etc/nginx/proxy_temp的，大部分是permission denied失败 我们flow 如下nginx + GKE  gateway + GKE  runtime
-
-
-
-
+```
 # Nginx proxy_temp Permission Denied 深度分析
 
 ## 问题分析
@@ -261,13 +260,13 @@ curl http://localhost/nginx_status
 
 ## 总结排查优先级
 
-| 优先级 | 检查项 | 命令 |
-|--------|--------|------|
-| P0 | proxy_temp 目录所有者 | `ls -la /etc/nginx/proxy_temp` |
-| P0 | 对流式API启用 `proxy_buffering off` | nginx config |
-| P1 | systemd service PrivateTmp 隔离 | `systemctl cat nginx` |
-| P1 | 子目录创建者是否为 nxadm | `find proxy_temp -type d -exec ls -la {} \;` |
-| P2 | AppArmor/SELinux 拦截 | `aa-status`, `dmesg` |
+| 优先级 | 检查项                              | 命令                                         |
+| ------ | ----------------------------------- | -------------------------------------------- |
+| P0     | proxy_temp 目录所有者               | `ls -la /etc/nginx/proxy_temp`               |
+| P0     | 对流式API启用 `proxy_buffering off` | nginx config                                 |
+| P1     | systemd service PrivateTmp 隔离     | `systemctl cat nginx`                        |
+| P1     | 子目录创建者是否为 nxadm            | `find proxy_temp -type d -exec ls -la {} \;` |
+| P2     | AppArmor/SELinux 拦截               | `aa-status`, `dmesg`                         |
 
 **最快的解法：** 对该流式API的 location 块加上 `proxy_buffering off;`，从根本上避免写入 `proxy_temp`，同时修复目录权限作为兜底。
 
@@ -277,7 +276,7 @@ curl http://localhost/nginx_status
 
 ```mermaid
 graph LR
-    subgraph [Buffering ON - 默认]
+    subgraph buf_on ["Buffering ON - 默认"]
         A1[Client] --> B1[Nginx Worker]
         B1 --> C1[Upstream]
         C1 -->|完整响应| B1
@@ -285,7 +284,7 @@ graph LR
         B1 -->|全部就绪后| A1
     end
 
-    subgraph [Buffering OFF - 修改后]
+    subgraph buf_off ["Buffering OFF - 修改后"]
         A2[Client] --> B2[Nginx Worker]
         B2 --> C2[Upstream]
         C2 -->|chunk| B2
@@ -339,14 +338,14 @@ sequenceDiagram
 
 ### 3. 资源占用对比表
 
-| 资源项 | Buffering ON | Buffering OFF | 风险等级 |
-|--------|-------------|---------------|----------|
-| Nginx 内存 | 较高（需缓冲完整响应） | 较低（只需转发buffer） | 🟢 改善 |
-| 磁盘 I/O | 有（proxy_temp写盘） | 无 | 🟢 改善 |
-| Upstream 连接占用时长 | 短（写完即释放） | 长（等client消费完） | 🔴 变差 |
-| Nginx Worker 连接数 | 正常 | 正常 | 🟡 持平 |
-| 内核 socket buffer | 正常 | 略增（双向维持） | 🟡 轻微 |
-| GKE Pod 线程/连接池 | 压力小 | **压力增大** | 🔴 需关注 |
+| 资源项                | Buffering ON           | Buffering OFF          | 风险等级 |
+| --------------------- | ---------------------- | ---------------------- | -------- |
+| Nginx 内存            | 较高（需缓冲完整响应） | 较低（只需转发buffer） | 🟢 改善   |
+| 磁盘 I/O              | 有（proxy_temp写盘）   | 无                     | 🟢 改善   |
+| Upstream 连接占用时长 | 短（写完即释放）       | 长（等client消费完）   | 🔴 变差   |
+| Nginx Worker 连接数   | 正常                   | 正常                   | 🟡 持平   |
+| 内核 socket buffer    | 正常                   | 略增（双向维持）       | 🟡 轻微   |
+| GKE Pod 线程/连接池   | 压力小                 | **压力增大**           | 🔴 需关注 |
 
 ---
 
