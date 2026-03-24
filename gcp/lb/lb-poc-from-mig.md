@@ -81,6 +81,20 @@ bash lb-poc-gen.sh my-api-mig --project my-proj --execute
 Edited refer-lb-create.sh
 Ran command: `chmod +x /Users/lex/git/knowledge/gcp/lb/refer-lb-create.sh`
 
+# 基本用法：从 MIG 出发，交互选择，终端输出命令
+bash refer-lb-create.sh my-mig --project my-proj --prefix lex-poc
+
+# 导出到可执行文件
+bash refer-lb-create.sh api --project my-proj --region us-central1 \
+  --prefix test-poc --output ./create-poc-lb.sh
+
+# 仅发现，不生成创建命令
+bash refer-lb-create.sh api --project my-proj --dry-run
+
+# 过滤特定的 LB scheme
+bash refer-lb-create.sh api --project my-proj --lb-scheme EXTERNAL_MANAGED
+
+
 脚本已创建在 [/Users/lex/git/knowledge/gcp/lb/refer-lb-create.sh](cci:7://file:///Users/lex/git/knowledge/gcp/lb/refer-lb-create.sh:0:0-0:0)。下面是这个脚本的完整工作流说明：
 
 ## 工作流程
