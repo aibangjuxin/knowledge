@@ -371,3 +371,269 @@
 你就可以很快把问题收敛到：
 
 **证书链问题？还是 trust store 问题？到底该找网关团队，还是找客户端/平台/IT 团队。**
+
+---
+
+## 11. 新增探索：如果 IBM DCM 的 `*SYSTEM` 里已经有企业 CA，为什么仍然会报错
+
+你现在拿到的新证据是：
+
+- IBM 客户端用户已经在 `IBM Digital Certificate Manager for i` 后台里确认
+- 在 `*SYSTEM` 证书库中，已经能看到你们企业签名相关的 CA 证书
+
+这说明一件事：
+
+**问题已经不能再简单归因为“IBM 机器完全没有导入企业 Root CA”。**
+
+但这并不自动意味着：
+
+- 实际发起 HTTPS 调用的那个 application 一定在使用 `*SYSTEM`
+- 或者它使用 `*SYSTEM` 时，一定已经重新加载到最新证书
+- 或者它需要的那条完整信任链（Root + Intermediate）已经齐全
+
+所以接下来排查的重点要从：
+
+- “有没有 CA”
+
+转向：
+
+- “谁在发请求”
+- “它到底绑定了哪个 trust store”
+- “它是否需要单独加载/重启/绑定 application certificate store”
+
+---
+
+## 12. 最关键的新判断
+
+在 IBM 生态里，看到 `*SYSTEM` 里有证书，只能证明：
+
+- **某个系统级证书库里存在该 CA**
+
+但不能证明：
+
+- 发起请求的 application/runtime 一定正在用这个库
+
+这和 Linux 世界很像：
+
+- 你把证书放进系统 CA，不等于 Java 一定会用它
+- 你更新了系统 trust store，不等于 Python `certifi` 自动更新
+
+IBM 世界里同样存在这个问题，只是它通常表现为：
+
+- `*SYSTEM`
+- `*USER`
+- 某个应用自己的 `.kdb`
+- 某个中间件自己的证书库
+
+所以现在最值得向 IBM 客户端确认的，不是“你们有没有导入 CA”，而是：
+
+**实际调用我们 API 的那个 application，到底是运行在什么环境里，它实际引用的是哪个 certificate store。**
+
+---
+
+## 13. 在什么情况下会触发这个错误
+
+下面这些场景都可能触发：
+
+> `Failed to establish SSL connection to server. The operation gsk_secure_soc_init() failed.`
+> `GSKit Error: 6000 - Certificate is not signed by a trusted certificate authority.`
+
+### 场景 A：应用确实使用 GSKit，但没有使用 `*SYSTEM`
+
+例如：
+
+- WebSphere 使用自己的 `.kdb`
+- MQ channel / client 使用自己的 `.kdb`
+- 某些 IBM 中间件或定制应用显式绑定了自己的 key database
+
+这时即使 `*SYSTEM` 里有企业 CA，也没用。
+
+### 场景 B：应用理论上使用 `*SYSTEM`，但加载时机早于证书导入
+
+例如：
+
+- 证书是后来导入的
+- application / job / subsystem 没有重启
+- 证书缓存仍然是旧的
+
+这时会出现：
+
+- DCM 里看得到证书
+- 但运行中的程序仍然报错
+
+### 场景 C：只导入了 Root，没有导入 Intermediate
+
+某些客户端对链条更敏感，尤其是老 IBM 环境或某些 GSKit 调用路径。
+
+结果就是：
+
+- `*SYSTEM` 里“看起来有企业证书”
+- 但真正验证时，链仍然拼不完整
+
+### 场景 D：服务端链仍然不完整
+
+即使客户端导入了 CA，如果服务端没有正确返回 Intermediate，IBM 客户端依旧可能失败。
+
+所以“客户端已经导证书”不能直接洗掉服务端链条问题。
+
+### 场景 E：调用方并不是 IBM i system utilities，而是跑在别的运行时里
+
+例如应用本身运行在：
+
+- WebSphere / Liberty
+- Java
+- Db2 function
+- MQ integration
+- RPG / COBOL 程序
+- 自定义 IBM HTTP client
+
+不同运行时可能用的是不同 trust store。
+
+---
+
+## 14. 现在最应该问 IBM 客户端什么
+
+你现在要确认的问题，建议从“应用运行栈”入手。
+
+### 你最应该问的 4 个问题
+
+#### 1. 是什么程序在调用这个 API
+
+例如：
+
+- IBM i 上的 RPG / COBOL 程序？
+- `QSYS2.HTTP_GET` / `QSYS2.HTTP_POST`？
+- WebSphere / Liberty 应用？
+- IBM MQ / Db2 / IHS？
+- Java 程序？
+
+这是第一优先级，因为它直接决定：
+
+- 用的是 `*SYSTEM`
+- 还是 `.kdb`
+- 还是 JVM `cacerts`
+
+#### 2. 这个 application 实际绑定的是哪个 certificate store
+
+要确认的是：
+
+- 是 `*SYSTEM`
+- 还是 application-specific store
+- 还是某个 `.kdb`
+- 还是 Java truststore
+
+#### 3. 证书导入后，这个 application 有没有重启或重新加载
+
+如果没有 reload/restart，旧缓存可能仍然生效。
+
+#### 4. 除了 Root CA，是否也导入了 Intermediate CA
+
+这个问题非常值得单独确认。
+
+---
+
+## 15. 如何继续 Debug：推荐路线
+
+现在更高价值的 debug 路线应该是下面这样。
+
+### Step 1：继续确认服务端链条没有问题
+
+先不要因为客户端说“DCM 里有证书”就跳过服务端。
+
+仍然建议继续用：
+
+- [verify-domain-ssl-enhance.sh](/Users/lex/git/knowledge/ssl/verify-domain-ssl-enhance.sh)
+
+确认：
+
+- 服务端返回几段证书
+- 是否带了 Intermediate
+- 用企业 CA 文件时是否能验证通过
+
+如果服务端链条本身不完整，那么客户端是否导入证书都只是部分信息。
+
+### Step 2：确认 IBM 侧“谁在发请求”
+
+这是现在最重要的一步。
+
+你需要让对方明确回答：
+
+- 这个 API 调用是哪个应用发起的
+- 这个应用运行在什么 runtime 上
+
+只有知道这个，才能判断它实际看哪个 trust store。
+
+### Step 3：确认它是否真的使用 `*SYSTEM`
+
+不要只看 DCM 页面里“有证书”。
+
+要继续确认：
+
+- 当前 application 是否配置为使用 `*SYSTEM`
+- 或者它是否有自己的 application certificate store
+
+### Step 4：确认应用是否需要重启
+
+如果证书是后补进去的，要问：
+
+- 证书导入后有没有重启 application / job / subsystem / server instance
+
+否则就算证书已经在库里，运行时也可能仍然用旧缓存。
+
+### Step 5：确认是否导入了 Intermediate
+
+如果只导了 Root，某些环境仍然可能失败。
+
+### Step 6：如果它是 Java/WebSphere/Liberty，重点就不再是 DCM
+
+这时要继续查的是：
+
+- Java truststore
+- WebSphere/Liberty SSL configuration
+- application 绑定的 key store / trust store
+
+换句话说，**一旦应用运行在 JVM 上，DCM 里有没有证书就不再是唯一关键点。**
+
+---
+
+## 16. 一个更准确的问题表达方式
+
+你现在和 IBM 客户端继续沟通时，可以把问题表达成这样：
+
+> 我们已经知道你们的 IBM Digital Certificate Manager for i 的 `*SYSTEM` certificate store 里能看到企业 CA。  
+> 但这还不能证明实际发起 HTTPS 请求的 application/runtime 正在使用这个 store。  
+> 想进一步确认：
+> 1. 实际是哪一个 application / job / runtime 在调用这个 API  
+> 2. 它绑定的是 `*SYSTEM` 还是自己的 application-specific certificate store / `.kdb` / Java truststore  
+> 3. 导入证书后，该 application 是否已经重启或重新加载  
+> 4. 是否除了 Root CA 之外，也导入了必要的 Intermediate CA
+
+---
+
+## 17. 当前阶段的最可能原因排序
+
+如果在“DCM 的 `*SYSTEM` 里已经有企业 CA”这个前提下，问题还在，我会优先怀疑下面几项：
+
+1. **实际发请求的应用没有使用 `*SYSTEM`**
+2. **应用使用的是独立 `.kdb` / Java truststore / middleware store**
+3. **证书导入后应用没有重启，仍在使用旧缓存**
+4. **客户端缺少 Intermediate CA**
+5. **服务端返回链条不完整**
+
+---
+
+## 18. 这部分探索的最终结论
+
+如果 IBM 客户端已经证明：
+
+- `IBM Digital Certificate Manager for i`
+- `*SYSTEM`
+- 里面确实有你们企业 CA
+
+那么下一步不应该继续停留在“有没有导证书”这个层面，而应该转向：
+
+**实际发请求的 application/runtime 到底使用哪个 trust store，以及它是否已经重新加载该 trust store。**
+
+换句话说：
+
+**GSKit Error 6000 在这种情况下，最值得优先排查的已不再是“系统库有没有证书”，而是“应用是否真的在用那个库”。**
