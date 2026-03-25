@@ -93,7 +93,7 @@ bash refer-lb-create.sh api --project my-proj --dry-run
 
 # 过滤特定的 LB scheme
 bash refer-lb-create.sh api --project my-proj --lb-scheme EXTERNAL_MANAGED
-
+.
 
 脚本已创建在 [/Users/lex/git/knowledge/gcp/lb/refer-lb-create.sh](cci:7://file:///Users/lex/git/knowledge/gcp/lb/refer-lb-create.sh:0:0-0:0)。下面是这个脚本的完整工作流说明：
 

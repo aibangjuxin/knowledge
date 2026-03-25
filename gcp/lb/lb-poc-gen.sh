@@ -195,20 +195,27 @@ done
 section "阶段二：探索 LB 链路"
 
 FOUND_MIG=""
-FOUND_MIG_JSON=""
-FOUND_BACKEND_JSON=""
-FOUND_URL_MAP_JSON=""
-FOUND_PROXY_JSON=""
-FOUND_FR_JSON=""
-FOUND_HC_JSON=""
+# 所有 JSON 中间结果存入临时文件，避免 bash <<< 对大 JSON 截断/损坏
+FOUND_MIG_FILE="$TMP_DIR/found_mig.json"
+FOUND_BACKEND_FILE="$TMP_DIR/found_backend.json"
+FOUND_URL_MAP_FILE="$TMP_DIR/found_url_map.json"
+FOUND_PROXY_FILE="$TMP_DIR/found_proxy.json"
+FOUND_FR_FILE="$TMP_DIR/found_fr.json"
+FOUND_HC_FILE="$TMP_DIR/found_hc.json"
+# 初始化为空 JSON 对象
+for f in "$FOUND_MIG_FILE" "$FOUND_BACKEND_FILE" "$FOUND_URL_MAP_FILE" "$FOUND_PROXY_FILE" "$FOUND_FR_FILE" "$FOUND_HC_FILE"; do
+  echo '{}' > "$f"
+done
 
 # ── 2.1 找 MIG ──
+echo "$MIGS_JSON" | jq -c '.[]' > "$TMP_DIR/migs.jsonl"
 while IFS= read -r mig; do
-  mig_name="$(jq -r '.name' <<<"$mig")"
+  echo "$mig" > "$TMP_DIR/_tmp_mig.json"
+  mig_name="$(jq -r '.name' < "$TMP_DIR/_tmp_mig.json")"
   [[ "$mig_name" =~ $MIG_PATTERN ]] || continue
 
-  zone_ref="$(jq -r '.zone // empty' <<<"$mig")"
-  region_ref="$(jq -r '.region // empty' <<<"$mig")"
+  zone_ref="$(jq -r '.zone // empty' < "$TMP_DIR/_tmp_mig.json")"
+  region_ref="$(jq -r '.region // empty' < "$TMP_DIR/_tmp_mig.json")"
   zone_name="$(name_from_ref "$zone_ref")"
   region_name="$(name_from_ref "$region_ref")"
   zone_region="${zone_name%-*}"
@@ -217,55 +224,62 @@ while IFS= read -r mig; do
   [[ -n "$REGION" && "$REGION" != "$region_name" && "$REGION" != "$zone_region"     ]] && continue
 
   FOUND_MIG="$mig_name"
-  FOUND_MIG_JSON="$mig"
+  cp "$TMP_DIR/_tmp_mig.json" "$FOUND_MIG_FILE"
   info "找到 MIG: ${BOLD}$mig_name${NC} (zone: $zone_name)"
   break
-done < <(echo "$MIGS_JSON" | jq -c '.[]')
+done < "$TMP_DIR/migs.jsonl"
 
 if [[ -z "$FOUND_MIG" ]]; then
   error "未找到匹配 pattern='$MIG_PATTERN' 的 MIG"
   exit 1
 fi
 
-INSTANCE_GROUP="$(jq -r '.instanceGroup // .selfLink' <<<"$FOUND_MIG_JSON")"
+INSTANCE_GROUP="$(jq -r '.instanceGroup // .selfLink' < "$FOUND_MIG_FILE")"
 
 # ── 2.2 找 Backend Service ──
+FOUND_BACKEND="false"
+echo "$BACKENDS_JSON" | jq -c '.[]' > "$TMP_DIR/backends.jsonl"
 while IFS= read -r bs; do
-  bs_name="$(jq -r '.name' <<<"$bs")"
+  echo "$bs" > "$TMP_DIR/_tmp_bs.json"
+  bs_name="$(jq -r '.name' < "$TMP_DIR/_tmp_bs.json")"
   found="$(jq -r --arg ig "$INSTANCE_GROUP" \
     '.backends // [] | map(select(.group == $ig or (.group | split("/")[-1]) == ($ig | split("/")[-1]))) | length' \
-    <<<"$bs")"
+    < "$TMP_DIR/_tmp_bs.json")"
   [[ "$found" -gt 0 ]] || continue
 
-  FOUND_BACKEND_JSON="$bs"
-  info "找到 Backend Service: ${BOLD}$bs_name${NC} (scheme: $(jq -r '.loadBalancingScheme' <<<"$bs"))"
+  FOUND_BACKEND="true"
+  cp "$TMP_DIR/_tmp_bs.json" "$FOUND_BACKEND_FILE"
+  info "找到 Backend Service: ${BOLD}$bs_name${NC} (scheme: $(jq -r '.loadBalancingScheme' < "$TMP_DIR/_tmp_bs.json"))"
   break
-done < <(echo "$BACKENDS_JSON" | jq -c '.[]')
+done < "$TMP_DIR/backends.jsonl"
 
-if [[ -z "$FOUND_BACKEND_JSON" ]]; then
+if [[ "$FOUND_BACKEND" != "true" ]]; then
   warn "未找到引用该 MIG 的 Backend Service，将只生成 Health Check + Backend Service 命令"
 fi
 
-BS_SELF_LINK="$(jq -r '.selfLink // empty' <<<"${FOUND_BACKEND_JSON:-{}}")"
-BS_NAME="$(jq -r '.name // empty'          <<<"${FOUND_BACKEND_JSON:-{}}")"
+BS_SELF_LINK="$(jq -r '.selfLink // empty' < "$FOUND_BACKEND_FILE")"
+BS_NAME="$(jq -r '.name // empty'          < "$FOUND_BACKEND_FILE")"
 
 # ── 2.3 找 Health Check ──
-if [[ -n "$FOUND_BACKEND_JSON" ]]; then
-  first_hc_ref="$(jq -r '.healthChecks[0] // empty' <<<"$FOUND_BACKEND_JSON")"
+if [[ "$FOUND_BACKEND" == "true" ]]; then
+  first_hc_ref="$(jq -r '.healthChecks[0] // empty' < "$FOUND_BACKEND_FILE")"
   first_hc_name="$(name_from_ref "$first_hc_ref")"
   if [[ -n "$first_hc_name" ]]; then
-    FOUND_HC_JSON="$(echo "$HC_JSON" | jq -c --arg n "$first_hc_name" '.[] | select(.name==$n)' | head -1)"
-    if [[ -n "$FOUND_HC_JSON" ]]; then
+    hc_result="$(echo "$HC_JSON" | jq -c --arg n "$first_hc_name" '.[] | select(.name==$n)' | head -1)"
+    if [[ -n "$hc_result" ]]; then
+      echo "$hc_result" > "$FOUND_HC_FILE"
       info "找到 Health Check: ${BOLD}$first_hc_name${NC}"
     fi
   fi
 fi
 
 # ── 2.4 找 URL Map ──
-if [[ -n "$FOUND_BACKEND_JSON" ]]; then
+FOUND_URL_MAP="false"
+if [[ "$FOUND_BACKEND" == "true" ]]; then
   while IFS= read -r um; do
     [[ -z "$um" ]] && continue
-    um_name="$(jq -r '.name' <<<"$um")"
+    echo "$um" > "$TMP_DIR/_tmp_um.json"
+    um_name="$(jq -r '.name' < "$TMP_DIR/_tmp_um.json")"
     has_bs="$(jq -r --arg bs_name "$BS_NAME" '
       [
         .defaultService,
@@ -273,44 +287,52 @@ if [[ -n "$FOUND_BACKEND_JSON" ]]; then
         (.pathMatchers[]?.pathRules[]?.service // empty),
         (.pathMatchers[]?.routeRules[]?.routeAction?.weightedBackendServices[]?.backendService // empty)
       ] | flatten | map(select(. != null) | split("/")[-1]) | any(. == $bs_name)
-    ' <<<"$um")"
+    ' < "$TMP_DIR/_tmp_um.json")"
     [[ "$has_bs" == "true" ]] || continue
-    FOUND_URL_MAP_JSON="$um"
+    FOUND_URL_MAP="true"
+    cp "$TMP_DIR/_tmp_um.json" "$FOUND_URL_MAP_FILE"
     info "找到 URL Map: ${BOLD}$um_name${NC}"
     break
   done < "$URL_MAPS_DETAIL_FILE"
 fi
 
-UM_NAME="$(jq -r '.name // empty' <<<"${FOUND_URL_MAP_JSON:-{}}")"
-UM_SELF_LINK="$(jq -r '.selfLink // empty' <<<"${FOUND_URL_MAP_JSON:-{}}")"
+UM_NAME="$(jq -r '.name // empty' < "$FOUND_URL_MAP_FILE")"
+UM_SELF_LINK="$(jq -r '.selfLink // empty' < "$FOUND_URL_MAP_FILE")"
 
 # ── 2.5 找 Target Proxy ──
-if [[ -n "$FOUND_URL_MAP_JSON" ]]; then
+FOUND_PROXY="false"
+if [[ "$FOUND_URL_MAP" == "true" ]]; then
   while IFS= read -r proxy; do
     [[ -z "$proxy" ]] && continue
-    proxy_um="$(jq -r '.urlMap // empty' <<<"$proxy")"
+    echo "$proxy" > "$TMP_DIR/_tmp_proxy.json"
+    proxy_um="$(jq -r '.urlMap // empty' < "$TMP_DIR/_tmp_proxy.json")"
     proxy_um_name="$(name_from_ref "$proxy_um")"
     [[ "$proxy_um_name" == "$UM_NAME" || "$proxy_um" == "$UM_SELF_LINK" ]] || continue
-    FOUND_PROXY_JSON="$proxy"
-    info "找到 Target Proxy: ${BOLD}$(jq -r '.name' <<<"$proxy")${NC} (kind: $(jq -r '.proxyKind' <<<"$proxy"))"
+    FOUND_PROXY="true"
+    cp "$TMP_DIR/_tmp_proxy.json" "$FOUND_PROXY_FILE"
+    info "找到 Target Proxy: ${BOLD}$(jq -r '.name' < "$TMP_DIR/_tmp_proxy.json")${NC} (kind: $(jq -r '.proxyKind' < "$TMP_DIR/_tmp_proxy.json"))"
     break
   done < "$PROXIES_FILE"
 fi
 
-PROXY_NAME="$(jq -r '.name // empty'     <<<"${FOUND_PROXY_JSON:-{}}")"
-PROXY_SL="$(jq -r '.selfLink // empty'   <<<"${FOUND_PROXY_JSON:-{}}")"
-PROXY_KIND="$(jq -r '.proxyKind // empty' <<<"${FOUND_PROXY_JSON:-{}}")"
+PROXY_NAME="$(jq -r '.name // empty'     < "$FOUND_PROXY_FILE")"
+PROXY_SL="$(jq -r '.selfLink // empty'   < "$FOUND_PROXY_FILE")"
+PROXY_KIND="$(jq -r '.proxyKind // empty' < "$FOUND_PROXY_FILE")"
 
 # ── 2.6 找 Forwarding Rule ──
-if [[ -n "$FOUND_PROXY_JSON" ]]; then
+FOUND_FR="false"
+if [[ "$FOUND_PROXY" == "true" ]]; then
+  echo "$FR_JSON" | jq -c '.[]' > "$TMP_DIR/frs.jsonl"
   while IFS= read -r fr; do
-    fr_target="$(jq -r '.target // empty' <<<"$fr")"
+    echo "$fr" > "$TMP_DIR/_tmp_fr.json"
+    fr_target="$(jq -r '.target // empty' < "$TMP_DIR/_tmp_fr.json")"
     fr_target_name="$(name_from_ref "$fr_target")"
     [[ "$fr_target_name" == "$PROXY_NAME" || "$fr_target" == "$PROXY_SL" ]] || continue
-    FOUND_FR_JSON="$fr"
-    info "找到 Forwarding Rule: ${BOLD}$(jq -r '.name' <<<"$fr")${NC}"
+    FOUND_FR="true"
+    cp "$TMP_DIR/_tmp_fr.json" "$FOUND_FR_FILE"
+    info "找到 Forwarding Rule: ${BOLD}$(jq -r '.name' < "$TMP_DIR/_tmp_fr.json")${NC}"
     break
-  done < <(echo "$FR_JSON" | jq -c '.[]')
+  done < "$TMP_DIR/frs.jsonl"
 fi
 
 # ─────────────────────────────────────────────
@@ -318,8 +340,8 @@ fi
 # ─────────────────────────────────────────────
 section "阶段三：提取参数"
 
-MIG_ZONE="$(jq -r '.zone // empty | split("/")[-1]' <<<"$FOUND_MIG_JSON")"
-MIG_REGION_RAW="$(jq -r '.region // empty | split("/")[-1]' <<<"$FOUND_MIG_JSON")"
+MIG_ZONE="$(jq -r '.zone // empty | split("/")[-1]' < "$FOUND_MIG_FILE")"
+MIG_REGION_RAW="$(jq -r '.region // empty | split("/")[-1]' < "$FOUND_MIG_FILE")"
 # zone-based MIG 时 region 从 zone 推导
 if [[ -z "$MIG_REGION_RAW" && -n "$MIG_ZONE" ]]; then
   MIG_REGION_RAW="${MIG_ZONE%-*}"
@@ -346,52 +368,51 @@ echo "  POC FR      : $POC_FR_NAME"
 echo ""
 
 # ── 提取 Health Check 参数 ──
-if [[ -n "${FOUND_HC_JSON:-}" ]]; then
-  HC_TYPE="$(jq -r '.type // "HTTP"' <<<"$FOUND_HC_JSON" | tr '[:upper:]' '[:lower:]')"
-  HC_PORT="$(jq -r '.${HC_TYPE}HealthCheck.port // .port // 80' <<<"$FOUND_HC_JSON" 2>/dev/null || echo 80)"
-  # 更安全的提取方式
+if [[ "$(jq -r '.name // empty' < "$FOUND_HC_FILE")" != "" ]]; then
+  HC_TYPE="$(jq -r '.type // "HTTP"' < "$FOUND_HC_FILE" | tr '[:upper:]' '[:lower:]')"
+  # 安全的提取方式：遍历所有可能的 health check 类型
   HC_PORT="$(jq -r '
     .httpHealthCheck.port //
     .httpsHealthCheck.port //
     .tcpHealthCheck.port //
     .grpcHealthCheck.port //
-    .port // 80' <<<"$FOUND_HC_JSON")"
-  HC_PATH="$(jq -r '.httpHealthCheck.requestPath // .httpsHealthCheck.requestPath // "/"' <<<"$FOUND_HC_JSON")"
-  HC_INTERVAL="$(jq -r '.checkIntervalSec // 10' <<<"$FOUND_HC_JSON")"
-  HC_TIMEOUT="$(jq -r '.timeoutSec // 5'  <<<"$FOUND_HC_JSON")"
-  HC_HEALTHY="$(jq -r '.healthyThreshold // 2'   <<<"$FOUND_HC_JSON")"
-  HC_UNHEALTHY="$(jq -r '.unhealthyThreshold // 2' <<<"$FOUND_HC_JSON")"
+    .port // 80' < "$FOUND_HC_FILE")"
+  HC_PATH="$(jq -r '.httpHealthCheck.requestPath // .httpsHealthCheck.requestPath // "/"' < "$FOUND_HC_FILE")"
+  HC_INTERVAL="$(jq -r '.checkIntervalSec // 10' < "$FOUND_HC_FILE")"
+  HC_TIMEOUT="$(jq -r '.timeoutSec // 5'  < "$FOUND_HC_FILE")"
+  HC_HEALTHY="$(jq -r '.healthyThreshold // 2'   < "$FOUND_HC_FILE")"
+  HC_UNHEALTHY="$(jq -r '.unhealthyThreshold // 2' < "$FOUND_HC_FILE")"
 else
   warn "未找到参考 Health Check，使用默认 HTTP:80/ 参数"
   HC_TYPE="http"; HC_PORT=80; HC_PATH="/"; HC_INTERVAL=10; HC_TIMEOUT=5; HC_HEALTHY=2; HC_UNHEALTHY=2
 fi
 
 # ── 提取 Backend Service 参数 ──
-if [[ -n "${FOUND_BACKEND_JSON:-}" ]]; then
-  BS_PROTOCOL="$(jq -r '.protocol // "HTTP"' <<<"$FOUND_BACKEND_JSON")"
-  BS_SCHEME="$(jq -r '.loadBalancingScheme // "EXTERNAL"' <<<"$FOUND_BACKEND_JSON")"
-  BS_TIMEOUT="$(jq -r '.timeoutSec // 30' <<<"$FOUND_BACKEND_JSON")"
-  BS_SESSION="$(jq -r '.sessionAffinity // "NONE"' <<<"$FOUND_BACKEND_JSON")"
-  BS_BALANCING="$(jq -r '.backends[0].balancingMode // "UTILIZATION"' <<<"$FOUND_BACKEND_JSON")"
-  BS_NAMED_PORT="$(jq -r '.portName // "http"' <<<"$FOUND_BACKEND_JSON")"
-  BS_REGION_REF="$(jq -r '.region // empty | split("/")[-1]' <<<"$FOUND_BACKEND_JSON")"
+if [[ "$FOUND_BACKEND" == "true" ]]; then
+  BS_PROTOCOL="$(jq -r '.protocol // "HTTP"' < "$FOUND_BACKEND_FILE")"
+  BS_SCHEME="$(jq -r '.loadBalancingScheme // "EXTERNAL"' < "$FOUND_BACKEND_FILE")"
+  BS_TIMEOUT="$(jq -r '.timeoutSec // 30' < "$FOUND_BACKEND_FILE")"
+  BS_SESSION="$(jq -r '.sessionAffinity // "NONE"' < "$FOUND_BACKEND_FILE")"
+  BS_BALANCING="$(jq -r '.backends[0].balancingMode // "UTILIZATION"' < "$FOUND_BACKEND_FILE")"
+  BS_NAMED_PORT="$(jq -r '.portName // "http"' < "$FOUND_BACKEND_FILE")"
+  BS_REGION_REF="$(jq -r '.region // empty | split("/")[-1]' < "$FOUND_BACKEND_FILE")"
 else
   BS_PROTOCOL="HTTP"; BS_SCHEME="EXTERNAL"; BS_TIMEOUT=30; BS_SESSION="NONE"
   BS_BALANCING="UTILIZATION"; BS_NAMED_PORT="http"; BS_REGION_REF=""
 fi
 
 # ── 提取 Forwarding Rule 参数 ──
-if [[ -n "${FOUND_FR_JSON:-}" ]]; then
-  FR_SCHEME="$(jq -r '.loadBalancingScheme // "EXTERNAL"' <<<"$FOUND_FR_JSON")"
+if [[ "$FOUND_FR" == "true" ]]; then
+  FR_SCHEME="$(jq -r '.loadBalancingScheme // "EXTERNAL"' < "$FOUND_FR_FILE")"
   FR_PORTS="$(jq -r '
     if (.ports // empty) != null and (.ports | length) > 0
     then (.ports | join(","))
     else (.portRange // "80")
-    end' <<<"$FOUND_FR_JSON")"
-  FR_PROTOCOL="$(jq -r '.IPProtocol // "TCP"' <<<"$FOUND_FR_JSON")"
-  FR_REGION_REF="$(jq -r '.region // empty | split("/")[-1]' <<<"$FOUND_FR_JSON")"
-  FR_NETWORK="$(jq -r '.network // empty | split("/")[-1]' <<<"$FOUND_FR_JSON")"
-  FR_SUBNET="$(jq -r '.subnetwork // empty | split("/")[-1]' <<<"$FOUND_FR_JSON")"
+    end' < "$FOUND_FR_FILE")"
+  FR_PROTOCOL="$(jq -r '.IPProtocol // "TCP"' < "$FOUND_FR_FILE")"
+  FR_REGION_REF="$(jq -r '.region // empty | split("/")[-1]' < "$FOUND_FR_FILE")"
+  FR_NETWORK="$(jq -r '.network // empty | split("/")[-1]' < "$FOUND_FR_FILE")"
+  FR_SUBNET="$(jq -r '.subnetwork // empty | split("/")[-1]' < "$FOUND_FR_FILE")"
 else
   FR_SCHEME="EXTERNAL"; FR_PORTS="80"; FR_PROTOCOL="TCP"
   FR_REGION_REF=""; FR_NETWORK=""; FR_SUBNET=""
@@ -479,7 +500,7 @@ CMD_UM_CREATE="gcloud compute url-maps create \"$POC_UM_NAME\" \\
 PROXY_KIND_EFFECTIVE="${PROXY_KIND:-http}"
 CERTS_FLAG=""
 if [[ "$PROXY_KIND_EFFECTIVE" == "https" ]]; then
-  ref_certs="$(jq -r '.sslCertificates // [] | map(split("/")[-1]) | join(",")' <<<"${FOUND_PROXY_JSON:-{}}")"
+  ref_certs="$(jq -r '.sslCertificates // [] | map(split("/")[-1]) | join(",")' < "$FOUND_PROXY_FILE")"
   if [[ -n "$ref_certs" ]]; then
     warn "参考 HTTPS proxy 使用了证书: $ref_certs，POC 需要替换为你自己的证书"
     CERTS_FLAG="--ssl-certificates=<YOUR_CERT_NAME>  # 请替换"
