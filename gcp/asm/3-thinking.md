@@ -44,6 +44,21 @@ PSC 与 ASM 集成配置：关键配置（DestinationRule, VirtualService）。
 这是一个非常经典且具有挑战性的企业级架构场景：**在 Master Project 上部署 Anthos Service Mesh (ASM)** 以统一管理微服务治理，同时通过 **PSC NEG** 安全地接收来自 Talent Project 的流量。
 
 结合你之前的 PSC NEG 实现方案，这不仅是网络打通的问题，更是 **Service Mesh 治理与跨项目网络架构融合** 的问题。以下是对该需求的深度探索和实施方案。
+- issue 
+```bash
+You cannot directly create a PSC ServiceAttachment from a GKE Gateway API resource like a Gateway. They are two different, incompatible control planes for managing GCP networking.
+
+Here’s a breakdown of why and what you should do instead.
+
+Why It Doesn't Work
+Different Control Planes:
+
+GKE Gateway API (Gateway, HTTPRoute) is designed to manage L7 Internal/External Application Load Balancers. The GKE controller owns and manages the underlying GCP resources (forwarding rules, target proxies, etc.). PSC (ServiceAttachment) is a separate GCP feature for publishing a service. The GKE ServiceAttachment CRD is a convenience wrapper that works by pointing to a Kubernetes Service of type: LoadBalancer (typically for L4 ILBs).
+
+Unstable Producer Target: The forwarding rule created by the GKE Gateway API is considered an implementation detail. GKE can change or recreate it without warning (e.g., during upgrades or configuration changes). A PSC ServiceAttachment requires a stable forwarding rule to point to, which the Gateway API doesn't guarantee for this purpose.
+
+Unsupported Producer Type: The specific type of load balancer created by gke-l7-rilb (the default internal GatewayClass) is not designed or documented to be a stable producer backend for PSC in this manner.
+```
 
 ---
 
