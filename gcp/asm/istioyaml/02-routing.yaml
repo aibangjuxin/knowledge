@@ -1,0 +1,77 @@
+# Warning:
+# This routing example assumes a relay-style upstream proxy.
+# It does not generate CONNECT or forward-proxy requests for Squid explicit proxy.
+
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: saas-egress-routing
+  namespace: istio-system
+spec:
+  hosts:
+  - api.saas1.com
+  - api.saas2.com
+  - api.saas3.com
+  gateways:
+  - mesh
+  - saas-egress-gw
+  tls:
+  - match:
+    - gateways:
+      - mesh
+      port: 443
+      sniHosts:
+      - api.saas1.com
+      - api.saas3.com
+    route:
+    - destination:
+        host: istio-egressgateway.istio-system.svc.cluster.local
+        port:
+          number: 443
+  - match:
+    - gateways:
+      - saas-egress-gw
+      port: 443
+      sniHosts:
+      - api.saas1.com
+    route:
+    - destination:
+        host: proxy-saas1.mesh.local
+        port:
+          number: 3128
+  - match:
+    - gateways:
+      - saas-egress-gw
+      port: 443
+      sniHosts:
+      - api.saas3.com
+    route:
+    - destination:
+        host: proxy-saas3.mesh.local
+        port:
+          number: 3128
+  http:
+  - match:
+    - gateways:
+      - mesh
+      port: 80
+      headers:
+        :authority:
+          exact: api.saas2.com
+    route:
+    - destination:
+        host: istio-egressgateway.istio-system.svc.cluster.local
+        port:
+          number: 80
+  - match:
+    - gateways:
+      - saas-egress-gw
+      port: 80
+      headers:
+        :authority:
+          exact: api.saas2.com
+    route:
+    - destination:
+        host: proxy-saas2.mesh.local
+        port:
+          number: 3128

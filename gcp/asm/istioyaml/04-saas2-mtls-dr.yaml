@@ -1,0 +1,21 @@
+# Warning:
+# This DestinationRule assumes the upstream on port 3128 behaves like a relay.
+# It is not directly usable with Squid explicit forward proxy.
+
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: proxy-saas2-mtls
+  namespace: istio-system
+spec:
+  host: proxy-saas2.mesh.local
+  trafficPolicy:
+    portLevelSettings:
+    - port:
+        number: 3128
+      tls:
+        mode: MUTUAL
+        credentialName: saas2-client-credential
+        sni: api.saas2.com
+        subjectAltNames:
+        - api.saas2.com

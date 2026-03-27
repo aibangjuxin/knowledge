@@ -1,0 +1,32 @@
+# Replace 10.10.20.15/32 with the real core proxy IP.
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-gw-only-to-core-proxy
+  namespace: istio-system
+spec:
+  podSelector:
+    matchLabels:
+      istio: egressgateway
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - ipBlock:
+        cidr: 10.10.20.15/32
+    ports:
+    - protocol: TCP
+      port: 3128
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53

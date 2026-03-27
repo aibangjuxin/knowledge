@@ -42,6 +42,58 @@
 
 `gcloud compute ssl-certificates list`
 
+- get-cert-domains.sh
+```bash
+#!/bin/bash
+# ==============================================================================
+# 脚本名称: get-cert-domains.sh
+# 功能描述: 快速拉取当前 GCP 项目下所有 SSL 证书的名称及包含的域名对照关系
+# ==============================================================================
+
+# 1. 检查是否配置了当前 Project
+CURRENT_PROJECT=$(gcloud config get-value project 2>/dev/null)
+if [ -z "$CURRENT_PROJECT" ]; then
+    echo "⚠️ 警告：当前未配置默认的 GCP Project！"
+    echo "请先运行 'gcloud config set project [YOUR_PROJECT_ID]'，或在下方命令中增加 --project 参数。"
+    exit 1
+fi
+
+echo "🔍 正在从项目 [ $CURRENT_PROJECT ] 拉取 SSL 证书及域名信息..."
+echo "--------------------------------------------------------------------------------"
+
+# 2. 方案 A：使用纯 gcloud table format (推荐，不需要额外安装 jq)
+# 此命令会将 SELF_MANAGED 和 MANAGED 的域名并排显示，一目了然。
+gcloud compute ssl-certificates list \
+  --format="table[box](<
+    name:label='证书名称 (Name>)',
+    type:label='类型 (Type)',
+    subjectAlternativeNames.join(', '):label='SAN 域名 (SELF_MANAGED)',
+    managed.domains.join(', '):label='域名 (MANAGED)'
+  )"
+
+echo "--------------------------------------------------------------------------------"
+echo "✅ 查询完成！"
+
+# ==============================================================================
+# [备选方案 B] 如果您希望使用 jq 来输出高度定制化、排版更易读的块状信息，可取消下面代码的注释：
+#
+# gcloud compute ssl-certificates list --format="json" | jq -r '
+#   .[] |
+#   "📜 证书名称 : " + .name + "\n" +
+#   "   证书类型 : " + .type + "\n" +
+#   "   绑定域名 : " + (
+#     if .subjectAlternativeNames then 
+#       (.subjectAlternativeNames | join(", "))
+#     elif .managed and .managed.domains then
+#       (.managed.domains | join(", "))
+#     else
+#       "N/A (无解析到的域名)"
+#     end
+#   ) + "\n"
+# '
+# ==============================================================================
+
+```
 ⸻
 
 🏗️ 二、如何创建一个 SELF_MANAGED 类型的证书资源
