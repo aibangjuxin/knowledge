@@ -218,3 +218,467 @@ graph TD
     *   **Pod**: 采用 `/18` (16,384 IP)，足以支撑中大型 API 平台的 Pod 密度。
     *   **Service**: 采用 `/18` (16,384 IP)，确保 ClusterIP 资源充足。
     *   Pod 段和 Service 段各自分配了独立的 Class B 级空间 (`100.64.*` vs `100.68.*`)，有效防止了多集群互联时的路由冲突。
+
+---
+
+# **6 PRIVATE_SERVICE_CONNECT 定义与规划（单区域 10 集群 / 高访问量版）**
+
+这部分基于上面 **生产级多集群 IP 规划 (基于 `192.168.64.0/20` 架构)**，专门为 **Master Project 中创建 PSC Service Attachment** 重新设计。
+
+这里采用你的真实前提：
+
+- **10 个 Cluster 都在同一个 Region**
+- 假设当前主区域统一为 `europe-west2`
+- 每个 Cluster 的 Node Subnet 都是 `/20`
+- Master Project 需要承载多个 PSC published service / service attachment
+- 平台访问量较大，不能只按“能不能用”做最小规划，必须考虑后续连接规模和扩容路径
+
+## **6.1 先说结论**
+
+更合理的做法是：
+
+- 将 **`192.168.240.0/20`** 定义为 **Master Project 的 PSC 专用保留池**
+```bash
+ipcalc 192.168.240.0/20
+Address:   192.168.240.0        11000000.10101000.1111 0000.00000000
+Netmask:   255.255.240.0 = 20   11111111.11111111.1111 0000.00000000
+Wildcard:  0.0.15.255           00000000.00000000.0000 1111.11111111
+=>
+Network:   192.168.240.0/20     11000000.10101000.1111 0000.00000000
+HostMin:   192.168.240.1        11000000.10101000.1111 0000.00000001
+HostMax:   192.168.255.254      11000000.10101000.1111 1111.11111110
+Broadcast: 192.168.255.255      11000000.10101000.1111 1111.11111111
+Hosts/Net: 4094                  Class C, Private Internet
+```
+- 在这个 `/20` 内，不按 Region 切，而是按 **Cluster / Shared Service Domain / Overflow** 切
+- 每个 Cluster 先预留一个 **独立 `/24` PSC Pool**
+- 每个 `Service Attachment` 从所属 Cluster 的 `/24` 池中分配一个独立 PSC NAT subnet
+
+### **为什么从 `/21` 提升到 `/20`**
+
+你现在的场景不是“多区域少量 attachment”，而是：
+
+- 单区域
+- 10 个 Cluster
+- 高访问量
+- 未来可能每个 Cluster 不止一个对外发布服务
+
+所以 `/21` 虽然能用，但偏紧。
+
+`/20` 更合适的原因：
+
+- 有 **16 个 `/24`**
+- 可以给 10 个 Cluster 各保留 1 个 `/24`
+- 还剩 6 个 `/24` 作为共享服务、超大流量 attachment、溢出池、迁移池
+- 后续不需要很快返工
+
+## **6.2 PSC 设计约束**
+
+基于 Google Cloud 官方行为，PSC producer 侧需要注意：
+
+1. `Service Attachment` 是 **regional resource**
+2. 一个 `Service Attachment` 可以关联 **多个 PSC NAT subnets**
+3. 但 **一个 PSC NAT subnet 不能被多个 Service Attachment 复用**
+4. PSC NAT subnet 只能用于 `purpose=PRIVATE_SERVICE_CONNECT`
+5. **子网大小决定的是“可接入消费者/endpoint/backends 的容量”**
+   - 不是简单等价于带宽或 QPS
+
+关键官方点：
+
+- `2026-03-27` 看到的 Google Cloud 文档说明：
+  - NAT subnet 大小决定多少消费者能连进来
+  - 每个连接到 service attachment 的 endpoint 或 backend 会消耗一个 NAT IP
+  - `/24` 有 252 个可用地址，因为有 4 个不可用地址
+  - 连接数、客户端数、consumer VPC 内部实例数，不会直接改变 NAT IP 的消耗方式  
+  来源：
+  - [About published services](https://cloud.google.com/vpc/docs/about-vpc-hosted-services)
+  - [Publish services by using Private Service Connect](https://cloud.google.com/vpc/docs/configure-private-service-connect-producer)
+
+## **6.3 关于“性能”的正确理解**
+
+### **重要澄清**
+
+我前一版里说：
+
+- `/26` 有 64 个地址
+- 足够覆盖一批消费者连接的 SNAT 需求
+
+这句话方向没错，但还不够准确。
+
+更准确的说法应该是：
+
+- PSC NAT subnet 的大小主要影响的是：
+  - **service attachment 可以承接多少 PSC endpoints / PSC backends / propagated connections**
+- 它 **不是直接的 QPS 指标**
+- 也 **不是单纯的后端吞吐指标**
+
+### **PSC NAT 容量主要受什么影响**
+
+1. **消费者 endpoint / backend 数量**
+   - 每个 consumer endpoint 或 backend 会占用一个 NAT IP
+2. **是否使用 propagated connections**
+   - 如果用了 propagated connections，会额外消耗 NAT IP
+3. **租户模型**
+   - 如果是多租户平台，consumer project / endpoint 数量通常增长很快
+4. **attachment 颗粒度**
+   - attachment 拆得越细，消耗的 PSC subnet 数量越多
+
+### **高访问量场景下怎么理解**
+
+如果你的平台“访问量很大”，要先区分两种压力：
+
+#### 类型 A：高 QPS，但消费者数量不多
+
+例如：
+
+- 只有少量 consumer project
+- 但每个 consumer 的请求量很高
+
+这种情况下，PSC NAT subnet 不一定先成为瓶颈。
+真正更可能先成为瓶颈的是：
+
+- 内部 LB
+- backend 服务
+- 连接保持/超时
+- 单 consumer 的连接行为
+
+#### 类型 B：消费者很多，而且 endpoint 很多
+
+例如：
+
+- 多 tenant
+- 多 consumer project
+- 每个 consumer 都创建自己的 PSC endpoint
+
+这种情况下，PSC NAT subnet 容量会很快成为约束。
+
+### **结论**
+
+对你们这种平台型架构，我建议 **不要把 `/26` 当默认值**。
+
+更稳妥的默认做法应该是：
+
+- **普通 attachment：`/25` 起步**
+- **高流量/高租户共享 attachment：`/24` 起步**
+- **超大 attachment：允许绑定多个 `/24` PSC subnets**
+
+## **6.4 推荐地址总池**
+
+### **PSC Supernet**
+
+建议正式定义：
+
+- **`192.168.240.0/20` = Master Project PSC Dedicated Pool**
+
+范围覆盖：
+
+- `192.168.240.0` - `192.168.255.255`
+
+这样做的好处：
+
+1. 与现有多集群 Node 规划完全分离
+2. 语义清晰，`24x~25x` 一眼就是 PSC
+3. 16 个 `/24` 足以支撑：
+   - 10 个 Cluster 各自 1 个 PSC Pool
+   - 外加 6 个共享 / overflow 池
+
+## **6.5 推荐切分策略：按 Cluster 分配 `/24`**
+
+既然 10 个 Cluster 都在同一区域，那么 PSC 地址规划更应该按 **Cluster 维度** 来切，而不是按 Region 切。
+
+### **Cluster PSC Pool 规划表**
+
+| Cluster ID     | 环境名称     | Cluster Node Subnet | PSC Pool (/24)     |
+| :------------- | :----------- | :------------------ | :----------------- |
+| **Cluster 01** | `core-01`    | `192.168.64.0/20`   | `192.168.240.0/24` |
+| **Cluster 02** | `core-02`    | `192.168.80.0/20`   | `192.168.241.0/24` |
+| **Cluster 03** | `core-03`    | `192.168.96.0/20`   | `192.168.242.0/24` |
+| **Cluster 04** | `core-04`    | `192.168.112.0/20`  | `192.168.243.0/24` |
+| **Cluster 05** | `tenant-01`  | `192.168.128.0/20`  | `192.168.244.0/24` |
+| **Cluster 06** | `tenant-02`  | `192.168.144.0/20`  | `192.168.245.0/24` |
+| **Cluster 07** | `staging-01` | `192.168.160.0/20`  | `192.168.246.0/24` |
+| **Cluster 08** | `staging-02` | `192.168.176.0/20`  | `192.168.247.0/24` |
+| **Cluster 09** | `mgmt-01`    | `192.168.192.0/20`  | `192.168.248.0/24` |
+| **Cluster 10** | `mgmt-02`    | `192.168.208.0/20`  | `192.168.249.0/24` |
+
+### **共享与扩容池**
+
+| 用途                       | PSC Pool (/24)     |
+| :------------------------- | :----------------- |
+| `shared-services-01`       | `192.168.250.0/24` |
+| `shared-services-02`       | `192.168.251.0/24` |
+| `high-traffic-overflow-01` | `192.168.252.0/24` |
+| `high-traffic-overflow-02` | `192.168.253.0/24` |
+| `migration-buffer-01`      | `192.168.254.0/24` |
+| `dr-reserved-01`           | `192.168.255.0/24` |
+
+## **6.6 每个 Cluster 的 attachment 切分建议**
+
+### **推荐不是预先固定切满**
+
+不要一开始就把每个 Cluster 的 `/24` 机械切成 4 个 `/26`。
+
+更好的方式是：
+
+- 先给每个 Cluster 一个 `/24` Pool
+- 再按 attachment 类型，从该 `/24` 里动态切分
+
+### **推荐 attachment profile**
+
+| Attachment 类型 | 建议起始网段 | 可用地址数 | 适用场景                              |
+| :-------------- | :----------- | :--------- | :------------------------------------ |
+| `Small`         | `/26`        | 60         | 小规模、内部测试、低租户 attachment   |
+| `Medium`        | `/25`        | 124        | 普通生产 attachment                   |
+| `Large`         | `/24`        | 252        | 高流量 / 高租户 / 平台共享 attachment |
+
+> 备注：Google Cloud 文档说明 NAT subnet 有 4 个不可用地址，因此 `/26` 不是 64 可用，而是 **60 可用**；`/25` 是 **124 可用**；`/24` 是 **252 可用**。
+
+### **生产推荐默认值**
+
+对于你们这种“大访问量平台”，我建议默认值如下：
+
+- **Cluster 私有服务 attachment 默认：`/25`**
+- **共享入口 / 平台级 attachment 默认：`/24`**
+- **低优先级或临时 attachment 才使用 `/26`**
+
+## **6.7 例子：Cluster 02（你原本考虑的 `192.168.241.0/24`）**
+
+如果把 `192.168.241.0/24` 定义为 `core-02` 的 PSC Pool，那么推荐不是默认拆成四个 `/26`，而是这样使用：
+
+### **方案 A：偏稳健的生产起步**
+
+| Attachment               | CIDR                 | 说明              |
+| :----------------------- | :------------------- | :---------------- |
+| `psc-core02-api-01`      | `192.168.241.0/25`   | 主生产 attachment |
+| `psc-core02-api-02`      | `192.168.241.128/26` | 次级 attachment   |
+| `psc-core02-reserved-01` | `192.168.241.192/26` | 扩容保留          |
+
+### **方案 B：如果某个服务就是平台共享入口**
+
+| Attachment                  | CIDR               | 说明                     |
+| :-------------------------- | :----------------- | :----------------------- |
+| `psc-core02-shared-ingress` | `192.168.241.0/24` | 直接给高流量共享服务使用 |
+
+然后如果后续还要新增同 Cluster 的第二个高流量 attachment：
+
+- 不要硬挤在同一个 `/24`
+- 直接从共享溢出池申请：
+  - `192.168.252.0/24`
+  - 或 `192.168.253.0/24`
+
+## **6.8 如何做性能与容量评估**
+
+### **不要只问 QPS，要问 4 个问题**
+
+在 PSC NAT 规划里，建议你对每个 service attachment 收集下面 4 个输入：
+
+1. **预计会有多少 consumer endpoints / backends**
+2. **是否会使用 propagated connections**
+3. **是否是共享平台服务**
+4. **是否需要单 consumer connection limits**
+
+### **容量评估公式（producer 侧）**
+
+可以先用下面这个简单模型做初始容量估算：
+
+```text
+Required NAT IPs
+= 预计 PSC endpoints 数量
++ 预计 PSC backends 数量
++ propagated connections 带来的附加消耗
++ 20%~30% buffer
+```
+
+然后对照子网可用地址：
+
+- `/26` -> 60 usable
+- `/25` -> 124 usable
+- `/24` -> 252 usable
+
+### **并发 TCP 连接估算公式**
+
+除了“需要多少 NAT IP”之外，还要补一个更接近连接容量的估算：
+
+对于 NAT 子网中的每一个 IP，它理论上能支持的并发 TCP 连接数，受限于源端口可用范围。
+
+可以采用下面这个近似公式：
+
+$$Concurrent\_Connections \approx \text{NAT\_IP\_Count} \times 63,488$$
+
+### **按子网规模换算**
+
+基于上面的 usable IP 数量，可以得到一个非常实用的粗略并发上限：
+
+| NAT Subnet | Usable NAT IPs | 理论并发 TCP 连接上限（近似） |
+| :--------- | :------------- | :---------------------------- |
+| `/26`      | `60`           | `60 × 63,488 ≈ 3.81M`         |
+| `/25`      | `124`          | `124 × 63,488 ≈ 7.87M`        |
+| `/24`      | `252`          | `252 × 63,488 ≈ 15.99M`       |
+
+### **这个公式怎么用**
+
+这个公式的意义不是说：
+
+- `/24` 就一定能稳定承载 1600 万 QPS
+
+而是说：
+
+- 如果你的访问模型包含大量并发 TCP 会话
+- 并且这些会话需要通过 PSC producer 侧 NAT IP 做端口映射
+- 那么 NAT subnet 的规模会决定“连接容量墙”
+
+### **对高访问量平台的实际解读**
+
+对于你们的平台，应该把容量评估拆成两层：
+
+#### **层 1：NAT IP / Endpoint 容量**
+
+看的是：
+
+- 有多少 consumer endpoints / backends / propagated connections
+- 当前 NAT subnet 还剩多少可用地址
+
+#### **层 2：并发 TCP Session 容量**
+
+看的是：
+
+- 客户端是不是短连接为主
+- 后端是不是大量新建连接
+- 单个 NAT IP 的端口空间会不会被快速耗尽
+
+这也是为什么：
+
+- **高 QPS 不一定马上打满 PSC NAT subnet**
+- 但 **海量短连接**、**高并发新建连接**、**多 consumer endpoint** 的组合，可能会很快把 PSC NAT 容量推满
+
+### **因此对你们的规划建议进一步收紧**
+
+在你这个“10 个 Cluster，同一 Region，大访问量”的场景里：
+
+- `/26` 只适合：
+  - 测试
+  - 低租户
+  - 明确知道是低并发连接模型的 attachment
+- `/25` 才适合作为普通生产 attachment 的默认起点
+- `/24` 更适合作为：
+  - 平台共享 attachment
+  - 大型 consumer 基数入口
+  - 高并发短连接模型服务
+
+### **监控指标**
+
+Google Cloud 官方建议重点盯 producer 侧这个指标：
+
+- `private_service_connect/producer/used_nat_ip_addresses`
+
+同时还要看：
+
+- service attachment connection status
+- 是否出现 `Needs attention`
+- 每个 consumer 的 connection limit 是否需要单独限制
+
+### **什么时候应该扩容**
+
+建议把下面作为告警阈值：
+
+- `used_nat_ip_addresses >= 60%`：开始评估扩容
+- `used_nat_ip_addresses >= 75%`：准备追加 NAT subnet
+- `used_nat_ip_addresses >= 85%`：禁止继续手工接入新 consumer，优先扩容
+
+### **扩容方式**
+
+PSC 的一个优点是：
+
+- 一个 service attachment 可以关联多个 NAT subnets
+- 可以在线追加，不需要中断流量
+
+所以高流量 attachment 的扩容动作应该是：
+
+1. 不去改已有 subnet
+2. 直接追加新的 PSC subnet
+3. 保持命名和归属关系清晰
+
+例如：
+
+```text
+psc-core02-api-01
+  -> 192.168.241.0/25
+  -> 192.168.252.0/25   # later expansion
+```
+
+## **6.9 最终推荐表**
+
+### **Master Project PSC 总体保留**
+
+| 用途                     | CIDR               | 说明                          |
+| :----------------------- | :----------------- | :---------------------------- |
+| `PSC Dedicated Supernet` | `192.168.240.0/20` | Master Project PSC 专用保留池 |
+
+### **10 Cluster 对应 PSC Pool**
+
+| Cluster      | PSC Pool           | 默认策略       |
+| :----------- | :----------------- | :------------- |
+| `core-01`    | `192.168.240.0/24` | `/25` 起步     |
+| `core-02`    | `192.168.241.0/24` | `/25` 起步     |
+| `core-03`    | `192.168.242.0/24` | `/25` 起步     |
+| `core-04`    | `192.168.243.0/24` | `/25` 起步     |
+| `tenant-01`  | `192.168.244.0/24` | `/25` 起步     |
+| `tenant-02`  | `192.168.245.0/24` | `/25` 起步     |
+| `staging-01` | `192.168.246.0/24` | `/26` 或 `/25` |
+| `staging-02` | `192.168.247.0/24` | `/26` 或 `/25` |
+| `mgmt-01`    | `192.168.248.0/24` | `/25` 起步     |
+| `mgmt-02`    | `192.168.249.0/24` | `/25` 起步     |
+
+### **共享与高流量扩容池**
+
+| Pool                       | CIDR               | 用途                   |
+| :------------------------- | :----------------- | :--------------------- |
+| `shared-services-01`       | `192.168.250.0/24` | 平台共享 attachment    |
+| `shared-services-02`       | `192.168.251.0/24` | 第二共享 attachment    |
+| `high-traffic-overflow-01` | `192.168.252.0/24` | 高流量 attachment 扩容 |
+| `high-traffic-overflow-02` | `192.168.253.0/24` | 第二高流量扩容池       |
+| `migration-buffer-01`      | `192.168.254.0/24` | 迁移/重建 buffer       |
+| `dr-reserved-01`           | `192.168.255.0/24` | DR / emergency reserve |
+
+## **6.10 结论**
+
+### **最终建议**
+
+在你这个“10 个 Cluster，同一 Region，大访问量”的场景下，推荐正式定义为：
+
+- **`192.168.240.0/20` = Master Project PSC Dedicated Pool**
+- 每个 Cluster 固定占用 **1 个 `/24` PSC Pool**
+- 普通生产 attachment 默认 **`/25` 起步**
+- 高流量 / 高租户 / 平台共享 attachment 默认 **`/24` 起步**
+- 不把 `/26` 当生产默认，只把它当小型 attachment 的节省型选项
+- 所有超大 attachment 都预期支持 **追加第二个 PSC subnet** 来扩容
+
+这样做的优点：
+
+- 和现有 `192.168.64.0/20` 多集群规划完全兼容
+- 保留了你已有的 `192.168.241.0/24` 思路
+- 单区域 10 Cluster 的 mapping 非常清晰
+- 高流量情况下不会因为一开始把 PSC 子网切得太碎而很快返工
+
+---
+
+> [!TIP]
+> **Terraform 落地建议**
+>
+> 建议把 PSC 规划定义成 3 层 `locals`：
+>
+> 1. `psc_supernet`
+> 2. `psc_cluster_pools`
+> 3. `psc_attachment_profiles`
+>
+> 然后创建子网时统一设置：
+>
+> - `purpose = "PRIVATE_SERVICE_CONNECT"`
+> - `region = "europe-west2"`
+> - `ip_cidr_range = <allocated /25 or /24>`
+>
+> 这样你们后续新增 attachment 的逻辑就会非常统一：
+>
+> - 普通服务：从 cluster pool 切 `/25`
+> - 共享服务：直接申请 `/24`
+> - 高流量扩容：从 overflow pool 再追加一个 `/24` 或 `/25`
