@@ -690,6 +690,328 @@ gcloud compute networks subnets list \
 | 管理粒度 | 精细 | 适中 | 精细隔离选/28 |
 | **最终建议** | **staging/mgmt** | **core/tenant** | **混合最优** |
 
+# quota
+# PSC NAT IP 容量评估 & 网络性能建模
+
+## 1. 问题分析
+
+你当前的计算是基于 **PSC Service Attachment 的 NAT IP → SNAT 端口容量模型**：
+
+- 每个 NAT IP ≈ **64,512 可用端口**
+- 每个连接占用一个 `(src_ip, src_port)` 映射
+
+👉 本质：**这是连接数上限（Connection Concurrency Ceiling），不是吞吐/QPS能力**
+
+你现在的核心问题是：
+
+> 如何从「连接数」推导出：
+- QPS / TPS
+- 吞吐量（Bandwidth）
+- GCP Quota 限制
+- 实际瓶颈在哪一层
+
+---
+
+## 2. 基础计算（你的问题）
+
+### 并发连接能力
+
+| NAT IP 数量 | 理论最大并发连接 |
+|------------|----------------|
+| 12         | ~774,144        |
+| 28         | ~1,806,336      |
+
+👉 计算：
+
+```text
+28 × 64,512 ≈ 1,806,336
+
+
+⸻
+
+3. 关键认知（非常重要）
+
+❗ 并发连接 ≠ QPS
+
+你必须引入一个关键变量：
+
+QPS = 并发连接数 / 平均连接持续时间
+
+
+⸻
+
+4. QPS 推导模型
+
+场景 1：短连接（HTTP/1.1 无 keepalive）
+
+平均请求耗时	理论 QPS
+1s	~1.8M QPS
+100ms	~18M QPS
+10ms	~180M QPS
+
+👉 现实结论：
+达不到 → CPU / LB / Backend 会先崩
+
+⸻
+
+场景 2：长连接（KeepAlive / HTTP2 / gRPC）
+
+假设：
+	•	每连接 100 QPS（复用）
+	•	连接数 1.8M
+
+理论 QPS = 1.8M × 100 = 180M QPS
+
+👉 ❗完全不现实（后端早挂）
+
+⸻
+
+✅ 实际经验值（生产）
+
+架构类型	QPS/IP 经验值
+普通 API	5k ~ 20k
+高性能 API	20k ~ 50k
+极限优化（C++/Envoy）	100k+
+
+👉 28 NAT IP：
+
+保守：28 × 10k = 280k QPS
+进阶：28 × 30k = 840k QPS
+
+
+⸻
+
+5. 吞吐量（Bandwidth）估算
+
+计算公式：
+
+吞吐量 = QPS × 平均请求大小
+
+示例：
+
+QPS	单请求大小	吞吐
+300k	2KB	~600 MB/s (~4.8 Gbps)
+800k	2KB	~1.6 GB/s (~12.8 Gbps)
+
+
+⸻
+
+⚠️ GCP 限制（关键）
+
+External Load Balancer
+
+指标	限制
+带宽	几十 Gbps（自动扩展）
+QPS	无硬限制（但受 backend 限制）
+
+
+⸻
+
+PSC 限制（核心）
+
+维度	说明
+NAT IP 数	决定并发连接
+每连接带宽	不保证
+总吞吐	受 backend VM / NEG 限制
+
+
+⸻
+
+6. 真正的瓶颈在哪里？
+
+👉 你的架构（结合你历史）：
+
+Client
+  ↓
+GLB
+  ↓
+Nginx L7
+  ↓
+Nginx L4
+  ↓
+Kong DP
+  ↓
+GKE RT
+
+
+⸻
+
+瓶颈排序（实际生产）
+
+graph TD
+    A["Client QPS"] --> B["GLB Capacity"]
+    B --> C["PSC NAT Port Limit"]
+    C --> D["Nginx / Kong CPU"]
+    D --> E["GKE Pod CPU / Memory"]
+    E --> F["Backend API"]
+
+
+⸻
+
+真实情况：
+
+层级	是否瓶颈
+PSC NAT	❌（很少先到）
+GLB	❌
+Nginx	⚠️
+Kong	⚠️⚠️
+GKE Pod	🔥
+Backend	🔥🔥🔥
+
+
+⸻
+
+7. 你漏掉的重要指标（建议补齐）
+
+① 连接层
+
+指标	说明
+Concurrent Connections	当前并发
+Connection Rate	新建连接速度
+TIME_WAIT 数量	端口耗尽风险
+
+
+⸻
+
+② 网络层
+
+指标	说明
+PPS（Packets per second）	LB/NIC 极限
+Bandwidth	Gbps
+SYN Rate	抗压能力
+
+
+⸻
+
+③ 应用层
+
+指标	说明
+QPS / TPS	核心指标
+P99 latency	延迟
+Error Rate	稳定性
+
+
+⸻
+
+④ GCP Quota（必须关注）
+
+PSC / Networking
+
+Quota	默认
+Forwarding rules	150
+Backend services	100
+NEG 数量	50-200
+PSC endpoints	有限制
+
+
+⸻
+
+GCE / GKE
+
+指标	说明
+CPU 核数	决定 QPS
+NIC 带宽	e2 / c2 差异巨大
+Pod 数量	IP 限制
+
+
+⸻
+
+8. 结论（核心回答）
+
+你的问题：28 NAT IP 能支撑什么规模？
+
+👉 分三层看：
+
+⸻
+
+① 连接能力（确定）
+
+≈ 1.8M 并发连接
+
+
+⸻
+
+② 实际 QPS（关键）
+
+≈ 300k ~ 800k QPS（现实范围）
+
+
+⸻
+
+③ 吞吐能力
+
+≈ 5 Gbps ~ 15 Gbps（取决于 payload）
+
+
+⸻
+
+9. 架构建议（结合你平台）
+
+✅ 不要以 NAT IP 为核心扩容手段
+
+👉 正确思路：
+
+QPS瓶颈 ≠ NAT
+QPS瓶颈 = Kong / GKE
+
+
+⸻
+
+✅ 推荐优化方向
+
+1. 连接复用（最关键）
+
+keepalive_timeout 60;
+keepalive_requests 10000;
+
+
+⸻
+
+2. Kong 优化
+	•	worker_processes auto
+	•	reuseport
+	•	upstream keepalive
+
+⸻
+
+3. GKE
+	•	HPA（CPU + QPS）
+	•	Pod anti-affinity
+	•	PDB
+
+⸻
+
+4. 压测验证（必须做）
+
+wrk -t8 -c1000 -d60s https://your-api
+
+
+⸻
+
+10. 一句话总结
+
+PSC NAT IP 决定“你最多能接多少连接”，但你真正能处理多少流量，取决于后面的 Kong + GKE。
+
+⸻
+
+如果你要进一步深入（我建议）
+
+我可以帮你做一件更有价值的事情：
+
+👉 基于你当前架构：
+	•	精确算出：
+	•	Kong 单 Pod QPS
+	•	GKE 总容量
+	•	最优 NAT IP 数量（避免浪费）
+
+只需要你给我：
+	•	Kong Pod 数量 / CPU
+	•	GKE RT Pod 规格
+	•	平均请求耗时
+	•	payload 大小
+
+我可以帮你做一份 生产级容量模型（capacity planning）
+
 
 
 
