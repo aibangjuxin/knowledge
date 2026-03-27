@@ -64,8 +64,8 @@ echo "--------------------------------------------------------------------------
 # 2. 方案 A：使用纯 gcloud table format (推荐，不需要额外安装 jq)
 # 此命令会将 SELF_MANAGED 和 MANAGED 的域名并排显示，一目了然。
 gcloud compute ssl-certificates list \
-  --format="table[box](<
-    name:label='证书名称 (Name>)',
+  --format="table[box](
+    name:label='证书名称 (Name)',
     type:label='类型 (Type)',
     subjectAlternativeNames.join(', '):label='SAN 域名 (SELF_MANAGED)',
     managed.domains.join(', '):label='域名 (MANAGED)'

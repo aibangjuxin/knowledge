@@ -94,6 +94,10 @@
 
 - 架构目标和控制原则仍然成立
 - 之前那套 YAML 只适合作为“relay 型出口”的参考草稿，不适合作为 `Squid explicit forward proxy` 的直接实施清单
+
+如果你要看专门面向 Squid 的版本，请直接参考：
+
+- [istio-egress-squid.md](/Users/lex/git/knowledge/gcp/asm/istio-egress-squid.md)
 ## 1. Goal and Constraints
 
 ### 目标
