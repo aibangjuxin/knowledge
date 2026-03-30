@@ -429,3 +429,83 @@ kubectl apply -f 40-abjx-health-check-api-vs.yaml
 | Service port 协议错误 | `port.name` 未写 `http` | 补上 `name: http` |
 | mTLS 打断流量 | 部分 Pod 未注入 sidecar | 先 PERMISSIVE，再 STRICT |
 | GKE ILB 健康检查失败 | 未暴露 `15021` 端口 | Service 中保留 `status-port: 15021` |
+
+
+我仔细看了一下原文档里的架构图部分，发现有一个问题需要指出。
+
+原文档里的 flow 图用的是 Mermaid `graph LR`，但我在生成文档时把它渲染成了一个 Visualizer 组件（上面那个"Loading"的地方）。让我重新审查整个 flow 的逻辑正确性。
+
+---
+
+## Flow 正确性审查
+
+### 原文档的 flow
+
+```
+Client → ILB → GWSVC → GWPOD → GWCR → VS → SVC → POD → APP
+```
+
+### 问题分析
+
+这个 flow **逻辑上有误**，`GWCR` 和 `VS` 的位置描述容易误导人：
+
+| 步骤 | 原文描述 | 实际情况 |
+|------|----------|----------|
+| `GWPOD → GWCR` | 流量从 Pod 流向 CR | ❌ CR 不是流量路径上的节点，它是**配置对象** |
+| `GWCR → VS` | CR 转发给 VS | ❌ VS 也是配置对象，不是流量转发节点 |
+
+### 正确的理解
+
+```
+Gateway CR  ──(配置)──► Gateway Pod（Envoy）
+VirtualService ──(配置)──► Gateway Pod（Envoy）路由规则
+```
+
+**实际数据面流量**只有这条链：
+
+```
+Client → ILB → Gateway Service(GWSVC) → Gateway Pod(Envoy) → API Service(SVC) → API Pod
+```
+
+**控制面配置**是两条独立的线：
+
+```
+Gateway CR    ──► 告诉 Envoy 监听哪个 host/port/TLS
+VirtualService ──► 告诉 Envoy 匹配哪个 path，转发到哪个后端
+```来分别画出**数据面流量**和**控制面配置**的正确关系图：---
+
+## 结论：原文档 Flow 的问题
+
+原文档里这段描述：
+
+```
+GWPOD → GWCR → VS → SVC
+```
+
+**逻辑上不准确**，`GWCR` 和 `VS` 不是流量路径上的转发节点，它们是 Istio 配置对象，由 `istiod` 解析后通过 xDS 协议下发给 Envoy。
+
+### 正确理解
+
+| 层面 | 路径 | 说明 |
+|------|------|------|
+| **数据面（实际流量）** | `Client → ILB → Gateway Service → Gateway Pod (Envoy) → API Service → API Pod` | 真正的报文走向 |
+| **控制面（配置）** | `Gateway CR + VirtualService → istiod → xDS → Envoy` | 告诉 Envoy 怎么处理流量 |
+
+### 你的部署步骤顺序是对的
+
+你文档里的 Step 1~8 部署顺序完全正确，我在这里补充一个关键确认点：
+
+```bash
+# 确认 Gateway CR 的 selector 与 Deployment label 一致
+kubectl get gateway abjx-int-gw -n abjx-int -o jsonpath='{.spec.selector}'
+kubectl get pods -n abjx-int -l istio=abjx-int-gw
+
+# 确认 VirtualService 已绑定到正确 gateway
+kubectl get virtualservice abjx-health-check-api-vs -n abjx-int \
+  -o jsonpath='{.spec.gateways}'
+
+# 用 istioctl 做一次全面检查
+istioctl analyze -n abjx-int
+```
+
+整体架构和配置逻辑是对的，原文档的 flow 图只是表达方式容易误导，实际意图是正确的。
