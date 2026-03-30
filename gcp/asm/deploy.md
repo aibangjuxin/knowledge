@@ -1,6 +1,8 @@
 # ASM Simple API 部署指南 (GKE Managed ASM + PSC 架构)
 
 > **场景说明**：在 Master-Tenant 架构中，流量通过 Private Service Connect (PSC) 进入 Master 项目，并由托管式 Anthos Service Mesh (ASM) 进行统一治理。本指南展示如何在 Mesh 内部部署并暴露一个 Simple API。
+>
+> **安全模式**：仅启用 **TLS**（单向加密），不启用 mTLS（双向认证）。
 
 ---
 
@@ -15,7 +17,7 @@ graph LR
     subgraph "Master Project (Producer + GKE Mesh)"
         SA["Service Attachment"] --> ILB["Internal Load Balancer"]
         ILB --> MGW["Mesh Gateway (Envoy)"]
-        
+
         subgraph "Mesh Context (Sidecar Injected)"
             MGW --> VS["VirtualService (Routing)"]
             VS --> SvcA["API Service (K8s)"]
@@ -26,9 +28,9 @@ graph LR
 
 ---
 
-## 2. 部署流程详解
+## 2. Mesh Context 部署流程
 
-### 第一阶段：环境准备与 Sidecar 注入
+### 2.1 Sidecar 注入配置
 Managed ASM 采用 **Revision-based** 注入模式。
 
 1. **获取 Revision 标签**：
@@ -45,12 +47,12 @@ Managed ASM 采用 **Revision-based** 注入模式。
      name: simple-api-ns
      labels:
        # 核心：将 Namespace 绑定到 ASM 托管控制面
-       istio.io/rev: asm-managed 
+       istio.io/rev: asm-managed
    ```
 
 ---
 
-### 第二阶段：部署基础 API 资源
+### 2.2 部署 API 工作负载
 定义标准的 Kubernetes Deployment 和 Service。
 
 1. **Deployment (API 实现)**：
@@ -96,8 +98,8 @@ Managed ASM 采用 **Revision-based** 注入模式。
 
 ---
 
-### 第三阶段：网关与路由配置 (Mesh Ingress)
-将内部服务通过 Mesh Gateway 暴露，并映射到外部可访问的域名。
+### 2.3 Mesh Gateway 与路由配置
+将内部服务通过 Mesh Gateway 暴露。
 
 1. **Gateway (入口定义)**：
    ```yaml
@@ -140,10 +142,10 @@ Managed ASM 采用 **Revision-based** 注入模式。
 
 ---
 
-### 第四阶段：安全策略与证书
+### 2.4 TLS 安全策略配置
 
-1. **启用内部 mTLS (PeerAuthentication)**：
-   在命名空间级别强制要求双向 TLS 加密。
+1. **禁用 mTLS (PeerAuthentication)**：
+   仅启用单向 TLS，不强制双向认证。
    ```yaml
    apiVersion: security.istio.io/v1beta1
    kind: PeerAuthentication
@@ -152,46 +154,51 @@ Managed ASM 采用 **Revision-based** 注入模式。
      namespace: simple-api-ns
    spec:
      mtls:
-       mode: STRICT
+       mode: DISABLE  # 禁用 mTLS，仅使用 TLS 加密
    ```
 
-2. **外部 HTTPS 证书配置**：
-   如果 Gateway 需要支持 HTTPS，需创建 K8s Secret：
+2. **Gateway TLS 终止配置**：
+   在入口网关配置 TLS 证书，实现 HTTPS 加密。
    ```bash
+   # 创建 TLS Secret
    kubectl create -n istio-system secret tls api-tls-cert \
      --key=key.pem --cert=cert.pem
    ```
-   然后在 `Gateway` 的 `tls`字段引用 `credentialName: api-tls-cert`。
-
-3. **身份校验 (RequestAuthentication)**：
-   在入口网关校验 JWT 令牌（可选）：
+   
    ```yaml
-   apiVersion: security.istio.io/v1beta1
-   kind: RequestAuthentication
+   # Gateway 配置 TLS 终止
+   apiVersion: networking.istio.io/v1beta1
+   kind: Gateway
    metadata:
-     name: jwt-auth
+     name: api-gateway
      namespace: simple-api-ns
    spec:
      selector:
-       matchLabels:
-         istio: ingressgateway
-     jwtRules:
-     - issuer: "https://issuer.example.com"
-       jwksUri: "https://issuer.example.com/.well-known/jwks.json"
+       istio: ingressgateway
+     servers:
+     - port:
+         number: 443
+         name: https
+         protocol: HTTPS
+       tls:
+         mode: SIMPLE  # 单向 TLS
+         credentialName: api-tls-cert
+       hosts:
+       - "api.internal.aibang"
    ```
 
 ---
 
-## 3. 关键配置项对照表
+## 3. Mesh Context 关键配置项
 
-| 资源名称 | 核心作用 | 备注 |
+| 资源名称 | 核心作用 | 配置要点 |
 | :--- | :--- | :--- |
 | **Namespace Label** | 激活 Sidecar 注入 | 必须指向正确的 ASM Revision |
 | **Deployment Labels** | 流量识别与指标收集 | `app` 标签用于 VS 和 Service 的选择 |
-| **Gateway** | 监听端口与域名绑定 | 相当于 Nginx 的 `server_name` |
-| **VirtualService** | 流量分发与路径匹配 | 相当于 Nginx 的 `location` |
-| **DestinationRule** | 子集定义与负载均衡策略 | 可用于实现蓝绿/灰度发布 |
-| **PeerAuthentication** | 控制 mTLS 状态 | `STRICT` 模式提供最高安全性 |
+| **Gateway** | 监听端口与域名绑定 | `tls.mode: SIMPLE` 启用单向 TLS |
+| **VirtualService** | 流量分发与路径匹配 | 绑定到 Gateway 并路由至 Service |
+| **PeerAuthentication** | 控制 mTLS 状态 | `DISABLE` 模式仅使用 TLS 加密 |
+| **TLS Secret** | 存储网关证书 | 通过 `credentialName` 引用 |
 
 ---
 
@@ -208,7 +215,16 @@ Managed ASM 采用 **Revision-based** 注入模式。
    istioctl analyze -n simple-api-ns
    ```
 
-3. **流量追踪**：
+3. **TLS 连接验证**：
+   ```bash
+   # 检查 Gateway TLS 配置
+   kubectl get gateway api-gateway -n simple-api-ns -o yaml
+   
+   # 测试 HTTPS 连接
+   curl -k https://api.internal.aibang
+   ```
+
+4. **流量追踪**：
    检查 Envoy 代理日志确认流量路径：
    ```bash
    kubectl logs <pod-name> -c istio-proxy -n simple-api-ns
