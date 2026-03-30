@@ -509,3 +509,69 @@ istioctl analyze -n abjx-int
 ```
 
 整体架构和配置逻辑是对的，原文档的 flow 图只是表达方式容易误导，实际意图是正确的。
+
+
+这是一个典型的**结构图**需求——"哪些资源在哪个 NS"，用 SVG 分层容器来表达最清晰。我用两层结构来画：外层是 NS 边界，内层是各类资源按类别分组。改用 Mermaid 来渲染，这更符合你原始文档的风格，也能直接粘贴到 `.md` 里用：渲染工具暂时超时了，直接给你完整的 Mermaid 源码，可以直接贴到 `.md` 文件里：
+
+```mermaid
+flowchart TB
+  Client(["Client / PSC Consumer"])
+  ILB["Internal LB (GKE ILB / PSC)"]
+
+  subgraph istio-system ["istio-system namespace"]
+    direction LR
+    istiod["istiod\n控制面 / xDS 下发"]
+    webhook["MutatingWebhook\nsidecar 注入"]
+  end
+
+  subgraph abjx-int ["namespace: abjx-int    label: istio.io/rev=asm-managed"]
+    direction TB
+
+    subgraph gw-layer ["网关层 — Gateway"]
+      direction LR
+      GW_SVC["Service\nabjx-int-gw\ntype: LoadBalancer"]
+      GW_DEP["Deployment\nabjx-int-gw\nEnvoy Pod"]
+      GW_CR["Gateway CR\nabjx-int-gw\nhost / port / TLS"]
+      TLS_SECRET["Secret 可选\nabjx-int-gw-tls"]
+    end
+
+    subgraph route-layer ["Istio 路由配置层"]
+      direction LR
+      VS["VirtualService\nabjx-health-check-api-vs\ngateways: abjx-int-gw"]
+      PA["PeerAuthentication 可选\nmode: STRICT\n确认全注入后启用"]
+    end
+
+    subgraph api-layer ["业务服务层 — API"]
+      direction LR
+      API_DEP["Deployment\nabjx-health-check-api\nreplicas:2 + istio-proxy"]
+      API_SVC["Service\nabjx-health-check-api\nport:80  name:http"]
+      PDB["PDB 可选\nminAvailable: 1"]
+    end
+  end
+
+  Client --> ILB
+  ILB --> GW_SVC
+  GW_SVC --> GW_DEP
+  GW_CR -. "配置监听规则" .-> GW_DEP
+  TLS_SECRET -. "credentialName" .-> GW_CR
+  GW_DEP --> VS
+  VS --> API_SVC
+  API_SVC --> API_DEP
+  istiod -. "xDS 下发" .-> GW_DEP
+  istiod -. "xDS 下发" .-> API_DEP
+  webhook -. "注入 sidecar" .-> API_DEP
+```
+
+---
+
+## 分层结构说明
+
+整个部署按 **3 层** 组织在 `abjx-int` 这一个 namespace 里：
+
+| 层 | 资源 | 说明 |
+|---|---|---|
+| 网关层 | `Service` + `Deployment` + `Gateway CR` + `Secret` | 所有 gateway 相关的工作负载和配置都在同一个 NS，边界清晰 |
+| Istio 路由配置层 | `VirtualService` + `PeerAuthentication` | 纯配置对象，不跑 Pod，但必须在同 NS 才能引用到 gateway |
+| 业务服务层 | `Deployment` + `Service` + `PDB` | 真正的 API 工作负载 |
+
+`istio-system` 是唯一在 `abjx-int` **之外**的依赖，它通过 xDS 把配置推给 Envoy，通过 Webhook 注入 sidecar，但你不需要在那个 NS 里部署任何东西。
