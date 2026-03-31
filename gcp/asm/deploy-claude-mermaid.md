@@ -1,3 +1,84 @@
+直接给你可以复制粘贴到 `.md` 的 Mermaid 源码：
+
+```mermaid
+flowchart TB
+  Client(["🌐 Client / PSC Consumer"])
+  ILB["⚖️ Internal LB\nGKE ILB / PSC"]
+
+  subgraph istio-system ["🔧 istio-system namespace"]
+    direction LR
+    istiod["istiod\n控制面 / xDS 下发"]
+    webhook["MutatingWebhook\nsidecar 注入"]
+  end
+
+  subgraph abjx-int ["📦 namespace: abjx-int  ·  istio.io/rev=asm-managed"]
+    direction TB
+
+    subgraph gw-layer ["🚪 网关层 Gateway"]
+      direction LR
+      GW_SVC["Service\nabjx-int-gw\ntype: LoadBalancer"]
+      GW_DEP["Deployment\nabjx-int-gw\nEnvoy Pod × 2"]
+      GW_CR["Gateway CR\nabjx-int-gw\nhost / port / TLS"]
+      TLS_SECRET["Secret 可选\nabjx-int-gw-tls\nTLS 证书"]
+    end
+
+    subgraph route-layer ["🗺️ Istio 路由配置层"]
+      direction LR
+      VS["VirtualService\nabjx-health-check-api-vs\ngateways: abjx-int-gw"]
+      PA["PeerAuthentication 可选\nmode: STRICT\n确认全注入后启用"]
+    end
+
+    subgraph api-layer ["🛠️ 业务服务层 API"]
+      direction LR
+      API_DEP["Deployment\nabjx-health-check-api\nreplicas:2 + istio-proxy"]
+      API_SVC["Service\nabjx-health-check-api\nport:80  name:http"]
+      PDB["PDB 可选\nminAvailable: 1\n防止驱逐"]
+    end
+  end
+
+  Client -->|"HTTPS / HTTP"| ILB
+  ILB -->|"内网流量"| GW_SVC
+  GW_SVC -->|"selector match"| GW_DEP
+  GW_CR -. "配置监听规则" .-> GW_DEP
+  TLS_SECRET -. "credentialName" .-> GW_CR
+  GW_DEP -->|"路由匹配"| VS
+  VS -->|"转发"| API_SVC
+  API_SVC -->|"负载均衡"| API_DEP
+  istiod -. "xDS 下发" .-> GW_DEP
+  istiod -. "xDS 下发" .-> API_DEP
+  webhook -. "注入 sidecar" .-> API_DEP
+
+  classDef ext  fill:#F1EFE8,stroke:#5F5E5A,color:#2C2C2A
+  classDef ctrl fill:#EEEDFE,stroke:#534AB7,color:#26215C
+  classDef gw   fill:#E1F5EE,stroke:#0F6E56,color:#04342C
+  classDef cfg  fill:#FAEEDA,stroke:#854F0B,color:#412402
+  classDef api  fill:#E6F1FB,stroke:#185FA5,color:#042C53
+  classDef opt  fill:#F1EFE8,stroke:#888780,color:#444441,stroke-dasharray:4 3
+
+  class Client,ILB ext
+  class istiod,webhook ctrl
+  class GW_SVC,GW_DEP gw
+  class GW_CR,VS cfg
+  class API_DEP,API_SVC api
+  class TLS_SECRET,PA,PDB opt
+```
+
+---
+
+**颜色说明**（`classDef` 对应关系）：
+
+| class | 颜色 | 含义 |
+|-------|------|------|
+| `ext` | 灰色 | 集群外部：Client、ILB |
+| `ctrl` | 紫色 | 控制面：istiod、Webhook |
+| `gw` | 绿色 | 网关工作负载：Service、Deployment |
+| `cfg` | 橙色 | Istio 配置对象：Gateway CR、VirtualService |
+| `api` | 蓝色 | 业务服务：API Deployment、Service |
+| `opt` | 灰色虚线 | 可选资源：Secret、PeerAuthentication、PDB |
+
+这份 Mermaid 在 GitHub、GitLab、Obsidian、Typora 等主流 Markdown 渲染器里都可以直接显示颜色。
+
+
 # ASM on GKE — 资源分层部署图 (Mermaid)
 
 本文档通过 Mermaid 图表展示 ASM 部署中各类资源在 Namespace 下的分布关系，帮助更清晰地理解部署架构。
