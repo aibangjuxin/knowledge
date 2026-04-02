@@ -292,7 +292,627 @@ map $host $internal_host {
 5. **特例 server 块优先级**：Nginx 精确域名 server 块优先级高于通配符，`components.team.app.aibang` 的精确块会自动覆盖 `*.team.app.aibang` 的通配符块，无需额外配置。
 
 
+我先读取你的原始文档，再结合新需求给出完整方案。基于你的需求，给出一套**完整的、生产级的、可直接参考的配置集合**。
 
+---
+
+## 🔍 问题分析
+
+**目标**：将策略配置从 Nginx 下沉到 Istio 层，在 Gateway + VirtualService 层实现：
+
+| 维度 | 能力 |
+|------|------|
+| Team 级 | 超时、重试、熔断策略 |
+| API 级 | 精细化路由、Header 改写、超时覆盖 |
+| 安全 | mTLS、JWT 认证、请求限流 |
+| 可观测 | Header 注入、Fault Injection（测试用） |
+
+---
+
+## 🛠 架构设计
+
+```mermaid
+graph TD
+    Client[外部客户端] -->|HTTPS *.team.app.aibang| Nginx["Nginx L7\n泛证书终止 TLS\n透传 Host 不改写"]
+    Nginx -->|HTTP/HTTPS proxy_pass| ASMLB["ASM Ingress LB\n外部 LoadBalancer"]
+
+    ASMLB --> GW["Istio Gateway\n监听 *.team.app.aibang\n处理 TLS 或 PASSTHROUGH"]
+
+    GW --> VS_Team["VirtualService\nteam 级别\n*.team.app.aibang"]
+    GW --> VS_Team2["VirtualService\nteam2 级别\n*.team2.app.aibang"]
+
+    VS_Team -->|"api1.team.app.aibang"| SVC_api1["api1-service\nNamespace: team-ns"]
+    VS_Team -->|"api2.team.app.aibang"| SVC_api2["api2-service\nNamespace: team-ns"]
+    VS_Team -->|"components.team.app.aibang\n超时300s Body50M"| SVC_comp["components-service\nNamespace: team-ns"]
+
+    VS_Team2 -->|"api1.team2.app.aibang"| SVC_t2_api1["api1-service\nNamespace: team2-ns"]
+
+    SVC_api1 --> DR_api1["DestinationRule\napi1\n连接池+熔断"]
+    SVC_comp --> DR_comp["DestinationRule\ncomponents\n大超时+连接池"]
+
+    GW -.->|PeerAuthentication| PA["mTLS STRICT\nMesh 内部"]
+    GW -.->|RequestAuthentication| RA["JWT 验证\n每个 team namespace"]
+    GW -.->|AuthorizationPolicy| AP["API 级访问控制"]
+
+    style SVC_comp fill:#f9a,stroke:#c00
+    style DR_comp fill:#f9a,stroke:#c00
+```
+
+---
+
+## 💻 完整配置文件
+
+### 1. Nginx 层（极简透传，不改写 Host）
+
+```nginx
+# /etc/nginx/conf.d/team-passthrough.conf
+# Nginx 仅做 TLS 终止 + 透传，策略全部下沉到 Istio
+
+map $host $upstream_timeout {
+    ~^components\.team\.app\.aibang$  300s;
+    default                            60s;
+}
+
+map $host $upstream_body_size {
+    ~^components\.team\.app\.aibang$  50m;
+    default                            30m;
+}
+
+# *.team.app.aibang
+server {
+    listen 443 ssl;
+    server_name *.team.app.aibang;
+
+    ssl_certificate     /etc/ssl/certs/wildcard.team.app.aibang.crt;
+    ssl_certificate_key /etc/ssl/private/wildcard.team.app.aibang.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    client_max_body_size $upstream_body_size;  # map 变量控制
+    proxy_read_timeout   $upstream_timeout;
+    proxy_send_timeout   $upstream_timeout;
+
+    location / {
+        proxy_pass              https://asm-ingressgateway-lb-ip;
+        proxy_set_header Host   $host;          # 保持原始 Host 不改写
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_ssl_verify        off;            # 内网信任，关闭 upstream SSL 验证
+        proxy_ssl_server_name   on;
+    }
+}
+
+# *.team2.app.aibang
+server {
+    listen 443 ssl;
+    server_name *.team2.app.aibang;
+
+    ssl_certificate     /etc/ssl/certs/wildcard.team2.app.aibang.crt;
+    ssl_certificate_key /etc/ssl/private/wildcard.team2.app.aibang.key;
+
+    client_max_body_size 30m;
+    proxy_read_timeout   60s;
+
+    location / {
+        proxy_pass              https://asm-ingressgateway-lb-ip;
+        proxy_set_header Host   $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_ssl_verify        off;
+    }
+}
+```
+
+---
+
+### 2. Istio Gateway（核心入口，统一监听）
+
+```yaml
+# gateway.yaml
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: team-unified-gateway
+  namespace: istio-system
+  labels:
+    app: team-unified-gateway
+    managed-by: platform-team
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    # ── team 泛域名 ──────────────────────────────────────
+    - port:
+        number: 443
+        name: https-team
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE                              # TLS 终止（若 Nginx 已终止则改 PASSTHROUGH）
+        credentialName: wildcard-team-app-aibang  # Secret 名称，存放证书
+      hosts:
+        - "*.team.app.aibang"
+
+    # ── team2 泛域名 ─────────────────────────────────────
+    - port:
+        number: 443
+        name: https-team2
+        protocol: HTTPS
+      tls:
+        mode: SIMPLE
+        credentialName: wildcard-team2-app-aibang
+      hosts:
+        - "*.team2.app.aibang"
+
+    # ── HTTP 重定向（可选）────────────────────────────────
+    - port:
+        number: 80
+        name: http-redirect
+        protocol: HTTP
+      tls:
+        httpsRedirect: true
+      hosts:
+        - "*.team.app.aibang"
+        - "*.team2.app.aibang"
+```
+
+---
+
+### 3. VirtualService —— Team 级（含 API 级精细化路由）
+
+```yaml
+# virtualservice-team.yaml
+# 覆盖 team 下所有 API，通过 match 实现 API 级差异化
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: team-vs
+  namespace: team-ns
+  labels:
+    team: team
+    managed-by: cicd
+spec:
+  hosts:
+    - "*.team.app.aibang"
+  gateways:
+    - istio-system/team-unified-gateway
+  http:
+
+    # ──────────────────────────────────────────────────────
+    # [API Level] components.team.app.aibang
+    # 特例：超时 300s，重试 1 次，允许大 Body
+    # ──────────────────────────────────────────────────────
+    - name: "route-components"
+      match:
+        - authority:                             # 匹配 Host Header
+            exact: "components.team.app.aibang"
+      timeout: 300s
+      retries:
+        attempts: 1
+        perTryTimeout: 280s
+        retryOn: "gateway-error,connect-failure,retriable-4xx"
+      headers:
+        request:
+          add:
+            x-api-name: "components"
+            x-team-name: "team"
+            x-route-policy: "large-body"
+        response:
+          add:
+            x-served-by: "istio-team-gateway"
+      route:
+        - destination:
+            host: components-service.team-ns.svc.cluster.local
+            port:
+              number: 8080
+          weight: 100
+
+    # ──────────────────────────────────────────────────────
+    # [API Level] api1.team.app.aibang
+    # 标准 API，默认超时 60s，带重试
+    # ──────────────────────────────────────────────────────
+    - name: "route-api1"
+      match:
+        - authority:
+            exact: "api1.team.app.aibang"
+      timeout: 60s
+      retries:
+        attempts: 3
+        perTryTimeout: 20s
+        retryOn: "gateway-error,connect-failure,reset,retriable-4xx"
+      headers:
+        request:
+          add:
+            x-api-name: "api1"
+            x-team-name: "team"
+          remove:
+            - x-internal-debug              # 移除可能泄露的内部 Header
+      route:
+        - destination:
+            host: api1-service.team-ns.svc.cluster.local
+            port:
+              number: 8080
+          weight: 100
+
+    # ──────────────────────────────────────────────────────
+    # [API Level] api2.team.app.aibang
+    # Canary 示例：90% 流量到稳定版，10% 到 canary 版
+    # ──────────────────────────────────────────────────────
+    - name: "route-api2-canary"
+      match:
+        - authority:
+            exact: "api2.team.app.aibang"
+      timeout: 60s
+      retries:
+        attempts: 3
+        perTryTimeout: 20s
+        retryOn: "gateway-error,connect-failure"
+      headers:
+        request:
+          add:
+            x-api-name: "api2"
+            x-team-name: "team"
+      route:
+        - destination:
+            host: api2-service.team-ns.svc.cluster.local
+            port:
+              number: 8080
+            subset: stable                   # DestinationRule 中定义的 subset
+          weight: 90
+        - destination:
+            host: api2-service.team-ns.svc.cluster.local
+            port:
+              number: 8080
+            subset: canary
+          weight: 10
+
+    # ──────────────────────────────────────────────────────
+    # [API Level] Fault Injection 示例（测试 / 混沌工程）
+    # internal-test.team.app.aibang 注入 5% 延迟
+    # ──────────────────────────────────────────────────────
+    - name: "route-internal-test"
+      match:
+        - authority:
+            exact: "internal-test.team.app.aibang"
+          headers:
+            x-chaos-test:                    # 只有携带该 Header 才注入故障
+              exact: "true"
+      fault:
+        delay:
+          percentage:
+            value: 5.0
+          fixedDelay: 3s
+        abort:
+          percentage:
+            value: 1.0
+          httpStatus: 503
+      timeout: 60s
+      route:
+        - destination:
+            host: internal-test-service.team-ns.svc.cluster.local
+            port:
+              number: 8080
+
+    # ──────────────────────────────────────────────────────
+    # [Team Level] 通配兜底路由
+    # 所有未精确匹配的 *.team.app.aibang 请求
+    # ──────────────────────────────────────────────────────
+    - name: "route-team-default"
+      match:
+        - authority:
+            regex: "^[a-z0-9-]+\\.team\\.app\\.aibang$"
+      timeout: 60s
+      retries:
+        attempts: 2
+        perTryTimeout: 25s
+        retryOn: "gateway-error,connect-failure"
+      headers:
+        request:
+          add:
+            x-team-name: "team"
+            x-route-policy: "default"
+      route:
+        - destination:
+            host: default-backend-service.team-ns.svc.cluster.local
+            port:
+              number: 8080
+```
+
+---
+
+### 4. VirtualService —— team2
+
+```yaml
+# virtualservice-team2.yaml
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: team2-vs
+  namespace: team2-ns
+spec:
+  hosts:
+    - "*.team2.app.aibang"
+  gateways:
+    - istio-system/team-unified-gateway
+  http:
+    - name: "route-api1-team2"
+      match:
+        - authority:
+            exact: "api1.team2.app.aibang"
+      timeout: 60s
+      retries:
+        attempts: 3
+        perTryTimeout: 20s
+        retryOn: "gateway-error,connect-failure"
+      headers:
+        request:
+          add:
+            x-team-name: "team2"
+            x-api-name: "api1"
+      route:
+        - destination:
+            host: api1-service.team2-ns.svc.cluster.local
+            port:
+              number: 8080
+
+    - name: "route-team2-default"
+      timeout: 60s
+      route:
+        - destination:
+            host: default-backend-service.team2-ns.svc.cluster.local
+            port:
+              number: 8080
+```
+
+---
+
+### 5. DestinationRule —— 连接池 + 熔断 + Subset
+
+```yaml
+# destinationrule-team.yaml
+---
+# api1 标准配置
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: api1-dr
+  namespace: team-ns
+spec:
+  host: api1-service.team-ns.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      http:
+        http1MaxPendingRequests: 100
+        http2MaxRequests: 1000
+        idleTimeout: 90s
+      tcp:
+        connectTimeout: 5s
+        maxConnections: 100
+    outlierDetection:                          # 熔断配置
+      consecutive5xxErrors: 5
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary
+---
+# components 大超时特例
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: components-dr
+  namespace: team-ns
+spec:
+  host: components-service.team-ns.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 200
+        idleTimeout: 360s                      # 比超时值大，避免连接被提前回收
+      tcp:
+        connectTimeout: 10s
+        maxConnections: 50
+    outlierDetection:
+      consecutive5xxErrors: 3
+      interval: 30s
+      baseEjectionTime: 60s
+      maxEjectionPercent: 30
+```
+
+---
+
+### 6. 安全层配置（mTLS + JWT + AuthorizationPolicy）
+
+```yaml
+# security-team.yaml
+---
+# Mesh 内部强制 mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: team-ns-mtls
+  namespace: team-ns
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# JWT 认证（验证外部 token）
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: team-jwt-auth
+  namespace: team-ns
+spec:
+  selector:
+    matchLabels:
+      app: api1-service                        # 精确绑定到具体服务
+  jwtRules:
+    - issuer: "https://auth.aibang.com"
+      jwksUri: "https://auth.aibang.com/.well-known/jwks.json"
+      audiences:
+        - "team-api"
+      forwardOriginalToken: true               # 透传原始 token 到后端
+
+---
+# 授权策略：api1 只允许携带有效 JWT 的请求
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: api1-authz
+  namespace: team-ns
+spec:
+  selector:
+    matchLabels:
+      app: api1-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            requestPrincipals:
+              - "https://auth.aibang.com/*"   # JWT iss/sub 组合
+      when:
+        - key: request.auth.claims[team]
+          values: ["team"]                     # JWT claims 中 team 字段必须匹配
+
+---
+# components 服务：仅允许来自 Nginx 的 IP 段（配合 Nginx 不改写场景）
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: components-ip-authz
+  namespace: team-ns
+spec:
+  selector:
+    matchLabels:
+      app: components-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            ipBlocks:
+              - "10.0.0.0/8"                  # 内网 Nginx 出口 IP 段
+```
+
+---
+
+### 7. EnvoyFilter —— 请求体大小限制（API 级，下沉到 Istio）
+
+```yaml
+# envoyfilter-body-limit.yaml
+# 在 Istio 层对 components 服务执行 50MB body 限制
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: components-body-limit
+  namespace: istio-system
+spec:
+  workloadSelector:
+    labels:
+      istio: ingressgateway
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          filterChain:
+            filter:
+              name: "envoy.filters.network.http_connection_manager"
+              subFilter:
+                name: "envoy.filters.http.router"
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.buffer
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.Buffer
+            max_request_bytes: 52428800        # 50MB = 50 * 1024 * 1024
+```
+
+---
+
+## 📊 配置层级与职责总览
+
+```mermaid
+graph TD
+    subgraph Nginx层[Nginx 层 - 边缘 TLS 终止]
+        N1["泛证书终止\n*.team / *.team2"]
+        N2["map 变量控制\nbody size + timeout"]
+        N3["透传原始 Host\n不做改写"]
+    end
+
+    subgraph Gateway层[Istio Gateway 层 - 统一入口]
+        G1["监听 *.team.app.aibang\n*.team2.app.aibang"]
+        G2["TLS credentialName\n证书 Secret 挂载"]
+        G3["HTTP 80 强制重定向"]
+    end
+
+    subgraph VS层[VirtualService 层 - 路由策略]
+        V1["authority exact 精确匹配\nAPI 级路由"]
+        V2["timeout 覆盖\n各 API 独立超时"]
+        V3["retries 重试策略"]
+        V4["headers 注入\nx-team-name x-api-name"]
+        V5["weight 流量分割\nCanary 发布"]
+        V6["fault 故障注入\n混沌测试"]
+        V7["通配兜底路由"]
+    end
+
+    subgraph DR层[DestinationRule 层 - 连接策略]
+        D1["connectionPool 连接池"]
+        D2["outlierDetection 熔断"]
+        D3["subset 版本分流"]
+    end
+
+    subgraph Security层[Security 层 - 安全策略]
+        S1["PeerAuthentication\nmTLS STRICT"]
+        S2["RequestAuthentication\nJWT 验证"]
+        S3["AuthorizationPolicy\n访问控制"]
+    end
+
+    subgraph EF层[EnvoyFilter 层 - 深度定制]
+        E1["Buffer Filter\nbody size 限制"]
+    end
+
+    Nginx层 --> Gateway层
+    Gateway层 --> VS层
+    VS层 --> DR层
+    DR层 --> Security层
+    Security层 --> EF层
+```
+
+---
+
+## ⚠️ 注意事项
+
+### 关键决策点
+
+| 问题 | 建议 |
+|------|------|
+| Nginx 与 Gateway 双重 TLS | 若 Nginx 已终止 TLS，Gateway 的 `tls.mode` 改为 `PASSTHROUGH` 或走 HTTP 80 |
+| `authority` 匹配 vs `headers.host` | Istio VS 用 `authority` 匹配 HTTP/2 的 `:authority` 伪头，等价于 HTTP/1.1 的 `Host` |
+| EnvoyFilter body limit 生效范围 | EnvoyFilter 是全局的，务必用 `workloadSelector` 精确限定 ingressgateway |
+| DestinationRule subset 必须与 Pod Label 对应 | `version: stable` 和 `version: canary` 需要在 Deployment 中打对应 Label |
+| AuthorizationPolicy 默认行为 | 一旦命名空间有 AuthorizationPolicy，**没有被 ALLOW 规则匹配的请求默认拒绝** |
+| 超时优先级 | VS timeout < DestinationRule timeout，VS 设置会覆盖默认值，不要双重设置产生混淆 |
+
+### Onboarding 流程建议
+
+```
+新增 Team:
+  1. Nginx: 添加 server_name 通配块（或不改动，若已有通配规则）
+  2. Gateway: 添加新 server 段 + credentialName Secret
+  3. 创建 Namespace + PeerAuthentication
+
+新增 API（CICD 团队自助）:
+  1. 在对应 team VS 中添加 authority exact match 块
+  2. 如有特殊超时/重试，在该 match 块内覆盖
+  3. 添加对应 DestinationRule
+  4. 如需 JWT，添加 RequestAuthentication + AuthorizationPolicy
+```
 
 
 # Nginx 7层代理 - Team级别配置最佳实践分析
