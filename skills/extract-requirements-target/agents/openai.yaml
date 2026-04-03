@@ -1,0 +1,4 @@
+interface:
+  display_name: "Extract Requirements & Target"
+  short_description: "Extract requirements and goals from docs"
+  default_prompt: "Use $extract-requirements-target to extract concise Requirements and Target from this document."

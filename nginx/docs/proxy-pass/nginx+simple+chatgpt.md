@@ -4,6 +4,31 @@
 
 ### 1.1 真实目标
 
+## Requirements
+- 外部访问域名必须始终保持为 `{apiname}.{team}.appdev.aibang`。
+- Nginx 不做 Host 改写，不做内部域名转换，并尽量保留原始 Host/SNI。
+- 流量最终必须到达 Pod，且 Client -> Nginx -> runtime Gateway -> Pod 全链路保持 TLS。
+- Pod-to-Pod 通信也必须加密。
+- 证书尽量复用同一套 team wildcard 证书：`*.{team}.appdev.aibang`。
+- runtime Gateway 需要作为标准模板存在，用户最好只关注 runtime 侧资源创建。
+- 如果 Pod-to-Pod 也要复用同一张 wildcard 证书，内部调用不能默认依赖 `service.namespace.svc.cluster.local`，而应尽量使用 `apiX.{team}.appdev.aibang`。
+- Pod 必须自己终止业务 TLS，因此 Pod 需要监听 HTTPS、挂载 team wildcard 证书，Gateway -> Pod 不能降级成明文。
+- runtime 侧至少需要一组可模板化资源：`Gateway`、`VirtualService`、`DestinationRule`、`ServiceEntry`、`Secret`、以及业务 `Deployment/StatefulSet` / `Service`。
+- 平台必须补齐证书签发、分发、轮换、Secret 生命周期管理和审计能力。
+- 必须提前验证 east-west 场景下 `apiX.{team}.appdev.aibang` 在集群内部如何解析到目标工作负载。
+- 如果 runtime Gateway 改成 `PASSTHROUGH`，就要接受 `VirtualService` 从 `http:` 转为 `tls:` + `sniHosts`，并放弃 Gateway 层的大部分 HTTP 七层治理能力。
+- 如果希望继续做 path 路由、header 处理、URI rewrite、HTTP 重试或基于 HTTP/JWT 的入口控制，就不应使用 `PASSTHROUGH`。
+
+## Target
+目标是构建一套以 `{apiname}.{team}.appdev.aibang` 为统一业务域名的端到端 TLS 架构，让 north-south 和 east-west 都尽量复用同一套 team wildcard 证书，并且让最终业务 TLS 尽可能直达到 Pod。与此同时，把复杂性尽量收敛到平台标准模板和 runtime 资源层，降低用户侧接入心智。
+
+## Notes
+- Inferred: 文档真正的核心难点不在 Nginx 或 Gateway，而在集群内部如何让 `apiX.{team}.appdev.aibang` 稳定、可校验地解析并路由到目标后端。
+- Inferred: 文档在对比两条方案。
+  - 方案一：Gateway terminate TLS，再 origination 到 Pod，保留更多七层能力。
+  - 方案二：Gateway `PASSTHROUGH`，简化 Gateway，让 TLS 更纯粹地下沉到 Pod。
+- Missing detail: 还没有最终拍板 east-west 的内部解析实现方式，是内部 DNS、mesh 自定义 host，还是回到 Gateway 转发。
+
 这次方案以你的实际目标为准，不再偏离：
 
 1. 域名始终保持为：`{apiname}.{team}.appdev.aibang`
