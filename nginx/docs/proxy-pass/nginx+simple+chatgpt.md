@@ -74,33 +74,33 @@ flowchart LR
 
 ### 3.1 必须遵守的原则
 
-| 原则 | 说明 |
-|---|---|
-| 全链路同域名 | Host/SNI 始终保持 `apiX.{team}.appdev.aibang` |
-| 全链路加密 | Client -> Nginx -> Gateway -> Pod 都是 TLS |
-| Pod 自己终止业务 TLS | 最终业务 Pod 必须挂载 team wildcard 证书并监听 HTTPS |
-| Pod-to-Pod 继续用业务域名 | 内部调用也尽量使用 `apiX.{team}.appdev.aibang` |
-| Gateway 与 Pod 证书一致 | runtime Gateway 与 Pod 都使用同一套 team wildcard 证书体系 |
-| 用户资源聚焦 runtime | 用户主要创建 `Gateway / VirtualService / DestinationRule / ServiceEntry` |
+| 原则                      | 说明                                                                     |
+| ------------------------- | ------------------------------------------------------------------------ |
+| 全链路同域名              | Host/SNI 始终保持 `apiX.{team}.appdev.aibang`                            |
+| 全链路加密                | Client -> Nginx -> Gateway -> Pod 都是 TLS                               |
+| Pod 自己终止业务 TLS      | 最终业务 Pod 必须挂载 team wildcard 证书并监听 HTTPS                     |
+| Pod-to-Pod 继续用业务域名 | 内部调用也尽量使用 `apiX.{team}.appdev.aibang`                           |
+| Gateway 与 Pod 证书一致   | runtime Gateway 与 Pod 都使用同一套 team wildcard 证书体系               |
+| 用户资源聚焦 runtime      | 用户主要创建 `Gateway / VirtualService / DestinationRule / ServiceEntry` |
 
 ### 3.2 这条路的直接收益
 
-| 好处 | 说明 |
-|---|---|
-| 不需要 Host 改写 | 配置更直观 |
-| 内外域名统一 | 排障简单 |
-| 证书模型统一 | 团队心智一致 |
+| 好处                     | 说明                              |
+| ------------------------ | --------------------------------- |
+| 不需要 Host 改写         | 配置更直观                        |
+| 内外域名统一             | 排障简单                          |
+| 证书模型统一             | 团队心智一致                      |
 | Pod 最终真正持有业务 TLS | 满足你“直接到达 Pod 且加密”的目标 |
-| east-west 也可统一标准 | Pod-to-Pod 不需要两套 TLS 逻辑 |
+| east-west 也可统一标准   | Pod-to-Pod 不需要两套 TLS 逻辑    |
 
 ### 3.3 代价
 
-| 代价 | 说明 |
-|---|---|
-| 私钥分发面扩大 | Nginx、Gateway、Pod 都要拿到同一套证书或同一套签发材料 |
-| Secret 轮换复杂 | 三层都要同步 |
-| 内部服务发现更复杂 | Pod-to-Pod 不能简单只靠 `cluster.local` |
-| 配置对象更多 | 除了 VS，还需要 DR / ServiceEntry / Secret |
+| 代价               | 说明                                                   |
+| ------------------ | ------------------------------------------------------ |
+| 私钥分发面扩大     | Nginx、Gateway、Pod 都要拿到同一套证书或同一套签发材料 |
+| Secret 轮换复杂    | 三层都要同步                                           |
+| 内部服务发现更复杂 | Pod-to-Pod 不能简单只靠 `cluster.local`                |
+| 配置对象更多       | 除了 VS，还需要 DR / ServiceEntry / Secret             |
 
 ---
 
@@ -110,11 +110,11 @@ flowchart LR
 
 在你的方案里，这三个位置都要具备 TLS 能力：
 
-| 位置 | 是否需要 `*.{team}.appdev.aibang` 证书 | 原因 |
-|---|---|---|
-| Nginx | 需要 | 终止外部 HTTPS |
-| Runtime Gateway | 需要 | 终止上游到 Gateway 的 HTTPS |
-| Runtime Pod | 需要 | 最终业务流量要直达 Pod，且 Pod 自己也终止 HTTPS |
+| 位置            | 是否需要 `*.{team}.appdev.aibang` 证书 | 原因                                            |
+| --------------- | -------------------------------------- | ----------------------------------------------- |
+| Nginx           | 需要                                   | 终止外部 HTTPS                                  |
+| Runtime Gateway | 需要                                   | 终止上游到 Gateway 的 HTTPS                     |
+| Runtime Pod     | 需要                                   | 最终业务流量要直达 Pod，且 Pod 自己也终止 HTTPS |
 
 ### 4.2 哪些地方不能偷懒
 
@@ -167,14 +167,14 @@ sequenceDiagram
 
 为了满足你的目标，runtime 侧建议至少有这些资源：
 
-| 资源 | 作用 |
-|---|---|
-| `Gateway` | team 级标准 HTTPS 入口 |
-| `VirtualService` | 按业务域名或路径把流量路由到后端 |
-| `DestinationRule` | 指定 Gateway -> Pod 的 TLS origination 方式 |
-| `ServiceEntry` | 让 Pod-to-Pod 可以继续用 `apiX.{team}.appdev.aibang` 访问内部服务 |
-| `Secret` | 持有 team wildcard 证书 |
-| `Deployment/StatefulSet` | 把证书挂给业务 Pod，应用监听 HTTPS |
+| 资源                     | 作用                                                              |
+| ------------------------ | ----------------------------------------------------------------- |
+| `Gateway`                | team 级标准 HTTPS 入口                                            |
+| `VirtualService`         | 按业务域名或路径把流量路由到后端                                  |
+| `DestinationRule`        | 指定 Gateway -> Pod 的 TLS origination 方式                       |
+| `ServiceEntry`           | 让 Pod-to-Pod 可以继续用 `apiX.{team}.appdev.aibang` 访问内部服务 |
+| `Secret`                 | 持有 team wildcard 证书                                           |
+| `Deployment/StatefulSet` | 把证书挂给业务 Pod，应用监听 HTTPS                                |
 
 ---
 
@@ -440,11 +440,11 @@ spec:
 
 你至少要确定一种方式：
 
-| 方式 | 说明 |
-|---|---|
-| 内部 DNS 解析到 service IP | 最直接，但要做 DNS 管理 |
-| 借助 mesh 注册自定义 host | 更 mesh-native，但需要额外资源设计 |
-| 内部统一回到 gateway 再转发 | 最容易统一，但不是最短路径 |
+| 方式                        | 说明                               |
+| --------------------------- | ---------------------------------- |
+| 内部 DNS 解析到 service IP  | 最直接，但要做 DNS 管理            |
+| 借助 mesh 注册自定义 host   | 更 mesh-native，但需要额外资源设计 |
+| 内部统一回到 gateway 再转发 | 最容易统一，但不是最短路径         |
 
 如果你坚持“尽量直接到 Pod”，那么更推荐：
 
@@ -493,13 +493,13 @@ spec:
 
 ## 11. Key Risks
 
-| 风险 | 说明 |
-|---|---|
-| 证书分发面扩大 | Nginx、Gateway、Pod 都要拿到证书 |
-| 轮换复杂 | 任意一层未同步都会中断 |
+| 风险                    | 说明                                                   |
+| ----------------------- | ------------------------------------------------------ |
+| 证书分发面扩大          | Nginx、Gateway、Pod 都要拿到证书                       |
+| 轮换复杂                | 任意一层未同步都会中断                                 |
 | east-west host 解析复杂 | 不解决内部域名解析，就无法真正做到“Pod 之间同证书 TLS” |
-| 应用必须支持 HTTPS | Pod 自己必须终止 TLS |
-| 私钥暴露面积增加 | 必须有 Secret 生命周期管理与审计 |
+| 应用必须支持 HTTPS      | Pod 自己必须终止 TLS                                   |
+| 私钥暴露面积增加        | 必须有 Secret 生命周期管理与审计                       |
 
 ---
 
@@ -564,20 +564,20 @@ tls:
 
 ### 2. Gateway `PASSTHROUGH` 的直接好处
 
-| 好处 | 说明 |
-|---|---|
-| Gateway 不需要证书 | 不用在 Gateway 维护 `credentialName` |
-| 证书下沉到最终 Pod | 更符合“最终由 Pod 终止业务 TLS” |
-| 避免双重 TLS terminate | Gateway 不再解密再发起新 TLS |
-| 配置更薄 | Gateway 更像纯转发层 |
+| 好处                   | 说明                                 |
+| ---------------------- | ------------------------------------ |
+| Gateway 不需要证书     | 不用在 Gateway 维护 `credentialName` |
+| 证书下沉到最终 Pod     | 更符合“最终由 Pod 终止业务 TLS”      |
+| 避免双重 TLS terminate | Gateway 不再解密再发起新 TLS         |
+| 配置更薄               | Gateway 更像纯转发层                 |
 
 ### 3. 但它带来的限制也很直接
 
-| 限制 | 说明 |
-|---|---|
-| Gateway 看不到 HTTP 层 | 因为 TLS 没有解密 |
-| `VirtualService.http` 不能再用 | 这类 HTTP 规则依赖解密后的七层信息 |
-| 只能基于 SNI 做 TLS 路由 | 路由粒度会变粗 |
+| 限制                            | 说明                                  |
+| ------------------------------- | ------------------------------------- |
+| Gateway 看不到 HTTP 层          | 因为 TLS 没有解密                     |
+| `VirtualService.http` 不能再用  | 这类 HTTP 规则依赖解密后的七层信息    |
+| 只能基于 SNI 做 TLS 路由        | 路由粒度会变粗                        |
 | 不能在 Gateway 层做 HTTP 头操作 | 比如 header 注入、URI 改写、HTTP 重试 |
 
 ### 4. 这时候 VirtualService 应该怎么写
@@ -753,13 +753,13 @@ spec:
 
 ### 9. 最终判断
 
-| 问题 | 结论 |
-|---|---|
-| Gateway 能不能直接走 `PASSTHROUGH` | 可以 |
-| 这样 Gateway 会不会更简单 | 会 |
-| `VirtualService` 还能不能继续写 `destination.host = {svc}.{ns}.svc.cluster.local` | 可以 |
-| `VirtualService` 还能不能继续用 `http:` 规则 | 一般不行，应改为 `tls:` + `sniHosts` |
-| Pod-to-Pod 如果也要复用 `*.{team}.appdev.aibang` 证书，是否还能直接访问 `cluster.local` | 不建议，证书名会不匹配 |
+| 问题                                                                                    | 结论                                 |
+| --------------------------------------------------------------------------------------- | ------------------------------------ |
+| Gateway 能不能直接走 `PASSTHROUGH`                                                      | 可以                                 |
+| 这样 Gateway 会不会更简单                                                               | 会                                   |
+| `VirtualService` 还能不能继续写 `destination.host = {svc}.{ns}.svc.cluster.local`       | 可以                                 |
+| `VirtualService` 还能不能继续用 `http:` 规则                                            | 一般不行，应改为 `tls:` + `sniHosts` |
+| Pod-to-Pod 如果也要复用 `*.{team}.appdev.aibang` 证书，是否还能直接访问 `cluster.local` | 不建议，证书名会不匹配               |
 
 ### 10. 我的架构建议
 
@@ -782,8 +782,8 @@ spec:
 
 前面我写到：
 
-| 问题 | 结论 |
-|---|---|
+| 问题                                         | 结论                                 |
+| -------------------------------------------- | ------------------------------------ |
 | `VirtualService` 还能不能继续用 `http:` 规则 | 一般不行，应改为 `tls:` + `sniHosts` |
 
 你现在的问题是：
@@ -821,16 +821,16 @@ spec:
 
 这才是 `tls + sniHosts` 的核心坏处。
 
-| 失去的能力 | 为什么会失去 |
-|---|---|
-| 基于 URI/path 路由 | Gateway 没解密 HTTP，看不到 `/api1/xxx` |
-| 基于 Header 路由 | 看不到 HTTP Header |
-| Header 注入/改写 | 不能操作 HTTP 报文 |
-| URI rewrite | 不能改路径 |
-| 基于 Method 的控制 | 看不到 GET/POST |
-| HTTP 层重试/超时策略 | 只能做更粗粒度的 TLS 转发 |
-| 更细粒度的 canary 路由 | 做不了基于 HTTP 属性的灰度 |
-| 基于 JWT/HTTP 的入口鉴权 | 不能在这个 Gateway 层直接做 |
+| 失去的能力               | 为什么会失去                            |
+| ------------------------ | --------------------------------------- |
+| 基于 URI/path 路由       | Gateway 没解密 HTTP，看不到 `/api1/xxx` |
+| 基于 Header 路由         | 看不到 HTTP Header                      |
+| Header 注入/改写         | 不能操作 HTTP 报文                      |
+| URI rewrite              | 不能改路径                              |
+| 基于 Method 的控制       | 看不到 GET/POST                         |
+| HTTP 层重试/超时策略     | 只能做更粗粒度的 TLS 转发               |
+| 更细粒度的 canary 路由   | 做不了基于 HTTP 属性的灰度              |
+| 基于 JWT/HTTP 的入口鉴权 | 不能在这个 Gateway 层直接做             |
 
 换句话说：
 
@@ -856,11 +856,11 @@ Gateway 层能看到的主要就是：
 
 例如：
 
-| 场景 | 影响 |
-|---|---|
-| 一个域名基本只对应一个 API 或一个服务 | 影响很小 |
-| 你本来就不需要 path 分流 | 影响很小 |
-| 你不在 Gateway 层做 header rewrite | 影响很小 |
+| 场景                                   | 影响       |
+| -------------------------------------- | ---------- |
+| 一个域名基本只对应一个 API 或一个服务  | 影响很小   |
+| 你本来就不需要 path 分流               | 影响很小   |
+| 你不在 Gateway 层做 header rewrite     | 影响很小   |
 | 你接受把更多治理能力下沉到应用或其他层 | 影响可接受 |
 
 所以不能抽象地说：
@@ -928,12 +928,12 @@ Gateway 层能看到的主要就是：
 
 `tls + sniHosts` 最适合这种模型：
 
-| 模式 | 是否适合 |
-|---|---|
-| 一个 API 一个子域名 | 很适合 |
-| 一个服务一个子域名 | 很适合 |
-| 同 Host 下多 path 多后端 | 不适合 |
-| 大量依赖 HTTP 层治理 | 不适合 |
+| 模式                     | 是否适合 |
+| ------------------------ | -------- |
+| 一个 API 一个子域名      | 很适合   |
+| 一个服务一个子域名       | 很适合   |
+| 同 Host 下多 path 多后端 | 不适合   |
+| 大量依赖 HTTP 层治理     | 不适合   |
 
 这点其实和你现在的命名方式很契合：
 
@@ -949,13 +949,13 @@ Gateway 层能看到的主要就是：
 
 如果按你的目标来判断，`tls + sniHosts` 最大的正收益其实是：
 
-| 好处 | 说明 |
-|---|---|
-| TLS 语义更纯粹 | 业务 TLS 一直保持到 Pod |
-| Gateway 更轻 | 不做 HTTP terminate，不持有更多七层逻辑 |
-| 路由模型简单 | 基于 host/SNI 直接转发 |
+| 好处                              | 说明                                              |
+| --------------------------------- | ------------------------------------------------- |
+| TLS 语义更纯粹                    | 业务 TLS 一直保持到 Pod                           |
+| Gateway 更轻                      | 不做 HTTP terminate，不持有更多七层逻辑           |
+| 路由模型简单                      | 基于 host/SNI 直接转发                            |
 | 和 team wildcard 证书模型天然匹配 | `apiX.{team}.appdev.aibang` 本来就是 SNI 友好模型 |
-| 更符合“最终由 Pod 自己持证书”目标 | 终止点就在 Pod |
+| 更符合“最终由 Pod 自己持证书”目标 | 终止点就在 Pod                                    |
 
 ### 8. 什么时候不应该选它
 
@@ -984,13 +984,13 @@ Gateway 层能看到的主要就是：
 
 我对 `tls + sniHosts` 的判断是：
 
-| 项目 | 结论 |
-|---|---|
-| 它是不是缺点 | 不天然是缺点 |
-| 它有没有代价 | 有，主要是失去七层路由和治理能力 |
-| 这个代价对你当前是不是不可接受 | 不一定，甚至很可能可接受 |
-| 它是否更贴近“TLS 直达 Pod”目标 | 是 |
-| 你当前域名模型是否适合它 | 适合，因为 `{api}.{team}.appdev.aibang` 天然适合按 SNI 分流 |
+| 项目                           | 结论                                                        |
+| ------------------------------ | ----------------------------------------------------------- |
+| 它是不是缺点                   | 不天然是缺点                                                |
+| 它有没有代价                   | 有，主要是失去七层路由和治理能力                            |
+| 这个代价对你当前是不是不可接受 | 不一定，甚至很可能可接受                                    |
+| 它是否更贴近“TLS 直达 Pod”目标 | 是                                                          |
+| 你当前域名模型是否适合它       | 适合，因为 `{api}.{team}.appdev.aibang` 天然适合按 SNI 分流 |
 
 ### 10. 结论
 
@@ -1009,3 +1009,249 @@ Gateway 层能看到的主要就是：
 `你放弃了 Gateway 这一层的 HTTP 七层治理能力`
 
 如果你当前不依赖这些能力，那么这条路线其实是成立的，而且和你的目标高度一致。
+
+---
+
+## Gateway SIMPLE + VS
+
+你这里的问题可以整理成一句话：
+
+`我能不能让 Gateway 这一层也走加密，然后 VS 这一层也继续走加密？`
+
+先给直接结论：
+
+`可以做全链路加密，但不是通过 VirtualService 自己“配置加密”来实现的。`
+
+更准确地说：
+
+- `Gateway.tls.mode: SIMPLE` 表示 Gateway 终止入站 TLS
+- `VirtualService` 负责路由，不负责把到后端的连接变成 TLS
+- `DestinationRule.trafficPolicy.tls` 才决定 Gateway 到后端 service / Pod 是否继续加密
+
+也就是说，你想要的其实不是：
+
+`Gateway 也加密，VS 也加密`
+
+而是：
+
+`Gateway 终止 TLS，然后 Gateway 到后端再发起一个新的 TLS 连接`
+
+Gateway tls.mode: SIMPLE 本身就是“网关终止 TLS”
+
+这条链路是能成立的。
+
+### 1. 三个对象的职责要分清
+
+| 对象              | 主要职责                                   | 是否直接决定到后端是否继续 TLS |
+| ----------------- | ------------------------------------------ | ------------------------------ |
+| `Gateway`         | 接受进入网关的流量，决定是否在网关终止 TLS | 只决定客户端到 Gateway 这一跳  |
+| `VirtualService`  | 路由规则                                   | 不直接决定                     |
+| `DestinationRule` | 到目标服务的流量策略，包括 TLS origination | 是                             |
+
+所以如果你写的是：
+
+```yaml
+tls:
+  mode: SIMPLE
+  credentialName: wildcard-abjx-appdev-aibang-cert
+  minProtocolVersion: TLSV1_2
+```
+
+这只能说明：
+
+`客户端到 Gateway 这一跳是 HTTPS，并且在 Gateway 终止。`
+
+它并不自动表示：
+
+`Gateway -> backend Pod 这一跳也是 HTTPS`
+
+### 2. 你要的目标，正确表达方式是什么
+
+如果按你的目标来写，应该分成两步：
+
+1. `Gateway` 用 `SIMPLE` 终止入站 TLS
+2. `DestinationRule` 用 `tls.mode: SIMPLE` 再把 Gateway 到后端的连接加密起来
+
+这样才是完整的：
+
+`Client -> Gateway = TLS`
+
+以及：
+
+`Gateway -> Pod = TLS`
+
+### 3. 那 VirtualService 在这里起什么作用
+
+`VirtualService` 在这个模式下仍然是有价值的，只是它负责的是路由，不是加密。
+
+例如：
+
+```yaml
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: api1-abjx-vs
+  namespace: abjx-int
+spec:
+  gateways:
+  - runtime-team-gateway
+  hosts:
+  - api1.abjx.appdev.aibang
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: api1-backend.abjx-int.svc.cluster.local
+        port:
+          number: 8443
+```
+
+这里它做的是：
+
+- Gateway 终止 TLS 之后
+- 基于 Host / URI 选路
+- 把流量送到 `api1-backend.abjx-int.svc.cluster.local:8443`
+
+真正让这一跳继续变成 TLS 的，是下面这个 `DestinationRule`：
+
+```yaml
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: api1-backend-dr
+  namespace: abjx-int
+spec:
+  host: api1-backend.abjx-int.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: SIMPLE
+      sni: api1.abjx.appdev.aibang
+```
+
+### 4. 这种模式的真实效果
+
+如果你采用：
+
+- `Gateway.tls.mode = SIMPLE`
+- `VirtualService.http`
+- `DestinationRule.tls.mode = SIMPLE`
+
+那么实际链路就是：
+
+```mermaid
+flowchart LR
+    A["Client"] -->|TLS| B["Gateway terminate TLS"]
+    B -->|HTTP route by VS| C["Gateway selects backend"]
+    C -->|new TLS by DR| D["Backend Pod terminate TLS"]
+```
+
+也就是说：
+
+- 第一段 TLS：Client -> Gateway
+- 第二段 TLS：Gateway -> Pod
+
+这依然是全链路加密，但不是“同一条 TLS 会话一路穿过去”，而是：
+
+`两段 TLS`
+
+### 5. 这种模式的好处
+
+如果你问“那我为什么不直接这样做”，这条路的优势很明确：
+
+| 好处                                        | 说明                                   |
+| ------------------------------------------- | -------------------------------------- |
+| Pod 最终仍然是加密的                        | 满足你的硬约束                         |
+| 还能保留 `VirtualService.http` 能力         | path、header、URI 规则都还能用         |
+| Gateway 层可以继续做七层治理                | 比 `PASSTHROUGH + tls+sniHosts` 更灵活 |
+| 后端证书仍然可以是 `*.{team}.appdev.aibang` | 只要 DR 的 `sni` 保持业务域名          |
+
+### 6. 这种模式的代价
+
+但它也有明确代价：
+
+| 代价                         | 说明                                  |
+| ---------------------------- | ------------------------------------- |
+| Gateway 必须终止 TLS         | Gateway 需要证书和私钥                |
+| Gateway 到后端要再发起新 TLS | 配置会比 passthrough 多一层           |
+| 证书校验要更仔细             | 特别是 `sni`、CA、SAN 是否一致        |
+| 不是单条 TLS 直达 Pod        | 而是网关 terminate 后重新 origination |
+
+所以如果你最在意的是：
+
+`Pod 最终必须加密`
+
+它是满足的。
+
+但如果你最在意的是：
+
+`TLS 会话本身必须一路穿透到 Pod，不在 Gateway 解密`
+
+那它就不满足。
+
+### 7. 它和 `tls + sniHosts` 的核心区别
+
+| 模式                                  | Gateway 是否解密 | VS 类型 | 到 Pod 是否加密 | 是否保留 HTTP 七层能力 |
+| ------------------------------------- | ---------------- | ------- | --------------- | ---------------------- |
+| `PASSTHROUGH + tls + sniHosts`        | 否               | `tls`   | 是              | 否                     |
+| `SIMPLE + http + DestinationRule.tls` | 是               | `http`  | 是              | 是                     |
+
+这就是你当前其实真正要选的两条路。
+
+### 8. 所以你能不能“Gateway 里面也走加密，然后到 VS 里面也走加密”
+
+如果把这句话翻译成标准 Istio 语义，答案是：
+
+`可以，但第二段加密不是 VS 负责，而是 DestinationRule 负责。`
+
+更准确的组合应该写成：
+
+- `Gateway.tls.mode: SIMPLE`
+- `VirtualService.http`
+- `DestinationRule.tls.mode: SIMPLE`
+
+### 9. 在你的目标下，我怎么判断
+
+如果你的核心目标排序是：
+
+1. Pod 最终必须加密
+2. 又想尽量保留 path / HTTP 路由能力
+
+那我更建议你优先考虑这一组：
+
+`Gateway SIMPLE + VirtualService.http + DestinationRule.tls`
+
+如果你的核心目标排序是：
+
+1. TLS 尽量不在 Gateway 解密
+2. Pod 自己终止 TLS
+3. 可以放弃 HTTP 七层能力
+
+那才更适合：
+
+`Gateway PASSTHROUGH + VirtualService.tls + sniHosts`
+
+### 10. 最终结论
+
+| 问题                                      | 结论                               |
+| ----------------------------------------- | ---------------------------------- |
+| Gateway 能不能用 `tls.mode: SIMPLE`       | 可以                               |
+| 这样 Pod 最终还能不能保持加密             | 可以，只要补 `DestinationRule.tls` |
+| VirtualService 自己是不是“负责第二段加密” | 不是                               |
+| 这条路能不能继续用 `http:` 规则           | 可以                               |
+| 这条路是不是比 `tls + sniHosts` 更灵活    | 是                                 |
+| 这条路是不是保留了 Pod 最终加密           | 是                                 |
+
+
+
+你的这条链路就是：
+Client -> Gateway 先做一次 TLS 终止，然后 Gateway -> 后端 Pod 再重新发起一段新的 TLS 连接。
+
+在 Istio 资源模型里，这通常意味着你会多引入一个 DestinationRule 来控制第二段 TLS。职责可以简单记成：
+
+Gateway：终止第一段 TLS
+VirtualService：决定流量路由到哪个后端
+DestinationRule：决定路由到后端时是否继续用 TLS，以及用什么 SNI
+所以如果你保留 Gateway.tls.mode: SIMPLE，又希望 Pod 最终仍然加密，基本上就要加 DestinationRule。
+唯一的例外是你完全依赖 mesh 自动 mTLS
