@@ -278,6 +278,18 @@ print(data.get("response", "").strip())
   printf '%s' "$msg"
 }
 
+# Return 0 if the first line of a commit message is a valid subject, 1 otherwise.
+is_valid_subject() {
+  local msg="$1"
+  local subject
+  subject=$(printf '%s' "$msg" | head -1)
+  # Reject: empty, only dots/spaces, or suspiciously short (< 10 chars)
+  [[ -z "$subject" ]]                    && return 1
+  [[ "$subject" =~ ^[[:space:].]+$ ]]    && return 1
+  [[ ${#subject} -lt 10 ]]              && return 1
+  return 0
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 while [[ $# -gt 0 ]]; do
@@ -446,8 +458,12 @@ if ollama_is_available; then
   if AI_MSG=$(ollama_generate_commit_msg \
         "$USER_HINT" "$DIFF_TEXT" "$STAGED_FILES" \
         "$INSERTIONS" "$DELETIONS" "$BRANCH"); then
-    FINAL_MESSAGE="$AI_MSG"
-    ok "AI message ready."
+    if is_valid_subject "$AI_MSG"; then
+      FINAL_MESSAGE="$AI_MSG"
+      ok "AI message ready."
+    else
+      warn "AI subject looks invalid (got: '$(printf '%s' "$AI_MSG" | head -1)'). Using structured fallback."
+    fi
   else
     warn "Ollama returned an empty or invalid response. Using structured fallback."
   fi
