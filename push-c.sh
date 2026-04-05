@@ -97,8 +97,53 @@ add_unique() {
 
 # ── Commit message helpers ────────────────────────────────────────────────────
 
+# Derive a short topic string from a newline-separated file list.
+# Strategy: collect unique top-level dirs + unique basenames (no ext), take up to 3.
+derive_topic_from_files() {
+  local files="$1"
+  local parts=()
+  local seen_dirs=()
+
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    local dir
+    dir=$(dirname "$f")
+    local base
+    base=$(basename "$f")
+    base="${base%.*}"   # strip extension
+
+    # Collect unique top-level dirs (skip '.')
+    local top_dir
+    top_dir=$(printf '%s' "$dir" | cut -d'/' -f1)
+    if [[ "$top_dir" != "." ]]; then
+      local already=0
+      local d
+      for d in "${seen_dirs[@]:-}"; do [[ "$d" == "$top_dir" ]] && already=1 && break; done
+      if [[ $already -eq 0 ]]; then
+        seen_dirs+=("$top_dir")
+        parts+=("$top_dir")
+      fi
+    else
+      # Root-level file: use basename
+      parts+=("$base")
+    fi
+  done <<< "$files"
+
+  # Take at most 3 parts, join with ', '
+  local result=""
+  local count=0
+  local p
+  for p in "${parts[@]:-}"; do
+    [[ $count -ge 3 ]] && break
+    [[ -n "$result" ]] && result+=", "
+    result+="$p"
+    count=$((count + 1))
+  done
+  printf '%s' "$result"
+}
+
 # Build a structured fallback commit message (no AI required).
-# Includes: conventional commit title + blank line + file list + stats.
+# Includes: conventional commit title derived from file paths + body with stats + file list.
 build_fallback_message() {
   local hint="$1"
   local branch="$2"
@@ -111,10 +156,27 @@ build_fallback_message() {
     title="${hint}"
     # Ensure it starts with a conventional prefix if not already
     if ! printf '%s' "$title" | grep -qE '^(feat|fix|docs|chore|refactor|style|test|ci|build|perf|revert):'; then
-      title="chore: ${title}"
+      title="docs: ${title}"
     fi
   else
-    title="chore: sync ${branch} $(date '+%Y-%m-%d %H:%M')"
+    # Derive topic from changed files for a meaningful subject line
+    local topic
+    topic=$(derive_topic_from_files "$staged_files")
+    local file_count
+    file_count=$(printf '%s' "$staged_files" | grep -c '.' || echo 0)
+    if [[ -n "$topic" ]]; then
+      if [[ $file_count -eq 1 ]]; then
+        # Single file: use full basename (no ext) as subject
+        local single_base
+        single_base=$(basename "$(printf '%s' "$staged_files" | head -1)")
+        single_base="${single_base%.*}"
+        title="docs: update ${single_base}"
+      else
+        title="docs: update ${topic} (${file_count} files)"
+      fi
+    else
+      title="chore: sync ${branch} $(date '+%Y-%m-%d %H:%M')"
+    fi
   fi
 
   # Truncate title to 72 chars
@@ -170,11 +232,14 @@ ollama_generate_commit_msg() {
   prompt="You are a git commit message writer. Analyze the diff and write an informative commit message.
 
 Rules:
-- Line 1: conventional commit format, max 72 chars (feat/fix/docs/chore/refactor/style/test/ci/perf: ...)
-- Line 2: BLANK (empty line)
-- Lines 3+: body with 2-4 bullet points explaining WHAT changed and WHY
-- Last section: include a 'Changed files:' block listing the files
-- Output ONLY the commit message text, no markdown fences, no explanation
+- Line 1 (subject): conventional commit type + colon + SPECIFIC description of what changed, max 72 chars
+  * The subject MUST mention the actual files, directories, or topic (e.g. 'docs: add TLS cross-project FQDN guide' or 'fix: nginx SNI passthrough for wildcard certs')
+  * NEVER write a vague subject like 'update files', 'sync branch', 'make changes', or repeat the branch name
+  * Types: feat/fix/docs/chore/refactor/style/test/ci/perf/revert
+- Line 2: BLANK (empty line, mandatory)
+- Lines 3+: 2-4 bullet points (start with '- ') explaining WHAT changed and WHY, be specific
+- After bullets, add a blank line then 'Changed files:' block listing all files
+- Output ONLY the commit message text, no markdown fences, no preamble, no explanation
 
 Context:
 Branch: ${branch}
@@ -184,6 +249,10 @@ Changed files:
 ${file_list}
 Diff:
 ${diff_text}"
+
+  # Few-shot example embedded as system note (not shown to git, just guides model)
+  # Good subject: "docs: add cross-project FQDN TLS best practices guide"
+  # Bad subject:  "feat: Push Csh to main branch" / "chore: sync main"
 
   local payload
   payload=$(printf '{"model":"%s","prompt":%s,"stream":false,"options":{"temperature":0.3,"num_predict":350}}' \
