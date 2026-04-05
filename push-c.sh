@@ -232,18 +232,15 @@ ollama_generate_commit_msg() {
   [[ -n "$hint" ]] && hint_line="User summary: ${hint}"$'\n'
 
   local prompt
-  prompt="You are a git commit message writer. Write a concise, informative git commit message.
+  prompt="You are a git commit message writer. Write ONLY the BODY of a git commit message.
 
 Rules:
-- Line 1 (subject): conventional commit type + colon + specific description, max 72 chars
-  * Types: feat/fix/docs/chore/refactor/style/test/ci/perf/revert
-  * MUST be useful in page previews where only the first line is visible
-  * MUST reflect actual content changed (files, topic, purpose)
-  * NEVER use vague phrases like 'update files', 'sync branch', 'git commit message', 'changes', or the branch name
-- Line 2: BLANK (empty line, mandatory)
-- Lines 3+: 2-3 bullet points explaining what changed and why
+- DO NOT write the subject line
+- Output 2-4 bullet points only
+- Be specific about what changed and why
+- Keep each bullet short and readable
 - End with a blank line then 'Changed files:' listing all files
-- Output ONLY the commit message, no fences, no explanation
+- Output ONLY the body text, no title, no fences, no explanation
 
 ${hint_line}Branch: ${branch}  Stats: +${insertions}/-${deletions} lines
 Changed files:
@@ -283,30 +280,38 @@ print(data.get("response", "").strip())
   printf '%s' "$msg"
 }
 
-# Return 0 if the first line of a commit message is a valid subject, 1 otherwise.
-is_valid_subject() {
-  local msg="$1"
-  local subject
-  subject=$(printf '%s' "$msg" | head -1)
-  # Reject: empty, only dots/spaces, or suspiciously short (< 10 chars)
-  [[ -z "$subject" ]]                    && return 1
-  [[ "$subject" =~ ^[[:space:].]+$ ]]    && return 1
-  [[ ${#subject} -lt 10 ]]              && return 1
-  printf '%s' "$subject" | grep -qiE '^(git commit message|commit message|update files|sync branch|changes)$' && return 1
-  printf '%s' "$subject" | grep -qiE '^[[:space:]]*(docs|chore|feat|fix|refactor|style|test|ci|build|perf|revert):[[:space:]]*(update files|changes|misc|miscellaneous|update|sync)$' && return 1
-  return 0
+sanitize_ai_body() {
+  local body="$1"
+  body=$(printf '%s\n' "$body" | sed '/^[[:space:]]*$/N;/^\n$/D')
+  body=$(printf '%s\n' "$body" | sed '/^[[:space:]]*git commit message[[:space:]]*$/Id')
+  printf '%s' "$body"
 }
 
-merge_subject_with_body() {
-  local preferred_subject="$1"
-  local msg="$2"
-  local body
-  body=$(printf '%s\n' "$msg" | sed '1d')
+compose_final_message() {
+  local subject="$1"
+  local ai_body="$2"
+  local branch="$3"
+  local staged_files="$4"
+  local insertions="$5"
+  local deletions="$6"
 
-  printf '%s\n' "$preferred_subject"
-  if [[ -n "${body//[[:space:]]/}" ]]; then
-    printf '\n%s\n' "$body"
+  local final_body=""
+  ai_body=$(sanitize_ai_body "$ai_body")
+
+  if [[ -n "${ai_body//[[:space:]]/}" ]]; then
+    final_body="$ai_body"
+  else
+    final_body="- Branch: ${branch}
+- Stats: +${insertions}/-${deletions} lines
+
+Changed files:"
+    while IFS= read -r f; do
+      [[ -n "$f" ]] && final_body="${final_body}
+  - ${f}"
+    done <<< "$staged_files"
   fi
+
+  printf '%s\n\n%s\n' "$subject" "$final_body"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -469,6 +474,8 @@ printf '\n%sGenerating commit message...%s\n' "$C_BOLD" "$C_RESET"
 
 USER_HINT="${COMMIT_MESSAGE:-}"
 FINAL_MESSAGE=""
+SUBJECT_LINE=$(derive_subject_line "$USER_HINT" "$BRANCH" "$STAGED_FILES")
+AI_BODY=""
 
 if ollama_is_available; then
   info "Ollama reachable → asking ${ENHANCE_MODEL} to summarise the diff..."
@@ -477,15 +484,8 @@ if ollama_is_available; then
   if AI_MSG=$(ollama_generate_commit_msg \
         "$USER_HINT" "$DIFF_TEXT" "$STAGED_FILES" \
         "$INSERTIONS" "$DELETIONS" "$BRANCH"); then
-    if is_valid_subject "$AI_MSG"; then
-      FINAL_MESSAGE="$AI_MSG"
-      ok "AI message ready."
-    else
-      warn "AI subject looks invalid (got: '$(printf '%s' "$AI_MSG" | head -1)'). Using structured fallback."
-      FINAL_MESSAGE=$(merge_subject_with_body \
-        "$(derive_subject_line "$USER_HINT" "$BRANCH" "$STAGED_FILES")" \
-        "$AI_MSG")
-    fi
+    AI_BODY="$AI_MSG"
+    ok "AI body ready."
   else
     warn "Ollama returned an empty or invalid response. Using structured fallback."
   fi
@@ -493,11 +493,13 @@ else
   warn "Ollama not reachable at ${OLLAMA_HOST}. Using structured fallback."
 fi
 
-# Fallback: structured message with file list and stats
-if [[ -z "$FINAL_MESSAGE" ]]; then
-  FINAL_MESSAGE=$(build_fallback_message \
-    "$USER_HINT" "$BRANCH" "$STAGED_FILES" "$INSERTIONS" "$DELETIONS")
-fi
+FINAL_MESSAGE=$(compose_final_message \
+  "$SUBJECT_LINE" \
+  "$AI_BODY" \
+  "$BRANCH" \
+  "$STAGED_FILES" \
+  "$INSERTIONS" \
+  "$DELETIONS")
 # ─────────────────────────────────────────────────────────────────────────────
 
 printf '\n%s--- commit message ---%s\n' "$C_CYAN" "$C_RESET"
