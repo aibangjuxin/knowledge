@@ -218,11 +218,6 @@ ollama_generate_commit_msg() {
 ... (diff truncated)"
   fi
 
-  local hint_section=""
-  if [[ -n "$hint" ]]; then
-    hint_section="User hint: ${hint}"$'\n'
-  fi
-
   # Build file list for prompt
   local file_list=""
   while IFS= read -r f; do
@@ -230,30 +225,58 @@ ollama_generate_commit_msg() {
   done <<< "$staged_files"
 
   local prompt
-  prompt="You are a git commit message writer. Analyze the diff and write an informative commit message.
+  if [[ -n "$hint" ]]; then
+    # ── HINT MODE: user supplied -m, AI refines/summarizes it ─────────────────
+    # The hint is the PRIMARY content; diff is supplementary context only.
+    prompt="You are a git commit message writer. The user has provided a commit message.
+Your job is to rewrite it into a clean, conventional commit message.
+
+Rules:
+- Line 1 (subject): keep the user's core intent, rewrite as conventional commit format,
+  max 72 chars. Use the most appropriate type: feat/fix/docs/chore/refactor/style/test/ci/perf/revert
+  * Preserve the specific topic/content from the user's message
+  * Do NOT change the meaning, just clean up the format and wording
+- Line 2: BLANK (empty line, mandatory)
+- Lines 3+: Expand the user's message into 2-3 bullet points with specific detail
+  * Use the diff context below to add specific details (files changed, what exactly changed)
+- After bullets, add a blank line then 'Changed files:' block
+- Output ONLY the commit message, no markdown fences, no preamble
+
+User's message to refine:
+${hint}
+
+Context (for expanding body detail only):
+Branch: ${branch}  Stats: +${insertions}/-${deletions} lines
+Changed files:
+${file_list}
+Diff (supplementary):
+${diff_text}"
+  else
+    # ── DIFF MODE: no hint, AI analyzes the diff to write the message ──────────
+    prompt="You are a git commit message writer. Analyze the diff and write an informative commit message.
 
 Rules:
 - Line 1 (subject): conventional commit type + colon + SPECIFIC description of what changed, max 72 chars
-  * The subject MUST mention the actual files, directories, or topic (e.g. 'docs: add TLS cross-project FQDN guide' or 'fix: nginx SNI passthrough for wildcard certs')
-  * NEVER write a vague subject like 'update files', 'sync branch', 'make changes', or repeat the branch name
+  * The subject MUST mention the actual files, directories, or topic
+  * NEVER write a vague subject like 'update files', 'sync branch', or repeat the branch name
   * Types: feat/fix/docs/chore/refactor/style/test/ci/perf/revert
 - Line 2: BLANK (empty line, mandatory)
 - Lines 3+: 2-4 bullet points (start with '- ') explaining WHAT changed and WHY, be specific
 - After bullets, add a blank line then 'Changed files:' block listing all files
-- Output ONLY the commit message text, no markdown fences, no preamble, no explanation
+- Output ONLY the commit message text, no markdown fences, no preamble
 
 Context:
 Branch: ${branch}
 Stats: +${insertions}/-${deletions} lines
-${hint_section}
 Changed files:
 ${file_list}
 Diff:
 ${diff_text}"
+  fi
 
-  # Few-shot example embedded as system note (not shown to git, just guides model)
-  # Good subject: "docs: add cross-project FQDN TLS best practices guide"
-  # Bad subject:  "feat: Push Csh to main branch" / "chore: sync main"
+  # Examples (for reference):
+  # Good: "docs: add TLS cross-project FQDN best practices guide"
+  # Bad:  "feat: Push Csh to main branch" / "chore: sync main"
 
   local payload
   payload=$(printf '{"model":"%s","prompt":%s,"stream":false,"options":{"temperature":0.3,"num_predict":350}}' \
