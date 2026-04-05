@@ -1,5 +1,25 @@
 # Current FQDN Status
 
+## Requirements
+- Tenant Project 对外必须继续暴露业务域名，如 `components1.{team}.appdev.aibang`。
+- Tenant Project 不直接承载最终入口，而是通过 `CNAME` 将业务域名指向 Master Project 的统一入口域名，如 `{env}-{region}.gcp.aliyun.aibang`。
+- Master Project 必须提供一个平台可控、可承载、可统一治理的独立入口域名，作为所有 Tenant CNAME 的收敛目标。
+- Master Project 入口前或内部必须保留 Nginx，且 Nginx 需要按 `*.{team}.appdev.aibang` 做 team 级域名侦听。
+- Master Project 返回的证书必须覆盖业务域名；不能只覆盖 `{env}-{region}.gcp.aliyun.aibang`。
+- TLS 语义必须保持业务域名不变：客户端访问时的 Host/SNI 仍应是 `components1.{team}.appdev.aibang`，不能因为 CNAME 改成入口域名。
+- Nginx 向上游转发时必须保留原始业务域名语义，包括 Host 不改写、SNI 继续传递。
+- 平台需要通过 Onboarding 显式或隐式登记 team、业务域名、CNAME 目标、Nginx listener、证书绑定、上游路由和 SNI 规则。
+- Tenant 侧不应感知 Master Project 的真实入口 IP 或底层入口实现；Tenant 上线动作应尽量收敛成配置 CNAME。
+- 需要验证 DNS CNAME、生效证书、SNI 保持和 Onboarding 注册完整性，而不只是验证“网络可达”。
+
+## Target
+把当前 Cross Project 的 FQDN 实现方式讲清楚：Tenant 负责业务域名和 CNAME，Master Project 负责统一入口承载，Master Nginx 负责 team 级 TLS 身份和后续转发语义保持。最终要达成的认知是，`CNAME` 只是把流量收敛到平台入口，不改变业务域名身份；Tenant 关心业务域名，平台关心真实入口承载。
+
+## Notes
+- Inferred: 当前真正持有 `*.{team}.appdev.aibang` TLS 身份、并作为第一个 team-aware TLS 终止点的，是 Master Project 的 Nginx。
+- Inferred: `{env}-{region}.gcp.aliyun.aibang` 的主要作用是平台入口承载和 CNAME 收敛目标，而不是业务对外身份。
+- Missing detail: 文档是“现状推演”，不是最终已验证架构；其中 listener、证书和上游 SNI 保持仍需用实际配置与链路验证确认。
+
 > 本文基于你补充的背景做“现状推演”，目标是把当前实现方式讲清楚，而不是给出理想态设计。这里重点回答：当 Tenant Project 的业务域名通过 CNAME 指向 Master Project 的统一入口域名时，当前这套 FQDN、SNI、SAN 和 Nginx 侦听关系大概率是怎样工作的。
 
 ---
@@ -181,12 +201,12 @@ https://components1.{team}.appdev.aibang
 
 推演下来，当前各层角色大概率是：
 
-| 层 | 当前角色 |
-| --- | --- |
-| Tenant Project | 负责对外暴露业务域名和 DNS CNAME |
+| 层                      | 当前角色                                |
+| ----------------------- | --------------------------------------- |
+| Tenant Project          | 负责对外暴露业务域名和 DNS CNAME        |
 | Master Project 入口域名 | 平台统一入口承载名，也是 CNAME 收敛目标 |
-| Master Project Nginx | 真正的 team 域名监听点 |
-| Gateway / Backend | 接收来自 Nginx 的业务域名语义 |
+| Master Project Nginx    | 真正的 team 域名监听点                  |
+| Gateway / Backend       | 接收来自 Nginx 的业务域名语义           |
 
 ### 3.2 当前实现里，为什么 Nginx 去不掉
 
@@ -286,13 +306,13 @@ sequenceDiagram
 
 在你描述的实现里，Master Project 的 Nginx 需要同时满足：
 
-| 条件 | 原因 |
-| --- | --- |
-| `server_name` 覆盖 `*.{team}.appdev.aibang` | 要识别业务域名 |
-| 挂载 team wildcard 证书 | 要让客户端对业务域名校验通过 |
-| `proxy_set_header Host $host` | 要保留原始业务 Host |
-| `proxy_ssl_server_name on` | 到上游时要带 SNI |
-| `proxy_ssl_name $host` | 到上游时继续带业务域名 |
+| 条件                                        | 原因                         |
+| ------------------------------------------- | ---------------------------- |
+| `server_name` 覆盖 `*.{team}.appdev.aibang` | 要识别业务域名               |
+| 挂载 team wildcard 证书                     | 要让客户端对业务域名校验通过 |
+| `proxy_set_header Host $host`               | 要保留原始业务 Host          |
+| `proxy_ssl_server_name on`                  | 到上游时要带 SNI             |
+| `proxy_ssl_name $host`                      | 到上游时继续带业务域名       |
 
 这和你前面文档里给出的模式是一致的：
 
@@ -343,15 +363,15 @@ server {
 
 如果按你的描述反推，当前 Onboarding 很可能已经隐式或显式在登记这些信息：
 
-| 类别 | 当前可能登记的内容 |
-| --- | --- |
-| Team | `team` 标识 |
-| 业务域名 | `components1.{team}.appdev.aibang` |
-| CNAME 目标 | `{env}-{region}.gcp.aliyun.aibang` |
-| Master listener | 对应 team 的 Nginx 侦听规则 |
-| 证书 | `*.{team}.appdev.aibang` 证书绑定 |
-| 上游路由 | team -> gateway / backend 关系 |
-| SNI 规则 | 上游继续使用业务域名 |
+| 类别            | 当前可能登记的内容                 |
+| --------------- | ---------------------------------- |
+| Team            | `team` 标识                        |
+| 业务域名        | `components1.{team}.appdev.aibang` |
+| CNAME 目标      | `{env}-{region}.gcp.aliyun.aibang` |
+| Master listener | 对应 team 的 Nginx 侦听规则        |
+| 证书            | `*.{team}.appdev.aibang` 证书绑定  |
+| 上游路由        | team -> gateway / backend 关系     |
+| SNI 规则        | 上游继续使用业务域名               |
 
 换句话说，现在的 Onboarding 本质上不只是“开通域名”，而是在做：
 
@@ -414,12 +434,12 @@ openssl s_client -connect <MASTER_ENTRY_IP>:443 </dev/null 2>/dev/null \
 
 ### 5.3 如果当前实现有问题，最可能出在哪
 
-| 现象 | 高概率问题 |
-| --- | --- |
-| DNS 正常，但 HTTPS 证书不对 | Master Nginx 没挂 team 证书 |
-| 带域名访问失败，但直接访问入口域名成功 | SAN 只覆盖入口域名，没有覆盖业务域名 |
-| 入口层正常，但上游返回错证书 | Nginx 没保留原始 SNI |
-| 某些 Team 正常，某些 Team 异常 | Onboarding listener / cert / route 注册不完整 |
+| 现象                                   | 高概率问题                                    |
+| -------------------------------------- | --------------------------------------------- |
+| DNS 正常，但 HTTPS 证书不对            | Master Nginx 没挂 team 证书                   |
+| 带域名访问失败，但直接访问入口域名成功 | SAN 只覆盖入口域名，没有覆盖业务域名          |
+| 入口层正常，但上游返回错证书           | Nginx 没保留原始 SNI                          |
+| 某些 Team 正常，某些 Team 异常         | Onboarding listener / cert / route 注册不完整 |
 
 ---
 
