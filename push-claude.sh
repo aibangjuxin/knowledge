@@ -140,7 +140,7 @@ ollama_generate_commit_msg() {
 
 Rules:
 - First line: conventional commit format, max 72 chars (e.g. feat: ..., fix: ..., chore: ..., refactor: ...)
-- Optionally add 1-3 bullet lines after a blank line for key details
+- Add a blank line, then 2-4 short bullet lines when there is meaningful detail
 - Be specific about what changed, not just \"update files\"
 - Output ONLY the commit message, no explanation, no markdown fences
 
@@ -172,6 +172,65 @@ print(data.get("response", "").strip())
 
   [[ -n "$msg" ]] || return 1
   printf '%s' "$msg"
+}
+
+compose_commit_message() {
+  local base_message="$1"
+  local hint="$2"
+  local branch="$3"
+  local updated_count="$4"
+  local rule_count="$5"
+  shift 5
+  local files=("$@")
+
+  local subject body line
+  subject=$(printf '%s\n' "$base_message" | sed -n '1p')
+  body=$(printf '%s\n' "$base_message" | sed '1d')
+
+  subject=${subject:-"chore: sync ${branch}"}
+
+  local extra_lines=()
+
+  if [[ -n "$hint" ]]; then
+    extra_lines+=("- Context: $hint")
+  fi
+
+  if [[ ${#files[@]} -gt 0 ]]; then
+    local max_files=8
+    local i
+    local touched=()
+    local touched_joined
+    for ((i=0; i<${#files[@]} && i<max_files; i++)); do
+      touched+=("${files[$i]}")
+    done
+
+    touched_joined=$(printf '%s, ' "${touched[@]}")
+    touched_joined=${touched_joined%, }
+    extra_lines+=("- Touched files: ${touched_joined}")
+
+    if [[ ${#files[@]} -gt $max_files ]]; then
+      extra_lines+=("- Additional files: $((${#files[@]} - max_files)) more")
+    fi
+  fi
+
+  extra_lines+=("- Replacement rules: ${rule_count}; files updated: ${updated_count}")
+
+  printf '%s\n' "$subject"
+
+  if [[ -n "${body//[[:space:]]/}" || ${#extra_lines[@]} -gt 0 ]]; then
+    printf '\n'
+  fi
+
+  if [[ -n "${body//[[:space:]]/}" ]]; then
+    printf '%s\n' "$body"
+    if [[ ${#extra_lines[@]} -gt 0 ]]; then
+      printf '\n'
+    fi
+  fi
+
+  for line in "${extra_lines[@]}"; do
+    printf '%s\n' "$line"
+  done
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -356,10 +415,26 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 
 printf '\n%sStaged files%s\n' "$C_BOLD" "$C_RESET"
-git diff --cached --name-only | sed 's/^/  - /'
+mapfile -t STAGED_FILES < <(git diff --cached --name-only)
+printf '%s\n' "${STAGED_FILES[@]}" | sed 's/^/  - /'
 
-log "Commit message: $FINAL_MESSAGE"
-git commit -m "$FINAL_MESSAGE"
+FINAL_MESSAGE=$(compose_commit_message \
+  "$FINAL_MESSAGE" \
+  "$USER_HINT" \
+  "$BRANCH" \
+  "$UPDATED" \
+  "$RULE_COUNT" \
+  "${STAGED_FILES[@]}")
+
+printf '\n%b--- final commit message ---%b\n' "$C_CYAN" "$C_RESET"
+printf '%s\n' "$FINAL_MESSAGE"
+printf '%b----------------------------%b\n' "$C_CYAN" "$C_RESET"
+
+COMMIT_FILE=$(mktemp "${TMPDIR:-/tmp}/commit-msg.XXXXXX")
+trap 'rm -f "$SED_SCRIPT" "$COMMIT_FILE"' EXIT
+printf '%s\n' "$FINAL_MESSAGE" > "$COMMIT_FILE"
+
+git commit -F "$COMMIT_FILE"
 
 if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
   git push
