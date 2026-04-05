@@ -143,6 +143,40 @@ derive_topic_from_files() {
   printf '%s' "$result"
 }
 
+derive_subject_line() {
+  local hint="$1"
+  local branch="$2"
+  local staged_files="$3"
+
+  local title topic file_count first_file first_base
+  file_count=$(printf '%s' "$staged_files" | grep -c '.' || echo 0)
+
+  if [[ -n "$hint" ]]; then
+    title="$hint"
+    if ! printf '%s' "$title" | grep -qiE '^(feat|fix|docs|chore|refactor|style|test|ci|build|perf|revert):'; then
+      title="docs: ${title}"
+    fi
+  else
+    topic=$(derive_topic_from_files "$staged_files")
+    if [[ $file_count -eq 1 ]]; then
+      first_file=$(printf '%s' "$staged_files" | head -1)
+      first_base=$(basename "$first_file")
+      first_base="${first_base%.*}"
+      title="docs: update ${first_base}"
+    elif [[ -n "$topic" ]]; then
+      title="docs: update ${topic}"
+    else
+      title="chore: sync ${branch}"
+    fi
+  fi
+
+  if [[ ${#title} -gt 72 ]]; then
+    title="${title:0:69}..."
+  fi
+
+  printf '%s' "$title"
+}
+
 # Build a structured fallback commit message (no AI required).
 # Includes: conventional commit title derived from file paths + body with stats + file list.
 build_fallback_message() {
@@ -153,37 +187,7 @@ build_fallback_message() {
   local deletions="$5"
 
   local title
-  if [[ -n "$hint" ]]; then
-    title="${hint}"
-    # Ensure it starts with a conventional prefix if not already
-    if ! printf '%s' "$title" | grep -qE '^(feat|fix|docs|chore|refactor|style|test|ci|build|perf|revert):'; then
-      title="docs: ${title}"
-    fi
-  else
-    # Derive topic from changed files for a meaningful subject line
-    local topic
-    topic=$(derive_topic_from_files "$staged_files")
-    local file_count
-    file_count=$(printf '%s' "$staged_files" | grep -c '.' || echo 0)
-    if [[ -n "$topic" ]]; then
-      if [[ $file_count -eq 1 ]]; then
-        # Single file: use full basename (no ext) as subject
-        local single_base
-        single_base=$(basename "$(printf '%s' "$staged_files" | head -1)")
-        single_base="${single_base%.*}"
-        title="docs: update ${single_base}"
-      else
-        title="docs: update ${topic} (${file_count} files)"
-      fi
-    else
-      title="chore: sync ${branch} $(date '+%Y-%m-%d %H:%M')"
-    fi
-  fi
-
-  # Truncate title to 72 chars
-  if [[ ${#title} -gt 72 ]]; then
-    title="${title:0:69}..."
-  fi
+  title=$(derive_subject_line "$hint" "$branch" "$staged_files")
 
   local body=""
   body+="Branch: ${branch}  Date: $(date '+%Y-%m-%d %H:%M:%S %Z')"$'\n'
@@ -233,8 +237,9 @@ ollama_generate_commit_msg() {
 Rules:
 - Line 1 (subject): conventional commit type + colon + specific description, max 72 chars
   * Types: feat/fix/docs/chore/refactor/style/test/ci/perf/revert
+  * MUST be useful in page previews where only the first line is visible
   * MUST reflect actual content changed (files, topic, purpose)
-  * NEVER use vague phrases like 'update files', 'sync branch', or the branch name
+  * NEVER use vague phrases like 'update files', 'sync branch', 'git commit message', 'changes', or the branch name
 - Line 2: BLANK (empty line, mandatory)
 - Lines 3+: 2-3 bullet points explaining what changed and why
 - End with a blank line then 'Changed files:' listing all files
@@ -287,7 +292,21 @@ is_valid_subject() {
   [[ -z "$subject" ]]                    && return 1
   [[ "$subject" =~ ^[[:space:].]+$ ]]    && return 1
   [[ ${#subject} -lt 10 ]]              && return 1
+  printf '%s' "$subject" | grep -qiE '^(git commit message|commit message|update files|sync branch|changes)$' && return 1
+  printf '%s' "$subject" | grep -qiE '^[[:space:]]*(docs|chore|feat|fix|refactor|style|test|ci|build|perf|revert):[[:space:]]*(update files|changes|misc|miscellaneous|update|sync)$' && return 1
   return 0
+}
+
+merge_subject_with_body() {
+  local preferred_subject="$1"
+  local msg="$2"
+  local body
+  body=$(printf '%s\n' "$msg" | sed '1d')
+
+  printf '%s\n' "$preferred_subject"
+  if [[ -n "${body//[[:space:]]/}" ]]; then
+    printf '\n%s\n' "$body"
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -463,6 +482,9 @@ if ollama_is_available; then
       ok "AI message ready."
     else
       warn "AI subject looks invalid (got: '$(printf '%s' "$AI_MSG" | head -1)'). Using structured fallback."
+      FINAL_MESSAGE=$(merge_subject_with_body \
+        "$(derive_subject_line "$USER_HINT" "$BRANCH" "$STAGED_FILES")" \
+        "$AI_MSG")
     fi
   else
     warn "Ollama returned an empty or invalid response. Using structured fallback."
@@ -485,7 +507,12 @@ printf '%s----------------------%s\n' "$C_CYAN" "$C_RESET"
 printf '\n%sStaged files%s\n' "$C_BOLD" "$C_RESET"
 git diff --cached --name-only | sed 's/^/  - /'
 
-git commit -m "$FINAL_MESSAGE"
+COMMIT_FILE=$(mktemp "${TMPDIR:-/tmp}/commit-msg.XXXXXX")
+cleanup() { rm -f "$SED_SCRIPT" "$COMMIT_FILE"; }
+trap cleanup EXIT
+printf '%s\n' "$FINAL_MESSAGE" > "$COMMIT_FILE"
+
+git commit -F "$COMMIT_FILE"
 
 if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
   git push
