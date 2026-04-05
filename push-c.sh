@@ -1,5 +1,6 @@
 #!/opt/homebrew/bin/bash
 ##!/usr/bin/env bash
+# -m "<commit message>"
 
 set -euo pipefail
 IFS=$'\n\t'
