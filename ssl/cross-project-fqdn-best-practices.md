@@ -2,7 +2,6 @@
 
 > 面向 Tenant Project -> PSC -> Master Project -> Nginx / Gateway / Pod 的跨项目接入场景，目标是在尽量复用同一套 team 证书体系的前提下，保持统一 FQDN、稳定 SNI 语义和可治理的 SAN 边界。
 
-> 说明：你消息里的 `SNA` 这里按 `SAN` 理解。
 
 ---
 
@@ -65,10 +64,10 @@
 
 这里要区分两种说法：
 
-| 说法 | 含义 | 是否推荐 |
-| --- | --- | --- |
-| 同一套证书语义 | 整条链路都围绕 `*.{team}.appdev.aibang` 设计 SAN/SNI | 推荐 |
-| 同一张证书文件和同一把私钥到处分发 | Tenant、Master Nginx、Gateway、Pod 全部拿同一份私钥 | 谨慎，仅在硬需求下接受 |
+| 说法                               | 含义                                                 | 是否推荐               |
+| ---------------------------------- | ---------------------------------------------------- | ---------------------- |
+| 同一套证书语义                     | 整条链路都围绕 `*.{team}.appdev.aibang` 设计 SAN/SNI | 推荐                   |
+| 同一张证书文件和同一把私钥到处分发 | Tenant、Master Nginx、Gateway、Pod 全部拿同一份私钥  | 谨慎，仅在硬需求下接受 |
 
 最佳实践不是“无脑把同一把私钥复制到所有层”，而是：
 
@@ -103,13 +102,13 @@ flowchart LR
 
 ### 2.4 每一段该关注什么
 
-| 链路 | 主要关注点 |
-| --- | --- |
-| Client -> Tenant Entry | 入口证书 SAN 是否覆盖业务域名 |
-| Tenant Entry -> PSC | 这是转发路径，不是证书选择层 |
-| PSC -> Master Nginx | 到达 Master 后，Nginx 是否按 team 域名监听 |
-| Nginx -> Gateway | 是否继续传原始 SNI |
-| Gateway -> Pod | 是否继续用业务域名做 SNI，且后端 SAN 能匹配 |
+| 链路                   | 主要关注点                                  |
+| ---------------------- | ------------------------------------------- |
+| Client -> Tenant Entry | 入口证书 SAN 是否覆盖业务域名               |
+| Tenant Entry -> PSC    | 这是转发路径，不是证书选择层                |
+| PSC -> Master Nginx    | 到达 Master 后，Nginx 是否按 team 域名监听  |
+| Nginx -> Gateway       | 是否继续传原始 SNI                          |
+| Gateway -> Pod         | 是否继续用业务域名做 SNI，且后端 SAN 能匹配 |
 
 ---
 
@@ -184,26 +183,26 @@ PSC 是服务级私有连通能力，不是 TLS 证书路由层。
 
 建议固定为：
 
-| 对象 | 规则 |
-| --- | --- |
-| Team 域名空间 | `*.{team}.appdev.aibang` |
-| API FQDN | `{apiname}.{team}.appdev.aibang` |
-| Team 入口证书 | wildcard team cert |
-| Master Nginx listener | `server_name *.{team}.appdev.aibang` |
-| Gateway hosts | `*.{team}.appdev.aibang` 或精确业务域名 |
-| Pod 返回证书 | 覆盖 `{apiname}.{team}.appdev.aibang` |
+| 对象                  | 规则                                    |
+| --------------------- | --------------------------------------- |
+| Team 域名空间         | `*.{team}.appdev.aibang`                |
+| API FQDN              | `{apiname}.{team}.appdev.aibang`        |
+| Team 入口证书         | wildcard team cert                      |
+| Master Nginx listener | `server_name *.{team}.appdev.aibang`    |
+| Gateway hosts         | `*.{team}.appdev.aibang` 或精确业务域名 |
+| Pod 返回证书          | 覆盖 `{apiname}.{team}.appdev.aibang`   |
 
 ### 4.2 推荐的证书治理模型
 
 推荐平台统一管理以下内容：
 
-| 项目 | 建议 |
-| --- | --- |
-| 证书签发 | 平台统一 CA / cert-manager / Vault 流程 |
-| 证书命名 | team 维度统一命名规范 |
-| 证书分发 | 仅分发到真实 TLS 终止点 |
-| 证书轮换 | 同一 team 统一轮换窗口 |
-| 审计 | 记录哪些项目、命名空间、工作负载持有 team 证书 |
+| 项目     | 建议                                           |
+| -------- | ---------------------------------------------- |
+| 证书签发 | 平台统一 CA / cert-manager / Vault 流程        |
+| 证书命名 | team 维度统一命名规范                          |
+| 证书分发 | 仅分发到真实 TLS 终止点                        |
+| 证书轮换 | 同一 team 统一轮换窗口                         |
+| 审计     | 记录哪些项目、命名空间、工作负载持有 team 证书 |
 
 ### 4.3 Onboarding 时必须登记的信息
 
@@ -211,16 +210,16 @@ PSC 是服务级私有连通能力，不是 TLS 证书路由层。
 
 建议 Onboarding 至少登记：
 
-| 类别 | 字段 |
-| --- | --- |
-| Team 信息 | `team`、owner、联系人、项目归属 |
-| 域名信息 | `*.{team}.appdev.aibang`、允许的 API 名单 |
-| 证书信息 | 证书模式、签发来源、到期时间、轮换 SLA |
-| Tenant Project | project id、consumer network、入口方式 |
-| PSC 信息 | service attachment、accept list、审批模式 |
+| 类别                | 字段                                          |
+| ------------------- | --------------------------------------------- |
+| Team 信息           | `team`、owner、联系人、项目归属               |
+| 域名信息            | `*.{team}.appdev.aibang`、允许的 API 名单     |
+| 证书信息            | 证书模式、签发来源、到期时间、轮换 SLA        |
+| Tenant Project      | project id、consumer network、入口方式        |
+| PSC 信息            | service attachment、accept list、审批模式     |
 | Master Project 路由 | Nginx listener、Gateway host、backend service |
-| SNI 规则 | 对外 FQDN、Nginx 上游 SNI、Gateway 上游 SNI |
-| SAN 规则 | 证书必须覆盖哪些 host |
+| SNI 规则            | 对外 FQDN、Nginx 上游 SNI、Gateway 上游 SNI   |
+| SAN 规则            | 证书必须覆盖哪些 host                         |
 
 ### 4.4 推荐的 Onboarding 流程
 
@@ -321,13 +320,13 @@ trafficPolicy:
 
 ### 5.2 验证矩阵
 
-| 验证点 | 命令/方法 | 预期 |
-| --- | --- | --- |
-| 外部域名访问 | `curl --resolve` | 仍访问 `{apiname}.{team}.appdev.aibang` |
-| 证书 SAN | `openssl x509 -checkhost` | 匹配业务域名 |
-| 服务端 SNI 支持 | `openssl s_client -servername ...` 对比不带 SNI | 返回结果可区分或符合预期 |
-| Nginx 上游 SNI | 看 Nginx 配置和上游返回证书 | 上游拿到原始业务域名 |
-| Gateway -> Pod SNI | 检查 `DestinationRule.tls.sni` | 与业务域名一致 |
+| 验证点             | 命令/方法                                       | 预期                                    |
+| ------------------ | ----------------------------------------------- | --------------------------------------- |
+| 外部域名访问       | `curl --resolve`                                | 仍访问 `{apiname}.{team}.appdev.aibang` |
+| 证书 SAN           | `openssl x509 -checkhost`                       | 匹配业务域名                            |
+| 服务端 SNI 支持    | `openssl s_client -servername ...` 对比不带 SNI | 返回结果可区分或符合预期                |
+| Nginx 上游 SNI     | 看 Nginx 配置和上游返回证书                     | 上游拿到原始业务域名                    |
+| Gateway -> Pod SNI | 检查 `DestinationRule.tls.sni`                  | 与业务域名一致                          |
 
 ### 5.3 推荐验证命令
 
@@ -388,12 +387,12 @@ openssl s_client -connect <ENTRY_IP>:443 </dev/null 2>/dev/null \
 
 ### 6.2 风险点
 
-| 风险 | 说明 | 建议 |
-| --- | --- | --- |
-| 同一私钥跨项目扩散 | blast radius 很大 | 尽量减少终止点，统一审计 |
-| Tenant 与 Master 都持证书 | 管理复杂度升高 | 统一签发、统一轮换、统一告警 |
-| 内部改写为非业务域名 | SAN/SNI 语义断裂 | 全程坚持业务 FQDN |
-| 只做链路连通验证 | 看不见 SNI 丢失 | 增加 SNI 对比验证 |
+| 风险                      | 说明              | 建议                         |
+| ------------------------- | ----------------- | ---------------------------- |
+| 同一私钥跨项目扩散        | blast radius 很大 | 尽量减少终止点，统一审计     |
+| Tenant 与 Master 都持证书 | 管理复杂度升高    | 统一签发、统一轮换、统一告警 |
+| 内部改写为非业务域名      | SAN/SNI 语义断裂  | 全程坚持业务 FQDN            |
+| 只做链路连通验证          | 看不见 SNI 丢失   | 增加 SNI 对比验证            |
 
 ### 6.3 我对“同一套证书”的最终建议
 

@@ -18,6 +18,7 @@
 - 必须提前验证 east-west 场景下 `apiX.{team}.appdev.aibang` 在集群内部如何解析到目标工作负载。
 - 如果 runtime Gateway 改成 `PASSTHROUGH`，就要接受 `VirtualService` 从 `http:` 转为 `tls:` + `sniHosts`，并放弃 Gateway 层的大部分 HTTP 七层治理能力。
 - 如果希望继续做 path 路由、header 处理、URI rewrite、HTTP 重试或基于 HTTP/JWT 的入口控制，就不应使用 `PASSTHROUGH`。
+- 统一 team FQDN + team wildcard 证书体系 + Master Project Nginx team listener + 显式保留 SNI + Pod/Gateway 证书 SAN 覆盖业务域名
 
 ## Target
 目标是构建一套以 `{apiname}.{team}.appdev.aibang` 为统一业务域名的端到端 TLS 架构，让 north-south 和 east-west 都尽量复用同一套 team wildcard 证书，并且让最终业务 TLS 尽可能直达到 Pod。与此同时，把复杂性尽量收敛到平台标准模板和 runtime 资源层，降低用户侧接入心智。
