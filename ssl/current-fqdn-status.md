@@ -11,7 +11,7 @@
 - 平台需要通过 Onboarding 显式或隐式登记 team、业务域名、CNAME 目标、Nginx listener、证书绑定、上游路由和 SNI 规则。
 - Tenant 侧不应感知 Master Project 的真实入口 IP 或底层入口实现；Tenant 上线动作应尽量收敛成配置 CNAME。
 - 需要验证 DNS CNAME、生效证书、SNI 保持和 Onboarding 注册完整性，而不只是验证“网络可达”。
-
+- using extra request to get more infomation
 ## Target
 把当前 Cross Project 的 FQDN 实现方式讲清楚：Tenant 负责业务域名和 CNAME，Master Project 负责统一入口承载，Master Nginx 负责 team 级 TLS 身份和后续转发语义保持。最终要达成的认知是，`CNAME` 只是把流量收敛到平台入口，不改变业务域名身份；Tenant 关心业务域名，平台关心真实入口承载。
 
