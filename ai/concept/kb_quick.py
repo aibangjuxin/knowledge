@@ -28,7 +28,7 @@ def search_knowledge(keywords: str, max_results: int = 30) -> List[Dict]:
     ]
     
     try:
-        result = subprocess.run(cmd, abjture_output=True, text=True, timeout=10)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         matches = []
         
         for line in result.stdout.strip().split('\n'):
