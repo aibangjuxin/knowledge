@@ -1,0 +1,7 @@
+#!/bin/bash
+# 快速知识库检索包装脚本
+
+PYTHON="/opt/homebrew/Caskroom/miniconda/base/bin/python"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+$PYTHON "$SCRIPT_DIR/kb_quick.py" "$@"
