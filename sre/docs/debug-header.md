@@ -232,6 +232,222 @@ curl -X POST http://kong-ip:8000/api/endpoint \
 
 > ⚠️ **CICD 2.0 特殊性**：如果是流水线部署后才出现，重点检查 Kong 的插件配置是否在部署时被覆盖或重置，这是最典型的"部署后行为变化"场景。
 
+
+## curl testing 
+```bash
+# 用 curl 模拟客户端，直接打到 Nginx 入口
+curl -X POST https://your-platform/api/endpoint \
+  -H "X-AIBANG-client-secret: your-secret-value" \
+  -H "Content-Type: application/json" \
+  -d '{"test": "payload"}' \
+  -v 2>&1 | grep -i "client-secret"
+```
+# 深度解析：Kong 将 Header 转为小写的问题
+
+## 核心结论
+
+**这是正常行为，不是 Bug。**
+
+Kong 基于 `ngx_lua`（OpenResty），其底层 Nginx 在处理 HTTP/1.1 请求时，会将所有 Header 名称**统一转为小写**存储和传递。
+
+```mermaid
+graph LR
+    A[Client\nX-AIBANG-client-secret: abc] --> B[Kong/Nginx\n内部转换]
+    B --> C[Upstream App\nx-aibang-client-secret: abc]
+
+    style A fill:#4A90D9,color:#fff
+    style B fill:#F5A623,color:#fff
+    style C fill:#7B68EE,color:#fff
+```
+
+---
+
+## 为什么会发生这个转换？
+
+### HTTP 协议规范层面
+
+RFC 7230 明确规定：
+
+> Header field names are **case-insensitive**
+
+所以 `X-AIBANG-client-secret` 和 `x-aibang-client-secret` 在协议层面是**完全等价**的。
+
+### Nginx/OpenResty 实现层面
+
+```
+HTTP/1.x → Nginx 接收 → 内部 ngx_http_headers_in_t 结构体 → 统一小写存储
+```
+
+Kong 使用 OpenResty，所有 Header 在 Lua 层面通过 `ngx.req.get_headers()` 获取时**全部是小写 key**，这是框架设计决定的。
+
+### HTTP/2 层面
+
+HTTP/2 规范 (RFC 7540) **强制要求** Header 名称必须小写，这是强制规范：
+
+```
+HTTP/2 → HPACK 压缩 → 强制 lowercase header names
+```
+
+---
+
+## 问题真正的根源在哪里？
+
+既然协议允许，那问题一定出在 **Java 应用的读取方式**上。
+
+```mermaid
+graph TD
+    A[Header 到达 Java 应用\nx-aibang-client-secret: value] --> B{Java 框架如何读取？}
+    
+    B --> C[Spring @RequestHeader\n严格匹配？]
+    B --> D[HttpServletRequest.getHeader\n大小写不敏感 ✅]
+    B --> E[自定义 Filter\n手动字符串比较？]
+    
+    C --> F{注解配置}
+    F -->|默认行为| G[Spring 会做不敏感匹配 ✅]
+    F -->|有自定义 resolver| H[可能有问题 ⚠️]
+    
+    E --> I[精确字符串匹配 ❌\n大小写不敏感匹配 ✅]
+```
+
+---
+
+## 逐一排查 Java 应用代码
+
+### 情况 1：使用 `@RequestHeader` 注解
+
+```java
+// ✅ 这种写法 Spring 会做大小写不敏感匹配，没有问题
+@PostMapping("/endpoint")
+public ResponseEntity handle(
+    @RequestHeader("X-AIBANG-client-secret") String secret
+) { ... }
+
+// ✅ 同样没问题
+@RequestHeader("x-aibang-client-secret") String secret
+```
+
+> Spring MVC 的 `RequestHeaderMethodArgumentResolver` 内部调用的是 `HttpServletRequest.getHeader()`，而 Servlet 规范要求该方法**大小写不敏感**。
+
+**验证方式：**
+
+```java
+// 在 Controller 里临时加这段，打印所有收到的 Header
+@PostMapping("/endpoint")
+public ResponseEntity handle(HttpServletRequest request) {
+    Enumeration<String> headerNames = request.getHeaderNames();
+    while (headerNames.hasMoreElements()) {
+        String name = headerNames.nextElement();
+        System.out.println("Header: [" + name + "] = [" + request.getHeader(name) + "]");
+    }
+    // ...
+}
+```
+
+---
+
+### 情况 2：自定义 Filter 或 Interceptor（**高风险区域**）
+
+```java
+// ❌ 危险写法：手动字符串精确比较
+public class SecretValidationFilter extends OncePerRequestFilter {
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, ...) {
+        // 这里如果用 Map 的 get()，key 大小写必须完全匹配
+        String secret = request.getHeader("X-AIBANG-client-secret");
+        
+        // ⚠️ 如果框架把 header 存成 map 后用精确匹配，就会取到 null
+        if (secret == null || !secret.equals(expectedSecret)) {
+            response.sendError(400, "Missing Header : X-AIBANG-client-secret");
+            return;
+        }
+    }
+}
+```
+
+```java
+// ✅ 正确写法：HttpServletRequest.getHeader() 是大小写不敏感的
+String secret = request.getHeader("X-AIBANG-client-secret");  // 能取到
+String secret = request.getHeader("x-aibang-client-secret");  // 也能取到
+```
+
+---
+
+### 情况 3：使用了某些框架的 Header Map（**最高风险**）
+
+```java
+// ❌ 如果用了 Spring 的 HttpHeaders 对象然后做精确 get
+HttpHeaders headers = new HttpHeaders();
+// HttpHeaders 内部是 case-insensitive 的 LinkedCaseInsensitiveMap，这个是安全的
+
+// ❌ 但如果有人把 headers 转成了普通 HashMap 再操作
+Map<String, String> headerMap = new HashMap<>();
+request.getHeaderNames().asIterator().forEachRemaining(name -> 
+    headerMap.put(name, request.getHeader(name))
+);
+// 此时 key 全是小写（因为 Kong 传来的是小写）
+// headerMap.get("X-AIBANG-client-secret") → null ❌
+// headerMap.get("x-aibang-client-secret") → value ✅
+```
+
+---
+
+## 排查命令：直接绕过所有中间层验证
+
+```bash
+# 1. 直接打 Java 应用端口，发送大写 Header
+curl -X POST http://java-app-ip:8080/endpoint \
+  -H "X-AIBANG-client-secret: test123" \
+  -H "Content-Type: application/json" \
+  -d '{}' -v
+
+# 2. 直接打 Java 应用端口，发送小写 Header（模拟 Kong 转换后）
+curl -X POST http://java-app-ip:8080/endpoint \
+  -H "x-aibang-client-secret: test123" \
+  -H "Content-Type: application/json" \
+  -d '{}' -v
+```
+
+| 测试结果           | 结论                                    |
+| ------------------ | --------------------------------------- |
+| 大写成功，小写失败 | Java 代码有大小写敏感问题               |
+| 大写失败，小写成功 | Java 代码在做精确小写匹配（反向问题）   |
+| 两者都失败         | 问题不在大小写，在其他逻辑              |
+| 两者都成功         | 问题在 Kong/Nginx 层，Header 值被修改了 |
+
+---
+
+## 最终解决方案
+
+### 方案 A：修复 Java 代码（推荐，治本）
+
+```java
+// 使用 Servlet 标准 API，天然大小写不敏感
+String secret = request.getHeader("X-AIBANG-client-secret");
+
+// 如果必须用 Map，使用 Spring 的 case-insensitive 实现
+import org.springframework.util.LinkedCaseInsensitiveMap;
+Map<String, String> safeMap = new LinkedCaseInsensitiveMap<>();
+```
+
+### 方案 B：Kong 端用 `request-transformer` 强制还原大小写（治标）
+
+```bash
+curl -X POST http://localhost:8001/services/{your-service}/plugins \
+  --data "name=request-transformer" \
+  --data "config.rename.headers=x-aibang-client-secret:X-AIBANG-client-secret"
+```
+
+> ⚠️ 方案 B 只是掩盖问题，HTTP/2 场景下还会再变小写，根本解法是方案 A。
+
+---
+
+## 结论
+
+```
+问题本质：不是 Kong 的问题，是 Java 应用对 Header 大小写敏感
+正确做法：始终使用 HttpServletRequest.getHeader()，永远不要用精确字符串 Map 匹配 Header key
+```
+
 ---
 
 # GKE + Nginx + Kong Header 丢失问题深度排查指南
