@@ -638,6 +638,221 @@ flowchart TD
 
 ### 3. 那同 namespace internal call 正确怎么做
 
+如果你当前 runtime namespace 的基线是：
+
+- `NetworkPolicy default deny all ingress + egress`
+- `PeerAuthentication STRICT`
+
+那么同 namespace 的 internal call 正确理解应该是：
+
+1. 先在网络层放通“谁可以连到谁”
+2. 再在 mesh 授权层定义“谁可以调用谁、可以调用到什么粒度”
+
+也就是说：
+
+`NetworkPolicy 决定流量能不能到；AuthorizationPolicy 决定到了以后放不放。`
+
+### 4. 从层级上怎么理解三种资源
+
+你可以把这三类资源理解成三个不同层次：
+
+| 层次 | 资源 | 回答的问题 |
+|---|---|---|
+| 网络层 | `NetworkPolicy` | 包能不能从 A 到 B |
+| 传输安全层 | `PeerAuthentication` | 这条连接是不是必须 mTLS |
+| 授权层 | `AuthorizationPolicy` | 即使连上了，A 有没有权限访问 B |
+
+所以对于你的 runtime namespace 模型，更合理的层级概念不是“谁比谁高级”，而是：
+
+`它们分属不同控制面，应该叠加，而不是互相替代。`
+
+### 5. 你现在这个思路是不是可以把 AuthorizationPolicy 理解成 API level
+
+答案是：
+
+`可以，而且这正是比较合理的高级用法。`
+
+更准确地说：
+
+- `NetworkPolicy` 更适合作为 namespace / workload 的网络边界基线
+- `PeerAuthentication` 更适合作为 namespace 的 mTLS 基线
+- `AuthorizationPolicy` 非常适合作为 API / workload level 的精细授权层
+
+所以你现在说的这个模式是成立的：
+
+1. runtime namespace 创建时，平台自动下发 `default deny all` 的 `NetworkPolicy`
+2. 同时下发 namespace 级 `PeerAuthentication STRICT`
+3. 再把 `AuthorizationPolicy` 作为 API level 的细粒度授权模型
+
+这其实就是一个很清晰的三层安全分工。
+
+### 6. 为什么说 AuthorizationPolicy 很适合做 API level
+
+因为它天然支持：
+
+- workload selector
+- source principal / service account
+- path / method / host / port
+
+这意味着你完全可以把它理解成：
+
+`某个 API 的调用权限定义`
+
+例如：
+
+- `api-order` 只允许 `frontend-sa` 调用
+- `api-billing` 只允许 `worker-sa` 调用
+- `api-health` 允许 mesh 内任意带身份 workload 访问 `/healthz`
+
+这和你现在 runtime namespace 里“每个 API 独立部署”的思路是非常匹配的。
+
+### 7. 更高级的理解：namespace baseline 和 API exception
+
+如果从平台工程角度去理解，我更建议你把策略分成两类：
+
+#### 7.1 Namespace baseline
+
+这部分由平台统一下发，作为 runtime namespace 默认安全姿态：
+
+- `NetworkPolicy default deny all`
+- namespace 级 `PeerAuthentication STRICT`
+- 一条 namespace 级 `AuthorizationPolicy` baseline
+
+这一层的目标不是表达业务逻辑，而是表达：
+
+`这个 namespace 默认是收紧的。`
+
+#### 7.2 API-level exception / allow list
+
+这部分由 API owner 或平台模板按 API 生成：
+
+- 允许哪个 service account 调用这个 API
+- 允许哪些 path / method
+- 是否允许 namespace 内某类调用
+- 是否允许跨 namespace 的特定 caller
+
+这一层的目标才是表达真正的业务调用关系。
+
+### 8. 你可以怎么理解“默认 deny all + API 精细授权”
+
+这个模型其实很像防火墙思维：
+
+1. 先全部收紧
+2. 再逐个放开最小必要通路
+
+放到你的 runtime namespace 里，可以理解成：
+
+#### 第一步：网络层默认不通
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: $namespace
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+```
+
+这一步表达：
+
+`这个 namespace 里的 Pod 默认谁也不能随便互访。`
+
+#### 第二步：mesh 连接必须带身份
+
+`PeerAuthentication STRICT`
+
+这一步表达：
+
+`即使网络放通，连接也必须是 mTLS。`
+
+#### 第三步：按 API 定义允许关系
+
+`AuthorizationPolicy`
+
+这一步表达：
+
+`就算你网络能到、而且是 mTLS，也不代表你可以调用这个 API。`
+
+### 9. 高级用法应该怎么设计
+
+如果你想把它做成更高级、更长期可维护的模型，我建议你按下面方式设计。
+
+#### 9.1 以 service account 作为调用方身份
+
+不要优先基于 Pod IP 或 namespace name 做复杂规则，而是优先基于：
+
+- `principal`
+- `serviceAccount`
+
+原因：
+
+- 这才是 mesh 里最稳定的调用身份
+- 更适合模板化
+- API level 规则更清晰
+
+#### 9.2 以 workload label 作为被访问方身份
+
+目标 API 的策略尽量挂在：
+
+- `selector.matchLabels.app: api-x`
+
+而不是一条 namespace 级巨型规则里塞所有 API。
+
+原因：
+
+- 规则和 workload 更接近
+- 更方便按 API 独立演进
+- 更适合 GitOps / Helm 模板生成
+
+#### 9.3 namespace 级策略只做基线，不做全部业务逻辑
+
+也就是说：
+
+- namespace 级策略做“默认收紧”
+- workload/API 级策略做“业务放行”
+
+这样不会把 namespace policy 写成一个巨型 if/else 文件。
+
+### 10. 推荐的落地模型
+
+对于你现在的 runtime namespace，我建议这样理解：
+
+| 层级 | 推荐职责 |
+|---|---|
+| namespace `NetworkPolicy` | 默认 deny all，定义网络边界 |
+| namespace `PeerAuthentication` | 默认 `STRICT`，定义 mTLS 基线 |
+| namespace `AuthorizationPolicy` | 做 baseline，例如只接受带身份流量 |
+| workload/API `AuthorizationPolicy` | 定义具体 API 的 allow rules |
+| workload/API `NetworkPolicy` | 只在确实需要时补充更细网络通路 |
+
+### 11. 你当前这个方向的最大价值
+
+如果你按这个模型往前走，最大的收益是：
+
+1. namespace 创建时就自带安全基线
+2. API owner 只需要在这个基线上补 API 级授权
+3. 平台能把“默认安全姿态”和“业务调用例外”彻底分开
+
+所以你的理解可以进一步总结成一句话：
+
+`runtime namespace 负责默认收紧，AuthorizationPolicy 负责 API 级精细放行。`
+
+### 12. 最终建议
+
+如果你要从概念上把这件事讲清楚，我建议用下面这套表述：
+
+- `NetworkPolicy` 是网络层默认边界
+- `PeerAuthentication` 是 mesh 传输层默认边界
+- `AuthorizationPolicy` 是 API 级授权层
+
+然后再补一句：
+
+`因此，default deny all 完全可以作为 runtime namespace 的默认配置，而 AuthorizationPolicy 非常适合作为新 API 上线后的精细化授权工具。`
+
 正确模式通常是：
 
 #### 第一步：网络层放通
