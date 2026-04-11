@@ -1,3 +1,42 @@
+
+明白了。你的架构是：
+	•	istio-abjx-int — 自定义 Istio Ingress Gateway namespace（非 istio-system）
+	•	team-a-runtime — 业务 runtime namespace
+参数对应：-g istio-abjx-int -u team-a-runtime
+核心区别是 Gateway Pod 不在 istio-system，而在独立 namespace，ServiceAccount、SPIFFE URI、NetworkPolicy 的 namespaceSelector 都要基于 istio-abjx-int 来验证。​​​​​​​​​​​​​​​​
+
+chmod +x verify-istio-gw-custom.sh
+./verify-istio-gw-custom.sh -g istio-abjx-int -u team-a-runtime
+
+
+架构映射与核心改动说明
+
+graph TD
+    A[istio-system] -->|istiod 控制面 固定| B
+    B[istio-abjx-int\n-g 参数\n自定义 Internal Gateway NS] -->|ingressgateway Pod\nSA / SPIFFE URI| C
+    C[team-a-runtime\n-u 参数\nRuntime NS]
+
+    B --> B1[§2.2 Pod Labels 高亮]
+    B --> B2[§2.3 SA + SPIFFE URI\ncluster.local/ns/istio-abjx-int/sa/xxx]
+    B --> B3[§2.4 Istio Gateway 资源\nnetworking.istio.io]
+
+    C --> C1[§3 VirtualService\n验证 gateways 字段是否引用 istio-abjx-int]
+    C --> C2[§4 NetworkPolicy\nnamespaceSelector 是否指向 istio-abjx-int]
+    C --> C3[§5 AuthorizationPolicy\nprincipal 是否含 istio-abjx-int SA]
+
+
+关键验证逻辑说明
+
+
+
+|检查点                              |验证内容                                     |为什么重要                    |
+|---------------------------------|-----------------------------------------|-------------------------|
+|§2.2 Gateway Pod Labels          |自动 discover（多 selector 尝试）               |自定义 NS 下 label 可能不是默认值   |
+|§2.3 SPIFFE URI                  |`cluster.local/ns/istio-abjx-int/sa/<sa>`|AP principal 必须精确匹配此值    |
+|§3.1 VirtualService `gateways` 字段|是否引用 `istio-abjx-int/<gw-name>`          |错误 NS 会导致 VS 无法绑定 Gateway|
+|§4.1 NetworkPolicy cross-validate|`namespaceSelector` 是否含 `istio-abjx-int` |否则 Gateway Pod 流量被 NP 拦截 |
+|§5.1 AP principal cross-validate |是否含 GW namespace 的 SA                    |否则 mTLS 校验失败 403         |
+
 成功读取了原始脚本。现在基于它的参数风格和结构，生成新的 Istio 专项验证脚本。​​​​​​​​​​​​​​​​
 
 脚本已生成，用法与原脚本保持一致：
