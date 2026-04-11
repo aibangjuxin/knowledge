@@ -1,3 +1,59 @@
+成功读取了原始脚本。现在基于它的参数风格和结构，生成新的 Istio 专项验证脚本。​​​​​​​​​​​​​​​​
+
+脚本已生成，用法与原脚本保持一致：
+
+chmod +x verify-istio-gateway.sh
+./verify-istio-gateway.sh -g istio-system -u production-ns
+
+
+脚本功能结构说明
+
+graph TD
+    A[参数: -g gateway-ns / -u runtime-ns] --> B
+
+    B[Section 1: Istio 控制面健康]
+    B --> B1[istiod Pod 状态]
+    B --> B2[Istio CRD 完整性检查]
+
+    B --> C[Section 2: Gateway Pod Labels & SA]
+    C --> C1[抓取 ingressgateway Pod Labels]
+    C --> C2[高亮输出 Key Labels]
+    C --> C3[打印 ServiceAccount + SPIFFE URI]
+    C --> C4[交叉验证: runtime NetworkPolicy 是否引用了 gateway labels]
+
+    B --> D[Section 3: Istio 资源检查]
+    D --> D1[Istio Gateway 资源]
+    D --> D2[VirtualService]
+    D --> D3[DestinationRule]
+
+    B --> E[Section 4: NetworkPolicy Audit]
+    E --> E1[gateway-ns NetworkPolicy]
+    E --> E2[runtime-ns NetworkPolicy]
+    E2 --> E3[基线规则覆盖度检查 deny-all / allow-dns / allow-istio ...]
+    E2 --> E4[高亮打印 podSelector / policyTypes / ingress.from / egress.to]
+
+    B --> F[Section 5: AuthorizationPolicy Audit]
+    F --> F1[基线 AP 覆盖度检查]
+    F --> F2[action / principals / paths 高亮打印]
+    F --> F3[Principal 与 Gateway SA 交叉验证]
+    F --> F4[PeerAuthentication mTLS mode 检查]
+
+    B --> G[Section 6: 汇总 OK/WARN/ERR 计数]
+
+
+核心功能要点
+
+
+
+|Section|功能                                            |关键输出                                                               |
+|-------|----------------------------------------------|-------------------------------------------------------------------|
+|§2.2   |Gateway Pod Labels 高亮                         |`app=istio-ingressgateway`, `istio=ingressgateway`                 |
+|§2.3   |ServiceAccount + SPIFFE URI                   |`cluster.local/ns/<ns>/sa/<sa>`                                    |
+|§2.4   |交叉验证 runtime NetworkPolicy 是否引用 gateway labels|✔/⚠ 明确告知                                                           |
+|§4     |NetworkPolicy 基线覆盖度检查                         |`deny-all` / `allow-dns` / `allow-istio` / `allow-ingressgateway` 等|
+|§5     |AuthorizationPolicy action 红/绿高亮              |`DENY`=红, `ALLOW`=绿                                                |
+|§5.1   |PeerAuthentication mTLS mode                  |`STRICT` 为 OK，其他为 WARN                                             |
+
 ```bash
 #!/bin/bash
 
