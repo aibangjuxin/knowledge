@@ -19,6 +19,25 @@
 `AuthorizationPolicy` 里的 `principals` 字段只有在 mTLS 握手完成后才能被填充（Envoy 从对端证书里提取 SPIFFE URI）。如果降级为 `PERMISSIVE`，明文流量进来时 `principals` 为空，AP 规则对明文流量**静默失效**——这是一个很隐蔽的安全漏洞。
 
 所以你的模型是正确的：**STRICT 是 AP 规则生效的基础，不能妥协**。
+---
+
+## 三段流量的本质区别
+
+| 段 | 路径 | 加密方式 | 谁负责 |
+|---|---|---|---|
+| ① 外部 TLS | Client → Gateway | 域名证书（SIMPLE） | 你手动配置的 Secret |
+| ② 网格 mTLS | Gateway Sidecar → App Sidecar | SPIFFE 证书（自动） | istiod 全权管理 |
+| ③ Pod 内明文 | Sidecar → App 容器 | 无（localhost） | iptables 拦截保障边界 |
+
+**第 ② 段是你"看不见但一直在工作"的部分**——istiod 在每个 Pod 启动时自动通过 SDS 推送证书，Envoy 之间握手全程透明，App 容器完全感知不到。
+
+---
+
+## 为什么 PeerAuthentication STRICT 是关键前提
+
+`AuthorizationPolicy` 里的 `principals` 字段只有在 mTLS 握手完成后才能被填充（Envoy 从对端证书里提取 SPIFFE URI）。如果降级为 `PERMISSIVE`，明文流量进来时 `principals` 为空，AP 规则对明文流量**静默失效**——这是一个很隐蔽的安全漏洞。
+
+所以你的模型是正确的：**STRICT 是 AP 规则生效的基础，不能妥协**。
 
 
 
