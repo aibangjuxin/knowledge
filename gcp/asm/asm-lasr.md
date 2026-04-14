@@ -13,6 +13,8 @@
 **第 ② 段是你"看不见但一直在工作"的部分**——istiod 在每个 Pod 启动时自动通过 SDS 推送证书，Envoy 之间握手全程透明，App 容器完全感知不到。
 
 ---
+--
+- ![svg](./istio_mtls_full_flow.svg)
 
 ## 为什么 PeerAuthentication STRICT 是关键前提
 
