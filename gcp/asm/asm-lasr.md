@@ -1,5 +1,6 @@
 图中每个节点均可点击，会直接发起对应主题的追问。以下是核心要点的文字对照：
-
+外部客户端HTTPS 请求 *.team-a.appdev.aibang① HTTPS / TLS（外部证书）namespace: istio-ingressgateway-intIstio Gateway PodTLS SIMPLE 终止 · 持有域名证书Envoy SidecarSPIFFE 身份 · 持有 istiod 颁发证书明文istiod CA（SDS）→ 自动签发 SPIFFE 证书，每 24h 轮转，存于 Sidecar 内存，不落盘，不可见② mTLS（自动加密）SPIFFE 双向证书验证NetworkPolicyL3/L4 仅放行 :8443namespace: team-a-runtimePeerAuthenticationSTRICT — 强制 mTLS，无证书即拒绝AuthorizationPolicydefault-deny-all + allow gateway SABusiness PodEnvoy Sidecar接收 mTLS 流量验证 SPIFFE 证书③ 明文localhost业务容器 AppHTTP :8443（明文）完全感知不到 mTLSiptables 规则由 istio-init 注入，自动拦截所有出入站流量至 Sidecar（App 无感知）安全层说明① 外部 TLS（SIMPLE）客户端 → Gateway 终止。使用业务域名证书（team-a 独立证书）。Gateway 之后无外部 TLS。② 网格内 mTLS（自动）Sidecar ↔ Sidecar 自动加密。istiod 颁发 SPIFFE 证书，无需手动配置。PeerAuthentication STRICT 强制。③ Pod 内明文（localhost）Sidecar → App 容器，走 localhost，不经过网络，安全边界由 Sidecar 保障。双层防护NetworkPolicy（L3/L4）+ AuthorizationPolicy（L7 SPIFFE）同时生效，互为补充。
+Copy failed — try from claude.ai in browser
 ---
 
 ## 三段流量的本质区别
