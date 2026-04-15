@@ -1,15 +1,12 @@
-图中每个节点均可点击，会直接发起对应主题的追问。以下是核心要点的文字对照：
-外部客户端HTTPS 请求 *.team-a.appdev.aibang① HTTPS / TLS（外部证书）namespace: istio-ingressgateway-intIstio Gateway PodTLS SIMPLE 终止 · 持有域名证书Envoy SidecarSPIFFE 身份 · 持有 istiod 颁发证书明文istiod CA（SDS）→ 自动签发 SPIFFE 证书，每 24h 轮转，存于 Sidecar 内存，不落盘，不可见② mTLS（自动加密）SPIFFE 双向证书验证NetworkPolicyL3/L4 仅放行 :8443namespace: team-a-runtimePeerAuthenticationSTRICT — 强制 mTLS，无证书即拒绝AuthorizationPolicydefault-deny-all + allow gateway SABusiness PodEnvoy Sidecar接收 mTLS 流量验证 SPIFFE 证书③ 明文localhost业务容器 AppHTTP :8443（明文）完全感知不到 mTLSiptables 规则由 istio-init 注入，自动拦截所有出入站流量至 Sidecar（App 无感知）安全层说明① 外部 TLS（SIMPLE）客户端 → Gateway 终止。使用业务域名证书（team-a 独立证书）。Gateway 之后无外部 TLS。② 网格内 mTLS（自动）Sidecar ↔ Sidecar 自动加密。istiod 颁发 SPIFFE 证书，无需手动配置。PeerAuthentication STRICT 强制。③ Pod 内明文（localhost）Sidecar → App 容器，走 localhost，不经过网络，安全边界由 Sidecar 保障。双层防护NetworkPolicy（L3/L4）+ AuthorizationPolicy（L7 SPIFFE）同时生效，互为补充。
-Copy failed — try from claude.ai in browser
----
+
 
 ## 三段流量的本质区别
 
-| 段 | 路径 | 加密方式 | 谁负责 |
-|---|---|---|---|
-| ① 外部 TLS | Client → Gateway | 域名证书（SIMPLE） | 你手动配置的 Secret |
-| ② 网格 mTLS | Gateway Sidecar → App Sidecar | SPIFFE 证书（自动） | istiod 全权管理 |
-| ③ Pod 内明文 | Sidecar → App 容器 | 无（localhost） | iptables 拦截保障边界 |
+| 段           | 路径                          | 加密方式            | 谁负责                |
+| ------------ | ----------------------------- | ------------------- | --------------------- |
+| ① 外部 TLS   | Client → Gateway              | 域名证书（SIMPLE）  | 你手动配置的 Secret   |
+| ② 网格 mTLS  | Gateway Sidecar → App Sidecar | SPIFFE 证书（自动） | istiod 全权管理       |
+| ③ Pod 内明文 | Sidecar → App 容器            | 无（localhost）     | iptables 拦截保障边界 |
 
 **第 ② 段是你"看不见但一直在工作"的部分**——istiod 在每个 Pod 启动时自动通过 SDS 推送证书，Envoy 之间握手全程透明，App 容器完全感知不到。
 
@@ -26,13 +23,26 @@ Copy failed — try from claude.ai in browser
 
 ## 三段流量的本质区别
 
-| 段 | 路径 | 加密方式 | 谁负责 |
-|---|---|---|---|
-| ① 外部 TLS | Client → Gateway | 域名证书（SIMPLE） | 你手动配置的 Secret |
-| ② 网格 mTLS | Gateway Sidecar → App Sidecar | SPIFFE 证书（自动） | istiod 全权管理 |
-| ③ Pod 内明文 | Sidecar → App 容器 | 无（localhost） | iptables 拦截保障边界 |
+| 段           | 路径                          | 加密方式            | 谁负责                |
+| ------------ | ----------------------------- | ------------------- | --------------------- |
+| ① 外部 TLS   | Client → Gateway              | 域名证书（SIMPLE）  | 你手动配置的 Secret   |
+| ② 网格 mTLS  | Gateway Sidecar → App Sidecar | SPIFFE 证书（自动） | istiod 全权管理       |
+| ③ Pod 内明文 | Sidecar → App 容器            | 无（localhost）     | iptables 拦截保障边界 |
 
 **第 ② 段是你"看不见但一直在工作"的部分**——istiod 在每个 Pod 启动时自动通过 SDS 推送证书，Envoy 之间握手全程透明，App 容器完全感知不到。
+
+
+```bash
+图中每个节点均可点击，会直接发起对应主题的追问。以下是核心要点的文字对照：
+外部客户端HTTPS 请求 *.team-a.appdev.aibang
+① HTTPS / TLS（外部证书）namespace: istio-ingressgateway-intIstio Gateway PodTLS SIMPLE 终止 · 持有域名证书Envoy SidecarSPIFFE 身份 · 持有 istiod 颁发证书明文istiod CA（SDS）→ 自动签发 SPIFFE 证书，每 24h 轮转，存于 Sidecar 内存，不落盘，不可见
+② mTLS（自动加密）SPIFFE 双向证书验证NetworkPolicyL3/L4 仅放行 :8443namespace: team-a-runtimePeerAuthenticationSTRICT — 强制 mTLS，无证书即拒绝AuthorizationPolicydefault-deny-all + allow gateway SABusiness PodEnvoy Sidecar接收 mTLS 流量验证 SPIFFE 证书
+③ 明文localhost业务容器 AppHTTP :8443（明文）完全感知不到 mTLSiptables 规则由 istio-init 注入，自动拦截所有出入站流量至 Sidecar（App 无感知）安全层说明① 外部 TLS（SIMPLE）客户端 → Gateway 终止。使用业务域名证书（team-a 独立证书）。Gateway 之后无外部 TLS。
+② 网格内 mTLS（自动）Sidecar ↔ Sidecar 自动加密。istiod 颁发 SPIFFE 证书，无需手动配置。PeerAuthentication STRICT 强制。
+③ Pod 内明文（localhost）Sidecar → App 容器，走 localhost，不经过网络，安全边界由 Sidecar 保障。双层防护NetworkPolicy（L3/L4）+ AuthorizationPolicy（L7 SPIFFE）同时生效，互为补充。
+```
+---
+
 
 ---
 
@@ -124,12 +134,12 @@ sequenceDiagram
 
 你配置了 `STRICT` 模式，这意味着：
 
-| 场景 | 是否允许 |
-|------|----------|
-| Sidecar → Sidecar（mTLS） | ✅ 允许 |
-| 无 Sidecar 的 Pod 直连（明文） | ❌ 拒绝 |
-| 外部流量绕过 Gateway 直连 | ❌ 拒绝 |
-| Gateway Sidecar → App Sidecar | ✅ 允许（自动mTLS） |
+| 场景                           | 是否允许           |
+| ------------------------------ | ------------------ |
+| Sidecar → Sidecar（mTLS）      | ✅ 允许             |
+| 无 Sidecar 的 Pod 直连（明文） | ❌ 拒绝             |
+| 外部流量绕过 Gateway 直连      | ❌ 拒绝             |
+| Gateway Sidecar → App Sidecar  | ✅ 允许（自动mTLS） |
 
 **这就是你的 AuthorizationPolicy 生效的前提**：只有携带合法 SPIFFE 证书的 Sidecar 才能建立连接，AP 规则才能匹配 `principals`。
 
@@ -815,10 +825,10 @@ sequenceDiagram
 
 根据你的需求，在 `team-a-runtime` namespace 实现了真正的深度防御 (Defense in Depth)：
 
-| 防护层级 | 实现技术 | 防御目标 | 你的配置体现 |
-| :--- | :--- | :--- | :--- |
-| **L3/L4 网络层** | Kubernetes `NetworkPolicy` | 防止未经授权的 IP、外部网段、其他非白名单 Namespace 发起底层 TCP 连接。 | 默认 `Deny-All` 入站，仅允许 `istio-ingressgateway-int` 命名空间的 IP 访问 `:8443`。 |
-| **网格传输层** | Istio `PeerAuthentication` | 防止内网抓包窃听；防止没有注入 Sidecar 的 Pod 冒充合法客户端发起请求。 | `STRICT` 模式。任何不用 mTLS 发起的连接直接在 Sidecar 层面被掐断。 |
+| 防护层级            | 实现技术                    | 防御目标                                                                       | 你的配置体现                                                                              |
+| :------------------ | :-------------------------- | :----------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------- |
+| **L3/L4 网络层**    | Kubernetes `NetworkPolicy`  | 防止未经授权的 IP、外部网段、其他非白名单 Namespace 发起底层 TCP 连接。        | 默认 `Deny-All` 入站，仅允许 `istio-ingressgateway-int` 命名空间的 IP 访问 `:8443`。      |
+| **网格传输层**      | Istio `PeerAuthentication`  | 防止内网抓包窃听；防止没有注入 Sidecar 的 Pod 冒充合法客户端发起请求。         | `STRICT` 模式。任何不用 mTLS 发起的连接直接在 Sidecar 层面被掐断。                        |
 | **L7 应用与身份层** | Istio `AuthorizationPolicy` | 细粒度控制“谁可以访问”。即使由于配置失误导致网络层通了，身份不对依然会被拒绝。 | 默认 `Deny-All`，仅允许携带 `istio-ingressgateway-int-sa` SPIFFE 证书的流量调用 `:8443`。 |
 
 ---
