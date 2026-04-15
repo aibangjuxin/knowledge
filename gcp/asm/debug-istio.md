@@ -201,6 +201,27 @@ for l in data:
 # 3. 查看 Sidecar 的实时出站日志（另开一个终端先跑这个，再 curl）
 kubectl logs -n runtime-ns <pod> -c istio-proxy -f | grep -E "sharevpc|443|reset|UF|UC|URX"
 
+2026-04-15T11:39:30.852492Z info xdsproxy connected to upstream XDS server: meshconfig.googleapis.com443
+[2026-04-15T12:03:21.043Z] "- - -" 0 UF,URX - - "TLS_error:|
+268435588:SSL_routines:OPENSSL_internal:CLIENTHELLO_TLSEXT|
+268435646:SSL_routines:OPENSSL_internal:PARSE_TLSEXT:TLS_error_end" 0 0 10002 - "-" "-" "-" "-" "100.68.34.241:443"
+outbound|443||sharevpc-fqnd.appdev.aibang - 10.105.0.249:443
+100.64.3.68:49884 sharevpc-fqnd.appdev.aibang -
+[2026-04-15T12:04:59.409Z] "- - -" 0 - - - "-" 731 3578 61055 -
+"-" "-" "-" "-" "10.88.0.162:443" PassthroughCluster
+100.64.3.68:52438 10.88.0.162:443 100.64.3.68:52428 dev-api.aliyun.cloud.xg.aibang -
+[2026-04-15T12:14:32.406Z] "- - -" 0 UF,URX - - "TLS_error:|
+268435588:SSL_routines:OPENSSL_internal:CLIENTHELLO_TLSEXT|
+268435646:SSL_routines:OPENSSL_internal:PARSE_TLSEXT:TLS_error_end" 0 0 10004 - "-" "-" "-" "-" "100.68.34.241:443"
+outbound|443||sharevpc-fqnd.appdev.aibang - 10.105.0.249:443
+100.64.3.68:41690 sharevpc-fqnd.appdev.aibang -
+[2026-04-15T12:15:13.918Z] "- - -" 0 UF,URX - - "TLS_error:|
+268435588:SSL_routines:OPENSSL_internal:CLIENTHELLO_TLSEXT|
+268435646:SSL_routines:OPENSSL_internal:PARSE_TLSEXT:TLS_error_end" 0 0 10001 - "-" "-" "-" "-" "100.68.34.241:443"
+outbound|443||sharevpc-fqnd.appdev.aibang - 10.105.0.249:443
+100.64.3.68:56902 sharevpc-fqnd.appdev.aibang -
+
+
 # 4. 最关键：看 istio-proxy 的 access log 里 response_flag 是什么
 kubectl exec -n runtime-ns <pod> -c istio-proxy -- \
   pilot-agent request GET stats | grep -E "sharevpc|ssl.handshake|ssl.connection_error"
@@ -411,3 +432,242 @@ annotations:
 ```
 
 先跑方案 C 的注解测试，结果出来我们就能确定方向。
+
+---
+
+## 针对你提供的 Envoy 报错日志深度解析
+
+你刚刚提供的 Envoy Access Log:
+
+```text
+[2026-04-15T12:15:13.918Z] "- - -" 0 UF,URX - - "TLS_error:|268435588:SSL_routines:OPENSSL_internal:CLIENTHELLO_TLSEXT|268435646:SSL_routines:OPENSSL_internal:PARSE_TLSEXT:TLS_error_end" 0 0 10001 - "-" "-" "-" "-" "100.68.34.241:443"
+outbound|443||sharevpc-fqnd.appdev.aibang - 10.105.0.249:443 100.64.3.68:56902 sharevpc-fqnd.appdev.aibang -
+```
+
+这个日志释放了**三个极其关键的信号**，它印证了我之前的一个猜测，并且直接把问题原因暴露出来了：
+
+### 1. `outbound|443||sharevpc-fqnd.appdev.aibang` (路由成功了！)
+日志证明 Sidecar **成功拦截并在路由表里匹配到了这个域名**。
+这说明：你的 `ServiceEntry` 是生效的。Envoy 知道这笔流量是要发给 `sharevpc-fqnd.appdev.aibang` 的 `443` 端口，并且它把目的地解析成了 `10.105.0.249`。
+
+### 2. `UF,URX` (上游连接失败)
+* `UF` (Upstream Connection Failure): Envoy 作为客户端，试图去连接 GLB (`10.105.0.249:443`)，但是失败了或者连接立刻被断开了。
+* `URX` (Upstream Retry Limit Exceeded): Envoy 尝试了重试但仍然失败。
+
+### 3. `SSL_routines:OPENSSL_internal:CLIENTHELLO_TLSEXT...PARSE_TLSEXT:TLS_error_end`
+这是重中之重。这是一个 OpenSSL 底层的**TLS 握手解析错误 (Parse Extension Error)**。
+
+为什么 Envoy 在去连接你的 GLB 时，会报 `PARSE_TLSEXT` 错误？
+
+**核心矛盾爆发点（Double TLS 冲突 / TLS 协议误判）：**
+当你在 Pod 里执行 `curl https://...` 时，`curl` 本身发出了一个 `TLS ClientHello`。
+由于流量命中了 `outbound|443`，Istio Sidecar 有两种可能的错误行为导致了这个报错：
+
+* **情景 A（双重 TLS）**：你的某个 `DestinationRule` 或者是全局默认把这个对外的连接配置成了 `tls.mode: SIMPLE` 或尝试发起 mTLS。这导致 Envoy 试图拿 `curl` 的数据去包一层 Envoy 自己的 TLS。
+* **情景 B（TLS Inspector 把 HTTPS 当作明文处理了）**：在你的 `ServiceEntry` 配置里，你可能把 port 的 `protocol` 写成了 `HTTPS`。在 Istio 的语义里，如果把外部服务的端口协议声明为 `HTTPS`，Istio 认为“流量在到达 Sidecar 之前是 HTTP 的，需要 Sidecar 来代理加密”。但实际上你的 `curl` 已经在发 TLS（HTTPS）连接了！于是 Envoy 的底层 TLS 解析引擎被这个实际上是 TLS 却当作别的东西（或反之）的数据包搞崩溃了。
+
+### 💡 结论与精准修复措施
+
+这个报错 **100% 说明 Sidecar 参与了 TLS 握手或者试图干预 TLS**，而没有乖乖地做“TCP/TLS 盲透传”。
+
+你的 `ServiceEntry` 或者对应的配置让 Envoy 做错了一件事：它介入了原本应该直接由 `curl` 与 `GLB` 完成的 TLS。
+
+**修复方案（方案 A 的终极形态）：**
+
+你必须让这个 `ServiceEntry` 的端口协议变成纯纯的 `TLS` (盲透传)，并且不让 Sidecar 做任何多余的 TLS 工作。修改你的 `ServiceEntry` 如下：
+
+```yaml
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: sharevpc-external-entry
+  namespace: runtime-ns
+spec:
+  hosts:
+  - "sharevpc-fqnd.appdev.aibang"
+  ports:
+  - number: 443
+    name: tls-443              # 【关键】名字以 tls- 打头
+    protocol: TLS              # 【关键】必须用 TLS，绝对不能用 HTTPS 或 HTTP
+  location: MESH_EXTERNAL
+  # 【极其关键】必须是 NONE。
+  # 之前 YAML 中写成了 DNS，导致 Envoy 擅自进行了解析，连错了 IP。
+  resolution: NONE              
+```
+
+*如果你在这个 Namespace 下有一个关于这个域名的 `DestinationRule`，请立刻删掉它或者把它的 `trafficPolicy.tls.mode` 设置为 `DISABLE`。对于 `protocol: TLS`，Envoy 就仅仅根据 SNI 路由，把原本的 TCP 字节流（也就是 curl 生成的 TLS 数据）原封不动传递给 GLB。*
+
+---
+
+## 针对最新 `UF, URX - - 10002` 报错的分析
+
+太棒了，这说明我们迈出了**决定性的一步**：
+之前令人绝望的 `SSL_routines:OPENSSL_internal:CLIENTHELLO_TLSEXT` (TLS 握手解析崩溃) **完全消失了**。这证明了将 `protocol: TLS` 设为纯透传的思路是 100% 正确的，Sidecar 已经不再胡乱干预你的加密流量。
+
+现在你遇到的是一个纯纯的 **L4 网络层问题（10秒 TCP 连接超时）**。
+
+### 为什么会报 `UF,URX` 和 `10002`？
+
+从你的最新日志中：
+`" 0 0 10002 - "-" "-" "-" "-" "100.68.34.241:443" outbound|443||sharevpc-fqnd.appdev.aibang - 10.105.0.249:443 100.64.3.68:56902 sharevpc-fqnd.appdev.aibang -`
+
+* `%UPSTREAM_HOST%` 是 `100.68.34.241:443`。
+* `DOWNSTREAM_LOCAL_ADDRESS` （也就是 `curl` 真正请求的目标）是 `10.105.0.249:443`。
+* `%DURATION%` 是 `10002` 毫秒 (精确的 10 秒)。
+* `UF,URX`：上游连接失败。
+
+**根本原因揭晓：**
+这是因为我在前一次给你的 YAML 片段里手滑写成了 `resolution: DNS`（尽管我在上面的文字解析里强调了要用 `NONE`）。
+因为用了 `DNS`，Envoy Sidecar 自己去系统里解析了这个 FQDN，由于它是网格内已知的域名（在某处的 Gateway 里声明过），Envoy 智能且“自作主张”地直接查到了底层的 **某个 Pod IP (`100.68.34.241`)**。
+然后，Envoy 尝试直接去连这个 Pod 的 `443` 端口！但是通常 Pod 面向业务暴露的是 `8443` 或 `8080`，根本没有监听网络原始的 `443`，导致 Envoy 在发送 TCP SYN 后干等了 10 秒钟，最终报了 TCP 握手超时（`10002ms`）。
+
+### 解决办法：改为 `resolution: NONE`
+
+我们完全不需要 Envoy 去自作聪明地查内网 IP。`curl` 已经正确地查到了 GLB/ILB 的 IP 是 `10.105.0.249`（`ORIGINAL_DST`）。
+
+将上面的 `ServiceEntry` 中的 `resolution` 必须改为：
+`resolution: NONE`
+
+**工作原理：**
+设置 `NONE` 后，Envoy 会直接读取被 iptables 拦截时的**原始目标 IP** (Original Destination)，也就是 `10.105.0.249`，并向其发起转发。
+
+修改并 Apply 这个包含 `resolution: NONE` 的 `ServiceEntry`，然后再跑一次 curl！
+
+---
+
+## 异常定位追踪：为什么改为 NONE 后仍然连接 `100.68.34.241`？
+
+你反馈说将 `resolution` 改为 `NONE` 后，日志完全没变：
+`"- - -" 0 UF,URX ... "100.68.34.241:443" outbound|443... - 10.105.0.249:443 ...`
+
+这里出现了一个极度反常的现象：===> 我也关注到了这个极度反常的现象，这个应该是连到了我一个pending status 状态的一个错误的SVC。
+既然已经设成了 `NONE`，Envoy 就绝对不应该去查 DNS。`UPSTREAM_HOST`（目标服务器 IP）理应和 `curl` 请求的 `DOWNSTREAM_LOCAL_ADDRESS`（`10.105.0.249`）一模一样。
+**但 Envoy 偏偏死了心要去连 `100.68.34.241:443`**，这导致了最终的 10 秒超时 (`10003ms`)。
+
+这说明了一件事：**你的这个 `ServiceEntry` 并没有按照预期生效。**
+
+### 为什么没生效？可能的原因：
+1. **全局冲突**：在集群的另一个 Namespace (比如 `istio-system` 或 `default`) 里，早就存在了一个 `hosts` 包含 `sharevpc-fqnd.appdev.aibang` 或者 `*.appdev.aibang` 的 `ServiceEntry` 或 `VirtualService`。在 Istio 中，相同 host 的配置哪怕在不同 Namespace 也会产生合并或覆盖冲突，导致你的 `NONE` 根本没被 Sidecar 采纳。
+2. **K8s Service 冲突**：集群里有一个 Kubernetes `Service` (可能是 ExternalName 或是某个内部服务) 占用了这个域名，或者 `100.68.34.241` 本身就是某个被错误注册的底层 Endpoint。
+
+### 降维打击修复法：强制锁定与拦截豁免
+
+既然 Sidecar 在这里总被干扰，我们要用两种“降维打击”的方法来查明真相。
+
+**方案 1：强制静态 Endpoint (Static Resolution)**
+直接在 ServiceEntry 里把 IP 写死，强迫 Envoy 只认 `10.105.0.249`。
+
+修改 `ServiceEntry` 为 `STATIC` 模式：
+```yaml
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: sharevpc-external-entry
+  namespace: runtime-ns
+spec:
+  hosts:
+  - "sharevpc-fqnd.appdev.aibang"
+  ports:
+  - number: 443
+    name: tls-443
+    protocol: TLS
+  location: MESH_EXTERNAL
+  # 【强制路由】直接告诉 Envoy 这个域名对应的唯一网络终点是谁
+  resolution: STATIC
+  endpoints:
+  - address: 10.105.0.249
+```
+*如果你 Apply 了这个配置，再次执行 curl，如果 `UPSTREAM_HOST` 终于变成了 `10.105.0.249:443` 且 curl 成功了，那说明前面的配置确确实实被其他规则覆盖了。*
+*如果换成了 `10.105.0.249:443` 后，仍然是 `UF,URX`（仍然超时 10 秒），那么 100% 确认是底层的云主机网络把流量丢了（例如著名的 **GCP ILB Hairpin Loopback 断流** 问题）。*
+
+**方案 2：核弹级直连（彻底排除 Istio 干扰）**
+如果方案 1 还是不行，我们要证明是不是哪怕没有 Istio 也连不上。
+请在你要用来发起测试的 Pod 的 **Deployment** 的 `spec.template.metadata.annotations` 加上这一行：
+
+```yaml
+annotations:
+  traffic.sidecar.istio.io/excludeOutboundPorts: "443"
+```
+加上后，重启该 Pod，然后再去 Pod 里跑：
+```bash
+curl -vvv https://sharevpc-fqnd.appdev.aibang/pmu-cicd-ms-proxy/v1/.well-known/health
+```
+
+**意义：**
+加了这个注解后，这个 Pod 往 443 发的所有包，**Envoy Sidecar 完全不会拦截，当作没看见，直接由底层 Linux 走原生的网络栈出去。**
+- 如果这样 `curl` 通了：说明你的集群里还有别人留下的一堆“脏”网格路由规则在作祟。
+- 如果这样 `curl` 还是连不上（一直卡在 trying 甚至 timeout）：恭喜你，你已经彻底脱离了 Istio 的苦海，这是一个**纯粹的 GCP 网络连通性问题**。你需要检查当前 VPC 到 GLB (`10.105.0.249`) 之间的路由（Firewall，NetworkPolicy，ILB 返回路由黑洞等）。
+
+改完上面的 `ServiceEntry`（确保 protocol 是 TLS 而不是 HTTPS），再跑一次 curl 试试，这个 `PARSE_TLSEXT` 报错就会瞬间消失。
+
+
+我现在已经按照你的建议删除了对应的Destination Rule，然后使用上面的这个对应的ServiceEntry。
+但是现在请求的话，日志还是报错，报错是下面这一个信息。
+
+
+
+```bash
+"- - -" 0 UF,URX - - " 0 0 10002 - "-" "-" "-" "-" "100.68.34.241:443"
+outbound|443||sharevpc-fqnd.appdev.aibang - 10.105.0.249:443 100.64.3.68:56902 sharevpc-fqnd.appdev.aibang -
+
+2026-04-15T12:34:47.153738Z info xdsproxy connected to upstream XDS server: meshconfig.googleapis.com:443 
+[2026-04-15T12:36:09.327Z] "- - -" 0 UF,URX - - "-" 0 0 10003 - "-" "-" "-" "-" "100.68.34.241:443" outbound|443||sharevpc-fqnd.appdev.aibang - 10.105.0.249:443 100.64.3.68:56420 sharevpc-fqnd.appdev.aibang -
+```
+
+---
+
+## 终极真相：跨 Namespace 的 ServiceEntry “毒化” (Config Leak)
+
+你发现的这条隐藏在 `runtime-ns-other` 里的规则，**完美且彻底地**解释了为什么连改成 `NONE` 都没有用，以及为什么 `100.68.34.241` 会像幽灵一样一直缠着这笔流量。
+
+### 根本原因 (Root Cause)
+
+1. **Istio 默认的全局可见性问题**：
+   在 Istio 的默认机制中，任何 Namespace 中创建的路由规则 (`ServiceEntry`, `VirtualService`, `DestinationRule`)，其默认的生效范围是 **整个 Mesh (即所有 Namespace)** (`exportTo: ["*"]`)。
+2. **规则冲突与合并 (Rule Collision)**：
+   当你的同事在 `runtime-ns-other` 中创建了 `ServiceEntry`，且 `hosts: ["sharevpc-fqnd.appdev.aibang"]`。Istio 的控制面 (Istiod) 会将这个域名的解析规则下发给集群里的**所有** Envoy。
+   偏偏他的规则里写死了 `endpoints: [{address: 100.68.34.241}]`，导致了全局所有的 Sidecar，只要出站流量请求了这个域名，一律被黑洞路由到了 `100.68.34.241` 这个 pending 的无效 IP。
+
+这在 Istio 中被称为 **Config Pollution (配置污染)**。
+
+### 架构层面的规避方案 (Best Practices)
+
+为了保证类似的架构问题不再发生，防止各个业务团队互相“投毒”，必须强制推广以下规范：
+
+#### 1. 强制使用 `exportTo`
+在所有（非公共基础架构 Namespace 的）网格配置中，强制声明 `exportTo: ["."]`。
+`.` 代表该配置**仅在当前 Namespace 生效**。这就像网络隔离一样，天然屏蔽冲突。
+
+```yaml
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: sharevpc-external-entry
+  namespace: runtime-ns
+spec:
+  exportTo:
+  - "."      # 【架构规范】严格限制只在当前 ns 生效
+  hosts:
+  - "sharevpc-fqnd.appdev.aibang"
+...
+```
+
+#### 2. K8s Policy 准入拦截
+SRE/架构团队应该在 OPA Gatekeeper 或 Kyverno 中配置策略 (ValidatingWebhookConfiguration)：
+*“任何开发者提交的 VirtualService, ServiceEntry, DestinationRule 资源，如果没有包含 `exportTo: ["."]` 或其值包含 `*`，并且不在白名单 Namespace 中，则一律拒绝 Apply。”*
+
+### 以后的排查手段 (How to debug next time)
+
+如果你以后再次遇到“为什么我的流量飘去了某个莫名其妙的 IP”，永远不要去猜，用以下两条黄金命令直接“抓现行”：
+
+**1. 看 Envoy 最终合成到底长什么样（查 Cluster）：**
+```bash
+istioctl proxy-config cluster <你的Pod名称>.runtime-ns --fqdn sharevpc-fqnd.appdev.aibang -o json
+```
+*这会打印出 Envoy 为这个域名生成的配置。你会立刻在里面看到它使用的 resolution 模式。*
+
+**2. 看目标 IP 到底是谁配的（查 Endpoint）：**
+```bash
+istioctl proxy-config endpoint <你的Pod名称>.runtime-ns --cluster "outbound|443||sharevpc-fqnd.appdev.aibang"
+```
+*这个命令极其强大！如果当时你跑这句命令，它不仅会打印出 `100.68.34.241`，还有极大概率在 `status` 或者推导源里暴露这条配置是由哪个 Namespace 的哪个实例合并产生的。*
