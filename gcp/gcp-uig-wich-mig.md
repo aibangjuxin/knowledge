@@ -52,9 +52,9 @@ UIG 是一个**手动管理**的实例组，你需要自己管理组内的每个
 ```mermaid
 graph TB
     subgraph UIG
-        VM1[VM Instance 1<br/>静态 IP: 35.0.0.1]
-        VM2[VM Instance 2<br/>静态 IP: 35.0.0.2]
-        VM3[VM Instance 3<br/>静态 IP: 35.0.0.3]
+        VM1["VM Instance 1\n静态 IP: 35.0.0.1"]
+        VM2["VM Instance 2\n静态 IP: 35.0.0.2"]
+        VM3["VM Instance 3\n静态 IP: 35.0.0.3"]
     end
     LB[Load Balancer] --> UIG
     style VM1 fill:#90EE90
@@ -99,13 +99,13 @@ graph TB
 ```mermaid
 graph LR
     subgraph "你的 GCP 项目"
-        YourService[你的服务]
-        Proxy[代理层<br/>Squid/Nginx]
+        YourService["你的服务"]
+        Proxy["代理层\nSquid/Nginx"]
     end
     
     subgraph "第三方服务"
-        ThirdParty[第三方 API]
-        WL[IP 白名单验证]
+        ThirdParty["第三方 API"]
+        WL["IP 白名单验证"]
     end
     
     YourService --> Proxy
@@ -205,13 +205,13 @@ graph TB
 ```mermaid
 graph TB
     subgraph "UIG 典型架构 - 静态 IP 出口"
-        App[应用服务]
+        App["应用服务"]
         subgraph "UIG (代理层)"
-            P1[Squid Proxy 1<br/>IP: 34.123.45.67]
-            P2[Squid Proxy 2<br/>IP: 34.123.45.68]
-            P3[Squid Proxy 3<br/>IP: 34.123.45.69]
+            P1["Squid Proxy 1\nIP: 34.123.45.67"]
+            P2["Squid Proxy 2\nIP: 34.123.45.68"]
+            P3["Squid Proxy 3\nIP: 34.123.45.69"]
         end
-        ThirdParty[第三方服务<br/>(IP 白名单)]
+        ThirdParty["第三方服务\n(IP 白名单)"]
     end
     App --> P1
     App --> P2
@@ -530,13 +530,13 @@ graph TB
     end
     
     subgraph "出口代理层 (UIG)"
-        Proxy1[Squid Proxy 1<br/>静态 IP: 34.123.45.67]
-        Proxy2[Squid Proxy 2<br/>静态 IP: 34.123.45.68]
-        Proxy3[Squid Proxy 3<br/>静态 IP: 34.123.45.69]
+        Proxy1["Squid Proxy 1\n静态 IP: 34.123.45.67"]
+        Proxy2["Squid Proxy 2\n静态 IP: 34.123.45.68"]
+        Proxy3["Squid Proxy 3\n静态 IP: 34.123.45.69"]
     end
     
     subgraph "第三方服务"
-        ThirdParty[第三方 API<br/>(IP 白名单)]
+        ThirdParty["第三方 API\n(IP 白名单)"]
     end
     
     GLB --> AppMIG
