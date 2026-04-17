@@ -1,0 +1,20 @@
+# Helm values for Gloo Platform (Management Plane + Agent)
+licensing:
+  glooMeshLicenseKey: ${GLOO_GATEWAY_LICENSE_KEY}
+glooMgmtServer:
+  enabled: true
+  # For single-cluster, we can use a local service address
+  relay:
+    disableTls: true
+glooAgent:
+  enabled: true
+  relay:
+    serverAddress: gloo-mesh-mgmt-server.gloo-mesh.svc.cluster.local:9900
+    # For single-cluster, disable TLS for relay to simplify
+    disableTls: true
+telemetryCollector:
+  enabled: true
+glooUi:
+  enabled: true
+# Single cluster mode registration
+# meshctl cluster register --cluster-name=gke-cluster-1

@@ -1,0 +1,30 @@
+# Step 7.1: VirtualGateway Configuration
+# VirtualGateway defines the ingress listener configuration for Gloo Gateway
+# It specifies which Gateway pods to use and what ports to listen on
+---
+apiVersion: networking.gloo.solo.io/v2
+kind: VirtualGateway
+metadata:
+  name: minimax-gateway
+  namespace: gloo-gateway
+spec:
+  # Bind to Gloo Gateway proxy pods
+  workloads:
+  - selector:
+      labels:
+        app: gloo-gateway
+      namespace: gloo-gateway
+  # Configure HTTP and HTTPS listeners
+  listeners:
+  - http: {}
+    port:
+      number: 8080
+    allowedRouteTables:
+    - host: "*"
+  - port:
+      number: 8443
+    tls:
+      mode: SIMPLE
+      secretName: gateway-tls-secret
+    allowedRouteTables:
+    - host: "*"

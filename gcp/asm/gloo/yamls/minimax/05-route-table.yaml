@@ -1,0 +1,57 @@
+# Step 7.2: RouteTable Configuration
+# RouteTable defines the routing rules for HTTP traffic
+# It replaces the traditional Istio VirtualService concept
+---
+apiVersion: networking.gloo.solo.io/v2
+kind: RouteTable
+metadata:
+  name: minimax-routes
+  namespace: minimax-runtime
+spec:
+  # Host patterns to match (use specific domains in production)
+  hosts:
+  - "*"
+  # VirtualGateways this route table binds to
+  virtualGateways:
+  - name: minimax-gateway
+    namespace: gloo-gateway
+  # HTTP routing rules
+  http:
+  # Route for /api/minimax prefix
+  - name: minimax-api-route
+    matchers:
+    - uri:
+        prefix: /api/minimax
+    forwardTo:
+      destinations:
+      - ref:
+          name: minimax-api
+          namespace: minimax-runtime
+        port:
+          number: 8080
+    labels:
+      route: minimax
+  # Route for /healthz - health check endpoint
+  - name: healthz-route
+    matchers:
+    - uri:
+        prefix: /healthz
+    forwardTo:
+      destinations:
+      - ref:
+          name: minimax-api
+          namespace: minimax-runtime
+        port:
+          number: 8080
+  # Default route for root path
+  - name: default-route
+    matchers:
+    - uri:
+        prefix: /
+    forwardTo:
+      destinations:
+      - ref:
+          name: minimax-api
+          namespace: minimax-runtime
+        port:
+          number: 8080

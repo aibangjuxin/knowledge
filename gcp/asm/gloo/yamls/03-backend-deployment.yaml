@@ -1,0 +1,86 @@
+# Backend Deployment - Sample application with automatic sidecar injection
+# This deployment will have an Envoy sidecar injected automatically
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api1-backend
+  namespace: team-a-runtime
+  labels:
+    app: api1-backend
+    version: v1
+spec:
+  replicas: 2  # High availability
+  selector:
+    matchLabels:
+      app: api1-backend
+  template:
+    metadata:
+      labels:
+        app: api1-backend
+        version: v1
+    spec:
+      serviceAccountName: default
+      containers:
+      - name: api1
+        image: nginx:1.25-alpine
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        volumeMounts:
+        - name: config
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: config
+        configMap:
+          name: api1-config
+---
+# ConfigMap - Provides custom content for the sample application
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api1-config
+  namespace: team-a-runtime
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>API1 Backend</title>
+    </head>
+    <body>
+        <h1>API1 Backend Service</h1>
+        <p>Service: api1-backend</p>
+        <p>Namespace: team-a-runtime</p>
+        <p>Mesh: Gloo Mesh Enterprise</p>
+    </body>
+    </html>
+  healthz: "OK"

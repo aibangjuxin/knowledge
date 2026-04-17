@@ -1,0 +1,19 @@
+# WorkspaceSettings - Configures service discovery and policy inheritance
+# Controls which Workspaces can import/export services
+apiVersion: admin.gloo.solo.io/v2
+kind: WorkspaceSettings
+metadata:
+  name: team-a-settings
+  namespace: team-a-runtime
+spec:
+  importFrom:
+  - workspaces:
+    - name: team-a-workspace
+  exportTo:
+  - workspaces:
+    - name: team-a-workspace
+  options:
+    serviceIsolation:
+      enabled: false  # Enable in multi-tenant environments for strict isolation
+    trimProxyConfig:
+      enabled: true   # Reduces sidecar memory footprint by optimizing Envoy config

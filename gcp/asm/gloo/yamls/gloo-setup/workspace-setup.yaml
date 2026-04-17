@@ -1,0 +1,25 @@
+# Define the workspace and its boundaries
+apiVersion: admin.gloo.solo.io/v2
+kind: Workspace
+metadata:
+  name: platform-workspace
+  namespace: gloo-mesh
+spec:
+  workloadClusters:
+  - name: gke-cluster-1
+    namespaces:
+    - name: gloo-mesh
+    - name: gloo-gateway
+    - name: sample-app
+---
+# Workspace settings to enable service discovery and isolation
+apiVersion: admin.gloo.solo.io/v2
+kind: WorkspaceSettings
+metadata:
+  name: platform-settings
+  namespace: gloo-mesh
+spec:
+  options:
+    serviceIsolation:
+      enabled: false # Set to true to enforce STRICT mTLS between all services
+    trimProxyConfig: true # Optimization to keep Envoy footprint small

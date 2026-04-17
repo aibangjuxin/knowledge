@@ -1,0 +1,150 @@
+# Step 5.1: Sample Backend Application Deployment
+# This creates a sample API service that will be exposed through Gloo Gateway
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: minimax-api-config
+  namespace: minimax-runtime
+data:
+  # Default nginx configuration
+  nginx.conf: |
+    worker_processes auto;
+    error_log /var/log/nginx/error.log;
+    pid /run/nginx.pid;
+    
+    events {
+        worker_connections 1024;
+    }
+    
+    http {
+        log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+        
+        access_log /var/log/nginx/access.log main;
+        
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        keepalive_timeout 65;
+        types_hash_max_size 2048;
+        
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+        
+        server {
+            listen 8080;
+            server_name _;
+            
+            location / {
+                root /usr/share/nginx/html;
+                index index.html index.htm;
+            }
+            
+            location /healthz {
+                access_log off;
+                return 200 "OK\n";
+                add_header Content-Type text/plain;
+            }
+            
+            location /api/info {
+                add_header Content-Type application/json;
+                return 200 '{"service":"minimax-api","version":"v1","pod":"$hostname","namespace":"$namespace"}';
+            }
+        }
+  # HTML content for the application
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>MiniMax API Service</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; }
+            h1 { color: #2c3e50; }
+            .info { background: #ecf0f1; padding: 20px; border-radius: 5px; }
+        </style>
+    </head>
+    <body>
+        <h1>MiniMax API Service</h1>
+        <div class="info">
+            <p><strong>Service:</strong> minimax-api</p>
+            <p><strong>Namespace:</strong> minimax-runtime</p>
+            <p><strong>Mesh:</strong> Gloo Gateway</p>
+            <p><strong>Status:</strong> Running</p>
+        </div>
+        <h2>Available Endpoints</h2>
+        <ul>
+            <li><code>/</code> - Main page</li>
+            <li><code>/healthz</code> - Health check endpoint</li>
+            <li><code>/api/info</code> - API information</li>
+        </ul>
+    </body>
+    </html>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minimax-api
+  namespace: minimax-runtime
+  labels:
+    app: minimax-api
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: minimax-api
+  template:
+    metadata:
+      labels:
+        app: minimax-api
+        version: v1
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25-alpine
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx
+          readOnly: true
+        - name: html-content
+          mountPath: /usr/share/nginx/html
+          readOnly: true
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          successThreshold: 1
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: minimax-api-config
+          items:
+          - key: nginx.conf
+            path: nginx.conf
+      - name: html-content
+        configMap:
+          name: minimax-api-config
+          items:
+          - key: index.html
+            path: index.html

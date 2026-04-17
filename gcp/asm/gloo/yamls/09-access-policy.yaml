@@ -1,0 +1,26 @@
+# AccessPolicy - L7 authorization policy
+# Controls which service accounts can access the backend
+# This is the Gloo Mesh equivalent of Istio AuthorizationPolicy
+apiVersion: security.policy.gloo.solo.io/v2
+kind: AccessPolicy
+metadata:
+  name: allow-gateway-to-api1
+  namespace: team-a-runtime
+spec:
+  applyToWorkloads:
+  - selector:
+      labels:
+        app: api1-backend
+  config:
+    # Authentication: require mTLS
+    authn:
+      tlsMode: STRICT
+    # Authorization: only allow Gloo Gateway service account
+    authz:
+      allowedClients:
+      - serviceAccountSelector:
+          name: gloo-gateway-sa
+          namespace: gloo-gateway
+
+# Note: Enable this in production for strict L7 authorization
+# Apply with: kubectl apply -f 09-access-policy.yaml

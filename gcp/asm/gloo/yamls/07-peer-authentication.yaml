@@ -1,0 +1,11 @@
+# PeerAuthentication - Enables mesh-wide mTLS
+# This is an Istio native resource (still used by Gloo Mesh)
+# STRICT mode requires all traffic to be encrypted with mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default-strict
+  namespace: istio-system  # Apply mesh-wide
+spec:
+  mtls:
+    mode: STRICT  # Reject plaintext traffic

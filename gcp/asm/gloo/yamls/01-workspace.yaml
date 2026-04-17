@@ -1,0 +1,13 @@
+# Workspace - Defines team/tenant isolation boundary
+# This resource scopes which namespaces belong to the team
+apiVersion: admin.gloo.solo.io/v2
+kind: Workspace
+metadata:
+  name: team-a-workspace
+  namespace: gloo-mesh
+spec:
+  workloadClusters:
+  - name: gke-cluster-1  # Auto-discovered in single-cluster mode
+    namespaces:
+    - name: team-a-runtime    # Workload namespace
+    - name: gloo-gateway      # Gateway namespace
