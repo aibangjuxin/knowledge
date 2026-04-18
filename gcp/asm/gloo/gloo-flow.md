@@ -166,21 +166,24 @@ Pod Sidecar → App:  127.0.0.1 明文
 │ ① HTTPS / TLS（外部证书）                                │
 │                                                         │
 │ namespace: gloo-gateway                                 │
-│ ┌───────────────────────┐  ┌──────────────────────────┐ │
-│ │ Gloo Gateway Pod      │  │ Envoy Sidecar            │ │
-│ │ VirtualGateway        │→ │ SPIFFE 身份              │ │
-│ │ TLS SIMPLE 终止       │  │ 持有 Gloo Mesh CA 证书   │ │
-│ │ 持有域名证书          │  │                          │ │
-│ └───────────────────────┘  └──────────────────────────┘ │
+│ ┌─────────────────────────────────────────────────────┐ │
+│ │ Gloo Gateway Pod（Envoy-based，本身持有 SPIFFE 身份）│ │
+│ │ VirtualGateway TLS SIMPLE 终止                      │ │
+│ │ 持有域名证书 wildcard-team-a-cert                   │ │
+│ │ 🆔 SPIFFE: spiffe://cluster.local/ns/gloo-gateway  │ │
+│ │ 🔐 Gloo Mesh CA 签发证书（通过 istiod SDS 下发）   │ │
+│ └─────────────────────────────────────────────────────┘ │
 │                                                         │
-│ Gloo Mesh Control Plane（管理面）                        │
-│ → 通过 RootTrustPolicy 统一管理 CA                      │
-│ → xDS 下发配置 + SDS 自动签发 SPIFFE 证书               │
-│ → 每 24h 轮转，存于 Sidecar 内存，不落盘                │
+│ Control Plane 证书下发路径：                             │
+│ mgmt-server ↔ gloo-mesh-agent（gRPC relay）            │
+│ → agent 同步配置到 istiod（ns: istio-system）           │
+│ → istiod 通过 SDS 自动签发 SPIFFE 证书                  │
+│ → 每 24h 轮转，存于 Envoy 内存，不落盘                  │
 └─────────────────────────────────────────────────────────┘
   │
   │ ② mTLS（自动加密）
   │ SPIFFE 双向证书验证（Gloo Mesh CA 签发）
+  │ Gateway Pod 直接发起 mTLS（Gateway 本身即 Envoy）
   │
   ▼
 ┌─────────────────────────────────────────────────────────┐
@@ -219,12 +222,13 @@ graph TD
     end
 
     subgraph gloo-gw-ns["namespace: gloo-gateway"]
-        GGW["Gloo Gateway Pod\nVirtualGateway TLS SIMPLE 终止\n持有域名证书 wildcard-team-a-cert"]
-        GGW_SC["Envoy Sidecar\nSPIFFE 身份\n持有 Gloo Mesh CA 签发证书"]
+        GGW["Gloo Gateway Pod（Envoy-based）\nVirtualGateway TLS SIMPLE 终止\n持有域名证书 wildcard-team-a-cert\n🆔 SPIFFE 身份 · Gloo Mesh CA 签发"]
     end
 
-    subgraph gloo-mesh-ns["namespace: gloo-mesh"]
-        GMCP["Gloo Mesh Control Plane\ngloo-mesh-mgmt-server\nRootTrustPolicy 统一 CA"]
+    subgraph ctrl["Control Plane"]
+        MGMT["mgmt-server\n（Management Cluster · ns: gloo-mesh）\nRootTrustPolicy 统一 CA"]
+        AGENT["gloo-mesh-agent\n（Workload Cluster · ns: gloo-mesh）"]
+        ISTIOD["istiod\n（ns: istio-system）"]
     end
 
     subgraph team-a-ns["namespace: team-a-runtime"]
@@ -238,12 +242,13 @@ graph TD
     end
 
     Client -->|"①\nHTTPS / TLS\n外部证书"| GGW
-    GGW -->|"明文"| GGW_SC
-    GGW_SC -->|"②\nmTLS 自动加密\nSPIFFE 双向验证"| RT_SC
+    GGW -->|"②\nmTLS 自动加密\nSPIFFE 双向验证"| RT_SC
     RT_SC -->|"③\n明文 localhost"| APP
 
-    GMCP -.->|"xDS + SDS\n证书下发\n24h 轮转"| GGW_SC
-    GMCP -.->|"xDS + SDS\n证书下发"| RT_SC
+    MGMT <-->|"gRPC relay"| AGENT
+    AGENT -->|"配置同步"| ISTIOD
+    ISTIOD -.->|"xDS + SDS\n证书下发 24h 轮转"| GGW
+    ISTIOD -.->|"xDS + SDS\n证书下发"| RT_SC
 
     NP -.->|"L3/L4 过滤"| pod
     PA -.->|"强制 mTLS"| pod
@@ -255,31 +260,32 @@ graph TD
 ```mermaid
 sequenceDiagram
     participant C as 外部客户端
-    participant GGW as Gloo Gateway Pod
-    participant GGW_SC as Gateway Envoy Sidecar
-    participant GMCP as Gloo Mesh Control Plane
+    participant GGW as Gloo Gateway Pod（Envoy-based）
+    participant MGMT as mgmt-server
+    participant AGENT as gloo-mesh-agent
+    participant ISTIOD as istiod
     participant RT_SC as Runtime Envoy Sidecar
     participant APP as 业务容器 App
 
-    Note over GMCP: 启动阶段：RootTrustPolicy 初始化 CA
-    GMCP->>GGW_SC: SDS 下发 SPIFFE 证书
-    GMCP->>RT_SC: SDS 下发 SPIFFE 证书
-    Note over GGW_SC,RT_SC: 证书每 24h 自动轮转，内存存储
+    Note over MGMT: 启动阶段：RootTrustPolicy 初始化 CA
+    MGMT->>AGENT: gRPC relay 推送 CA 配置
+    AGENT->>ISTIOD: 同步证书策略
+    ISTIOD->>GGW: SDS 下发 SPIFFE 证书
+    ISTIOD->>RT_SC: SDS 下发 SPIFFE 证书
+    Note over GGW,RT_SC: 证书每 24h 自动轮转，内存存储
 
     C->>GGW: ① HTTPS 请求 *.team-a.appdev.aibang
     Note over GGW: VirtualGateway TLS SIMPLE 终止<br/>使用 wildcard-team-a-cert 证书
-    GGW->>GGW_SC: 明文流量（Pod 内 localhost）
 
-    Note over GGW_SC,RT_SC: ② mTLS 自动加密<br/>SPIFFE 双向证书验证
-    GGW_SC->>RT_SC: mTLS 加密传输
+    Note over GGW,RT_SC: ② mTLS 自动加密<br/>SPIFFE 双向证书验证
+    GGW->>RT_SC: mTLS 加密传输（Gateway 直接发起）
 
     Note over RT_SC: PeerAuthentication STRICT 验证<br/>AccessPolicy 检查 gloo-gateway SA
     RT_SC->>APP: ③ 明文 localhost（HTTP :8443）
     Note over APP: 完全感知不到 mTLS<br/>iptables 规则自动拦截
 
     APP-->>RT_SC: HTTP Response
-    RT_SC-->>GGW_SC: mTLS Response
-    GGW_SC-->>GGW: 明文
+    RT_SC-->>GGW: mTLS Response
     GGW-->>C: HTTPS Response
 ```
 
@@ -399,13 +405,12 @@ graph TD
         GLB["☁️ Google Cloud LB\nTLS 1.3 终止 或 透传"]
     end
 
-    subgraph GW_Zone["🔵 Zone 2 — Gloo Gateway 加密区"]
+    subgraph GW_Zone["🔵 Zone 2 — Gloo Gateway（ns: gloo-gateway）"]
         direction TB
-        GGW["🚪 Gloo Gateway Pod\n📜 VirtualGateway\nTLS SIMPLE 终止\n🔑 wildcard-team-a-cert"]
-        GGW_SC["🛡️ Gateway Envoy Sidecar\n🆔 SPIFFE: spiffe://cluster.local/ns/gloo-gateway/sa/gloo-gw-sa\n🔐 Gloo Mesh CA 签发"]
+        GGW["🚪 Gloo Gateway Pod（Envoy-based）\n📜 VirtualGateway TLS SIMPLE 终止\n🔑 wildcard-team-a-cert\n🆔 SPIFFE: spiffe://cluster.local/ns/gloo-gateway/sa/gloo-gw-sa\n🔐 Gloo Mesh CA 签发"]
     end
 
-    subgraph MESH_Zone["🟢 Zone 3 — Mesh mTLS 加密区"]
+    subgraph MESH_Zone["🟢 Zone 3 — Mesh mTLS 加密区（ns: team-a-runtime）"]
         direction TB
         NP["🧱 NetworkPolicy\nL3/L4: 仅放行 TCP :8443"]
         PA["🔒 PeerAuthentication\nSTRICT — 无证书即拒绝"]
@@ -418,24 +423,36 @@ graph TD
         APP["📦 业务容器 App\nHTTP :8443 明文\n✨ 完全无感知加密"]
     end
 
+    subgraph CTRL["⚙️ Control Plane"]
+        MGMT["🧠 mgmt-server\n（Management Cluster）"]
+        AGENT["📡 gloo-mesh-agent\n（Workload Cluster）"]
+        ISTIOD["🎛️ istiod\n（ns: istio-system）"]
+    end
+
     Client -->|"🔸 HTTPS TLS 1.3\n公网证书"| GLB
     GLB -->|"🔸 HTTPS / 透传"| GGW
-    GGW -->|"明文\nlocalhost"| GGW_SC
-    GGW_SC -->|"🔹 mTLS\nSPIFFE 双向验证\nAES-256-GCM"| RT_SC
+    GGW -->|"🔹 mTLS\nSPIFFE 双向验证\nAES-256-GCM"| RT_SC
     NP -.->|"L3/L4"| RT_SC
     PA -.->|"mTLS 强制"| RT_SC
     AP -.->|"L7 SA 验证"| RT_SC
     RT_SC -->|"🔸 明文\n127.0.0.1"| APP
 
+    MGMT <-->|"gRPC relay"| AGENT
+    AGENT -->|"配置同步"| ISTIOD
+    ISTIOD -.->|"xDS + SDS"| GGW
+    ISTIOD -.->|"xDS + SDS"| RT_SC
+
     style Client fill:#2d2d2d,stroke:#e0e0e0,color:#fff
     style GLB fill:#4a90d9,stroke:#2a5fa8,color:#fff
     style GGW fill:#6c5ce7,stroke:#5341d6,color:#fff
-    style GGW_SC fill:#00b894,stroke:#009a7d,color:#fff
     style NP fill:#636e72,stroke:#4a5459,color:#fff
     style PA fill:#00cec9,stroke:#00b3ad,color:#fff
     style AP fill:#e17055,stroke:#c0553e,color:#fff
     style RT_SC fill:#00b894,stroke:#009a7d,color:#fff
     style APP fill:#fdcb6e,stroke:#d4a84e,color:#333
+    style MGMT fill:#6c5ce7,stroke:#5341d6,color:#fff
+    style AGENT fill:#a29bfe,stroke:#8a82e5,color:#fff
+    style ISTIOD fill:#ffeaa7,stroke:#dcc47a,color:#333
 ```
 
 ### 🔷 图 2：Gloo Mesh 证书生命周期
@@ -572,11 +589,11 @@ graph TD
     end
 
     subgraph PURPLE["🟣 Gateway — TLS SIMPLE 终止"]
-        GGW["🚪 Gloo Gateway\nVirtualGateway"]
+        GGW["🚪 Gloo Gateway\nVirtualGateway\n（Envoy-based）"]
     end
 
     subgraph GREEN["🟢 Mesh — mTLS SPIFFE 自动加密"]
-        GWSC["🛡️ GW Sidecar"] --> RTSC["🛡️ RT Sidecar"]
+        GGW2["🛡️ Gateway Envoy"] --> RTSC["🛡️ RT Sidecar"]
     end
 
     subgraph YELLOW["🟡 Pod — 明文 localhost"]
@@ -584,23 +601,29 @@ graph TD
     end
 
     subgraph CONTROL["⚙️ Control Plane"]
-        CP["🧠 Gloo Mesh\nmgmt-server"]
+        MGMT["🧠 mgmt-server"]
+        AGENT["📡 agent"]
+        ISTIOD["🎛️ istiod"]
     end
 
     Client -->|"TLS 1.3"| GLB
     GLB -->|"TLS"| GGW
-    GGW -->|"plaintext"| GWSC
+    GGW -->|"mTLS"| GGW2
     RTSC -->|"localhost"| APP
-    CP -.->|"xDS + SDS"| GWSC
-    CP -.->|"xDS + SDS"| RTSC
+    MGMT <-->|"relay"| AGENT
+    AGENT -->|"sync"| ISTIOD
+    ISTIOD -.->|"xDS + SDS"| GGW2
+    ISTIOD -.->|"xDS + SDS"| RTSC
 
     style Client fill:#2d3436,stroke:#636e72,color:#fff
     style GLB fill:#d63031,stroke:#b52727,color:#fff
     style GGW fill:#6c5ce7,stroke:#5341d6,color:#fff
-    style GWSC fill:#00b894,stroke:#009a7d,color:#fff
+    style GGW2 fill:#00b894,stroke:#009a7d,color:#fff
     style RTSC fill:#00b894,stroke:#009a7d,color:#fff
     style APP fill:#fdcb6e,stroke:#d4a84e,color:#333
-    style CP fill:#a29bfe,stroke:#8a82e5,color:#fff
+    style MGMT fill:#a29bfe,stroke:#8a82e5,color:#fff
+    style AGENT fill:#00cec9,stroke:#00b3ad,color:#fff
+    style ISTIOD fill:#ffeaa7,stroke:#dcc47a,color:#333
 ```
 
 ### 🔷 图 6：Gloo Gateway 请求处理管线
@@ -615,7 +638,7 @@ graph LR
     AUTH -->|"✅ 通过"| TP
     AUTH -->|"❌ 拒绝"| DENY["🚫 403 Forbidden"]
     TP["⚡ 流量策略\nTrafficPolicy\n重试 · 超时 · 熔断"]
-    TP --> MTLS_O["🔒 mTLS 发起\nSidecar 加密\nSPIFFE 证书"]
+    TP --> MTLS_O["🔒 mTLS 发起\nGateway Envoy 加密\nSPIFFE 证书"]
     MTLS_O --> BACKEND["📦 Backend Pod"]
 
     style REQ fill:#2d3436,stroke:#636e72,color:#fff
@@ -633,40 +656,49 @@ graph LR
 
 ```mermaid
 graph TB
-    subgraph Management["🧠 Management Plane — gloo-mesh"]
-        MGMT["⚙️ mgmt-server\nCRD 翻译引擎"]
-        UI["📊 Gloo Mesh UI\nEnterprise Dashboard"]
-        RBAC_E["🔐 Enterprise RBAC\n多租户策略"]
-        RTP_E["📜 RootTrustPolicy\n统一 CA"]
-        TEL["📡 Telemetry Collector\nOpenTelemetry"]
+    subgraph MgmtCluster["🧠 Management Cluster"]
+        subgraph gloo_mesh_ns["ns: gloo-mesh"]
+            MGMT["⚙️ mgmt-server\nCRD 翻译引擎"]
+            UI["📊 Gloo Mesh UI\nEnterprise Dashboard"]
+            RBAC_E["🔐 Enterprise RBAC\n多租户策略"]
+            RTP_E["📜 RootTrustPolicy\n统一 CA"]
+            TEL["📡 Telemetry Collector\nOpenTelemetry"]
+        end
     end
 
-    subgraph DataPlane["⚡ Data Plane — gloo-gateway"]
-        GW["🚪 Gloo Gateway\nEnvoy-based"]
-        AGENT["📡 gloo-mesh-agent\n状态上报"]
-        ISTIOD_E["🎛️ istiod\nxDS Server"]
+    subgraph WkldCluster["⚡ Workload Cluster"]
+        subgraph agent_ns["ns: gloo-mesh（Agent）"]
+            AGENT["📡 gloo-mesh-agent\nRelay 双向同步"]
+        end
+
+        subgraph istio_ns["ns: istio-system"]
+            ISTIOD_E["🎛️ istiod\nxDS + SDS Server"]
+        end
+
+        subgraph gw_ns["ns: gloo-gateway"]
+            GW["🚪 Gloo Gateway\nEnvoy-based"]
+        end
+
+        subgraph Workloads["📦 Workload Namespaces"]
+            W1["🟢 team-a-runtime\nPod + Sidecar"]
+            W2["🔵 team-b-runtime\nPod + Sidecar"]
+            W3["🟠 team-c-runtime\nPod + Sidecar"]
+        end
     end
 
-    subgraph Workloads["📦 Workload Namespaces"]
-        W1["🟢 team-a-runtime\nPod + Sidecar"]
-        W2["🔵 team-b-runtime\nPod + Sidecar"]
-        W3["🟠 team-c-runtime\nPod + Sidecar"]
-    end
-
-    MGMT --> AGENT
-    MGMT --> ISTIOD_E
-    AGENT --> MGMT
+    MGMT <-->|"gRPC relay"| AGENT
     UI --> MGMT
     RBAC_E --> MGMT
-    RTP_E --> ISTIOD_E
+    RTP_E --> MGMT
     TEL --> MGMT
-    ISTIOD_E --> GW
-    ISTIOD_E --> W1
-    ISTIOD_E --> W2
-    ISTIOD_E --> W3
-    GW --> W1
-    GW --> W2
-    GW --> W3
+    AGENT --> ISTIOD_E
+    ISTIOD_E -->|"xDS"| GW
+    ISTIOD_E -->|"xDS + SDS"| W1
+    ISTIOD_E -->|"xDS + SDS"| W2
+    ISTIOD_E -->|"xDS + SDS"| W3
+    GW -->|"mTLS"| W1
+    GW -->|"mTLS"| W2
+    GW -->|"mTLS"| W3
 
     style MGMT fill:#6c5ce7,stroke:#5341d6,color:#fff
     style UI fill:#a29bfe,stroke:#8a82e5,color:#fff

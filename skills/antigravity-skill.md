@@ -33,3 +33,25 @@ You don't need to explicitly tell the agent to use a skill—it decides based on
 
 背景：我正在设计一个生产环境的 GKE 集群，需要暴露多个 gRPC 服务。 问题：应该选择哪种负载均衡器（L4 还是 L7），以及如何配置 Ingress 或 Gateway API 来实现最佳性能？ 要求：请严格按照 Skill 里的 Workflow 步骤（分析 -> 方案 -> 代码 -> 图表 -> 注意事项）进行回答。
 
+https://codelabs.developers.google.com/getting-started-with-antigravity-skills?hl=zh-cn#4
+
+在 Antigravity 中创建 Skill 遵循特定的目录结构和文件格式。这种标准化可确保 Skills 的可移植性，并确保智能体能够可靠地解析和执行它们。该设计有意简单，依赖于广泛理解的格式（如 Markdown 和 YAML），降低了希望扩展其 IDE 功能的开发者的入门门槛。
+
+目录结构
+Skills 可以在两个范围内定义，允许进行项目特定和用户特定的自定义：
+
+工作区范围：位于 <workspace-root>/.agent/skills/ 中。这些 Skills 仅在特定项目中可用。这非常适合项目特定的脚本，例如部署到特定环境、该应用的数据管理，或为专有框架生成样板代码。
+全局范围：位于 ~/.gemini/antigravity/skills/ 中。这些 Skills 在用户机器上的所有项目中都可用。这适用于通用实用程序，例如“格式化 JSON”“生成 UUID”“查看代码样式”或与个人效率工具集成。
+
+
+➜  antigravity pwd
+➜  antigravity cp -r /Users/lex/git/knowledge/skills/* ./
+/Users/lex/.gemini/antigravity
+
+
+
+GitHub
+https://github.com › guanyang › blob
+·
+Translate this page
+在对话框中输入 @[skill-name] 或 /skill-name 即可调用，
