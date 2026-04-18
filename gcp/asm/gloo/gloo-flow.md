@@ -712,3 +712,77 @@ graph TB
     style W2 fill:#74b9ff,stroke:#5ca4e5,color:#fff
     style W3 fill:#fab1a0,stroke:#e08e7e,color:#333
 ```
+
+---
+
+## 🏗️ Maitreya Premium Visualization
+
+### 🔷 图 8：Gloo Mesh Enterprise 全景 (Maitreya Premium Style)
+
+> [!TIP]
+> **Maitreya 视角**：本图通过色彩分层与 `classDef` 强化了管理面（Zone 1）、网关层（Zone 2）、网格基础设施（Zone 3）与业务负载（Zone 4）的逻辑边界。
+
+```mermaid
+graph TB
+    %% [Maitreya Style Definitions]
+    classDef default font-family:Inter,font-size:13px;
+    classDef mgmt fill:#2d3436,stroke:#000,color:#fff,stroke-width:2px,rx:10,ry:10;
+    classDef gateway fill:#6c5ce7,stroke:#5341d6,color:#fff,stroke-width:2px,rx:10,ry:10;
+    classDef mesh fill:#00b894,stroke:#009a7d,color:#fff,stroke-width:2px,rx:10,ry:10;
+    classDef app fill:#fdcb6e,stroke:#d4a84e,color:#333,stroke-width:2px;
+    classDef storage fill:#fab1a0,stroke:#e17055,color:#333;
+
+    subgraph MgmtCluster ["🧠 Management Cluster (Zone 1)"]
+        direction TB
+        subgraph gloo_mesh_ns ["ns: gloo-mesh"]
+            MGMT["⚙️ mgmt-server\n(CRD Translation)"]:::mgmt
+            UI["📊 Gloo Mesh UI\n(Dashboard)"]:::mgmt
+            RTP_E["📜 RootTrustPolicy\n(Unified CA)"]:::mgmt
+            TEL["📡 Telemetry Collector\n(OpenTelemetry)"]:::mgmt
+        end
+    end
+
+    subgraph WkldCluster ["⚡ Workload Cluster"]
+        subgraph mesh_infra ["Mesh Infrastructure (Zone 3)"]
+            AGENT["📡 gloo-mesh-agent\n(Relay Agent)"]:::mesh
+            ISTIOD_E["🎛️ istiod\n(xDS + SDS Server)"]:::mesh
+        end
+
+        subgraph entry_points ["Entry Points (Zone 2)"]
+            GW["🚪 Gloo Gateway\n(Envoy-based)"]:::gateway
+        end
+
+        subgraph workloads ["Workload Domains (Zone 4)"]
+            W1["🟢 team-a-runtime\n(Pod + Sidecar)"]:::app
+            W2["🔵 team-b-runtime\n(Pod + Sidecar)"]:::app
+            W3["🟠 team-c-runtime\n(Pod + Sidecar)"]:::app
+        end
+    end
+
+    %% [Control Plane & Relay Flow]
+    MGMT <-->|"gRPC Relay\n(Bi-directional)"| AGENT
+    AGENT -->|"Config Sync"| ISTIOD_E
+    UI --- MGMT
+    RTP_E --- MGMT
+
+    %% [Data Plane Distribution]
+    ISTIOD_E -.->|"xDS / SDS"| GW
+    ISTIOD_E -.->|"xDS / SDS"| W1
+    ISTIOD_E -.->|"xDS / SDS"| W2
+    ISTIOD_E -.->|"xDS / SDS"| W3
+
+    %% [North-South Traffic]
+    GW ==>|"mTLS"| W1
+    GW ==>|"mTLS"| W2
+    GW ==>|"mTLS"| W3
+
+    %% [Technical Insight Note]
+    Note_Maitreya[Maitreya 架构见解：'浓缩铀'级别核心]
+    Note_Maitreya --- K1{统一信任根: RootTrustPolicy 跨集群分发}
+    Note_Maitreya --- K2{Relay 架构: 屏蔽 API Server 跨集群暴露风险}
+    Note_Maitreya --- K3{无感加密: 业务 0 感知 mTLS 自动注入}
+
+    style MgmtCluster fill:#f1f2f6,stroke:#dfe4ea,stroke-width:2px
+    style WkldCluster fill:#f1f2f6,stroke:#dfe4ea,stroke-width:2px
+    style Note_Maitreya fill:#fff,stroke:#e17055,stroke-width:3px
+```
