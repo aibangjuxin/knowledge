@@ -62,13 +62,13 @@
 
 **Key Concepts:**
 
-|Term              |Description                                                                         |
-|------------------|------------------------------------------------------------------------------------|
-|**Control Plane** |The `gloo` deployment that watches CRDs and translates them into Envoy xDS config   |
-|**Data Plane**    |The `gateway-proxy` Envoy deployment that actually forwards traffic                 |
-|**Upstream**      |A Gloo CRD that defines a routing destination (K8s Service, static host, etc.)      |
-|**VirtualService**|A Gloo CRD that defines domain-level routing rules (similar to Istio VirtualService)|
-|**Gateway**       |The Gloo CRD that defines what ports/protocols the Envoy proxy listens on           |
+| Term               | Description                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| **Control Plane**  | The `gloo` deployment that watches CRDs and translates them into Envoy xDS config    |
+| **Data Plane**     | The `gateway-proxy` Envoy deployment that actually forwards traffic                  |
+| **Upstream**       | A Gloo CRD that defines a routing destination (K8s Service, static host, etc.)       |
+| **VirtualService** | A Gloo CRD that defines domain-level routing rules (similar to Istio VirtualService) |
+| **Gateway**        | The Gloo CRD that defines what ports/protocols the Envoy proxy listens on            |
 
 -----
 
@@ -76,12 +76,12 @@
 
 ### 2.1 Required Tools
 
-|Tool        |Minimum Version    |Installation                                              |
-|------------|-------------------|----------------------------------------------------------|
-|`gcloud` CLI|latest             |https://cloud.google.com/sdk/docs/install                 |
-|`kubectl`   |1.27+              |bundled with gcloud or `gcloud components install kubectl`|
-|`helm`      |3.12+              |https://helm.sh/docs/intro/install/                       |
-|`glooctl`   |matching EE version|See Step 4                                                |
+| Tool         | Minimum Version     | Installation                                               |
+| ------------ | ------------------- | ---------------------------------------------------------- |
+| `gcloud` CLI | latest              | https://cloud.google.com/sdk/docs/install                  |
+| `kubectl`    | 1.27+               | bundled with gcloud or `gcloud components install kubectl` |
+| `helm`       | 3.12+               | https://helm.sh/docs/intro/install/                        |
+| `glooctl`    | matching EE version | See Step 4                                                 |
 
 ### 2.2 Required Access
 
@@ -983,30 +983,30 @@ gcloud compute firewall-rules delete "allow-gloo-webhook-${CLUSTER_NAME}" \
 
 ## Appendix B: Key Gloo CRD Cheat Sheet
 
-|CRD              |API Group                     |Purpose                                              |
-|-----------------|------------------------------|-----------------------------------------------------|
-|`Gateway`        |`gateway.solo.io/v1`          |Define listener ports and protocols (L4 config)      |
-|`VirtualService` |`gateway.solo.io/v1`          |Define L7 routing rules per domain                   |
-|`RouteTable`     |`gateway.solo.io/v1`          |Delegated route rules (shared across VirtualServices)|
-|`Upstream`       |`gloo.solo.io/v1`             |Define routing destinations                          |
-|`UpstreamGroup`  |`gloo.solo.io/v1`             |Weighted routing across multiple Upstreams           |
-|`AuthConfig`     |`enterprise.gloo.solo.io/v1`  |External auth policy (API key, OIDC, JWT)            |
-|`RateLimitConfig`|`ratelimit.solo.io/v1alpha1`  |Rate limiting descriptors                            |
-|`GraphQLApi`     |`graphql.gloo.solo.io/v1beta1`|GraphQL schema stitching (EE only)                   |
+| CRD               | API Group                      | Purpose                                               |
+| ----------------- | ------------------------------ | ----------------------------------------------------- |
+| `Gateway`         | `gateway.solo.io/v1`           | Define listener ports and protocols (L4 config)       |
+| `VirtualService`  | `gateway.solo.io/v1`           | Define L7 routing rules per domain                    |
+| `RouteTable`      | `gateway.solo.io/v1`           | Delegated route rules (shared across VirtualServices) |
+| `Upstream`        | `gloo.solo.io/v1`              | Define routing destinations                           |
+| `UpstreamGroup`   | `gloo.solo.io/v1`              | Weighted routing across multiple Upstreams            |
+| `AuthConfig`      | `enterprise.gloo.solo.io/v1`   | External auth policy (API key, OIDC, JWT)             |
+| `RateLimitConfig` | `ratelimit.solo.io/v1alpha1`   | Rate limiting descriptors                             |
+| `GraphQLApi`      | `graphql.gloo.solo.io/v1beta1` | GraphQL schema stitching (EE only)                    |
 
 -----
 
 ## Appendix C: Comparison with ASM/Istio CRDs
 
-|Istio / ASM          |Gloo Gateway Equivalent              |Notes                                                       |
-|---------------------|-------------------------------------|------------------------------------------------------------|
-|`Gateway`            |`Gateway` (gloo)                     |Gloo Gateway CRD also manages the proxy deployment lifecycle|
-|`VirtualService`     |`VirtualService` (gloo)              |Gloo VS also handles routing to non-K8s upstreams           |
-|`DestinationRule`    |`Upstream` options                   |TLS mode, load balancing policy set on the Upstream CRD     |
-|`ServiceEntry`       |`Upstream` (static)                  |External services registered as static Upstreams            |
-|`AuthorizationPolicy`|`AuthConfig` + VirtualService options|Gloo uses a more plugin-based model                         |
-|`PeerAuthentication` |Upstream mTLS config                 |Per-upstream mTLS settings in the Upstream CRD spec         |
-|`EnvoyFilter`        |Route/VH `options` fields            |Most filter config is done declaratively via CRD options    |
+| Istio / ASM           | Gloo Gateway Equivalent               | Notes                                                        |
+| --------------------- | ------------------------------------- | ------------------------------------------------------------ |
+| `Gateway`             | `Gateway` (gloo)                      | Gloo Gateway CRD also manages the proxy deployment lifecycle |
+| `VirtualService`      | `VirtualService` (gloo)               | Gloo VS also handles routing to non-K8s upstreams            |
+| `DestinationRule`     | `Upstream` options                    | TLS mode, load balancing policy set on the Upstream CRD      |
+| `ServiceEntry`        | `Upstream` (static)                   | External services registered as static Upstreams             |
+| `AuthorizationPolicy` | `AuthConfig` + VirtualService options | Gloo uses a more plugin-based model                          |
+| `PeerAuthentication`  | Upstream mTLS config                  | Per-upstream mTLS settings in the Upstream CRD spec          |
+| `EnvoyFilter`         | Route/VH `options` fields             | Most filter config is done declaratively via CRD options     |
 
 -----
 
@@ -1036,6 +1036,9 @@ graph TD
     D --> E["Gloo Control Plane"]
     D --> F["Kubernetes Service"]
     F --> G["Backend Pod"]
+```
+
+![Gloo Enterprise Architecture Overview (Maitreya Style)](./gloo-enterprise-architecture.svg)
 
 ⸻
 
@@ -1134,7 +1137,7 @@ kubectl get svc echo
 7. Configure Gloo Routing
 
 7.1 Create Upstream
-
+```yaml
 apiVersion: gloo.solo.io/v1
 kind: Upstream
 metadata:
@@ -1145,12 +1148,13 @@ spec:
     serviceName: echo
     serviceNamespace: default
     servicePort: 80
+```
 kubectl apply -f upstream.yaml
 
 ⸻
 
 7.2 Create Virtual Service
-
+```yaml
 apiVersion: gateway.solo.io/v1
 kind: VirtualService
 metadata:
@@ -1168,6 +1172,7 @@ spec:
             upstream:
               name: echo-upstream
               namespace: gloo-system
+```
 kubectl apply -f virtualservice.yaml
 
 ⸻
@@ -1193,7 +1198,7 @@ Expected:
 ⸻
 
 9. Request Flow Deep Dive
-
+```mermaid
 graph TD
     A["curl request"] --> B["GCP LB"]
     B --> C["gateway-proxy Service"]
@@ -1202,7 +1207,7 @@ graph TD
     E --> F["Upstream (K8S Service)"]
     F --> G["Pod"]
     G --> A
-
+```
 ⸻
 
 10. Key Concepts (Minimal but Critical)

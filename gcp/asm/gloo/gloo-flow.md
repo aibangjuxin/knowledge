@@ -721,6 +721,8 @@ graph TB
 
 > [!TIP]
 > **Maitreya 视角**：本图通过色彩分层与 `classDef` 强化了管理面（Zone 1）、网关层（Zone 2）、网格基础设施（Zone 3）与业务负载（Zone 4）的逻辑边界。
+> 
+> ![Gloo Mesh Enterprise Architecture Overview (Maitreya Style)](./gloo-enterprise-architecture.svg)
 
 ```mermaid
 graph TB
