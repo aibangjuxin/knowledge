@@ -254,6 +254,7 @@ graph TD
     PA -.->|"强制 mTLS"| pod
     AP -.->|"L7 SPIFFE 验证"| pod
 ```
+- ![gloo-flow-optimized.svg](./gloo-flow-optimized.svg)
 
 ### Sequence Diagram — 完整请求生命周期
 
