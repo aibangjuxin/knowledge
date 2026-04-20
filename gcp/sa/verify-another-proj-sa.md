@@ -205,4 +205,103 @@ echo ""
 echo -e "${BLUE}======================================================${NC}"
 echo -e "${BLUE}   Verification Complete!                              ${NC}"
 echo -e "${BLUE}======================================================${NC}"
+
+
+
+local 
+#!/bin/bash
+
+# ------------------------------------------------------
+# GCP Service Account Permission Verifier
+# 功能：检查一个指定的Service Account在当前运行环境 (Project A) 中拥有哪些IAM角色。
+# 注意：脚本必须在具备读取 IAM Policy 的权限的机器上运行，并且已配置 gcloud CLI。
+# ------------------------------------------------------
+
+# 检查参数数量
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 <SERVICE_ACCOUNT_EMAIL>"
+    echo ""
+    echo "Example:"
+    echo "  $0 dev-us-app-sa@projectb.iam.gserviceaccount.com"
+    exit 1
+fi
+
+# --- 输入参数处理 ---
+TARGET_SA="$1"
+
+# 检查 gcloud 是否可用
+if ! command -v gcloud &> /dev/null
+then
+    echo "🚨 Error: The 'gcloud' CLI command could not be found. Please ensure the Google Cloud SDK is installed and initialized."
+    exit 1
+fi
+
+# 获取当前项目 ID (这是权限的检查范围，即 Project A)
+CURRENT_PROJECT=$(gcloud config get-value project)
+
+if [ -z "$CURRENT_PROJECT" ]; then
+    echo "🚨 Error: Could not determine the current GCP project. Please run 'gcloud config set project YOUR_PROJECT_ID' first."
+    exit 1
+fi
+
+
+# --- 主逻辑 ---
+echo "================================================================"
+echo "🔍 Starting Permission Audit..."
+echo "  Target Service Account: $TARGET_SA"
+echo "  Audit Scope (Project A): $CURRENT_PROJECT"
+echo "----------------------------------------------------------------"
+
+# 格式化输出的头部信息
+echo -e "\n✅ Found Permissions for '$TARGET_SA' in Project '$CURRENT_PROJECT':\n"
+
+# 核心逻辑：使用 gcloud projects get-iam-policy 读取整个项目的 IAM 策略，
+# 并只筛选出包含目标 SA 的绑定（Bindings）。
+POLICY_OUTPUT=$(gcloud projects get-iam-policy "${CURRENT_PROJECT}" \
+    --format=json --quiet)
+
+if [ $? -ne 0 ]; then
+    echo "❌ Error: Failed to retrieve the IAM policy for project '$CURRENT_PROJECT'."
+    echo "   Please ensure that the authenticated user has 'resourcemanager.projects.getIamPolicy' permission on this project."
+    exit 1
+fi
+
+# 初始化一个标志位，用于追踪是否找到了权限
+FOUND_PERMISSIONS=0
+
+# 使用 jq 工具解析 JSON (jq 是处理JSON的最佳工具)
+if command -v jq &> /dev/null; then
+    echo "Using 'jq' for reliable JSON parsing..."
+    
+    # 遍历 policy 中的每一个 bindings 对象
+    gcloud projects get-iam-policy "${CURRENT_PROJECT}" --format=json | jq -r \
+        '.bindings[] | select(.members[] | test("accounts/.*'+${TARGET_SA}'")) | "\(.role)\t\(\(.members | join(", ")))"' | while IFS=$'\t' read -r ROLE MEMBERS; do
+        
+            echo "  🛡️ Role Granted: $ROLE"
+            echo "    * Assigned to: ${MEMBERS}"
+            FOUND_PERMISSIONS=1
+        done
+
+else
+    # 如果没有安装 jq，则提供警告并退出
+    echo ""
+    echo "⚠️ WARNING: The 'jq' utility is required for reliable JSON parsing."
+    echo "   Please install it (e.g., sudo apt-get install jq or brew install jq)."
+    exit 1
+fi
+
+
+# --- 结果总结 ---
+if [ "$FOUND_PERMISSIONS" -eq 0 ]; then
+    echo ""
+    echo "----------------------------------------------------------------"
+    echo "✨ SUCCESS: The Service Account '$TARGET_SA' currently does not appear to have any direct, explicit roles granted on Project '$CURRENT_PROJECT'."
+    echo "(Note: It might inherit permissions through Google Workspace or other indirect means.)"
+else
+    echo ""
+    echo "================================================================"
+    echo "✅ Audit Complete. The Service Account '$TARGET_SA' has been confirmed to hold the roles listed above in Project '$CURRENT_PROJECT'."
+fi
+
+
 ```
