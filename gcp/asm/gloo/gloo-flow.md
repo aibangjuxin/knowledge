@@ -71,6 +71,88 @@ graph TD
     IGW --> SVC
     SVC --> POD
 ```
+toolName: Skill
+            
+status: success
+          
+          
+
+        
+            
+toolName: view_files
+            
+status: failed
+          
+            
+filePath: /Users/lex/git/knowledge/gcp/asm/gloo/gloo/gloo-flow.md
+          
+
+        
+            
+toolName: view_files
+            
+status: success
+          
+            
+filePath: /Users/lex/git/knowledge/gcp/asm/gloo/gloo-flow.md
+          
+**结论**
+- 整体流程是正确的：外部 TLS 到 GCLB；GCLB 到 Istio Ingress Gateway 支持 HTTPS(L7)终结或 TCP(L4)透传；网格内由 Envoy Sidecar 进行 mTLS；istiod 下发证书与 xDS；IGW 通过 Service 负载到 Pod。[gloo-flow.md:L46-73](file:///Users/lex/git/knowledge/gcp/asm/gloo/gloo-flow.md#L46-L73)
+- 两处表述需要更精准：
+  - IGW 的“TLS/mTLS 终结”不严谨。TLS 终结只在 GCLB 透传时发生；mTLS 是 IGW 与后端 sidecar 之间的双向加密，不叫“终结”。
+  - “mTLS (PeerAuth)”通常还需要 DestinationRule（或启用 Auto mTLS）。单写 PeerAuth 会让读者误以为它单独就能启用所有场景。
+
+**问题与修正**
+- IGW 节点文案建议改为“TLS 终结（当 GLB 透传）/ 作为后端 mTLS 会话一方”，避免把 mTLS 描述为“终结”。
+- IGW→后端的加密链路应标注为“HTTP/HTTP2 over mTLS（PeerAuth + DestinationRule 或 Auto mTLS）”，并把加密标签放在 IGW→SVC 这条边上更贴近真实数据面。
+- 外部层建议明确“GCLB: HTTPS(L7) 终结 或 TLS(L4) 透传（可选）”，使读者明确双模式。
+- 可选补充：GCLB 前挂 Cloud Armor/WAF；Pod 内侧明确“Sidecar → App 容器 localhost 明文”（当前图未展示这一内联细节）。
+
+**优化建议**
+- 统一术语与位置：把 mTLS 标注放在 IGW→SVC；保留 SVC→POD 作为负载分发，不重复标注加密。
+- 采用编号标签（①②③）精炼箭头文案，提高可读性与审阅速度。
+- 给 Service 明确类型（ClusterIP），让读者理解 IGW 通过 VIP/NEG 指向后端。
+- 可选展示策略面：PeerAuthentication、DestinationRule（或 Auto mTLS）、AuthorizationPolicy（或 AccessPolicy）以虚线节点或边注释说明其作用范围。
+
+**优化后的 Mermaid**
+将原图替换为以下片段，语义更准确且更易读：
+
+```mermaid
+graph TD
+    subgraph External
+        Client["外部客户端 / Internet"]
+    end
+
+    subgraph GKE-LB [GKE - Cloud Load Balancer]
+        GLB["Google Cloud LB (L4/L7)\n① HTTPS(L7) 终结 或 ② TLS(L4) 透传"]
+    end
+
+    subgraph istio-system [Namespace: istio-system]
+        IGW["Istio Ingress Gateway\n(Envoy Proxy)\nTLS 终结（当 GLB 透传）\n后端发起/参与 mTLS"]
+        ISTIOD["istiod\nCA + xDS Control Plane"]
+    end
+
+    subgraph app-ns [Namespace: team-a-runtime]
+        SVC["Kubernetes Service (ClusterIP)"]
+        POD["App Pod\n+ Envoy Sidecar\nmTLS 加密通信"]
+    end
+
+    Client -->|"① HTTPS (TLS)"| GLB
+    GLB -->|"②a HTTPS(L7) 终结 → HTTP/2"| IGW
+    GLB -->|"②b TCP(L4) TLS 透传"| IGW
+
+    IGW -->|"③ HTTP/HTTP2 over mTLS\n（PeerAuth + DestinationRule 或 Auto mTLS）"| SVC
+    SVC -->|"④ 负载到后端"| POD
+
+    ISTIOD -.->|"xDS/SDS 证书下发"| IGW
+    ISTIOD -.->|"xDS/SDS 证书下发"| POD
+```
+
+**可选增强**
+- 在 GLB 节点增加“Cloud Armor/WAF（可选）”一行，突出北向安全。
+- 增加虚线说明“Pod 内：Sidecar → App 容器 localhost 明文”，帮助读者理解“应用对 mTLS 无感知”的事实。
+- 如果你正使用 Gloo Enterprise，可将 IGW 替换为“Gloo Gateway（Envoy-based）”，并在控制面增加“Gloo Mesh Control Plane（RootTrustPolicy 统一 CA）/ ExtAuthPolicy”等节点，以反映增强能力与证书统一管理。
+- 
 - ![istio_mtls_full_flow.svg](../istio_mtls_full_flow.svg)
 
 **加密链路说明：**
@@ -255,6 +337,7 @@ graph TD
     AP -.->|"L7 SPIFFE 验证"| pod
 ```
 - ![gloo-flow-optimized.svg](./gloo-flow-optimized.svg)
+- ![gloo-istio-architecture.svg](./gloo-istio-architecture.svg)
 
 ### Sequence Diagram — 完整请求生命周期
 

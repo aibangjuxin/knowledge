@@ -1,0 +1,362 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 900 1060" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap');
+    </style>
+
+    <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="0.9" fill="rgba(28,25,23,0.10)"/>
+    </pattern>
+
+    <!-- Arrow markers -->
+    <marker id="arr-ink" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M1,1 L6,3.5 L1,6 Z" fill="#57534e"/>
+    </marker>
+    <marker id="arr-accent" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M1,1 L6,3.5 L1,6 Z" fill="#b5523a"/>
+    </marker>
+    <marker id="arr-link" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M1,1 L6,3.5 L1,6 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-muted" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+      <path d="M1,1 L5,3 L1,5 Z" fill="#78716c"/>
+    </marker>
+  </defs>
+
+  <!-- ═══════════════════════════════════════════════
+       PAGE BACKGROUND
+  ════════════════════════════════════════════════ -->
+  <rect width="900" height="1060" fill="#faf7f2"/>
+
+  <!-- ═══════════════════════════════════════════════
+       PAGE HEADER
+  ════════════════════════════════════════════════ -->
+  <!-- Eyebrow -->
+  <text x="20" y="44" fill="#78716c" font-size="8" font-family="'Geist Mono',monospace"
+        letter-spacing="0.18em">ARCHITECTURE · GLOO MESH + ISTIO</text>
+  <!-- Title -->
+  <text x="20" y="72" fill="#1c1917" font-size="28" font-family="'Instrument Serif',serif"
+        font-weight="400">Gloo Gateway mTLS Traffic Flow</text>
+  <!-- Subtitle -->
+  <text x="20" y="92" fill="#57534e" font-size="13" font-family="'Geist',sans-serif">
+    外部 HTTPS 终止 → Gloo Envoy → Istio mTLS → 业务 Pod · SPIFFE 双向身份验证
+  </text>
+
+  <!-- ═══════════════════════════════════════════════
+       DIAGRAM CONTAINER (background + border)
+  ════════════════════════════════════════════════ -->
+  <rect x="16" y="108" width="868" height="756" rx="8"
+        fill="#f2ede4" stroke="rgba(28,25,23,0.12)" stroke-width="1"/>
+
+  <!-- Diagram dot-grid background -->
+  <rect x="16" y="108" width="868" height="756" rx="8" fill="url(#dots)" opacity="0.6"/>
+
+  <!-- ═══════════════════════════════════════════════
+       DIAGRAM CONTENT (offset by x=16, y=108)
+  ════════════════════════════════════════════════ -->
+  <g transform="translate(16,108)">
+
+    <!-- BOUNDARY: External -->
+    <rect x="28" y="28" width="180" height="88" rx="8"
+          fill="rgba(28,25,23,0.02)" stroke="rgba(28,25,23,0.20)" stroke-width="1" stroke-dasharray="5,4"/>
+    <rect x="44" y="22" width="72" height="14" rx="2" fill="#f2ede4"/>
+    <text x="80" y="33" fill="#78716c" font-size="8" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.14em">EXTERNAL</text>
+
+    <!-- Client node -->
+    <rect x="44" y="44" width="148" height="60" rx="6"
+          fill="rgba(120,113,108,0.10)" stroke="#78716c" stroke-width="1"/>
+    <rect x="52" y="50" width="32" height="12" rx="2" fill="transparent" stroke="rgba(120,113,108,0.5)" stroke-width="0.8"/>
+    <text x="68" y="59" fill="rgba(120,113,108,0.9)" font-size="7" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.08em">CLIENT</text>
+    <text x="118" y="70" fill="#1c1917" font-size="12" font-weight="600"
+          font-family="'Geist',sans-serif" text-anchor="middle">外部客户端</text>
+    <text x="118" y="84" fill="#57534e" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">HTTPS *.team-a.appdev</text>
+
+    <!-- BOUNDARY: gloo-gateway namespace -->
+    <rect x="28" y="148" width="800" height="116" rx="8"
+          fill="rgba(181,82,58,0.04)" stroke="rgba(181,82,58,0.40)" stroke-width="1" stroke-dasharray="4,4"/>
+    <rect x="44" y="141" width="156" height="14" rx="2" fill="#f2ede4"/>
+    <text x="122" y="152" fill="rgba(181,82,58,0.8)" font-size="8" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.12em">NS: GLOO-GATEWAY</text>
+
+    <!-- Gloo Gateway Pod — FOCAL -->
+    <rect x="44" y="160" width="760" height="92" rx="6"
+          fill="rgba(181,82,58,0.08)" stroke="#b5523a" stroke-width="1"/>
+    <rect x="52" y="166" width="32" height="12" rx="2" fill="transparent" stroke="rgba(181,82,58,0.5)" stroke-width="0.8"/>
+    <text x="68" y="175" fill="rgba(181,82,58,0.9)" font-size="7" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.08em">FOCAL</text>
+    <text x="424" y="192" fill="#1c1917" font-size="12" font-weight="600"
+          font-family="'Geist',sans-serif" text-anchor="middle">Gloo Gateway Pod（Envoy-based）</text>
+    <text x="424" y="208" fill="#57534e" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">VirtualGateway · TLS SIMPLE 终止 · wildcard-team-a-cert</text>
+    <text x="424" y="224" fill="#57534e" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">SPIFFE 身份 · Gloo Mesh CA 签发</text>
+    <text x="424" y="240" fill="#78716c" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">ns: gloo-gateway</text>
+
+    <!-- BOUNDARY: Control Plane -->
+    <rect x="28" y="296" width="800" height="120" rx="8"
+          fill="rgba(28,25,23,0.02)" stroke="rgba(28,25,23,0.18)" stroke-width="1" stroke-dasharray="5,4"/>
+    <rect x="44" y="289" width="108" height="14" rx="2" fill="#f2ede4"/>
+    <text x="98" y="300" fill="#78716c" font-size="8" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.12em">CONTROL PLANE</text>
+
+    <!-- mgmt-server -->
+    <rect x="44" y="308" width="236" height="96" rx="6"
+          fill="#ffffff" stroke="#1c1917" stroke-width="1"/>
+    <rect x="52" y="314" width="32" height="12" rx="2" fill="transparent" stroke="rgba(28,25,23,0.35)" stroke-width="0.8"/>
+    <text x="68" y="323" fill="rgba(28,25,23,0.7)" font-size="7" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.08em">MGMT</text>
+    <text x="162" y="342" fill="#1c1917" font-size="12" font-weight="600"
+          font-family="'Geist',sans-serif" text-anchor="middle">mgmt-server</text>
+    <text x="162" y="358" fill="#57534e" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">Management Cluster</text>
+    <text x="162" y="372" fill="#57534e" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">ns: gloo-mesh</text>
+    <text x="162" y="388" fill="#78716c" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">RootTrustPolicy 统一 CA</text>
+
+    <!-- gloo-mesh-agent -->
+    <rect x="312" y="308" width="220" height="96" rx="6"
+          fill="#ffffff" stroke="#1c1917" stroke-width="1"/>
+    <rect x="320" y="314" width="32" height="12" rx="2" fill="transparent" stroke="rgba(28,25,23,0.35)" stroke-width="0.8"/>
+    <text x="336" y="323" fill="rgba(28,25,23,0.7)" font-size="7" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.08em">AGENT</text>
+    <text x="422" y="342" fill="#1c1917" font-size="12" font-weight="600"
+          font-family="'Geist',sans-serif" text-anchor="middle">gloo-mesh-agent</text>
+    <text x="422" y="358" fill="#57534e" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">Workload Cluster</text>
+    <text x="422" y="372" fill="#57534e" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">ns: gloo-mesh</text>
+    <text x="422" y="388" fill="#78716c" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">配置同步桥接</text>
+
+    <!-- istiod -->
+    <rect x="564" y="308" width="248" height="96" rx="6"
+          fill="#ffffff" stroke="#1c1917" stroke-width="1"/>
+    <rect x="572" y="314" width="32" height="12" rx="2" fill="transparent" stroke="rgba(28,25,23,0.35)" stroke-width="0.8"/>
+    <text x="588" y="323" fill="rgba(28,25,23,0.7)" font-size="7" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.08em">ISTIOD</text>
+    <text x="688" y="342" fill="#1c1917" font-size="12" font-weight="600"
+          font-family="'Geist',sans-serif" text-anchor="middle">istiod</text>
+    <text x="688" y="358" fill="#57534e" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">ns: istio-system</text>
+    <text x="688" y="372" fill="#57534e" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">xDS + SDS 证书下发</text>
+    <text x="688" y="388" fill="#78716c" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">24h 轮转</text>
+
+    <!-- BOUNDARY: team-a-runtime namespace -->
+    <rect x="28" y="448" width="800" height="220" rx="8"
+          fill="rgba(28,25,23,0.02)" stroke="rgba(28,25,23,0.18)" stroke-width="1" stroke-dasharray="5,4"/>
+    <rect x="44" y="441" width="168" height="14" rx="2" fill="#f2ede4"/>
+    <text x="128" y="452" fill="#78716c" font-size="8" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.12em">NS: TEAM-A-RUNTIME</text>
+
+    <!-- NetworkPolicy -->
+    <rect x="44" y="460" width="196" height="72" rx="6"
+          fill="rgba(181,82,58,0.05)" stroke="rgba(181,82,58,0.45)" stroke-width="1" stroke-dasharray="4,4"/>
+    <rect x="52" y="466" width="32" height="12" rx="2" fill="transparent" stroke="rgba(181,82,58,0.4)" stroke-width="0.8"/>
+    <text x="68" y="475" fill="rgba(181,82,58,0.8)" font-size="7" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.08em">L3/L4</text>
+    <text x="142" y="494" fill="#1c1917" font-size="12" font-weight="600"
+          font-family="'Geist',sans-serif" text-anchor="middle">NetworkPolicy</text>
+    <text x="142" y="510" fill="#57534e" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">仅放行 :8443</text>
+    <text x="142" y="524" fill="#78716c" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">L3/L4 入口过滤</text>
+
+    <!-- PeerAuthentication -->
+    <rect x="260" y="460" width="196" height="72" rx="6"
+          fill="rgba(181,82,58,0.05)" stroke="rgba(181,82,58,0.45)" stroke-width="1" stroke-dasharray="4,4"/>
+    <rect x="268" y="466" width="44" height="12" rx="2" fill="transparent" stroke="rgba(181,82,58,0.4)" stroke-width="0.8"/>
+    <text x="290" y="475" fill="rgba(181,82,58,0.8)" font-size="7" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.08em">MTLS</text>
+    <text x="358" y="494" fill="#1c1917" font-size="12" font-weight="600"
+          font-family="'Geist',sans-serif" text-anchor="middle">PeerAuthentication</text>
+    <text x="358" y="510" fill="#57534e" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">STRICT mTLS</text>
+    <text x="358" y="524" fill="#78716c" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">强制双向 TLS</text>
+
+    <!-- AccessPolicy -->
+    <rect x="476" y="460" width="196" height="72" rx="6"
+          fill="rgba(181,82,58,0.05)" stroke="rgba(181,82,58,0.45)" stroke-width="1" stroke-dasharray="4,4"/>
+    <rect x="484" y="466" width="32" height="12" rx="2" fill="transparent" stroke="rgba(181,82,58,0.4)" stroke-width="0.8"/>
+    <text x="500" y="475" fill="rgba(181,82,58,0.8)" font-size="7" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.08em">L7</text>
+    <text x="574" y="494" fill="#1c1917" font-size="12" font-weight="600"
+          font-family="'Geist',sans-serif" text-anchor="middle">AccessPolicy</text>
+    <text x="574" y="510" fill="#57534e" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">allow gloo-gateway SA</text>
+    <text x="574" y="524" fill="#78716c" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">SPIFFE L7 验证</text>
+
+    <!-- Business Pod boundary -->
+    <rect x="44" y="552" width="760" height="104" rx="8"
+          fill="rgba(28,25,23,0.03)" stroke="rgba(28,25,23,0.15)" stroke-width="1"/>
+    <rect x="60" y="545" width="96" height="14" rx="2" fill="#f2ede4"/>
+    <text x="108" y="556" fill="#78716c" font-size="8" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.12em">BUSINESS POD</text>
+
+    <!-- Envoy Sidecar -->
+    <rect x="60" y="564" width="280" height="80" rx="6"
+          fill="#ffffff" stroke="#1c1917" stroke-width="1"/>
+    <rect x="68" y="570" width="40" height="12" rx="2" fill="transparent" stroke="rgba(28,25,23,0.35)" stroke-width="0.8"/>
+    <text x="88" y="579" fill="rgba(28,25,23,0.7)" font-size="7" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.08em">SIDECAR</text>
+    <text x="200" y="598" fill="#1c1917" font-size="12" font-weight="600"
+          font-family="'Geist',sans-serif" text-anchor="middle">Envoy Sidecar</text>
+    <text x="200" y="614" fill="#57534e" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">接收 mTLS · 验证 SPIFFE</text>
+    <text x="200" y="630" fill="#78716c" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">inbound :8443</text>
+
+    <!-- App Container -->
+    <rect x="516" y="564" width="272" height="80" rx="6"
+          fill="rgba(28,25,23,0.05)" stroke="#57534e" stroke-width="1"/>
+    <rect x="524" y="570" width="28" height="12" rx="2" fill="transparent" stroke="rgba(120,113,108,0.4)" stroke-width="0.8"/>
+    <text x="538" y="579" fill="rgba(120,113,108,0.9)" font-size="7" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.08em">APP</text>
+    <text x="652" y="598" fill="#1c1917" font-size="12" font-weight="600"
+          font-family="'Geist',sans-serif" text-anchor="middle">业务容器 App</text>
+    <text x="652" y="614" fill="#57534e" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">HTTP :8443 明文（无感知 mTLS）</text>
+    <text x="652" y="630" fill="#78716c" font-size="9" font-family="'Geist Mono',monospace"
+          text-anchor="middle">localhost loopback</text>
+
+    <!-- ARROWS -->
+
+    <!-- ① Client → Gloo GW -->
+    <line x1="118" y1="104" x2="118" y2="157"
+          stroke="#2563eb" stroke-width="1.2" marker-end="url(#arr-link)"/>
+    <rect x="68" y="118" width="100" height="14" rx="2" fill="#f2ede4"/>
+    <text x="118" y="128" fill="#2563eb" font-size="8" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.06em">① HTTPS/TLS</text>
+
+    <!-- ② Gloo GW → Envoy Sidecar -->
+    <line x1="200" y1="252" x2="200" y2="560"
+          stroke="#b5523a" stroke-width="1.2" marker-end="url(#arr-accent)"/>
+    <rect x="124" y="392" width="152" height="14" rx="2" fill="#f2ede4"/>
+    <text x="200" y="402" fill="#b5523a" font-size="8" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.06em">② mTLS · SPIFFE 双向验证</text>
+
+    <!-- ③ Envoy Sidecar → App -->
+    <line x1="344" y1="604" x2="512" y2="604"
+          stroke="#57534e" stroke-width="1" marker-end="url(#arr-muted)"/>
+    <rect x="372" y="596" width="84" height="14" rx="2" fill="#f2ede4"/>
+    <text x="414" y="606" fill="#57534e" font-size="8" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.06em">③ 明文 localhost</text>
+
+    <!-- mgmt ↔ agent -->
+    <line x1="280" y1="356" x2="308" y2="356"
+          stroke="#57534e" stroke-width="1" marker-end="url(#arr-muted)"/>
+    <line x1="308" y1="368" x2="280" y2="368"
+          stroke="#57534e" stroke-width="1" marker-end="url(#arr-muted)"/>
+    <rect x="270" y="349" width="72" height="12" rx="2" fill="#f2ede4"/>
+    <text x="306" y="358" fill="#57534e" font-size="8" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.06em">gRPC RELAY</text>
+
+    <!-- agent → istiod -->
+    <line x1="532" y1="356" x2="560" y2="356"
+          stroke="#57534e" stroke-width="1" marker-end="url(#arr-muted)"/>
+    <rect x="512" y="349" width="72" height="12" rx="2" fill="#f2ede4"/>
+    <text x="548" y="358" fill="#57534e" font-size="8" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.06em">配置同步</text>
+
+    <!-- istiod → Gloo GW (xDS+SDS) -->
+    <line x1="688" y1="304" x2="688" y2="255"
+          stroke="#78716c" stroke-width="0.8" stroke-dasharray="4,3" marker-end="url(#arr-muted)"/>
+    <line x1="688" y1="255" x2="424" y2="244"
+          stroke="#78716c" stroke-width="0.8" stroke-dasharray="4,3"/>
+    <rect x="542" y="246" width="96" height="12" rx="2" fill="#f2ede4"/>
+    <text x="590" y="255" fill="#78716c" font-size="8" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.06em">xDS+SDS · 24h轮转</text>
+
+    <!-- istiod → Envoy Sidecar (xDS+SDS) -->
+    <line x1="688" y1="408" x2="688" y2="544"
+          stroke="#78716c" stroke-width="0.8" stroke-dasharray="4,3"/>
+    <line x1="688" y1="544" x2="280" y2="580"
+          stroke="#78716c" stroke-width="0.8" stroke-dasharray="4,3" marker-end="url(#arr-muted)"/>
+    <rect x="470" y="544" width="72" height="12" rx="2" fill="#f2ede4"/>
+    <text x="506" y="553" fill="#78716c" font-size="8" font-family="'Geist Mono',monospace"
+          text-anchor="middle" letter-spacing="0.06em">xDS+SDS</text>
+
+    <!-- Security policies → pod -->
+    <line x1="142" y1="532" x2="142" y2="560"
+          stroke="rgba(181,82,58,0.5)" stroke-width="0.8" stroke-dasharray="3,3" marker-end="url(#arr-muted)"/>
+    <line x1="358" y1="532" x2="280" y2="560"
+          stroke="rgba(181,82,58,0.5)" stroke-width="0.8" stroke-dasharray="3,3" marker-end="url(#arr-muted)"/>
+    <line x1="574" y1="532" x2="400" y2="560"
+          stroke="rgba(181,82,58,0.5)" stroke-width="0.8" stroke-dasharray="3,3" marker-end="url(#arr-muted)"/>
+
+    <!-- LEGEND -->
+    <line x1="28" y1="686" x2="832" y2="686" stroke="rgba(28,25,23,0.10)" stroke-width="0.8"/>
+    <text x="28" y="700" fill="#78716c" font-size="8" font-family="'Geist Mono',monospace"
+          letter-spacing="0.14em">LEGEND</text>
+    <line x1="100" y1="696" x2="124" y2="696" stroke="#2563eb" stroke-width="1.2" marker-end="url(#arr-link)"/>
+    <text x="128" y="700" fill="#57534e" font-size="8" font-family="'Geist Mono',monospace">外部 HTTPS</text>
+    <line x1="216" y1="696" x2="240" y2="696" stroke="#b5523a" stroke-width="1.2" marker-end="url(#arr-accent)"/>
+    <text x="244" y="700" fill="#57534e" font-size="8" font-family="'Geist Mono',monospace">mTLS 加密流量</text>
+    <line x1="352" y1="696" x2="376" y2="696" stroke="#57534e" stroke-width="1" marker-end="url(#arr-muted)"/>
+    <text x="380" y="700" fill="#57534e" font-size="8" font-family="'Geist Mono',monospace">内部明文/控制面</text>
+    <line x1="488" y1="696" x2="512" y2="696" stroke="#78716c" stroke-width="0.8" stroke-dasharray="4,3"/>
+    <text x="516" y="700" fill="#57534e" font-size="8" font-family="'Geist Mono',monospace">xDS/SDS 配置推送</text>
+    <rect x="636" y="690" width="12" height="12" rx="2"
+          fill="rgba(181,82,58,0.05)" stroke="rgba(181,82,58,0.45)" stroke-width="0.8" stroke-dasharray="3,3"/>
+    <text x="652" y="700" fill="#57534e" font-size="8" font-family="'Geist Mono',monospace">安全策略边界</text>
+
+  </g><!-- end diagram group -->
+
+  <!-- ═══════════════════════════════════════════════
+       SUMMARY CARDS (y starts at 108+756+12 = 876)
+  ════════════════════════════════════════════════ -->
+
+  <!-- Card 1: TRAFFIC FLOW -->
+  <rect x="16" y="876" width="288" height="128" rx="6"
+        fill="#ffffff" stroke="rgba(28,25,23,0.12)" stroke-width="1"/>
+  <text x="28" y="893" fill="#78716c" font-size="8" font-family="'Geist Mono',monospace"
+        letter-spacing="0.18em">TRAFFIC FLOW</text>
+  <!-- dot accent -->
+  <circle cx="32" cy="908" r="3.5" fill="#b5523a"/>
+  <text x="40" y="913" fill="#1c1917" font-size="13" font-weight="600"
+        font-family="'Geist',sans-serif">三段式流量路径</text>
+  <text x="28" y="932" fill="#57534e" font-size="11" font-family="'Geist',sans-serif">— ① 外部 HTTPS → Gloo Envoy TLS 终止</text>
+  <text x="28" y="950" fill="#57534e" font-size="11" font-family="'Geist',sans-serif">— ② Gloo → Sidecar 自动 mTLS 加密</text>
+  <text x="28" y="968" fill="#57534e" font-size="11" font-family="'Geist',sans-serif">— ③ Sidecar → App 明文 localhost</text>
+
+  <!-- Card 2: IDENTITY & CERT -->
+  <rect x="316" y="876" width="268" height="128" rx="6"
+        fill="#ffffff" stroke="rgba(28,25,23,0.12)" stroke-width="1"/>
+  <text x="328" y="893" fill="#78716c" font-size="8" font-family="'Geist Mono',monospace"
+        letter-spacing="0.18em">IDENTITY &amp; CERT</text>
+  <circle cx="332" cy="908" r="3.5" fill="#1c1917"/>
+  <text x="340" y="913" fill="#1c1917" font-size="13" font-weight="600"
+        font-family="'Geist',sans-serif">SPIFFE 身份链</text>
+  <text x="328" y="932" fill="#57534e" font-size="11" font-family="'Geist',sans-serif">— Gloo Mesh CA 统一签发</text>
+  <text x="328" y="950" fill="#57534e" font-size="11" font-family="'Geist',sans-serif">— RootTrustPolicy 跨集群信任</text>
+  <text x="328" y="968" fill="#57534e" font-size="11" font-family="'Geist',sans-serif">— istiod xDS+SDS 24h 证书轮转</text>
+
+  <!-- Card 3: SECURITY LAYERS -->
+  <rect x="596" y="876" width="288" height="128" rx="6"
+        fill="#ffffff" stroke="rgba(28,25,23,0.12)" stroke-width="1"/>
+  <text x="608" y="893" fill="#78716c" font-size="8" font-family="'Geist Mono',monospace"
+        letter-spacing="0.18em">SECURITY LAYERS</text>
+  <circle cx="612" cy="908" r="3.5" fill="#78716c"/>
+  <text x="620" y="913" fill="#1c1917" font-size="13" font-weight="600"
+        font-family="'Geist',sans-serif">纵深防御策略</text>
+  <text x="608" y="932" fill="#57534e" font-size="11" font-family="'Geist',sans-serif">— NetworkPolicy L3/L4 仅放行 :8443</text>
+  <text x="608" y="950" fill="#57534e" font-size="11" font-family="'Geist',sans-serif">— PeerAuthentication STRICT mTLS</text>
+  <text x="608" y="968" fill="#57534e" font-size="11" font-family="'Geist',sans-serif">— AccessPolicy L7 SPIFFE 验证</text>
+
+  <!-- ═══════════════════════════════════════════════
+       FOOTER
+  ════════════════════════════════════════════════ -->
+  <line x1="20" y1="1022" x2="880" y2="1022" stroke="rgba(28,25,23,0.12)" stroke-width="0.8"/>
+  <text x="20" y="1040" fill="#78716c" font-size="9" font-family="'Geist Mono',monospace"
+        letter-spacing="0.06em">ARCHITECTURE · GLOO MESH + ISTIO SERVICE MESH · GENERATED BY DIAGRAM-DESIGN SKILL</text>
+
+</svg>
