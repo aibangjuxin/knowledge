@@ -772,6 +772,517 @@ echo "=== Kong → Backend ===" && time curl -I http://backend:8080/slow-api
 
 
 
+### 7.4 retries
+
+你说得非常对！GCP **Internal HTTP(S) Load Balancer**（内部负载均衡器）确实有一个我之前文档中遗漏的重要重试机制，而且它的行为与 External GLB 有显著差异。让我为你深入探索这一部分。
+
+---
+
+#### GCP Internal HTTP(S) Load Balancer 重试机制深度解析
+
+##### 一、核心机制概览
+
+GCP Internal HTTP(S) Load Balancer 的重试策略是在 **URL Map 的 Route Rules 层级**配置的，这与 External GLB 的隐式/有限重试行为完全不同 。
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│           GCP Internal HTTP(S) LB 重试机制（URL Map Route Rules）            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+【默认行为】（未配置 retryPolicy 时）：
+  • numRetries: 1（默认重试1次）
+  • 仅对无 HTTP body 的请求 → 即 GET 请求
+  • 仅在返回 502、503、504 时触发
+  • HTTP POST 请求永远不会被重试
+  • 重试请求只生成一条日志（最终响应）
+
+【自定义行为】（通过 retryPolicy 配置）：
+  • numRetries: 可配置
+  • perTryTimeout: 最大可配置 24 小时（86400 秒）
+  • retryConditions: 多种条件可选
+  • 可按路径精细控制
+```
+
+---
+
+##### 二、与 External GLB 的关键差异
+
+| 特性                | External GLB | Internal HTTP(S) LB        |
+| ------------------- | ------------ | -------------------------- |
+| **Retry Policy**    | 几乎无/隐式  | 完整的 URL Map retryPolicy |
+| **可配置性**        | 不可配置     | 通过 routeRules 完全配置   |
+| **默认 numRetries** | 1（隐式）    | 1（显式默认值）            |
+| **perTryTimeout**   | 无此概念     | 最大 24 小时               |
+| **POST 重试**       | 绝不         | 可配置（但极其危险）       |
+| **重试目标**        | 任意健康后端 | **不同 VM**（已验证）      |
+
+---
+
+##### 三、Retry Conditions 详解
+
+Internal LB 支持以下重试条件 ：
+
+| 条件              | 含义               | 安全建议           |
+| ----------------- | ------------------ | ------------------ |
+| `5xx`             | 任意 5xx 状态码    | ⚠️ 范围太宽，慎用   |
+| `gateway-error`   | 502、503、504      | ✅ 最安全的默认选项 |
+| `connect-failure` | 无法建立连接       | ✅ 几乎总是安全     |
+| `reset`           | 响应头前连接重置   | ✅ 对幂等请求安全   |
+| `refused-stream`  | HTTP/2 stream 拒绝 | ✅ gRPC 场景适用    |
+| `retriable-4xx`   | 409 Conflict       | ⚠️ 仅应用支持时启用 |
+
+---
+
+##### 四、Timeout 交互模型（Critical!）
+
+这是最容易出错的部分。Internal LB 涉及 **三个不同层级的超时** ：
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         超时交互层级                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+  Client Request
+       │
+       ▼
+  ┌──────────────────────────────┐
+  │  Route Timeout (URL Map)     │  ← 包含所有重试的总超时
+  │  例如：35 秒                  │
+  │                              │
+  │  ┌────────────────────────┐  │
+  │  │ Attempt 1              │  │
+  │  │ perTryTimeout: 10s     │  │  ← 单次尝试超时
+  │  │ ──────► 失败/超时       │  │
+  │  └────────────────────────┘  │
+  │           │                  │
+  │           ▼ 重试             │
+  │  ┌────────────────────────┐  │
+  │  │ Attempt 2              │  │
+  │  │ perTryTimeout: 10s     │  │
+  │  │ ──────► 失败/超时       │  │
+  │  └────────────────────────┘  │
+  │           │                  │
+  │           ▼ 重试             │
+  │  ┌────────────────────────┐  │
+  │  │ Attempt 3 (final)      │  │
+  │  │ perTryTimeout: 10s     │  │
+  │  │ ──────► 成功/失败       │  │
+  │  └────────────────────────┘  │
+  │                              │
+  └──────────────────────────────┘
+       │
+       ▼
+  ┌──────────────────────────────┐
+  │ Backend Service Timeout      │  ← 最终兜底上限
+  │ 例如：300 秒                  │
+  │ 如果超过 → 504 Gateway Timeout│
+  └──────────────────────────────┘
+```
+
+**关键公式**：
+```
+Route Timeout ≥ (numRetries + 1) × perTryTimeout + backoff_buffer
+
+必须满足：
+perTryTimeout < Backend Service Timeout
+```
+
+---
+
+##### 五、完整架构中的位置与配置
+
+### 5.1 更新后的四层架构
+
+```
+    Client
+      │
+      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ① GCP Internal HTTP(S) LB                                                   │
+│    ┌─────────────────────────────────────────────────────────────────────┐  │
+│    │ URL Map Route Rules                                                 │  │
+│    │  • retryPolicy:                                                     │  │
+│    │    - numRetries: 1~2（保守）                                         │  │
+│    │    - perTryTimeout: 10s（读API）                                    │  │
+│    │    - retryConditions: ["gateway-error", "connect-failure"]          │  │
+│    │  • route timeout: 35s（包含重试）                                    │  │
+│    │                                                                     │  │
+│    │ 写操作路径：无 retryPolicy（POST 默认不重试）                         │  │
+│    │ 长耗时路径：无 retryPolicy，timeout: 290s                           │  │
+│    └─────────────────────────────────────────────────────────────────────┘  │
+│    Backend Service timeout: 300s                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+      │
+      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ② Nginx L7 (反向代理)                                                        │
+│    • proxy_connect_timeout: 5s                                              │
+│    • proxy_read_timeout: 290s  (< Backend Service timeout)                  │
+│    • proxy_send_timeout: 60s                                                │
+│    • proxy_next_upstream_tries: 2                                           │
+│    • 非幂等方法不重试                                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+      │
+      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ③ Kong (API Gateway)                                                        │
+│    • connect_timeout: 5000ms                                                │
+│    • write_timeout: 60000ms                                                 │
+│    • read_timeout: 280000ms  (< Nginx read_timeout)                         │
+│    • retries: 2                                                             │
+│    • 仅幂等方法重试                                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+      │
+      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ④ GKE Runtime (K8s Pods)                                                    │
+│    • Server timeout: 275s                                                   │
+│    • Business logic timeout: 270s                                           │
+│    • DB query timeout: 30s                                                  │
+│    • External API timeout: 20s                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 5.2 gcloud 配置示例
+
+```bash
+# 导出当前 URL Map
+gcloud compute url-maps export my-internal-url-map \
+    --region=us-central1 \
+    --destination=/tmp/urlmap.yaml
+
+# 编辑后重新导入
+gcloud compute url-maps import my-internal-url-map \
+    --region=us-central1 \
+    --source=/tmp/urlmap.yaml
+```
+
+```yaml
+# urlmap.yaml
+defaultService: projects/my-project/regions/us-central1/backendServices/my-backend
+
+hostRules:
+- hosts:
+  - "api.internal.example.com"
+  pathMatcher: api-matcher
+
+pathMatchers:
+- name: api-matcher
+  defaultService: projects/my-project/regions/us-central1/backendServices/my-backend
+  
+  routeRules:
+  
+  # ═══════════════════════════════════════════════════════
+  # 规则1: 读操作 API — 安全重试
+  # ═══════════════════════════════════════════════════════
+  - priority: 100
+    matchRules:
+    - prefixMatch: /api/v1/read/
+    routeAction:
+      retryPolicy:
+        retryConditions:
+        - "gateway-error"      # 502, 503, 504
+        - "connect-failure"    # 连接失败
+        - "reset"              # 连接重置
+        numRetries: 2           # 最多重试2次（共3次尝试）
+        perTryTimeout:
+          seconds: 10           # 每次尝试10秒
+      timeout:
+        seconds: 35             # 总超时35秒（3×10 + 5秒缓冲）
+      weightedBackendServices:
+      - backendService: projects/my-project/regions/us-central1/backendServices/my-backend
+        weight: 100
+
+  # ═══════════════════════════════════════════════════════
+  # 规则2: 写操作 API — 显式关闭重试
+  # ═══════════════════════════════════════════════════════
+  - priority: 200
+    matchRules:
+    - prefixMatch: /api/v1/write/
+    routeAction:
+      # 不配置 retryPolicy = 不重试
+      # POST 默认也不重试，双重保险
+      timeout:
+        seconds: 30
+      weightedBackendServices:
+      - backendService: projects/my-project/regions/us-central1/backendServices/my-backend
+        weight: 100
+
+  # ═══════════════════════════════════════════════════════
+  # 规则3: 长耗时任务 — 超长超时，无重试
+  # ═══════════════════════════════════════════════════════
+  - priority: 300
+    matchRules:
+    - prefixMatch: /api/v1/jobs/
+    routeAction:
+      timeout:
+        seconds: 290            # 接近上限，给Nginx留10秒缓冲
+      weightedBackendServices:
+      - backendService: projects/my-project/regions/us-central1/backendServices/my-backend
+        weight: 100
+```
+
+### 5.3 Terraform 配置
+
+```hcl
+resource "google_compute_region_url_map" "internal_lb" {
+  name            = "my-internal-url-map"
+  region          = "us-central1"
+  default_service = google_compute_region_backend_service.default.id
+
+  host_rule {
+    hosts        = ["api.internal.example.com"]
+    path_matcher = "api-matcher"
+  }
+
+  path_matcher {
+    name            = "api-matcher"
+    default_service = google_compute_region_backend_service.default.id
+
+    # 读操作 - 安全重试
+    route_rules {
+      priority = 100
+      match_rules {
+        prefix_match = "/api/v1/read/"
+      }
+      route_action {
+        retry_policy {
+          retry_conditions = ["gateway-error", "connect-failure", "reset"]
+          num_retries      = 2
+          per_try_timeout {
+            seconds = 10
+          }
+        }
+        timeout {
+          seconds = 35
+        }
+        weighted_backend_services {
+          backend_service = google_compute_region_backend_service.default.id
+          weight          = 100
+        }
+      }
+    }
+
+    # 写操作 - 不重试
+    route_rules {
+      priority = 200
+      match_rules {
+        prefix_match = "/api/v1/write/"
+      }
+      route_action {
+        timeout {
+          seconds = 30
+        }
+        weighted_backend_services {
+          backend_service = google_compute_region_backend_service.default.id
+          weight          = 100
+        }
+      }
+    }
+  }
+}
+
+resource "google_compute_region_backend_service" "default" {
+  name                  = "my-backend-service"
+  region                = "us-central1"
+  protocol              = "HTTP"
+  timeout_sec           = 300
+  connection_draining_timeout_sec = 300
+
+  backend {
+    group = google_compute_region_instance_group_manager.default.instance_group
+  }
+
+  health_checks = [google_compute_region_health_check.default.id]
+}
+```
+
+---
+
+##### 六、Critical Warnings（关键警告）
+
+### ⚠️ 1. 重试放大效应（Retry Amplification）
+
+如果每一层都配置重试，会产生**乘法效应**：
+
+```
+Internal LB: numRetries=2  → 最多 3 次尝试
+     ↓
+Nginx: proxy_next_upstream_tries=2  → 最多 3 次尝试
+     ↓
+Kong: retries=2  → 最多 3 次尝试
+
+最坏情况：3 × 3 × 3 = 27 个后端请求！
+```
+
+**建议**：将 Internal LB 的 numRetries 控制在 **1**（最多2次尝试），让 Nginx 和 Kong 主要负责重试。
+
+### ⚠️ 2. POST 请求重试风险
+
+虽然 Internal LB 默认不会重试 POST，但如果你通过 `retryPolicy` 显式配置了包含 POST 路径的规则，**可能导致重复写入**。
+
+**必须**：为写操作路径单独创建 routeRule，**不配置 retryPolicy**。
+
+### ⚠️ 3. 日志追踪陷阱
+
+> "Retried requests only generate one log entry for the final response"
+
+重试的中间请求**不会生成独立日志**！如果最终成功，你只看到一条 200 日志，看不到之前的 503 失败。
+
+**解决方案**：在各层启用分布式追踪（OpenTelemetry/Zipkin），并在 Nginx 注入唯一请求 ID：
+
+```nginx
+map $http_x_request_id $req_id {
+    default   $http_x_request_id;
+    ""        $request_id;  # Nginx 生成的唯一ID
+}
+proxy_set_header X-Request-ID $req_id;
+proxy_set_header X-B3-TraceId $req_id;
+```
+
+### ⚠️ 4. 重试目标确认
+
+根据 StackOverflow 验证 ，Internal LB 的重试会路由到**不同的 VM**，而非同一实例。这是好的设计，但需要确保后端实例池足够大：
+```
+最小实例数 > numRetries + 1
+```
+
+---
+
+##### 七、故障排查速查表
+
+| 现象                         | 根因                                       | 排查方法                             |
+| ---------------------------- | ------------------------------------------ | ------------------------------------ |
+| 间歇性 502，后端日志显示成功 | LB 重试到了健康实例                        | 检查 Cloud Logging `statusDetails`   |
+| POST 被重试了                | URL Map 配置了过于宽泛的 retryPolicy       | 检查写操作路径的 routeRule           |
+| 重试未触发，直接 504         | `perTryTimeout >= Backend Service Timeout` | 确保 perTryTimeout < Backend Timeout |
+| 重试风暴导致雪崩             | 各层重试次数乘积过大                       | 监控重试率，设置 >5% 告警            |
+| 无法追踪重试链路             | LB 不生成中间日志                          | 启用 OpenTelemetry 分布式追踪        |
+
+---
+
+##### 八、监控告警
+
+```bash
+# 高重试率告警
+gcloud alpha monitoring policies create \
+  --display-name="Internal LB High Retry Rate" \
+  --condition-display-name="Retry rate > 5%" \
+  --condition-filter='
+    resource.type="internal_http_lb_rule"
+    AND metric.type="loadbalancing.googleapis.com/internal/request_count"
+    AND metric.labels.response_code_class="5xx"
+  ' \
+  --condition-comparison=COMPARISON_GT \
+  --condition-threshold-value=0.05 \
+  --condition-duration=300s
+```
+
+---
+
+##### 九、最终检查清单
+
+```
+□ perTryTimeout < Backend Service Timeout
+□ Route Timeout >= (numRetries + 1) × perTryTimeout + 缓冲
+□ POST/PUT/PATCH/DELETE 路径无 retryPolicy
+□ numRetries 保守（建议1）
+□ 后端实例数 > numRetries + 1
+□ 各层超时：LB > Nginx > Kong > App
+□ 启用分布式追踪
+□ 配置重试率监控告警
+□ 压力测试验证重试行为
+```
+
+---
+
+##### 十、numRetries 配置必要性评估
+
+**核心问题**：`numRetries` 是否必须配置？不配置有什么坏处？
+
+###### 10.1 不配置 numRetries（使用默认行为）
+
+**默认行为**（未显式配置 retryPolicy 时）：
+
+| 特性 | 行为 |
+| ---- | ---- |
+| `numRetries` | 默认值 1（自动重试1次） |
+| 触发条件 | 仅 GET 请求（无 HTTP body） |
+| 错误码 | 仅 502、503、504 |
+| POST 重试 | **绝不重试** |
+| 日志 | 只生成一条最终响应日志 |
+
+**不配置的坏处**：
+
+| 风险 | 说明 |
+| ---- | ---- |
+| **重试行为不可预测** | 依赖默认隐式行为，难以追踪 |
+| **perTryTimeout 缺失** | 使用后端服务的 timeoutSec，可能不是期望值 |
+| **日志追踪困难** | "重试请求只生成一条日志"，无法区分首次成功还是重试成功 |
+| **错误处理不精细** | 无法按路径定制重试条件 |
+
+###### 10.2 配置 numRetries（显式配置 retryPolicy）
+
+**显式配置的好处**：
+
+| 收益 | 说明 |
+| ---- | ---- |
+| **精确控制重试次数** | numRetries=1 表示最多 2 次尝试（1 次重试） |
+| **自定义 perTryTimeout** | 每次尝试的超时独立控制（最大 24h） |
+| **精细化 retryConditions** | 按场景选择 gateway-error、connect-failure 等 |
+| **路径级别控制** | 不同 API 路径可有不同重试策略 |
+| **可预测性** | 配置即文档，团队行为一致 |
+
+**显式配置的坏处/风险**：
+
+| 风险 | 说明 |
+| ---- | ---- |
+| **配置复杂度增加** | 需要维护 URL Map 的 routeRules |
+| **重试放大效应** | 如果 Nginx/Kong 也配置重试，可能产生 3×3×3=27 次请求 |
+| **POST 意外重试** | 如果配置不当，可能导致非幂等操作重复执行 |
+| **超时计算复杂** | Route Timeout = (numRetries + 1) × perTryTimeout，需精确计算 |
+
+###### 10.3 评估决策表
+
+| 场景 | 推荐配置 | 原因 |
+| ---- | -------- | ---- |
+| **读操作 API**（GET，幂等） | `numRetries: 1-2` + `retryConditions: ["gateway-error", "connect-failure"]` | 提升瞬态故障的可靠性 |
+| **写操作 API**（POST/PUT/PATCH） | **不配置 retryPolicy** 或 `numRetries: 0` | 防止重复提交，除非有幂等性保护 |
+| **长耗时任务**（批处理、导出） | **不配置 retryPolicy**，使用独立的 `timeout: 290s` | 重试可能导致更大问题 |
+| **健康检查/探活** | `numRetries: 0` | 快速感知，无需重试 |
+| **高价值交易**（支付、转账） | **不配置 retryPolicy** | 必须人工确认或使用分布式事务 |
+
+###### 10.4 numRetries 配置建议值
+
+| 应用场景 | numRetries | perTryTimeout | retryConditions |
+| -------- | ---------- | ------------- | ----------------- |
+| **普通读 API** | 1 | 10s | gateway-error, connect-failure |
+| **高性能读 API** | 0 | - | 不重试，快速失败 |
+| **文件/媒体处理** | 0 | - | 不重试，避免资源浪费 |
+| **与下游服务通信** | 1-2 | 5s | connect-failure, reset |
+| **gRPC 服务** | 1 | 5s | refused-stream, connect-failure |
+
+**保守建议**：对于大多数场景，`numRetries: 1` 是最安全的选择：
+- 提供一次重试机会提升可靠性
+- 避免过多重试导致雪崩
+- 与 Nginx/Kong 的重试机制叠加后不会过于激进
+
+###### 10.5 不配置 vs 配置 对比
+
+| 维度 | 不配置（默认） | 显式配置 |
+| ---- | ------------- | -------- |
+| **重试次数** | 隐式 1 次 | 显式控制 (0-10) |
+| **超时控制** | 使用 Backend Service timeoutSec | 独立 perTryTimeout，最大 24h |
+| **触发条件** | 仅 GET + 502/503/504 | 可完全自定义 |
+| **路径控制** | 无（全局影响） | 按 routeRules 精细控制 |
+| **运维复杂度** | 低 | 中 |
+| **可预测性** | 低（隐式行为） | 高（配置即文档） |
+
+---
+
+如果你使用的是 **Global External Application Load Balancer** 而非 Internal LB，重试策略的行为又会有所不同（Global External 现在也支持通过 URL Map 配置 retryPolicy ）。
+
+
 # 多层架构超时与重试机制全链路指南
 
 ## GCP GLB → Nginx → Kong → GKE Runtime
