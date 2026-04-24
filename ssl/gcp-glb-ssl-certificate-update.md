@@ -1,6 +1,7 @@
 # GCP GLB SSL 证书管理方案
 - https://docs.cloud.google.com/sdk/gcloud/reference/compute/target-https-proxies/update
 - https://docs.cloud.google.com/certificate-manager/docs/map-entries#gcloud
+- https://docs.cloud.google.com/certificate-manager/docs/quotas#resource_quotas_and_limits
 ## 背景
 
 - 当前 GLB 使用 **TargetHttpsProxy**，存在 **15 个 SSL 证书限制**
@@ -19,7 +20,7 @@
 | modes                                 | certificate limit | certificate management way                            |
 | ------------------------------------- | ----------------- | ----------------------------------------------------- |
 | Legacy SSL Certificates               | 15                | certificate directly mounted to Proxy                 |
-| Certificate Manager + Certificate Map | no limit          | certificate mounted to Map, Proxy only mounted to Map |
+| Certificate Manager + Certificate Map | more              | certificate mounted to Map, Proxy only mounted to Map |
 
 ---
 
