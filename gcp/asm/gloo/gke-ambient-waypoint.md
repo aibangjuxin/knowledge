@@ -1,596 +1,451 @@
-# GKE Ambient + Waypoint 安装与验证（基于 Gloo Mesh 企业版）
+# GKE Ambient + Waypoint 安装与校正文档（企业版可用）
 
-> **文档定位**：在 GKE 上采用 "Istio + Gloo Mesh 企业版" 实现多集群 Service Mesh，优先使用 Ambient（ztunnel）+ Waypoint 模式。文档综合现有 Gloo 资料，提供可落地的 step-by-step 操作与配置示例。
-
----
-
-## 1. 目标与约束
-
-### 核心需求
-- 多集群服务网格，Gloo Mesh 作为管理层（推荐企业版）
-- 新集群优先使用 Ambient（ztunnel）+ Waypoint
-- 保持端到端 TLS、域名不变、Host/SNI 不变
-- 兼容现有 Nginx 与 PSC 架构
-
-### 不变项（与之前设计一致）
-- 入口层：GCP GLB + Cloud Armor + PSC NEG
-- 生产者（Producer）：Service Attachment + ILB（不变）
-- 客户端到 Nginx 的 TLS 与证书（不变）
-- Pod 内部业务保持 HTTP，由 Sidecar 或 Waypoint 处理加密（不变）
-
-### 变化项（仅限 mesh 层）
-- 控制面从 ASM Istiod 迁移到 Gloo Mesh 管理面
-- Gateway Pod 替换为 Gloo Gateway
-- 路由资源从 VirtualService 迁移到 RouteTable/VirtualGateway
-- 可选：启用 Ambient 模式（ztunnel）卸载数据面代理，Waypoint 处理 L7 策略
+> 结论先说：**这条路径在你的 GKE 企业版环境里是可行的**。  
+> 但原文把 **Gloo Platform APIs / Gloo Mesh Gateway CRD** 和 **Ambient 所要求的 Istio Ambient + Kubernetes Gateway API** 混用了，**不能原样照装**。  
+> 我已经按当前更稳妥的生产路径重写为一份可执行版本。
 
 ---
 
-## 2. 环境与先决条件
+## 1. Goal and Constraints
 
-### 2.1 所需权限
-GCP 项目 Owner 或具备以下角色：
-- `roles/container.admin`（Kubernetes Engine Admin）
-- `roles/iam.serviceAccountAdmin`（Service Account Admin）
-- `roles/compute.networkAdmin`（Compute Network Admin）
+### 目标
+- 在 GKE 上部署 **Ambient Mesh（ztunnel + Waypoint）**
+- 使用 **企业版能力**，支持后续多集群扩展
+- 保留你现有的外部入口思路：`GLB / Cloud Armor / PSC / Nginx` 不强制重构
+- Mesh 层优先采用 **Gloo 管理平面 + Solo Enterprise for Istio**
 
-### 2.2 工具版本
+### 结论
+- **可行**：GKE Standard + 企业版 License + Ambient + Waypoint 没问题
+- **推荐实现方式**：
+  1. 用 `gloo-platform` 安装管理面
+  2. 用 **Solo distribution of Istio** 安装 ambient 组件
+  3. 用 **Kubernetes Gateway API** 和 `istio-waypoint` 部署 waypoint
+- **不建议**：用 `RouteTable / VirtualGateway / Waypoint(kind)` 作为 ambient 的主配置模型
 
-| 工具 | 最低版本 | 说明 |
-| --- | --- | --- |
-| gcloud | 400.0.0+ | GCP CLI |
-| kubectl | 1.28+ | Kubernetes CLI |
-| helm | 3.12+ | Helm 包管理器 |
-| meshctl | 2.x | Gloo Mesh EE CLI |
-| istioctl | 1.19+ | Istio 诊断（可选） |
+### 复杂度
+- 单集群：`Moderate`
+- 多集群联邦：`Advanced`
 
-### 2.3 环境变量（示例）
+---
 
-```bash
-# GCP 配置
-export GCP_PROJECT_ID="your-gcp-project-id"
-export GCP_REGION="us-central1"
-export GKE_CLUSTER_NAME="gloo-gke-cluster"
+## 2. 推荐架构（V1）
 
-# Gloo 配置
-export GLOO_EE_VERSION="2.1.0"  # 请替换为最新 EE 版本
-export LICENSE_KEY="<YOUR_LICENSE_KEY>"
-
-# 命名空间配置
-export MGMT_NAMESPACE="gloo-mesh"
-export GATEWAY_NAMESPACE="gloo-gateway"
-export WORKLOAD_NAMESPACE="team-a-runtime"
+```text
+Internet
+  |
+  v
+GCP External Load Balancer + Cloud Armor
+  |
+  v
+Ingress Gateway (Gloo Gateway / kgateway, optional)
+  |
+  v
+Ambient Mesh
+  |- istiod
+  |- istio-cni
+  |- ztunnel (DaemonSet)
+  |- waypoint (Gateway API, per namespace / per service)
+  |
+  v
+Application Pods (no sidecar)
 ```
 
-### 2.4 GKE 版本要求
+### 控制面拆分
+- **Gloo management plane**：负责管理、洞察、多集群联邦能力
+- **Solo Enterprise for Istio**：负责 ambient mesh 本身
+- **Gateway API**：负责 ambient 下的 waypoint 与入口路由
 
-- **GKE 1.25+**：推荐，获得最佳 ztunnel 与 Ambient 支持
-- **GKE 1.28+**：生产环境推荐版本
-- 节点池：使用 Standard 节点池（非 Container-Optimized OS）
+### 为什么这是 V1
+- 贴近 Solo 官方当前文档
+- 不把 ambient 和旧式 sidecar/gateway CRD 体系混装
+- 后续扩成多集群时，不需要推翻单集群做法
 
 ---
 
-## 3. 创建 GKE 集群
+## 3. 原文的关键问题
 
-### 3.1 创建命令
+### 可以保留的判断
+- “企业版可以在 GKE 上跑 ambient + waypoint”  
+  这个判断是对的。
+- “后续可以做多集群”  
+  这个方向也是对的。
+
+### 必须修正的地方
+1. **安装管理面 chart 错了**
+   - 原文用了 `glooe/gloo-ee`
+   - 现在更稳妥的管理面安装路径是 `gloo-platform/gloo-platform`
+
+2. **ambient 不是通过 `MeshConfig ambient.enabled` 这样启用**
+   - ambient 的核心组件是 `istiod + istio-cni + ztunnel`
+   - 需要按 Solo / Istio 的 ambient 安装路径部署
+
+3. **waypoint 资源模型写错了**
+   - 原文写成了自定义 `kind: Waypoint`
+   - 正确做法是使用 **Gateway API 的 `Gateway`**，`gatewayClassName: istio-waypoint`
+
+4. **ambient 加入方式写错了**
+   - 原文通过“禁用 sidecar 注入”来表达 ambient
+   - 正确做法是给 namespace 打标签：`istio.io/dataplane-mode=ambient`
+
+5. **路由模型混用了两套体系**
+   - 原文后半段使用 `Upstream / VirtualGateway / RouteTable / TrafficPolicy / AccessPolicy`
+   - 这些更偏 Gloo Gateway / Gloo Mesh Gateway 侧能力
+   - ambient 主路径下，**应优先使用 Gateway API / HTTPRoute / waypoint**
+
+6. **GKE 节点 OS 判断不对**
+   - 原文说“非 COS”
+   - GKE 官方当前仍把 `cos_containerd` 作为推荐节点 OS；不能把 COS 写成不推荐
+
+---
+
+## 4. Trade-offs and Alternatives
+
+### 推荐方案
+**Gloo management plane + Solo Enterprise for Istio ambient + Gateway API**
+
+优点：
+- 和官方 ambient 路径一致
+- 升级路径清晰
+- 后续多集群能力自然衔接
+- 不需要 sidecar 注入
+
+代价：
+- 需要理解 `Gateway API` 与传统 `VirtualService` 的差别
+- 入口网关与 mesh 路由边界要明确
+
+### 可选方案 A
+**继续 sidecar 模式**
+
+适合：
+- 你已有大量 `VirtualService / DestinationRule / AuthorizationPolicy`
+- 现网不想动流量模型
+
+不适合：
+- 目标是降低 sidecar 成本
+- 目标是未来做 ambient 标准化
+
+### 可选方案 B
+**只上 ambient，不接 Gloo 管理面**
+
+适合：
+- 纯单集群 PoC
+
+问题：
+- 少了多集群治理、洞察、企业支撑
+
+---
+
+## 5. 实施步骤
+
+## 5.1 环境变量
+
+```bash
+export GCP_PROJECT_ID="your-project"
+export GCP_REGION="us-central1"
+export GKE_CLUSTER_NAME="ambient-prod-1"
+
+export GLOO_VERSION="2.13.0"
+export GLOO_MESH_LICENSE_KEY="<your-enterprise-license>"
+
+export MGMT_CLUSTER="${GKE_CLUSTER_NAME}"
+export MGMT_CONTEXT="gke_${GCP_PROJECT_ID}_${GCP_REGION}_${GKE_CLUSTER_NAME}"
+
+export ISTIO_VERSION="1.27.0"
+export ISTIO_IMAGE="${ISTIO_VERSION}-solo"
+export REPO_KEY="<solo-repo-key>"
+export REPO="us-docker.pkg.dev/gloo-mesh/istio-${REPO_KEY}"
+export HELM_REPO="us-docker.pkg.dev/gloo-mesh/istio-helm-${REPO_KEY}"
+
+export MGMT_NAMESPACE="gloo-mesh"
+export ISTIO_NAMESPACE="istio-system"
+export APP_NAMESPACE="team-a-runtime"
+```
+
+说明：
+- `GLOO_VERSION`、`ISTIO_VERSION` 必须按你当前企业版支持矩阵选，不要再写死 `2.1.0`
+- 这份文档按 **2026-04-25** 的仓库校正，建议实际安装前再对一次企业订阅版本
+
+---
+
+## 5.2 创建 GKE 集群
 
 ```bash
 gcloud container clusters create ${GKE_CLUSTER_NAME} \
   --project=${GCP_PROJECT_ID} \
   --location=${GCP_REGION} \
-  --cluster-version=1.28 \
+  --release-channel=regular \
   --machine-type=e2-standard-4 \
   --num-nodes=3 \
+  --enable-autoscaling \
   --min-nodes=3 \
   --max-nodes=6 \
-  --enable-autoscaling \
   --enable-autoupgrade \
   --enable-autorepair \
-  --disk-size=100 \
-  --disk-type=pd-balanced \
-  --network=default \
-  --subnetwork=default \
   --enable-ip-alias \
-  --enable-intra-node-visibility \
-  --workload-pool=${GCP_PROJECT_ID}.svc.id.goog \
-  --labels="env=prod,app=gloo-gateway,mesh=gloo"
-```
+  --workload-pool=${GCP_PROJECT_ID}.svc.id.goog
 
-### 3.2 关键标志说明
-
-| 标志 | 说明 |
-| --- | --- |
-| `--enable-ip-alias` | VPC-native 集群（推荐，便于 PSC 与多集群） |
-| `--enable-intra-node-visibility` | 允许 Pod 直连（有助于调试与 east-west 流量） |
-| `--workload-pool` | 启用 Workload Identity（可选但推荐，用于安全地绑定 GCP SA） |
-| `--enable-autoscaling` | 根据负载自动扩缩节点 |
-| `--machine-type=e2-standard-4` | 4 vCPU, 16GB RAM（适合管理面 + 网关 + 工作负载） |
-
-### 3.3 验证集群
-
-```bash
-# 获取凭证
 gcloud container clusters get-credentials ${GKE_CLUSTER_NAME} \
   --project=${GCP_PROJECT_ID} \
   --location=${GCP_REGION}
+```
 
-# 验证连接
+### GKE 侧建议
+- 模式：`GKE Standard`
+- 节点 OS：优先默认 `cos_containerd`
+- 节点池至少 3 个节点，避免 waypoint / ztunnel / istiod 和业务争抢
+
+### 验证
+
+```bash
 kubectl cluster-info
-
-# 确认上下文
+kubectl get nodes -o wide
 kubectl config current-context
-# 预期：gke_${GCP_PROJECT_ID}_${GCP_REGION}_${GKE_CLUSTER_NAME}
-
-# 查看节点
-kubectl get nodes
 ```
 
 ---
 
-## 4. 安装 Gloo Mesh 企业版（管理面）
+## 5.3 安装 Gloo 管理面
 
-### 4.1 安装 meshctl CLI
-
-```bash
-# 下载并安装 meshctl
-curl -sL https://run.solo.io/meshctl/install | sh
-
-# 移动到 PATH
-sudo mv $HOME/.gloo-mesh/bin/meshctl /usr/local/bin/
-
-# 验证版本
-meshctl version
-# 预期输出：
-# {
-#   "meshctl": "2.1.0",
-#   "gloo-mesh-enterprise": "2.1.0"
-# }
-```
-
-### 4.2 添加 Gloo Platform Helm 仓库
+### 1) 添加 Helm 仓库
 
 ```bash
-# 添加 Enterprise 仓库
-helm repo add glooe https://storage.googleapis.com/gloo-ee-helm
-
-# 添加 Platform 仓库（用于 gloo-platform-crds）
 helm repo add gloo-platform https://storage.googleapis.com/gloo-platform/helm-charts
-
-# 更新本地缓存
 helm repo update
-
-# 验证仓库
-helm search repo glooe/gloo-ee --versions | head -5
 ```
 
-### 4.3 创建命名空间
+### 2) 安装 CRDs
 
 ```bash
-# 创建所需命名空间
-kubectl create namespace ${MGMT_NAMESPACE}          # Gloo Mesh 管理面
-kubectl create namespace ${GATEWAY_NAMESPACE}       # Gloo Gateway
-kubectl create namespace ${WORKLOAD_NAMESPACE}      # 业务工作负载
-kubectl create namespace istio-system               # Istio 控制面
-
-# 验证
-kubectl get namespaces
-```
-
-### 4.4 安装 CRDs（必须先于管理面）
-
-```bash
-# 安装 Gloo Platform CRDs
-helm install gloo-platform-crds gloo-platform/gloo-platform-crds \
-  --namespace ${MGMT_NAMESPACE} \
+helm upgrade -i gloo-platform-crds gloo-platform/gloo-platform-crds \
+  --namespace=${MGMT_NAMESPACE} \
   --create-namespace \
-  --version ${GLOO_EE_VERSION} \
-  --wait
-
-# 验证 CRDs
-kubectl get crds | grep solo.io | head -10
-# 预期：virtualgateways.networking.gloo.solo.io, routetables.networking.gloo.solo.io 等
+  --version=${GLOO_VERSION} \
+  --kube-context ${MGMT_CONTEXT}
 ```
 
-### 4.5 安装 Gloo Mesh 管理面
+### 3) 生成管理面 profile
 
 ```bash
-# 安装 Gloo Mesh Enterprise 管理面
-helm install gloo-platform glooe/gloo-ee \
-  --namespace ${MGMT_NAMESPACE} \
-  --version ${GLOO_EE_VERSION} \
-  --set-string license_key="${LICENSE_KEY}" \
-  --values - <<EOF
-# 全局设置
-global:
-  extensions:
-    enabled:
-      - enterprise
-
-# 管理服务器
-gloo:
-  mgmtServer:
-    enabled: true
-    replicaCount: 1
-    resources:
-      requests:
-        cpu: 500m
-        memory: 512Mi
-      limits:
-        cpu: 1000m
-        memory: 1Gi
-
-# Gloo Agent（必须在管理服务器之后启动）
-  glooAgent:
-    enabled: true
-    relay:
-      serverAddress: gloo-mesh-mgmt-server.${MGMT_NAMESPACE}.svc.cluster.local:9900
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-      limits:
-        cpu: 500m
-        memory: 512Mi
-
-# 遥测收集器
-  telemetryCollector:
-    enabled: true
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-      limits:
-        cpu: 500m
-        memory: 512Mi
-
-# Gloo UI
-  glooUi:
-    enabled: true
-    replicaCount: 1
-    service:
-      type: ClusterIP
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-      limits:
-        cpu: 500m
-        memory: 512Mi
-
-# Istio 控制面（由 Gloo Mesh 管理）
-  istiod:
-    enabled: true
-    replicaCount: 1
-    global:
-      proxy:
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
-EOF
-
-# 等待安装完成（通常 3-5 分钟）
-kubectl wait --for=condition=Ready pods --all -n ${MGMT_NAMESPACE} --timeout=300s
+curl https://storage.googleapis.com/gloo-platform/helm-profiles/${GLOO_VERSION}/mgmt-server.yaml > /tmp/mgmt-plane.yaml
 ```
 
-### 4.6 验证管理面安装
+### 4) 安装管理面
 
 ```bash
-# 检查所有 Pod 状态
+helm upgrade -i gloo-platform gloo-platform/gloo-platform \
+  --namespace=${MGMT_NAMESPACE} \
+  --version=${GLOO_VERSION} \
+  --values /tmp/mgmt-plane.yaml \
+  --set common.cluster=${MGMT_CLUSTER} \
+  --set licensing.glooMeshLicenseKey=${GLOO_MESH_LICENSE_KEY}
+```
+
+### 5) 验证
+
+```bash
 kubectl get pods -n ${MGMT_NAMESPACE}
-
-# 预期输出：
-# NAME                                    READY   STATUS    RESTARTS   AGE
-# gloo-mesh-agent-xxxxx                   1/1     Running   0          2m
-# gloo-mesh-mgmt-server-xxxxx             1/1     Running   0          2m
-# gloo-mesh-ui-xxxxx                      1/1     Running   0          2m
-# gloo-telemetry-collector-xxxxx          1/1     Running   0          2m
-# istiod-xxxxx                            1/1     Running   0          2m
-
-# 运行健康检查
-meshctl check
-
-# 预期输出：
-# ✓ Gloo Mesh management plane is healthy
-# ✓ Gloo Mesh agent is connected
-# ✓ Istiod is running
-# ✓ License is valid
+meshctl check --kubecontext ${MGMT_CONTEXT}
 ```
 
-### 4.7 可选：访问 Gloo Mesh UI
+### 生产建议
+- relay 连接使用 **BYO mTLS 证书**
+- 不建议生产直接用 self-signed
+
+---
+
+## 5.4 安装 Ambient 所需 Gateway API CRD
 
 ```bash
-# Port-forward 到 UI
-kubectl port-forward -n ${MGMT_NAMESPACE} svc/gloo-mesh-ui 8080:8080 &
+kubectl apply --server-side -f \
+  https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
+```
 
-# 浏览器打开 http://localhost:8080
-# 默认无认证（生产环境应配置 RBAC）
+### 验证
+
+```bash
+kubectl get crd gateways.gateway.networking.k8s.io
+kubectl get crd httproutes.gateway.networking.k8s.io
 ```
 
 ---
 
-## 5. 安装并配置 Gloo Gateway（替代 ASM Ingress Gateway）
+## 5.5 安装 Solo Enterprise for Istio Ambient 组件
 
-### 5.1 部署 Gloo Gateway
+### 1) `base`
 
 ```bash
-# 安装 Gloo Gateway（使用 Helm，与生产环境一致）
-helm install gloo-gateway glooe/gloo-gateway \
-  --namespace ${GATEWAY_NAMESPACE} \
+helm upgrade --install istio-base oci://${HELM_REPO}/base \
+  --namespace ${ISTIO_NAMESPACE} \
   --create-namespace \
-  --version ${GLOO_EE_VERSION} \
-  --set-string license_key="${LICENSE_KEY}" \
-  --values - <<EOF
-# 启用 Gloo Gateway
-glooGateway:
-  enabled: true
-
-  # Gateway Proxy 配置
-  gatewayProxies:
-    gatewayProxy:
-      # Service 类型：LoadBalancer（GCP 自动创建外部 LB）
-      service:
-        type: LoadBalancer
-        annotations:
-          service.beta.kubernetes.io/gcp-load-balancer-type: "External"
-      # 副本数（生产至少 2）
-      deployment:
-        replicas: 2
-        resources:
-          requests:
-            cpu: 250m
-            memory: 256Mi
-          limits:
-            cpu: 1000m
-            memory: 1Gi
-      # 高可用：反亲和性
-      podTemplate:
-        terminationGracePeriodSeconds: 30
-        affinity:
-          podAntiAffinity:
-            preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchLabels:
-                    app: gloo-gateway
-                topologyKey: kubernetes.io/hostname
-
-# 集成 Istio（用于 mTLS）
-istio:
-  enabled: true
-  istiod:
-    enabled: true
-
-# 禁用 Portal Server（不需要开发者门户）
-glooPortalServer:
-  enabled: false
+  --version ${ISTIO_IMAGE} \
+  -f - <<EOF
+defaultRevision: ""
+profile: ambient
 EOF
-
-# 等待安装完成
-kubectl wait --for=condition=Ready pods -l app=gloo-gateway -n ${GATEWAY_NAMESPACE} --timeout=300s
 ```
 
-### 5.2 验证 Gateway Pod
+### 2) `istiod`
 
 ```bash
-# 检查 Pod 状态
-kubectl get pods -n ${GATEWAY_NAMESPACE}
-
-# 预期输出：
-# NAME                             READY   STATUS    RESTARTS   AGE
-# gloo-gateway-xxxxx               1/1     Running   0          2m
-# gloo-gateway-xxxxx               1/1     Running   0          2m
-# istiod-xxxxx                     1/1     Running   0          2m
-
-# 检查 Service（应有外部 IP）
-kubectl get svc -n ${GATEWAY_NAMESPACE}
-
-# 预期输出：
-# NAME                  TYPE           CLUSTER-IP    EXTERNAL-IP    PORT(S)                        AGE
-# gloo-gateway-proxy    LoadBalancer   10.x.x.x      34.x.x.x       8080:3xxxx/TCP,8443:3xxxx/TCP  3m
-# istiod                ClusterIP      10.x.x.x      <none>         15010/TCP,15012/TCP,15014/TCP  3m
+helm upgrade --install istiod oci://${HELM_REPO}/istiod \
+  --namespace ${ISTIO_NAMESPACE} \
+  --version ${ISTIO_IMAGE} \
+  -f - <<EOF
+global:
+  hub: ${REPO}
+  tag: ${ISTIO_IMAGE}
+  proxy:
+    clusterDomain: cluster.local
+pilot:
+  cni:
+    enabled: true
+    namespace: ${ISTIO_NAMESPACE}
+meshConfig:
+  accessLogFile: /dev/stdout
+  defaultConfig:
+    proxyMetadata:
+      ISTIO_META_DNS_AUTO_ALLOCATE: "true"
+license:
+  value: ${GLOO_MESH_LICENSE_KEY}
+EOF
 ```
 
-### 5.3 获取外部 IP
+### 3) `istio-cni`
 
 ```bash
-# 获取 LoadBalancer 外部 IP
-export GATEWAY_IP=$(kubectl get svc -n ${GATEWAY_NAMESPACE} gloo-gateway-proxy \
-  -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-
-echo "Gateway LoadBalancer IP: ${GATEWAY_IP}"
-
-# 若为空，等待 IP 分配（通常 1-3 分钟）
-if [ -z "${GATEWAY_IP}" ]; then
-  echo "Waiting for LoadBalancer IP assignment..."
-  kubectl get svc -n ${GATEWAY_NAMESPACE} gloo-gateway-proxy -w
-fi
-
-# 保存备用
-echo "export GATEWAY_IP=${GATEWAY_IP}" >> ~/.bashrc
+helm upgrade --install istio-cni oci://${HELM_REPO}/cni \
+  --namespace ${ISTIO_NAMESPACE} \
+  --version ${ISTIO_IMAGE} \
+  -f - <<EOF
+ambient:
+  dnsCapture: true
+excludeNamespaces:
+  - ${ISTIO_NAMESPACE}
+  - kube-system
+global:
+  hub: ${REPO}
+  tag: ${ISTIO_IMAGE}
+profile: ambient
+EOF
 ```
+
+### 4) `ztunnel`
+
+```bash
+helm upgrade --install ztunnel oci://${HELM_REPO}/ztunnel \
+  --namespace ${ISTIO_NAMESPACE} \
+  --version ${ISTIO_IMAGE} \
+  -f - <<EOF
+configValidation: true
+enabled: true
+env:
+  L7_ENABLED: "true"
+hub: ${REPO}
+istioNamespace: ${ISTIO_NAMESPACE}
+namespace: ${ISTIO_NAMESPACE}
+profile: ambient
+proxy:
+  clusterDomain: cluster.local
+tag: ${ISTIO_IMAGE}
+terminationGracePeriodSeconds: 29
+variant: distroless
+EOF
+```
+
+### 验证
+
+```bash
+kubectl get pods -n ${ISTIO_NAMESPACE}
+kubectl get ds -n ${ISTIO_NAMESPACE} ztunnel
+```
+
+预期：
+- `istiod` Running
+- `istio-cni-*` Running
+- `ztunnel` 为每节点一个 Pod
 
 ---
 
-## 6. 在 GKE 中启用 Ambient（ztunnel）+ Waypoint 模式
-
-> **这是本文档的核心差异化能力**：相比传统 Sidecar 注入，Ambient 模式通过节点级 ztunnel 拦截流量，配合 Waypoint Proxy 处理 L7 策略，大幅降低资源开销并简化升级。
-
-### 6.1 Ambient vs Sidecar 模式对比
-
-| 特性 | Sidecar 模式 | Ambient 模式 |
-| --- | --- | --- |
-| 代理位置 | 每个 Pod 内注入 | 节点级 DaemonSet |
-| 资源消耗 | 每个 Pod 一个代理进程 | 共享节点级代理 |
-| 升级影响 | 需重启所有 Pod | 仅需重启 ztunnel DaemonSet |
-| L7 策略 | Sidecar 直接处理 | Waypoint Proxy 处理 |
-| 适用场景 | 精细控制、低延迟 | 大规模集群、成本优化 |
-
-### 6.2 Ambient 架构说明
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Worker Node                                                 │
-│                                                             │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐  │
-│  │  Pod A      │     │  Pod B      │     │  Pod C      │  │
-│  │  (无 Sidecar)│     │  (无 Sidecar)│     │  (无 Sidecar)│  │
-│  └──────┬──────┘     └──────┬──────┘     └──────┬──────┘  │
-│         │                   │                   │         │
-│         └───────────────────┼───────────────────┘         │
-│                             │                             │
-│                    ┌────────▼────────┐                    │
-│                    │   ztunnel       │                    │
-│                    │   (节点级)       │                    │
-│                    │   捕获所有流量   │                    │
-│                    └────────┬────────┘                    │
-│                             │                             │
-│                    ┌────────▼────────┐                    │
-│                    │  Waypoint Proxy │                    │
-│                    │  (按需部署)      │                    │
-│                    │  处理 L7 策略   │                    │
-│                    └─────────────────┘                    │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 6.3 启用 Ambient 模式
+## 5.6 把命名空间加入 Ambient
 
 ```bash
-# 方法：通过 Gloo Mesh MeshConfig 启用 Ambient
-cat <<EOF | kubectl apply -f -
-apiVersion: mesh.gloo.solo.io/v1
-kind: MeshConfig
-metadata:
-  name: default
-  namespace: ${MGMT_NAMESPACE}
-spec:
-  # Ambient 模式配置
-  ambient:
-    enabled: true
-    ztunnel:
-      # ztunnel 配置
-      config:
-        # 性能参数
-        concurrency: 2
-  # 禁用水 sidcar 自动注入（Ambient 模式不需要）
-  sidecar:
-    autoInject: disabled
-EOF
+kubectl create namespace ${APP_NAMESPACE}
 
-# 验证 MeshConfig
-kubectl get meshconfig -n ${MGMT_NAMESPACE}
-kubectl describe meshconfig default -n ${MGMT_NAMESPACE}
+kubectl label namespace ${APP_NAMESPACE} \
+  istio.io/dataplane-mode=ambient --overwrite
 ```
 
-### 6.4 部署 Waypoint Proxy（处理 L7 策略）
-
-Waypoint 是 Ambient 模式下处理 L7 策略的组件，类似 Sidecar 的 L7 代理能力。
+### 验证
 
 ```bash
-# 通过 Gloo Mesh 创建 Waypoint
-# Waypoint 按 Workspace 或服务自动部署
+kubectl get ns ${APP_NAMESPACE} --show-labels
+```
 
-# 示例：为 team-a-runtime 命名空间创建 Waypoint
-cat <<EOF | kubectl apply -f -
-apiVersion: gateway.networking.gloo.solo.io/v1
-kind: Waypoint
+**注意**
+- 这里不是靠 `istio-injection=disabled` 来表达 ambient
+- `ambient` 的正确加入方式是 `istio.io/dataplane-mode=ambient`
+
+---
+
+## 5.7 部署 Waypoint
+
+### 推荐方式
+用 `istioctl waypoint apply`，或者直接下发 `Gateway API`
+
+### 方式 A：用 `istioctl`
+
+```bash
+istioctl waypoint apply -n ${APP_NAMESPACE} --enroll-namespace
+```
+
+这条命令会：
+- 创建 waypoint
+- 给 namespace 打上 `istio.io/use-waypoint=waypoint`
+
+### 方式 B：显式创建 Gateway
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
 metadata:
-  name: team-a-waypoint
-  namespace: ${WORKLOAD_NAMESPACE}
+  name: waypoint
+  namespace: team-a-runtime
   labels:
-    # 标记为由 Gloo Mesh 管理
-    app.kubernetes.io/managed-by: gloo-mesh
+    istio.io/waypoint-for: service
 spec:
-  # 指向要代理的工作负载
-  workloadSelectors:
-  - namespace: ${WORKLOAD_NAMESPACE}
-    # 或使用标签选择器
-    # labels:
-    #   app: team-a-backend
-  # 副本数（高可用）
-  replicas: 2
-  # 允许的输入端口
-  ports:
-  - name: http
-    port: 15088
-    protocol: TCP
-EOF
-
-# 验证 Waypoint 部署
-kubectl get waypoint -n ${WORKLOAD_NAMESPACE}
-kubectl get pods -n ${WORKLOAD_NAMESPACE} -l "app.kubernetes.io/name=team-a-waypoint"
-
-# 预期：Waypoint 以 Deployment 形式部署，副本数为 2
+  gatewayClassName: istio-waypoint
+  listeners:
+  - name: mesh
+    port: 15008
+    protocol: HBONE
 ```
 
-### 6.5 验证 Ambient 模式
+应用：
 
 ```bash
-# 1. 检查 ztunnel DaemonSet 是否运行
-kubectl get daemonset -n istio-system
-# 预期输出：
-# NAME    DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE
-# ztunnel   3         3         3       3            3
-
-# 2. 检查 Pod 是否无 Sidecar（每个 Pod 只有 1 个容器）
-kubectl get pods -n ${WORKLOAD_NAMESPACE} -o jsonpath='{.items[*].spec.containers[*].name}'
-# 预期输出：httpbin（无 istio-proxy 容器）
-
-# 3. 检查 Waypoint 是否存在
-kubectl get waypoint -A
-
-# 4. 通过 meshctl 验证
-meshctl ambient check
-# 或
-meshctl check
+kubectl apply -f waypoint.yaml
+kubectl label namespace ${APP_NAMESPACE} istio.io/use-waypoint=waypoint --overwrite
 ```
 
-### 6.6 Ambient 模式下的流量路由
+### 验证
 
+```bash
+kubectl get gateway -n ${APP_NAMESPACE}
+kubectl get deploy,svc -n ${APP_NAMESPACE} | grep waypoint
 ```
-外部流量 → Gloo Gateway → ztunnel（节点级）→ Waypoint → Pod
-                                      ↓
-                              L7 策略（L7 Authorization,
-                              Retry, Timeout, etc.）
-```
-
-**注意**：Ambient 模式下，mTLS 仍然由 ztunnel 处理，但 L7 策略（如 AuthorizationPolicy、VirtualService 的 L7 规则）由 Waypoint 执行。
 
 ---
 
-## 7. 部署示例后端服务
+## 5.8 部署测试应用
 
-### 7.1 创建命名空间（禁用 Sidecar 注入）
-
-```bash
-# 创建命名空间，明确禁用 istio-injection
-kubectl create namespace ${WORKLOAD_NAMESPACE}
-
-# 确认无自动注入（Ambient 模式不需要）
-kubectl label namespace ${WORKLOAD_NAMESPACE} \
-  istio-injection=disabled --overwrite
-
-# 验证标签
-kubectl get namespace ${WORKLOAD_NAMESPACE} --show-labels
-```
-
-### 7.2 部署 HTTPbin 示例
-
-```bash
-# 部署 HTTPbin（轻量 HTTP 测试服务）
-cat <<EOF | kubectl apply -f -
+```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: httpbin
-  namespace: ${WORKLOAD_NAMESPACE}
+  namespace: team-a-runtime
   labels:
     app: httpbin
-    version: v1
 spec:
   replicas: 2
   selector:
@@ -600,661 +455,199 @@ spec:
     metadata:
       labels:
         app: httpbin
-        version: v1
     spec:
-      # Ambient 模式：无需 serviceAccount
       containers:
       - name: httpbin
         image: kennethreitz/httpbin:latest
         ports:
         - containerPort: 80
           name: http
-        resources:
-          requests:
-            cpu: 100m
-            memory: 64Mi
-          limits:
-            cpu: 200m
-            memory: 128Mi
-        livenessProbe:
-          httpGet:
-            path: /status/200
-            port: 80
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /status/200
-            port: 80
-          initialDelaySeconds: 3
-          periodSeconds: 5
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: httpbin
-  namespace: ${WORKLOAD_NAMESPACE}
-  labels:
-    app: httpbin
+  namespace: team-a-runtime
 spec:
-  type: ClusterIP
-  ports:
-  - port: 80
-    targetPort: 80
-    protocol: TCP
-    name: http
   selector:
     app: httpbin
-EOF
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
 ```
 
-### 7.3 验证部署
+应用后验证：
 
 ```bash
-# 检查 Pod 状态（应为 1/1，无 Sidecar）
-kubectl get pods -n ${WORKLOAD_NAMESPACE}
-
-# 预期输出：
-# NAME                      READY   STATUS    RESTARTS   AGE
-# httpbin-xxxxx-xxxxx       1/1     Running   0          1m
-# httpbin-xxxxx-xxxxx       1/1     Running   0          1m
-
-# 确认无 Sidecar 容器
-kubectl get pod -n ${WORKLOAD_NAMESPACE} -l app=httpbin \
+kubectl get pods -n ${APP_NAMESPACE}
+kubectl get pod -n ${APP_NAMESPACE} -l app=httpbin \
   -o jsonpath='{.items[0].spec.containers[*].name}'
-# 预期：仅输出 "httpbin"（无 istio-proxy）
-
-# 检查 Service
-kubectl get svc -n ${WORKLOAD_NAMESPACE}
-
-# 预期输出：
-# NAME      TYPE        CLUSTER-IP    PORT(S)   AGE
-# httpbin   ClusterIP   10.x.x.x      80/TCP    1m
 ```
+
+预期：
+- Pod 只有业务容器
+- **没有 `istio-proxy` sidecar**
 
 ---
 
-## 8. 创建 Gloo Mesh 上层路由资源
+## 5.9 Ingress 与路由建议
 
-> **核心概念**：Gloo Mesh 使用高阶 CRD（VirtualGateway、RouteTable、TrafficPolicy）替代标准 Istio CRD，提供更简洁的抽象和更丰富的功能（如 RouteTable delegation）。
+### 关键原则
+- Ambient 下，**入口和网格内部路由要分层**
+- 外部入口可以继续用：
+  - GCP GLB + Cloud Armor
+  - Gloo Gateway / kgateway
+  - 你现有 Nginx / PSC 结构
 
-### 8.1 创建 Upstream（指向 K8s Service）
+### Ambient 内部优先路由模型
+- `Gateway`
+- `HTTPRoute`
+- `ReferenceGrant`（跨命名空间时）
+- Waypoint 负责 L7 处理
 
-```bash
-cat <<EOF | kubectl apply -f -
-apiVersion: gloo.solo.io/v1
-kind: Upstream
-metadata:
-  name: httpbin-upstream
-  namespace: ${MGMT_NAMESPACE}
-  labels:
-    app: httpbin
-spec:
-  kube:
-    serviceName: httpbin
-    serviceNamespace: ${WORKLOAD_NAMESPACE}
-    servicePort: 80
-EOF
+### 不建议作为 ambient 主路径的资源
+- `VirtualGateway`
+- `RouteTable`
+- `Upstream`
+- `TrafficPolicy`
+- 自定义 `Waypoint` 资源
 
-# 验证 Upstream 状态
-kubectl get upstream -n ${MGMT_NAMESPACE} httpbin-upstream
-
-# 预期：
-# NAME               TYPE      STATUS   DETAILS
-# httpbin-upstream   Kubernetes  Accepted  svc name: httpbin, svc namespace: team-a-runtime, port: 80
-```
-
-### 8.2 创建 VirtualGateway（替代 Istio Gateway，定义入口监听器）
-
-```bash
-cat <<EOF | kubectl apply -f -
-apiVersion: networking.gloo.solo.io/v2
-kind: VirtualGateway
-metadata:
-  name: runtime-gateway
-  namespace: ${GATEWAY_NAMESPACE}
-spec:
-  # 关联到 Gloo Gateway Pod
-  workloads:
-  - selector:
-      labels:
-        app: gloo-gateway
-      namespace: ${GATEWAY_NAMESPACE}
-  # 监听器配置
-  listeners:
-  - http: {}
-    port:
-      number: 443
-    # TLS 终止配置（与之前 ASM 配置一致）
-    tls:
-      mode: SIMPLE                    # 单向 TLS，Gateway 终止
-      secretName: wildcard-abjx-appdev-aibang-cert  # 引用你的证书 Secret
-    # 允许绑定哪些 RouteTable
-    allowedRouteTables:
-    - host: "*.abjx.appdev.aibang"    # 支持通配符
----
-# HTTP 监听器（用于测试）
-apiVersion: networking.gloo.solo.io/v2
-kind: VirtualGateway
-metadata:
-  name: runtime-gateway-http
-  namespace: ${GATEWAY_NAMESPACE}
-spec:
-  workloads:
-  - selector:
-      labels:
-        app: gloo-gateway
-      namespace: ${GATEWAY_NAMESPACE}
-  listeners:
-  - http: {}
-    port:
-      number: 80
-    allowedRouteTables:
-    - host: "*"
-EOF
-
-# 验证
-kubectl get virtualgateway -n ${GATEWAY_NAMESPACE}
-```
-
-### 8.3 创建 RouteTable（替代 Istio VirtualService，定义路由规则）
-
-```bash
-cat <<EOF | kubectl apply -f -
-apiVersion: networking.gloo.solo.io/v2
-kind: RouteTable
-metadata:
-  name: httpbin-routes
-  namespace: ${MGMT_NAMESPACE}
-  labels:
-    # 可用于 delegation（路由委托）
-    team: platform
-spec:
-  # 匹配哪些域名
-  hosts:
-  - "*.abjx.appdev.aibang"
-  # 绑定到哪个 VirtualGateway
-  virtualGateways:
-  - name: runtime-gateway
-    namespace: ${GATEWAY_NAMESPACE}
-  # HTTP 路由规则
-  http:
-  # 路由 1：/get 路径
-  - name: route-get
-    matchers:
-    - uri:
-        prefix: /get
-    forwardTo:
-      destinations:
-      - ref:
-          name: httpbin-upstream
-          namespace: ${MGMT_NAMESPACE}
-        port:
-          number: 80
-        # 可选：权重（用于金丝雀发布）
-        # weight: 90
-  # 路由 2：根路径
-  - name: route-root
-    matchers:
-    - uri:
-        prefix: /
-    forwardTo:
-      destinations:
-      - ref:
-          name: httpbin-upstream
-          namespace: ${MGMT_NAMESPACE}
-        port:
-          number: 80
-EOF
-
-# 验证
-kubectl get routetable -n ${MGMT_NAMESPACE}
-
-# 查看详情
-kubectl get routetable -n ${MGMT_NAMESPACE} httpbin-routes -o yaml
-```
-
-### 8.4 创建 TrafficPolicy（替代 Istio DestinationRule，定义流量策略）
-
-```bash
-cat <<EOF | kubectl apply -f -
-apiVersion: trafficcontrol.policy.gloo.solo.io/v2
-kind: TrafficPolicy
-metadata:
-  name: httpbin-traffic-policy
-  namespace: ${MGMT_NAMESPACE}
-spec:
-  # 作用于哪些目标（这里选择前面定义的 Upstream）
-  applyToDestinations:
-  - selector:
-      name: httpbin-upstream
-      namespace: ${MGMT_NAMESPACE}
-  policy:
-    # TLS 配置（保持业务域名作为 SNI）
-    tls:
-      mode: SIMPLE        # 向后端发起 TLS
-      sni: api1.abjx.appdev.aibang
-    # 连接池配置
-    connectionPool:
-      tcp:
-        maxConnections: 100
-      http:
-        h2UpgradePolicy: UPGRADE
-        http1MaxPendingRequests: 100
-        http2MaxRequests: 1000
-        maxRequestsPerConnection: 100
-    # 负载均衡
-    loadBalancer:
-      simple: ROUND_ROBIN
-    # 异常检测（熔断）
-    outlierDetection:
-      consecutive5xxErrors: 5
-      interval: 30s
-      baseEjectionTime: 30s
-      maxEjectionPercent: 50
-      minHealthPercent: 50
-EOF
-
-# 验证
-kubectl get trafficpolicy -n ${MGMT_NAMESPACE}
-```
-
-### 8.5 可选：创建 AccessPolicy（替代 Istio AuthorizationPolicy）
-
-```bash
-# 默认拒绝所有入站流量
-cat <<EOF | kubectl apply -f -
-apiVersion: security.policy.gloo.solo.io/v2
-kind: AccessPolicy
-metadata:
-  name: deny-all
-  namespace: ${WORKLOAD_NAMESPACE}
-spec:
-  # 空 spec = 拒绝所有
----
-# 放行来自 Gateway 的流量
-apiVersion: security.policy.gloo.solo.io/v2
-kind: AccessPolicy
-metadata:
-  name: allow-from-gateway
-  namespace: ${WORKLOAD_NAMESPACE}
-spec:
-  # 作用于哪些工作负载
-  applyToWorkloads:
-  - selector:
-      labels:
-        app: httpbin
-  config:
-    # mTLS 模式
-    authn:
-      tlsMode: STRICT     # 强制 mTLS
-    # L7 授权
-    authz:
-      # 仅允许来自特定 ServiceAccount 的流量
-      allowedClients:
-      - serviceAccountSelector:
-          name: gloo-gateway-sa
-          namespace: ${GATEWAY_NAMESPACE}
-      # 允许的端口
-      allowedPorts:
-      - port: 80
-EOF
-
-# 注意：在 Ambient 模式下，AccessPolicy 由 Waypoint 执行
-```
+这些资源不是完全不能用，但**不应该作为 ambient 安装闭环的基础文档**。
 
 ---
 
-## 9. 验证端到端访问
+## 6. Validation and Rollback
 
-### 9.1 获取网关 IP
-
-```bash
-export GATEWAY_IP=$(kubectl get svc -n ${GATEWAY_NAMESPACE} gloo-gateway-proxy \
-  -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-echo "Gateway IP: ${GATEWAY_IP}"
-
-# 如果使用 HTTP（端口 80）测试
-export GATEWAY_HTTP_IP=$(kubectl get svc -n ${GATEWAY_NAMESPACE} gloo-gateway-proxy \
-  -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-echo "Gateway HTTP IP: ${GATEWAY_HTTP_IP}"
-```
-
-### 9.2 HTTP 测试（端口 80）
+## 6.1 安装完成后的最小验证
 
 ```bash
-# 测试根路径
-curl -s http://${GATEWAY_IP}/
-
-# 测试 /get 端点
-curl -s http://${GATEWAY_IP}/get
-
-# 预期：返回 httpbin 的 JSON 响应
+kubectl get pods -n ${MGMT_NAMESPACE}
+kubectl get pods -n ${ISTIO_NAMESPACE}
+kubectl get ds -n ${ISTIO_NAMESPACE} ztunnel
+kubectl get gateway -n ${APP_NAMESPACE}
+meshctl check --kubecontext ${MGMT_CONTEXT}
 ```
 
-### 9.3 HTTPS 测试（端口 443，使用 Host 头）
+## 6.2 Ambient 验证
 
 ```bash
-# 测试 HTTPS + Host 头
-curl -s -k -H "Host: api1.abjx.appdev.aibang" \
-  https://${GATEWAY_IP}/get
-
-# -k：跳过证书验证（测试用）
-# -v：详细输出，可查看 TLS 握手
-
-# 更详细的测试
-curl -v -H "Host: api1.abjx.appdev.aibang" \
-  https://${GATEWAY_IP}/get 2>&1 | head -30
+kubectl get ns -L istio.io/dataplane-mode,istio.io/use-waypoint
+kubectl get pods -n ${APP_NAMESPACE}
 ```
 
-### 9.4 预期结果
+看点：
+- namespace 带 `istio.io/dataplane-mode=ambient`
+- namespace 或 service 带 `istio.io/use-waypoint`
+- workload 无 sidecar
 
-**成功时的输出**：
-```json
-{
-  "args": {},
-  "headers": {
-    "Accept": "*/*",
-    "Host": "api1.abjx.appdev.aibang",
-    "User-Agent": "curl/8.x",
-    "X-Forwarded-For": "xxx.xxx.xxx.xxx",
-    "X-Request-Id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-  },
-  "origin": "xxx.xxx.xxx.xxx",
-  "url": "https://api1.abjx.appdev.aibang/get"
-}
-```
+## 6.3 回滚策略
 
-**关键验证点**：
-- `X-Request-Id`：确认流量经过 Envoy
-- `X-Forwarded-For`：确认原始客户端 IP（可能因 GCP LB 而变化）
-- TLS 握手成功，无证书错误（使用正确证书时）
-
-### 9.5 Pod 内部通信测试（验证 mTLS）
-
+### 仅回滚 waypoint
 ```bash
-# 在 Waypoint 中执行 curl（验证 mTLS）
-kubectl exec -n ${WORKLOAD_NAMESPACE} deploy/team-a-waypoint -c waypoint -- \
-  curl -s http://httpbin.${WORKLOAD_NAMESPACE}:80/get
-
-# 预期：返回 JSON（说明 Waypoint → Pod 流量正常）
+kubectl label namespace ${APP_NAMESPACE} istio.io/use-waypoint-
+kubectl delete gateway waypoint -n ${APP_NAMESPACE}
 ```
 
----
-
-## 10. 排错与诊断
-
-### 10.1 常见问题与解决方案
-
-| 问题现象 | 检查命令 | 解决方案 |
-| --- | --- | --- |
-| Gateway LoadBalancer IP 为空 | `kubectl describe svc -n ${GATEWAY_NAMESPACE} gloo-gateway-proxy` | 等待 3-5 分钟，或检查 GCP 配额 |
-| 404 路由未匹配 | `kubectl get routetable -n ${MGMT_NAMESPACE}` | 确认 hosts 和 matchers 配置正确 |
-| 503 Service Unavailable | `kubectl get upstream -n ${MGMT_NAMESPACE}` | 确认 Upstream 状态为 Accepted |
-| mTLS 握手失败 | `kubectl logs -n ${GATEWAY_NAMESPACE} -l app=gloo-gateway --tail=50` | 确认 PeerAuthentication 为 STRICT |
-| Ambient ztunnel 未运行 | `kubectl get daemonset -n istio-system` | 检查节点是否支持 ztunnel |
-| RouteTable 未绑定 | `kubectl describe virtualgateway -n ${GATEWAY_NAMESPACE}` | 确认 allowedRouteTables 配置 |
-
-### 10.2 诊断命令速查
-
+### 退出 ambient
 ```bash
-# ─── Gloo Mesh 健康检查 ─────────────────────
-meshctl check                              # 完整健康检查
-meshctl ambient check                      # Ambient 特定检查
-
-# ─── 资源状态 ─────────────────────────────
-kubectl get virtualgateway,routetable,trafficpolicy,upstream -n ${MGMT_NAMESPACE}
-kubectl get accesspolicy -n ${WORKLOAD_NAMESPACE}
-
-# ─── 资源详情 ─────────────────────────────
-kubectl describe virtualgateway runtime-gateway -n ${GATEWAY_NAMESPACE}
-kubectl describe routetable httpbin-routes -n ${MGMT_NAMESPACE}
-kubectl describe upstream httpbin-upstream -n ${MGMT_NAMESPACE}
-
-# ─── Pod 日志 ─────────────────────────────
-kubectl logs -n ${GATEWAY_NAMESPACE} -l app=gloo-gateway --tail=100 -f
-kubectl logs -n ${MGMT_NAMESPACE} deployment/gloo-mesh-mgmt-server --tail=100
-kubectl logs -n ${WORKLOAD_NAMESPACE} -l app=httpbin --tail=50
-
-# ─── Envoy 诊断 ─────────────────────────────
-# Port-forward 到 Envoy admin
-kubectl port-forward -n ${GATEWAY_NAMESPACE} deploy/gloo-gateway 15000:15000 &
-curl http://localhost:15000/server_info          # 服务信息
-curl http://localhost:15000/clusters             # 集群配置
-curl http://localhost:15000/listeners            # 监听器配置
-curl http://localhost:15000/routes               # 路由配置
-
-# ─── Ambient 特定 ─────────────────────────────
-kubectl get daemonset -n istio-system            # ztunnel DaemonSet
-kubectl get waypoint -A                          # Waypoint 列表
-kubectl describe waypoint team-a-waypoint -n ${WORKLOAD_NAMESPACE}
-
-# ─── Istio 诊断 ─────────────────────────────
-istioctl proxy-status                           # 代理状态
-istioctl proxy-config cluster <pod-name> -n ${WORKLOAD_NAMESPACE}
-istioctl proxy-config endpoint <pod-name> -n ${WORKLOAD_NAMESPACE}
+kubectl label namespace ${APP_NAMESPACE} istio.io/dataplane-mode-
 ```
 
-### 10.3 查看 Envoy 配置（验证路由翻译）
-
+### 卸载 ambient 组件
 ```bash
-# 查看 Gloo 翻译后的 Istio 资源
-kubectl get virtualservice -n ${MGMT_NAMESPACE}
-kubectl get gateway -n ${MGMT_NAMESPACE}
-
-# 查看详细配置
-kubectl get virtualservice -n ${MGMT_NAMESPACE} -o yaml
-kubectl get gateway -n ${MGMT_NAMESPACE} -o yaml
+helm uninstall ztunnel -n ${ISTIO_NAMESPACE}
+helm uninstall istio-cni -n ${ISTIO_NAMESPACE}
+helm uninstall istiod -n ${ISTIO_NAMESPACE}
+helm uninstall istio-base -n ${ISTIO_NAMESPACE}
 ```
 
----
-
-## 11. 多集群扩展（未来）
-
-### 11.1 添加第二个集群到 Gloo Mesh
-
+### 卸载 Gloo 管理面
 ```bash
-# 在第二个集群上执行（假设已安装 Gloo Agent）
-meshctl cluster register \
-  --cluster-name=cluster-2 \
-  --mgmt-context=cluster-1-gke \
-  --remote-context=cluster-2-gke \
-  --agent-server-address=gloo-mesh-mgmt-server.${MGMT_NAMESPACE}.svc.cluster.local:9900
-```
-
-### 11.2 Workspace 隔离多租户
-
-```bash
-# 为不同团队创建 Workspace
-cat <<EOF | kubectl apply -f -
-apiVersion: admin.gloo.solo.io/v2
-kind: Workspace
-metadata:
-  name: team-a-workspace
-  namespace: ${MGMT_NAMESPACE}
-spec:
-  workloadClusters:
-  - name: gke-cluster-1
-    namespaces:
-    - name: team-a-runtime
-    - name: team-a-gateway
-EOF
-```
-
-### 11.3 Federation（跨集群服务发现）
-
-```bash
-# 通过 Federation 暴露服务到其他集群
-cat <<EOF | kubectl apply -f -
-apiVersion: networking.gloo.solo.io/v2
-kind: Federation
-metadata:
-  name: httpbin-federation
-  namespace: ${MGMT_NAMESPACE}
-spec:
-  upstream:
-    ref:
-      name: httpbin-upstream
-      namespace: ${MGMT_NAMESPACE}
-  # 导出到的集群
-  exportTo:
-  - clusters:
-    - cluster-2
-EOF
-```
-
----
-
-## 12. 完整 YAML 文件参考
-
-### 12.1 一键安装脚本（完整版）
-
-```bash
-#!/bin/bash
-# install-gloo-ambient.sh - GKE + Gloo Mesh + Ambient 完整安装
-
-set -e
-
-# ─── 配置 ─────────────────────────────────
-export GCP_PROJECT_ID="${GCP_PROJECT_ID:-your-gcp-project}"
-export GCP_REGION="${GCP_REGION:-us-central1}"
-export GKE_CLUSTER_NAME="${GKE_CLUSTER_NAME:-gloo-ambient-cluster}"
-export GLOO_EE_VERSION="${GLOO_EE_VERSION:-2.1.0}"
-export LICENSE_KEY="${LICENSE_KEY:-<YOUR_LICENSE_KEY>}"
-export MGMT_NAMESPACE="${MGMT_NAMESPACE:-gloo-mesh}"
-export GATEWAY_NAMESPACE="${GATEWAY_NAMESPACE:-gloo-gateway}"
-export WORKLOAD_NAMESPACE="${WORKLOAD_NAMESPACE:-team-a-runtime}"
-
-echo "=== GKE + Gloo Mesh + Ambient 安装脚本 ==="
-echo "项目: ${GCP_PROJECT_ID}"
-echo "区域: ${GCP_REGION}"
-echo "集群: ${GKE_CLUSTER_NAME}"
-echo "Gloo 版本: ${GLOO_EE_VERSION}"
-
-# ─── Step 1: 创建 GKE 集群 ─────────────────────
-echo "[1/8] 创建 GKE 集群..."
-gcloud container clusters create ${GKE_CLUSTER_NAME} \
-  --project=${GCP_PROJECT_ID} \
-  --location=${GCP_REGION} \
-  --cluster-version=1.28 \
-  --machine-type=e2-standard-4 \
-  --num-nodes=3 \
-  --enable-autoscaling \
-  --enable-ip-alias \
-  --workload-pool=${GCP_PROJECT_ID}.svc.id.goog \
-  --labels="env=prod,mesh=gloo"
-
-# ─── Step 2: 配置 kubectl ─────────────────────
-echo "[2/8] 配置 kubectl 上下文..."
-gcloud container clusters get-credentials ${GKE_CLUSTER_NAME} \
-  --project=${GCP_PROJECT_ID} \
-  --location=${GCP_REGION}
-
-# ─── Step 3: 安装工具 ─────────────────────
-echo "[3/8] 安装 meshctl 和添加 Helm 仓库..."
-curl -sL https://run.solo.io/meshctl/install | sh
-sudo mv $HOME/.gloo-mesh/bin/meshctl /usr/local/bin/
-helm repo add glooe https://storage.googleapis.com/gloo-ee-helm
-helm repo add gloo-platform https://storage.googleapis.com/gloo-platform/helm-charts
-helm repo update
-
-# ─── Step 4: 创建命名空间 ─────────────────────
-echo "[4/8] 创建命名空间..."
-kubectl create namespace ${MGMT_NAMESPACE}
-kubectl create namespace ${GATEWAY_NAMESPACE}
-kubectl create namespace ${WORKLOAD_NAMESPACE}
-
-# ─── Step 5: 安装 Gloo Mesh 管理面 ─────────────────────
-echo "[5/8] 安装 Gloo Mesh 管理面..."
-helm install gloo-platform-crds gloo-platform/gloo-platform-crds \
-  --namespace ${MGMT_NAMESPACE} --create-namespace \
-  --version ${GLOO_EE_VERSION} --wait
-
-helm install gloo-platform glooe/gloo-ee \
-  --namespace ${MGMT_NAMESPACE} \
-  --version ${GLOO_EE_VERSION} \
-  --set-string license_key="${LICENSE_KEY}" \
-  --values - <<EOF
-gloo:
-  mgmtServer:
-    enabled: true
-  glooAgent:
-    enabled: true
-    relay:
-      serverAddress: gloo-mesh-mgmt-server.${MGMT_NAMESPACE}.svc.cluster.local:9900
-  glooUi:
-    enabled: true
-  telemetryCollector:
-    enabled: true
-  istiod:
-    enabled: true
-EOF
-
-# ─── Step 6: 安装 Gloo Gateway ─────────────────────
-echo "[6/8] 安装 Gloo Gateway..."
-helm install gloo-gateway glooe/gloo-gateway \
-  --namespace ${GATEWAY_NAMESPACE} --create-namespace \
-  --version ${GLOO_EE_VERSION} \
-  --set-string license_key="${LICENSE_KEY}" \
-  --set glooGateway.gatewayProxies.gatewayProxy.service.type=LoadBalancer \
-  --set glooGateway.gatewayProxies.gatewayProxy.deployment.replicas=2
-
-# ─── Step 7: 等待就绪 ─────────────────────
-echo "[7/8] 等待组件就绪..."
-kubectl wait --for=condition=Ready pods --all -n ${MGMT_NAMESPACE} --timeout=300s
-kubectl wait --for=condition=Ready pods -l app=gloo-gateway -n ${GATEWAY_NAMESPACE} --timeout=300s
-
-# ─── Step 8: 验证安装 ─────────────────────
-echo "[8/8] 验证安装..."
-meshctl check
-
-echo ""
-echo "=== 安装完成 ==="
-echo "Gateway IP: $(kubectl get svc -n ${GATEWAY_NAMESPACE} gloo-gateway-proxy -o jsonpath='{.status.loadBalancer.ingress[0].ip}')"
-echo "管理面: kubectl get pods -n ${MGMT_NAMESPACE}"
-echo "网关: kubectl get pods -n ${GATEWAY_NAMESPACE}"
-echo "访问 UI: kubectl port-forward -n ${MGMT_NAMESPACE} svc/gloo-mesh-ui 8080:8080"
-```
-
----
-
-## 13. 清理与卸载
-
-```bash
-# 删除路由资源
-kubectl delete routetable,upstream,virtualgateway,trafficpolicy -n ${MGMT_NAMESPACE} --all
-kubectl delete accesspolicy -n ${WORKLOAD_NAMESPACE} --all
-kubectl delete waypoint -n ${WORKLOAD_NAMESPACE} --all
-
-# 删除工作负载
-kubectl delete deployment,svc httpbin -n ${WORKLOAD_NAMESPACE}
-
-# 卸载 Gloo Gateway
-helm uninstall gloo-gateway -n ${GATEWAY_NAMESPACE}
-kubectl delete namespace ${GATEWAY_NAMESPACE}
-
-# 卸载 Gloo Mesh 管理面
 helm uninstall gloo-platform -n ${MGMT_NAMESPACE}
-kubectl delete namespace ${MGMT_NAMESPACE}
-
-# 删除集群（谨慎操作）
-# gcloud container clusters delete ${GKE_CLUSTER_NAME} \
-#   --project=${GCP_PROJECT_ID} \
-#   --location=${GCP_REGION}
+helm uninstall gloo-platform-crds -n ${MGMT_NAMESPACE}
 ```
 
 ---
 
-## 14. 参考链接
+## 7. Reliability and Cost Optimizations
 
-- [Gloo Mesh 官方文档](https://docs.solo.io/gloo-mesh-enterprise/)
-- [Gloo Gateway 文档](https://docs.solo.io/gloo-mesh-gateway/)
-- [Gloo Mesh Ambient 模式](https://docs.solo.io/gloo-mesh-enterprise/latest/ambient/introduction/)
-- [Istio 与 Gloo 资源对照表](https://docs.solo.io/gloo-mesh-enterprise/latest/reference/istio-resources-mapping/)
-- [Gloo Platform Helm Chart](https://storage.googleapis.com/gloo-ee-helm)
-- [GKE 文档](https://cloud.google.com/kubernetes-engine/docs)
+### 高可用
+- 节点数至少 3
+- `istiod` 至少 2 副本
+- 业务 waypoint 建议 2 副本
+- 节点池跨 zone
+
+### 零停机
+- waypoint 滚动升级前先看 PDB
+- ztunnel 升级会影响长连接，安排维护窗口
+- ingress gateway 和 waypoint 不要同时做大版本升级
+
+### 成本
+- ambient 的核心价值就是去掉 sidecar 常驻成本
+- waypoint 只对需要 L7 的 namespace / service 开
+- 不要“全命名空间一刀切”启用 waypoint，除非你真的需要 L7 观测和策略
+
+### 安全
+- 管理面 relay 用 BYO mTLS
+- 工作负载身份统一走 SPIFFE/SPIRE 或 Solo 支持路径
+- 外围仍建议保留 Cloud Armor / WAF，不要把入口防护完全压到 mesh 内
 
 ---
 
-*文档版本：适用于 Gloo Mesh EE 2.x，GKE 1.25+*
-*更新日期：2026-04-25*
+## 8. Handoff Checklist
+
+- [ ] GKE Standard 集群已创建并启用 Workload Identity
+- [ ] `gloo-platform-crds` 与 `gloo-platform` 已安装
+- [ ] Gateway API CRD 已安装
+- [ ] `istiod / istio-cni / ztunnel` 已运行
+- [ ] 目标 namespace 已加 `istio.io/dataplane-mode=ambient`
+- [ ] waypoint 已通过 `Gateway` 或 `istioctl waypoint apply` 创建
+- [ ] 测试服务已接入且无 sidecar
+- [ ] `meshctl check` 通过
+- [ ] 已定义回滚步骤
+
+---
+
+## 9. 本次修正点总结
+
+### 你最关心的结论
+- **企业版 GKE 上安装 ambient + waypoint 没问题**
+- **原文不适合直接执行**
+- **我已经把它改成适合 GKE 企业版的版本**
+
+### 区别点在哪里
+1. **管理面安装路径改了**
+   - 从 `glooe/gloo-ee`
+   - 改成 `gloo-platform/gloo-platform`
+
+2. **ambient 启用方式改了**
+   - 不再写 `MeshConfig ambient.enabled`
+   - 改成实际安装 `istiod + istio-cni + ztunnel`
+
+3. **waypoint 资源改了**
+   - 不再用 `kind: Waypoint`
+   - 改成 `Gateway API + gatewayClassName: istio-waypoint`
+
+4. **工作负载加入方式改了**
+   - 不再靠“禁用 sidecar 注入”表达 ambient
+   - 改成 `istio.io/dataplane-mode=ambient`
+
+5. **路由模型改了**
+   - 不再把 `RouteTable / VirtualGateway / Upstream` 当 ambient 主路径
+   - 改成 `Gateway / HTTPRoute / waypoint`
+
+6. **GKE 节点 OS 描述改了**
+   - 删除“非 COS”这种错误前提
+   - 改成遵循 GKE 官方推荐
+
+---
+
+## 10. 参考
+
+- [Solo Enterprise for Istio ambient install](https://docs.solo.io/gloo-mesh/main/ambient/setup/install/manual/)
+- [Solo multicluster ambient requirements](https://docs.solo.io/gloo-mesh/latest/ambient/setup/multicluster/default/manual/)
+- [Gloo management plane install](https://docs.solo.io/gloo-mesh-enterprise/main/setup/install/enterprise_installation/)
+- [Gloo Platform CRD note for ambient](https://docs.solo.io/gloo-mesh-enterprise/main/reference/helm/gloo_platform_crds_helm_values_reference/)
+- [Istio waypoint configuration](https://istio.io/latest/docs/ambient/usage/waypoint/)
+- [GKE node images](https://cloud.google.com/kubernetes-engine/docs/concepts/node-images)
