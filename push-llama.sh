@@ -262,58 +262,85 @@ ${diff_text:0:1500}
 
 Write a concise commit message body with 2-4 bullet points explaining what changed and why. Focus on the purpose and impact of the changes."
 
-    # 调用 OpenAI 兼容 API
-    # 必须先 export，再让 Python 子进程读取环境变量
-    export LLAMA_USER_PROMPT="${hint_line}Branch: ${branch}
-Stats: +${insertions}/-${deletions} lines
+    # 全部由 Python 完成：构建 payload → HTTP POST → 解析响应
+    # 避免 curl + 环境变量传递的 ordering 问题，同时打印原始响应到 stderr 方便调试
+    local msg
+    msg=$(LLAMA_BASE_URL="${base_url}" \
+          LLAMA_HINT_LINE="${hint_line}" \
+          LLAMA_BRANCH="${branch}" \
+          LLAMA_INSERTIONS="${insertions}" \
+          LLAMA_DELETIONS="${deletions}" \
+          LLAMA_FILE_LIST="${file_list}" \
+          LLAMA_DIFF_TEXT="${diff_text:0:1500}" \
+          LLAMA_HTTP_TIMEOUT="${LLAMA_HTTP_TIMEOUT}" \
+          $PYTHON - <<'PYEOF'
+import json, sys, os, urllib.request, urllib.error
 
-Changed files:
-${file_list}
-Diff summary:
-${diff_text:0:1500}
+base_url       = os.environ['LLAMA_BASE_URL']
+hint_line      = os.environ.get('LLAMA_HINT_LINE', '')
+branch         = os.environ.get('LLAMA_BRANCH', '')
+insertions     = os.environ.get('LLAMA_INSERTIONS', '0')
+deletions      = os.environ.get('LLAMA_DELETIONS', '0')
+file_list      = os.environ.get('LLAMA_FILE_LIST', '')
+diff_text      = os.environ.get('LLAMA_DIFF_TEXT', '')
+timeout        = int(os.environ.get('LLAMA_HTTP_TIMEOUT', '120'))
 
-Write a concise commit message body with 2-4 bullet points explaining what changed and why. Focus on the purpose and impact of the changes."
+user_prompt = (
+    f"{hint_line}Branch: {branch}\n"
+    f"Stats: +{insertions}/-{deletions} lines\n\n"
+    f"Changed files:\n{file_list}\n"
+    f"Diff summary:\n{diff_text}\n\n"
+    "Write a concise commit message body with 2-4 bullet points explaining "
+    "what changed and why. Focus on the purpose and impact of the changes."
+)
 
-    local payload
-    payload=$($PYTHON - <<'PYEOF'
-import json, sys, os
-
-system_prompt = "You are an expert git commit message writer. Write professional, clear commit messages following conventional commits format."
-user_prompt = os.environ.get('LLAMA_USER_PROMPT', '')
-
-data = {
+payload = json.dumps({
     "model": "gemma-3-1b-it",
     "messages": [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt}
+        {"role": "system", "content": "You are an expert git commit message writer. "
+                                      "Write professional, clear commit messages "
+                                      "following conventional commits format."},
+        {"role": "user", "content": user_prompt},
     ],
     "temperature": 0.3,
     "max_tokens": 400,
-    "stream": False
-}
-print(json.dumps(data))
-PYEOF
-)
+    "stream": False,
+}).encode('utf-8')
 
-    local response
-    # 不使用 -f，以便能看到非 2xx 的错误响应体（同时捕获 stderr）
-    response=$(curl -s --max-time $LLAMA_HTTP_TIMEOUT \
-        -X POST \
-        -H "Content-Type: application/json" \
-        -d "$payload" \
-        "${base_url}/v1/chat/completions" 2>/dev/null) || return 1
-
-    # 空响应保护：curl 成功但 body 为空 → 直接 return 1 走 fallback
-    [[ -n "$response" ]] || { warn "llama-server: empty response from API"; return 1; }
-
-    local msg
-    msg=$(printf '%s' "$response" | $PYTHON - <<'PYEOF'
-import json, sys
-raw = sys.stdin.read().strip()
-if not raw:
+url = f"{base_url}/v1/chat/completions"
+req = urllib.request.Request(url, data=payload,
+                             headers={"Content-Type": "application/json"})
+try:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read().decode('utf-8').strip()
+except urllib.error.URLError as e:
+    print(f"[llama-debug] HTTP error: {e}", file=sys.stderr)
     sys.exit(1)
-data = json.loads(raw)
-print(data.get("choices", [{}])[0].get("message", {}).get("content", "").strip())
+
+# 打印原始响应到 stderr，方便调试
+print(f"[llama-debug] raw response: {raw[:300]}", file=sys.stderr)
+
+if not raw:
+    print("[llama-debug] empty response body", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    data = json.loads(raw)
+except json.JSONDecodeError as e:
+    print(f"[llama-debug] JSON parse error: {e}", file=sys.stderr)
+    sys.exit(1)
+
+# 兼容 OpenAI chat completions 格式
+content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+if not content:
+    # 某些 llama-server 版本直接返回 {"content": "..."}
+    content = data.get("content", "")
+
+print(f"[llama-debug] extracted content length={len(content)}", file=sys.stderr)
+content = content.strip()
+if not content:
+    sys.exit(1)
+print(content)
 PYEOF
 ) || return 1
 
