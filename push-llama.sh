@@ -2,6 +2,8 @@
 # push-llama.sh
 # 使用本地 llama-server + gemma-3-1b-it 生成标准化 commit message
 # 参考: ocr-llama.py 的临时 server 模式
+# when I using bash -x push-llama.sh, I found that the python script is not executed, 
+# So I add the python path to the script.
 
 set -euo pipefail
 IFS=$'\n\t'
