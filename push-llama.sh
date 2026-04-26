@@ -246,7 +246,7 @@ generate_commit_msg_via_llama() {
     local hint_line=""
     [[ -n "$hint" ]] && hint_line="User summary hint: ${hint}"$'\n'
 
-    # 构建 chat 格式 prompt
+    # 构建 chat 格式 prompt（纯英文，避免编码问题）
     local system_prompt="You are an expert git commit message writer. Write professional, clear commit messages following conventional commits format."
     local user_prompt="${hint_line}Branch: ${branch}
 Stats: +${insertions}/-${deletions} lines
@@ -258,15 +258,20 @@ ${diff_text:0:1500}
 
 Write a concise commit message body with 2-4 bullet points explaining what changed and why. Focus on the purpose and impact of the changes."
 
-    # 调用 OpenAI 兼容 API
+    # 调用 OpenAI 兼容 API（修复：正确的 Python JSON 处理）
     local payload
-    payload=$(python3 - <<PYEOF
-import json, sys
+    payload=$(python3 - <<'PYEOF'
+import json, sys, os
+
+system_prompt = """You are an expert git commit message writer. Write professional, clear commit messages following conventional commits format."""
+
+user_prompt = os.environ.get('LLAMA_USER_PROMPT', '')
+
 data = {
     "model": "gemma-3-1b-it",
     "messages": [
-        {"role": "system", "content": "$system_prompt"},
-        {"role": "user", "content": """${user_prompt}"""}
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
     ],
     "temperature": 0.3,
     "max_tokens": 400,
@@ -276,6 +281,16 @@ print(json.dumps(data))
 PYEOF
 )
 
+    export LLAMA_USER_PROMPT="${hint_line}Branch: ${branch}
+Stats: +${insertions}/-${deletions} lines
+
+Changed files:
+${file_list}
+Diff summary:
+${diff_text:0:1500}
+
+Write a concise commit message body with 2-4 bullet points explaining what changed and why. Focus on the purpose and impact of the changes."
+
     local response
     response=$(curl -sf --max-time $LLAMA_HTTP_TIMEOUT \
         -X POST \
@@ -284,7 +299,7 @@ PYEOF
         "${base_url}/v1/chat/completions" 2>/dev/null) || return 1
 
     local msg
-    msg=$(python3 - <<PYEOF
+    msg=$(printf '%s' "$response" | python3 - <<'PYEOF'
 import json, sys
 data = json.loads(sys.stdin.read())
 print(data.get("choices", [{}])[0].get("message", {}).get("content", "").strip())
