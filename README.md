@@ -1,3 +1,4 @@
+---
 # 如何正确思考"创建一个资源"——从命令驱动到模型驱动
 
 ---
@@ -312,7 +313,7 @@ NEG / MIG
 Backend Pod / VM
 ```
 
-如果概念不清楚，就很容易出现：
+如果概念不清楚，就容易出现：
 
 - 参数乱配
 - 逻辑混乱
@@ -543,7 +544,7 @@ Backend Service = traffic distribution
 ```
 Backend Service
  ├─ Health Check
- ├─ Backend
+ ├─ NEG / MIG
  └─ Network
 ```
 
