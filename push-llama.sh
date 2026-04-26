@@ -314,20 +314,16 @@ try:
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         raw = resp.read().decode('utf-8').strip()
 except urllib.error.URLError as e:
-    print(f"[llama-debug] HTTP error: {e}", file=sys.stderr)
+    print(f"HTTP error: {e}", file=sys.stderr)
     sys.exit(1)
 
-# 打印原始响应到 stderr，方便调试
-print(f"[llama-debug] raw response: {raw[:300]}", file=sys.stderr)
-
 if not raw:
-    print("[llama-debug] empty response body", file=sys.stderr)
     sys.exit(1)
 
 try:
     data = json.loads(raw)
 except json.JSONDecodeError as e:
-    print(f"[llama-debug] JSON parse error: {e}", file=sys.stderr)
+    print(f"JSON parse error: {e}", file=sys.stderr)
     sys.exit(1)
 
 # 兼容 OpenAI chat completions 格式
@@ -336,7 +332,6 @@ if not content:
     # 某些 llama-server 版本直接返回 {"content": "..."}
     content = data.get("content", "")
 
-print(f"[llama-debug] extracted content length={len(content)}", file=sys.stderr)
 content = content.strip()
 if not content:
     sys.exit(1)
