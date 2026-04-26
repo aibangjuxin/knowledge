@@ -262,13 +262,23 @@ ${diff_text:0:1500}
 
 Write a concise commit message body with 2-4 bullet points explaining what changed and why. Focus on the purpose and impact of the changes."
 
-    # 调用 OpenAI 兼容 API（修复：正确的 Python JSON 处理）
+    # 调用 OpenAI 兼容 API
+    # 必须先 export，再让 Python 子进程读取环境变量
+    export LLAMA_USER_PROMPT="${hint_line}Branch: ${branch}
+Stats: +${insertions}/-${deletions} lines
+
+Changed files:
+${file_list}
+Diff summary:
+${diff_text:0:1500}
+
+Write a concise commit message body with 2-4 bullet points explaining what changed and why. Focus on the purpose and impact of the changes."
+
     local payload
     payload=$($PYTHON - <<'PYEOF'
 import json, sys, os
 
-system_prompt = """You are an expert git commit message writer. Write professional, clear commit messages following conventional commits format."""
-
+system_prompt = "You are an expert git commit message writer. Write professional, clear commit messages following conventional commits format."
 user_prompt = os.environ.get('LLAMA_USER_PROMPT', '')
 
 data = {
@@ -285,27 +295,24 @@ print(json.dumps(data))
 PYEOF
 )
 
-    export LLAMA_USER_PROMPT="${hint_line}Branch: ${branch}
-Stats: +${insertions}/-${deletions} lines
-
-Changed files:
-${file_list}
-Diff summary:
-${diff_text:0:1500}
-
-Write a concise commit message body with 2-4 bullet points explaining what changed and why. Focus on the purpose and impact of the changes."
-
     local response
-    response=$(curl -sf --max-time $LLAMA_HTTP_TIMEOUT \
+    # 不使用 -f，以便能看到非 2xx 的错误响应体（同时捕获 stderr）
+    response=$(curl -s --max-time $LLAMA_HTTP_TIMEOUT \
         -X POST \
         -H "Content-Type: application/json" \
         -d "$payload" \
         "${base_url}/v1/chat/completions" 2>/dev/null) || return 1
 
+    # 空响应保护：curl 成功但 body 为空 → 直接 return 1 走 fallback
+    [[ -n "$response" ]] || { warn "llama-server: empty response from API"; return 1; }
+
     local msg
     msg=$(printf '%s' "$response" | $PYTHON - <<'PYEOF'
 import json, sys
-data = json.loads(sys.stdin.read())
+raw = sys.stdin.read().strip()
+if not raw:
+    sys.exit(1)
+data = json.loads(raw)
 print(data.get("choices", [{}])[0].get("message", {}).get("content", "").strip())
 PYEOF
 ) || return 1
