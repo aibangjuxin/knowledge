@@ -11,6 +11,8 @@ DEFAULT_REPLACE_FILE="${HOME}/.config/push-replace/replace.txt"
 REPLACE_FILE="${REPLACE_FILE:-$DEFAULT_REPLACE_FILE}"
 COMMIT_MESSAGE=""
 DRY_RUN=0
+SED_SCRIPT=""
+COMMIT_FILE=""
 
 # llama-server 配置（参考 ocr-llama.py）
 LLAMA_SERVER_BIN="${LLAMA_SERVER_BIN:-/opt/homebrew/bin/llama-server}"
@@ -62,8 +64,10 @@ EOF
 }
 
 # ── llama-server Lifecycle ─────────────────────────────────────────────────────
+PYTHON=/Users/lex/python/openai/bin/python3
+
 find_free_port() {
-    python3 - <<'PYEOF'
+    $PYTHON - <<'PYEOF'
 import socket
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.bind(('127.0.0.1', 0))
@@ -260,7 +264,7 @@ Write a concise commit message body with 2-4 bullet points explaining what chang
 
     # 调用 OpenAI 兼容 API（修复：正确的 Python JSON 处理）
     local payload
-    payload=$(python3 - <<'PYEOF'
+    payload=$($PYTHON - <<'PYEOF'
 import json, sys, os
 
 system_prompt = """You are an expert git commit message writer. Write professional, clear commit messages following conventional commits format."""
@@ -299,7 +303,7 @@ Write a concise commit message body with 2-4 bullet points explaining what chang
         "${base_url}/v1/chat/completions" 2>/dev/null) || return 1
 
     local msg
-    msg=$(printf '%s' "$response" | python3 - <<'PYEOF'
+    msg=$(printf '%s' "$response" | $PYTHON - <<'PYEOF'
 import json, sys
 data = json.loads(sys.stdin.read())
 print(data.get("choices", [{}])[0].get("message", {}).get("content", "").strip())
