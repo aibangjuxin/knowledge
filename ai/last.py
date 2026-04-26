@@ -30,10 +30,13 @@ import json
 import os
 import re
 import select
+import subprocess
 import sys
 import textwrap
 import threading
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
@@ -49,9 +52,12 @@ SUPPORTED_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 # 可以通过环境变量 OLLAMA_NUM_THREAD=8 来外部覆盖，默认仍然使用系统总核心数
 CPU_THREADS = int(os.environ.get("OLLAMA_NUM_THREAD", max(1, os.cpu_count() or 4)))
 # CPU_THREADS = max(1, os.cpu_count() or 4) # 默认使用系统总核心数
+OCR_KEEP_ALIVE = os.environ.get("OCR_KEEP_ALIVE", "0")
+OCR_NUM_CTX = int(os.environ.get("OCR_NUM_CTX", "4096"))
 ENHANCE_KEEP_ALIVE = os.environ.get("ENHANCE_KEEP_ALIVE", "15m")
 ENHANCE_NUM_CTX = int(os.environ.get("ENHANCE_NUM_CTX", "2048"))
 ENHANCE_NUM_PREDICT = int(os.environ.get("ENHANCE_NUM_PREDICT", "1024"))
+UNLOAD_MODEL_AFTER_USE = os.environ.get("UNLOAD_MODEL_AFTER_USE", "1").lower() not in {"0", "false", "no"}
 
 OCR_PROMPT = (
     "请识别并提取这张图片中的所有文字内容，尽量保留原始格式，"
@@ -176,6 +182,48 @@ def _get_client():
         sys.exit(1)
 
 
+def unload_model(model: str):
+    """
+    主动卸载模型，尽快释放 Ollama 占用的内存/显存。
+    优先走官方 API keep_alive=0；如果失败，再回退到 `ollama stop`。
+    """
+    if not UNLOAD_MODEL_AFTER_USE or not model:
+        return
+
+    _, client = _get_client()
+
+    try:
+        # 官方文档支持 keep_alive=0 立即卸载模型
+        client.generate(model=model, keep_alive=0)
+        return
+    except Exception:
+        pass
+
+    try:
+        subprocess.run(
+            ["ollama", "stop", model],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=8,
+        )
+        return
+    except Exception:
+        pass
+
+    try:
+        req = urllib.request.Request(
+            f"{OLLAMA_HOST.rstrip('/')}/api/generate",
+            data=json.dumps({"model": model, "keep_alive": 0}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=8):
+            pass
+    except (urllib.error.URLError, TimeoutError, OSError):
+        pass
+
+
 def stage1_ocr(image_path: Path) -> str:
     """Stage 1：glm-ocr 提取原始文字"""
     ollama, client = _get_client()
@@ -202,12 +250,17 @@ def stage1_ocr(image_path: Path) -> str:
             options=ollama.Options(
                 temperature=0.05,
                 top_p=0.9,
+                num_ctx=OCR_NUM_CTX,
             ),
+            keep_alive=OCR_KEEP_ALIVE,
         )
     except ollama.ResponseError as e:
         print(f"❌  OCR 错误：{e.status_code} — {e.error}")
         print(f"    确认 {OCR_MODEL} 已拉取：ollama list")
         sys.exit(1)
+    finally:
+        # glm-ocr 很吃资源，Stage 1 一结束就尽快卸载
+        unload_model(OCR_MODEL)
 
     print_stage_end(t_start, "Stage 1 OCR")
     return response.message.content
@@ -404,7 +457,12 @@ def main():
         _print_total(t_global)
         return
 
-    enhanced_text = stage2_enhance(rule_text, args.model)
+    enhanced_text = None
+    try:
+        enhanced_text = stage2_enhance(rule_text, args.model)
+    finally:
+        # 整个脚本结束前把 Stage 2 模型也释放掉，避免空闲占用内存
+        unload_model(args.model)
 
     print(f"\n{EQUALS}")
     print(f"✨  [Stage 2] AI 增强完毕  [{args.model}]")
