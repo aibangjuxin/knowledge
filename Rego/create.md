@@ -66,7 +66,7 @@ spec:
 ### Why is this whitelist professional?
 
 | Decision | Rationale |
-|----------|-----------|
+|---|---|
 | **Excluding core/Service** | Forces users to expose services via Ingress, prevents creating Type: LoadBalancer causing unexpected costs or exposing unsafe NodePort |
 | **Excluding core/Pod** | Forces users to use Deployment or Job, ensures all containers are managed by controllers, conforming to cloud-native self-healing principles |
 | **Including HPA and PDB** | Demonstrates focus on High Availability (HA), forcing businesses to consider auto-scaling and disruption budgets |
@@ -74,7 +74,7 @@ spec:
 ### Potential Risks and Challenges
 
 | Risk | Description |
-|------|-------------|
+|---|---|
 | **ConfigMap and Secret missing** | Without these, applications cannot mount configurations or environment variables. Recommend adding `v1/ConfigMap` and `v1/Secret` |
 | **ServiceAccount missing** | If business needs specific IAM bindings (Workload Identity), allow creating `v1/ServiceAccount` |
 | **Namespace lockup risk** | Never apply this policy to all Namespaces. If applied to `kube-system`, GKE auto-upgrade and component repair will fail |
@@ -84,7 +84,7 @@ spec:
 To make this design work in production, I recommend adding the following essential components:
 
 | Resource Type | Reason |
-|---------------|--------|
+|---|---|
 | v1/Service | Although you want to control ingress, Ingress must forward to Service (ClusterIP) |
 | v1/ConfigMap | Store application configuration files |
 | v1/Secret | Store encrypted credentials |

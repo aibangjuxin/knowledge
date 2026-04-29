@@ -13,7 +13,7 @@
 ## 2. 产品定位对比
 
 | 维度 | GKE Policy Controller | Standalone Gatekeeper |
-|------|----------------------|----------------------|
+|---|---|---|
 | **本质** | GCP 原生托管的 Gatekeeper | 独立开源项目（CNCF） |
 | **安装方式** | GKE 集群一键启用 / Fleet 管理 | 手动 helm/kubectl 部署 |
 | **版本更新** | 随 GKE 版本绑定，延迟较慢 | 独立迭代，更新快 |
@@ -57,7 +57,7 @@ helm install gatekeeper gatekeeper/gatekeeper \
 **GKE Policy Controller** 提供开箱即用的策略：
 
 | 类别 | 策略名称 | 功能 |
-|------|----------|------|
+|---|---|---|
 | **安全** | CIS Kubernetes Benchmark | K8s 安全基线 |
 | **安全** | No Public IPs | 禁止公网 IP |
 | **安全** | No Privileged Containers | 禁止特权容器 |
@@ -86,7 +86,7 @@ helm install gatekeeper gatekeeper/gatekeeper \
 要让 Rego 策略在 GKE 和阿里云 ACK 间完全复用，需满足：
 
 | 条件 | 说明 |
-|------|------|
+|---|---|
 | **Gatekeeper 版本一致** | v3.12+ 推荐，v3.9+ 基本兼容 |
 | **ConstraintTemplate API 版本** | 使用 `templates.gatekeeper.sh/v1` |
 | **Kubernetes API 版本** | 使用 `constraints.gatekeeper.sh/v1beta1` 或 `v1` |
@@ -95,7 +95,7 @@ helm install gatekeeper gatekeeper/gatekeeper \
 ### 4.2 GKE 和阿里云 ACK 的差异
 
 | 维度 | GKE | 阿里云 ACK |
-|------|-----|------------|
+|---|---|---|
 | **Gatekeeper 支持** | 原生集成 Policy Controller | 需手动部署 |
 | **K8s 版本** | 1.26+ 默认禁用 shell | 自行选择版本 |
 | **网络策略** | Calico / Cilium | Terway |
@@ -255,7 +255,7 @@ kubectl apply -f gatekeeper-library/library/
 ## 7. 选型决策矩阵
 
 | 场景 | 推荐 | 理由 |
-|------|------|------|
+|---|---|---|
 | **仅使用 GKE** | GKE Policy Controller | 原生集成，维护成本低 |
 | **多云（GKE + ACK）** | Standalone Gatekeeper | 策略统一，跨平台复用 |
 | **强合规要求（金融/政务）** | Standalone Gatekeeper | 版本可控，审计方便 |
@@ -315,7 +315,7 @@ input.review.object.metadata.labels
 ### 9.1 最终建议
 
 | 你的情况 | 建议方案 |
-|----------|----------|
+|---|---|
 | **当前 GKE，未来上阿里云** | Standalone Gatekeeper |
 | **需要预置策略快速落地** | GKE Policy Controller 先用，后期迁移 |
 | **强多云一致性要求** | Standalone Gatekeeper + GitOps |
