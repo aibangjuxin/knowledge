@@ -132,9 +132,62 @@ egress:
 | 必须两个都允许吗？ | 取决于你的连接方式。如果只用 Auth Proxy，只需 3307；如果只用直接连接，只需 3306。但同时允许两者可以应对所有场景。 |
 | 禁止 3307 会怎样？ | 如果应用使用 Auth Proxy，连接会被 NetworkPolicy 拒绝 |
 
+## PostgreSQL PSC 端口说明
+
+根据 [Cloud SQL PostgreSQL PSC 文档](https://cloud.google.com/sql/docs/postgres/about-private-service-connect)，PostgreSQL PSC 支持以下端口：
+
+| 端口 | 用途 | 说明 |
+|------|------|------|
+| **5432** | 直接连接 / Managed Connection Pooling | PostgreSQL 默认端口，原生协议连接 |
+| **6432** | PgBouncer (Managed Connection Pooling) | PostgreSQL 托管连接池使用 PgBouncer，端口为 6432 |
+| **3307** | Cloud SQL Auth Proxy | Auth Proxy 出站连接端口 (与 MySQL 相同) |
+
+### 关键发现：Auth Proxy 使用 3307 而非 5432
+
+**重要**：Cloud SQL Auth Proxy 对 PostgreSQL 的出站连接使用 **TCP 3307** 端口，而不是 PostgreSQL 默认的 5432 端口。这意味着：
+
+```
+GKE Pod → Auth Proxy (本地:5432) → PSC Endpoint (:3307) → Service Attachment → Cloud SQL (:5432)
+```
+
+如果你的 NetworkPolicy 只允许 5432 端口，Auth Proxy 的出站连接会被阻止，因为 Auth Proxy 实际连接到 Cloud SQL PSC 端点的 **3307** 端口。
+
+### PostgreSQL NetworkPolicy 配置建议
+
+```yaml
+egress:
+  # DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+  # Cloud SQL PSC 连接
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 5432   # PostgreSQL 直接连接 / PgBouncer
+    - protocol: TCP
+      port: 6432   # PostgreSQL Managed Connection Pooling (PgBouncer)
+    - protocol: TCP
+      port: 3307   # Cloud SQL Auth Proxy (MySQL 和 PostgreSQL 通用)
+
+  # 其他必要出站
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+```
+
 ## 参考链接
 
 - [Private Service Connect overview - Cloud SQL MySQL](https://cloud.google.com/sql/docs/mysql/about-private-service-connect)
+- [Private Service Connect overview - Cloud SQL PostgreSQL](https://cloud.google.com/sql/docs/postgres/about-private-service-connect)
 - [Connect to an instance using Private Service Connect](https://cloud.google.com/sql/docs/mysql/configure-private-service-connect)
+- [Connect to an instance using Private Service Connect - PostgreSQL](https://cloud.google.com/sql/docs/postgres/configure-private-service-connect)
 - [Cloud SQL Auth Proxy](https://cloud.google.com/sql/docs/mysql/sql-proxy)
-- [Managed Connection Pooling](https://cloud.google.com/sql/docs/mysql/managed-connection-pooling)
+- [Cloud SQL Auth Proxy - PostgreSQL](https://cloud.google.com/sql/docs/postgres/sql-proxy)
+- [Managed Connection Pooling - MySQL](https://cloud.google.com/sql/docs/mysql/managed-connection-pooling)
+- [Managed Connection Pooling - PostgreSQL](https://cloud.google.com/sql/docs/postgres/managed-connection-pooling)
