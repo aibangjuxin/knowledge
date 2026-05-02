@@ -1,0 +1,326 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxGraphModel adaptiveColors="auto">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+
+    <mxCell id="title" value="Part 3: Request Lifecycle — End-to-End Flow" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#1A202C;" vertex="1" parent="1">
+      <mxGeometry x="450" y="20" width="600" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="subtitle" value="从外部客户端到业务容器的完整请求生命周期（10步）" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=13;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="450" y="58" width="500" height="25" as="geometry"/>
+    </mxCell>
+
+    <!-- Left column: 10 steps vertically -->
+    <!-- Step 1 -->
+    <mxCell id="s1n" value="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#4A5568;strokeColor=#2D3748;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;" vertex="1" parent="1">
+      <mxGeometry x="30" y="110" width="36" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s1" value="Client 发起 HTTPS 请求" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EBF8FF;strokeColor=#3182CE;fontColor=#1A202C;fontSize=12;arcSize=15;width=200;height=36;" vertex="1" parent="1">
+      <mxGeometry x="76" y="110" width="200" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s1d" value="DNS 解析到 GLB 公网 IP" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="76" y="150" width="200" height="18" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="a1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="48" y="168"/><mxPoint x="48" y="185"/></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Step 2 -->
+    <mxCell id="s2n" value="2" style="ellipse;whiteSpace=wrap;html=1;fillColor=#4A5568;strokeColor=#2D3748;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;" vertex="1" parent="1">
+      <mxGeometry x="30" y="185" width="36" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s2" value="GLB 终止 TLS (TLS SIMPLE)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EBF8FF;strokeColor=#3182CE;fontColor=#1A202C;fontSize=12;arcSize=15;width=200;height=36;" vertex="1" parent="1">
+      <mxGeometry x="76" y="185" width="200" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s2d" value="使用业务域名证书，终止后为明文内部流量" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="76" y="225" width="220" height="18" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="a2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="48" y="243"/><mxPoint x="48" y="260"/></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Step 3 -->
+    <mxCell id="s3n" value="3" style="ellipse;whiteSpace=wrap;html=1;fillColor=#4A5568;strokeColor=#2D3748;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;" vertex="1" parent="1">
+      <mxGeometry x="30" y="260" width="36" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s3" value="Cloud Armor 执行访问控制" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FED7D7;strokeColor=#E53E3E;fontColor=#1A202C;fontSize=12;arcSize=15;width=200;height=36;" vertex="1" parent="1">
+      <mxGeometry x="76" y="260" width="200" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s3d" value="WAF / IP Allowlist / Geo / Rate Limit" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="76" y="300" width="200" height="18" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="a3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="48" y="318"/><mxPoint x="48" y="335"/></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Step 4 -->
+    <mxCell id="s4n" value="4" style="ellipse;whiteSpace=wrap;html=1;fillColor=#4A5568;strokeColor=#2D3748;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;" vertex="1" parent="1">
+      <mxGeometry x="30" y="335" width="36" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s4" value="Backend Service 选择 PSC NEG" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EBF8FF;strokeColor=#3182CE;fontColor=#1A202C;fontSize=12;arcSize=15;width=200;height=36;" vertex="1" parent="1">
+      <mxGeometry x="76" y="335" width="200" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s4d" value="命中 Consumer VPC 内的 PSC 接入 IP" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="76" y="375" width="200" height="18" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="a4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="48" y="393"/><mxPoint x="48" y="410"/></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Step 5 -->
+    <mxCell id="s5n" value="5" style="ellipse;whiteSpace=wrap;html=1;fillColor=#4A5568;strokeColor=#2D3748;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;" vertex="1" parent="1">
+      <mxGeometry x="30" y="410" width="36" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s5" value="Google Backbone PSC 通道转发" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFAF0;strokeColor=#ED8936;fontColor=#1A202C;fontSize=12;arcSize=15;width=200;height=36;" vertex="1" parent="1">
+      <mxGeometry x="76" y="410" width="200" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s5d" value="跨 Project 到 B Project，私有服务级通道" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="76" y="450" width="220" height="18" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="a5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="48" y="468"/><mxPoint x="48" y="485"/></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Step 6 -->
+    <mxCell id="s6n" value="6" style="ellipse;whiteSpace=wrap;html=1;fillColor=#4A5568;strokeColor=#2D3748;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;" vertex="1" parent="1">
+      <mxGeometry x="30" y="485" width="36" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s6" value="Service Attachment 校验 Consumer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0FFF4;strokeColor=#38A169;fontColor=#1A202C;fontSize=12;arcSize=15;width=200;height=36;" vertex="1" parent="1">
+      <mxGeometry x="76" y="485" width="200" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s6d" value="检查 ACCEPT_MANUAL / ACCEPT_AUTO / Allowlist" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="76" y="525" width="220" height="18" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="a6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="48" y="543"/><mxPoint x="48" y="560"/></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Step 7 -->
+    <mxCell id="s7n" value="7" style="ellipse;whiteSpace=wrap;html=1;fillColor=#4A5568;strokeColor=#2D3748;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;" vertex="1" parent="1">
+      <mxGeometry x="30" y="560" width="36" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s7" value="PSC NAT Subnet SNAT 转换" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0FFF4;strokeColor=#38A169;fontColor=#1A202C;fontSize=12;arcSize=15;width=200;height=36;" vertex="1" parent="1">
+      <mxGeometry x="76" y="560" width="200" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s7d" value="源 IP 转换为 NAT 池地址 (purpose=PRIVATE_SERVICE_CONNECT)" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="76" y="600" width="260" height="18" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="a7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="48" y="618"/><mxPoint x="48" y="635"/></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Step 8 -->
+    <mxCell id="s8n" value="8" style="ellipse;whiteSpace=wrap;html=1;fillColor=#4A5568;strokeColor=#2D3748;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;" vertex="1" parent="1">
+      <mxGeometry x="30" y="635" width="36" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s8" value="ILB 转发到 GKE Pod" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0FFF4;strokeColor=#38A169;fontColor=#1A202C;fontSize=12;arcSize=15;width=200;height=36;" vertex="1" parent="1">
+      <mxGeometry x="76" y="635" width="200" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s8d" value="Internal Load Balancer 根据健康状态分发流量" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="76" y="675" width="230" height="18" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="a8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="48" y="693"/><mxPoint x="48" y="710"/></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Step 9 -->
+    <mxCell id="s9n" value="9" style="ellipse;whiteSpace=wrap;html=1;fillColor=#4A5568;strokeColor=#2D3748;fontColor=#FFFFFF;fontSize=15;fontStyle=1;align=center;" vertex="1" parent="1">
+      <mxGeometry x="30" y="710" width="36" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s9" value="Envoy Sidecar 接收并验证 mTLS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E9FFFE;strokeColor=#00B5AD;fontColor=#1A202C;fontSize=12;arcSize=15;width=200;height=36;" vertex="1" parent="1">
+      <mxGeometry x="76" y="710" width="200" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s9d" value="SPIFFE 证书双向验证 + AuthorizationPolicy (L7)" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="76" y="750" width="240" height="18" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="a9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="48" y="768"/><mxPoint x="48" y="785"/></Array></mxGeometry>
+    </mxCell>
+
+    <!-- Step 10 -->
+    <mxCell id="s10n" value="10" style="ellipse;whiteSpace=wrap;html=1;fillColor=#4A5568;strokeColor=#2D3748;fontColor=#FFFFFF;fontSize=13;fontStyle=1;align=center;" vertex="1" parent="1">
+      <mxGeometry x="30" y="785" width="36" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s10" value="App Container 处理请求" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FED7AA;strokeColor=#DD6B20;fontColor=#1A202C;fontSize=12;arcSize=15;width=200;height=36;" vertex="1" parent="1">
+      <mxGeometry x="76" y="785" width="200" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="s10d" value="明文 HTTP :8443，完全感知不到 mTLS" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="76" y="825" width="220" height="18" as="geometry"/>
+    </mxCell>
+
+    <!-- Right panel: mini path diagram -->
+    <mxCell id="path_hdr" value="完整链路总览" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#1A202C;" vertex="1" parent="1">
+      <mxGeometry x="560" y="100" width="400" height="25" as="geometry"/>
+    </mxCell>
+
+    <!-- Path boxes row 1 -->
+    <mxCell id="p1" value="Client" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#4A5568;strokeColor=#2D3748;fontColor=#FFFFFF;fontSize=10;arcSize=20;width=70;height=28;" vertex="1" parent="1">
+      <mxGeometry x="330" y="140" width="70" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="p2" value="DNS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#48BB78;strokeColor=#276749;fontColor=#FFFFFF;fontSize=10;arcSize=20;width=55;height=28;" vertex="1" parent="1">
+      <mxGeometry x="415" y="140" width="55" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="p3" value="GLB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3182CE;strokeColor=#2C5AA0;fontColor=#FFFFFF;fontSize=10;arcSize=20;width=55;height=28;" vertex="1" parent="1">
+      <mxGeometry x="485" y="140" width="55" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="p4" value="Armor" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E53E3E;strokeColor=#C53030;fontColor=#FFFFFF;fontSize=10;arcSize=20;width=55;height=28;" vertex="1" parent="1">
+      <mxGeometry x="555" y="140" width="55" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="p5" value="BS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#805AD5;strokeColor=#6B46C1;fontColor=#FFFFFF;fontSize=10;arcSize=20;width=55;height=28;" vertex="1" parent="1">
+      <mxGeometry x="625" y="140" width="55" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="p6" value="PSC NEG" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3182CE;strokeColor=#2B6CB0;fontColor=#FFFFFF;fontSize=10;arcSize=20;width=65;height=28;" vertex="1" parent="1">
+      <mxGeometry x="695" y="140" width="65" height="28" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="ppa1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=1.5;endArrow=none;endFill=0;" edge="1" parent="1" source="p1" target="p2">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ppa2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=1.5;endArrow=none;endFill=0;" edge="1" parent="1" source="p2" target="p3">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ppa3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=1.5;endArrow=none;endFill=0;" edge="1" parent="1" source="p3" target="p4">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ppa4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=1.5;endArrow=none;endFill=0;" edge="1" parent="1" source="p4" target="p5">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ppa5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=1.5;endArrow=none;endFill=0;" edge="1" parent="1" source="p5" target="p6">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- A Project label -->
+    <mxCell id="projA_lbl" value="A Project (Consumer)" style="text;html=1;stroke=none;fill=#EBF8FF;align=center;verticalAlign=middle;fontSize=9;fontColor=#3182CE;rounded=1;whiteSpace=wrap;width=110;height=20;" vertex="1" parent="1">
+      <mxGeometry x="695" y="168" width="110" height="20" as="geometry"/>
+    </mxCell>
+
+    <!-- PSC tunnel -->
+    <mxCell id="psc_t" value="PSC 通道" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ED8936;strokeColor=#C05621;fontColor=#FFFFFF;fontSize=10;arcSize=20;width=65;height=28;" vertex="1" parent="1">
+      <mxGeometry x="695" y="210" width="65" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="ppc_arrow" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#ED8936;strokeWidth=2.5;endArrow=classic;endFill=1;dashed=1;" edge="1" parent="1" source="p6" target="psc_t">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="bb_lbl" value="Google Backbone" style="text;html=1;stroke=none;fill=#FFFAF0;align=center;verticalAlign=middle;fontSize=9;fontColor=#ED8936;rounded=1;whiteSpace=wrap;width=100;height=20;" vertex="1" parent="1">
+      <mxGeometry x="678" y="240" width="100" height="20" as="geometry"/>
+    </mxCell>
+
+    <!-- Row 2 -->
+    <mxCell id="p7" value="SA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#38A169;strokeColor=#276749;fontColor=#FFFFFF;fontSize=10;arcSize=20;width=55;height=28;" vertex="1" parent="1">
+      <mxGeometry x="625" y="275" width="55" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="p8" value="NAT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#9AE6B4;strokeColor=#48BB78;fontColor=#1A202C;fontSize=10;arcSize=20;width=55;height=28;" vertex="1" parent="1">
+      <mxGeometry x="555" y="275" width="55" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="p9" value="ILB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#38A169;strokeColor=#276749;fontColor=#FFFFFF;fontSize=10;arcSize=20;width=55;height=28;" vertex="1" parent="1">
+      <mxGeometry x="485" y="275" width="55" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="p10" value="Sidecar" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#008F8F;strokeColor=#006666;fontColor=#FFFFFF;fontSize=10;arcSize=20;width=65;height=28;" vertex="1" parent="1">
+      <mxGeometry x="415" y="275" width="65" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="p11" value="App" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F6AD55;strokeColor=#DD6B20;fontColor=#1A202C;fontSize=10;arcSize=20;width=55;height=28;" vertex="1" parent="1">
+      <mxGeometry x="345" y="275" width="55" height="28" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="projB_lbl" value="B Project (Producer) / GKE" style="text;html=1;stroke=none;fill=#F0FFF4;align=center;verticalAlign=middle;fontSize=9;fontColor=#38A169;rounded=1;whiteSpace=wrap;width=130;height=20;" vertex="1" parent="1">
+      <mxGeometry x="330" y="303" width="130" height="20" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="ppa6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#48BB78;strokeWidth=1;dashed=1;endArrow=none;endFill=0;" edge="1" parent="1" source="psc_t" target="p7">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ppa7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=1.5;endArrow=none;endFill=0;" edge="1" parent="1" source="p7" target="p8">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ppa8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=1.5;endArrow=none;endFill=0;" edge="1" parent="1" source="p8" target="p9">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ppa9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=1.5;endArrow=none;endFill=0;" edge="1" parent="1" source="p9" target="p10">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ppa10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=1.5;endArrow=none;endFill=0;" edge="1" parent="1" source="p10" target="p11">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Flow annotation labels -->
+    <mxCell id="fl1" value="① HTTPS/TLS" style="text;html=1;stroke=none;fill=#FEFCBF;align=center;verticalAlign=middle;fontSize=9;fontColor=#744210;rounded=1;whiteSpace=wrap;width=80;height=20;" vertex="1" parent="1">
+      <mxGeometry x="400" y="120" width="80" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="fl2" value="② mTLS" style="text;html=1;stroke=none;fill=#C6F6D5;align=center;verticalAlign=middle;fontSize=9;fontColor=#276749;rounded=1;whiteSpace=wrap;width=65;height=20;" vertex="1" parent="1">
+      <mxGeometry x="415" y="245" width="65" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="fl3" value="③ localhost" style="text;html=1;stroke=none;fill=#FED7D7;align=center;verticalAlign=middle;fontSize=9;fontColor=#9B2C2C;rounded=1;whiteSpace=wrap;width=70;height=20;" vertex="1" parent="1">
+      <mxGeometry x="375" y="245" width="70" height="20" as="geometry"/>
+    </mxCell>
+
+    <!-- Security policies summary -->
+    <mxCell id="sec_hdr" value="安全层总结" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#1A202C;" vertex="1" parent="1">
+      <mxGeometry x="560" y="350" width="400" height="25" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="sec1" value="① HTTPS/TLS" style="text;html=1;stroke=none;fill=#FEFCBF;align=left;verticalAlign=middle;fontSize=10;fontColor=#744210;rounded=1;whiteSpace=wrap;width=150;height=22;" vertex="1" parent="1">
+      <mxGeometry x="330" y="385" width="150" height="22" as="geometry"/>
+    </mxCell>
+    <mxCell id="sec1d" value="Client → GLB，业务域名证书，外部可见" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="490" y="387" width="280" height="18" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="sec2" value="② mTLS 自动" style="text;html=1;stroke=none;fill=#C6F6D5;align=left;verticalAlign=middle;fontSize=10;fontColor=#276749;rounded=1;whiteSpace=wrap;width=150;height=22;" vertex="1" parent="1">
+      <mxGeometry x="330" y="415" width="150" height="22" as="geometry"/>
+    </mxCell>
+    <mxCell id="sec2d" value="Sidecar ↔ Sidecar，istiod SDS 签发 SPIFFE，PeerAuthentication STRICT" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="490" y="417" width="360" height="18" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="sec3" value="③ 明文 localhost" style="text;html=1;stroke=none;fill=#FED7D7;align=left;verticalAlign=middle;fontSize=10;fontColor=#9B2C2C;rounded=1;whiteSpace=wrap;width=150;height=22;" vertex="1" parent="1">
+      <mxGeometry x="330" y="445" width="150" height="22" as="geometry"/>
+    </mxCell>
+    <mxCell id="sec3d" value="Sidecar → App，localhost 不经网络，安全由 Sidecar 保障" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="490" y="447" width="300" height="18" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="sec4" value="双层防护" style="text;html=1;stroke=none;fill=#BEE3F8;align=left;verticalAlign=middle;fontSize=10;fontColor=#2C5282;rounded=1;whiteSpace=wrap;width=150;height=22;" vertex="1" parent="1">
+      <mxGeometry x="330" y="475" width="150" height="22" as="geometry"/>
+    </mxCell>
+    <mxCell id="sec4d" value="NetworkPolicy (L3/L4) + AuthorizationPolicy (L7 SPIFFE 身份)" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="490" y="477" width="320" height="18" as="geometry"/>
+    </mxCell>
+
+    <!-- Troubleshooting box -->
+    <mxCell id="ts_hdr" value="排障要点" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#FFFAF0;strokeColor=#ED8936;startSize=24;horizontalPadding=10;verticalPadding=8;fontSize=12;fontStyle=1;fontColor=#1A202C;resizeParent=1;resizeParentMax=0;fillOpacity=100;" vertex="1" parent="1">
+      <mxGeometry x="330" y="520" width="660" height="210" as="geometry"/>
+    </mxCell>
+    <mxCell id="t1" value="• TLS/WAF/公网治理都在 A Project 入口层完成" style="text;html=1;stroke=none;fill=none;align=left;fontSize=10;fontColor=#1A202C;" vertex="1" parent="ts_hdr">
+      <mxGeometry y="35" width="640" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="t2" value="• B Project 只接收 Service Attachment 放行后的流量" style="text;html=1;stroke=none;fill=none;align=left;fontSize=10;fontColor=#1A202C;" vertex="1" parent="ts_hdr">
+      <mxGeometry y="60" width="640" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="t3" value="• Producer 看到的源 IP 是 PSC NAT 后的地址，不是 Consumer 原始 IP" style="text;html=1;stroke=none;fill=none;align=left;fontSize=10;fontColor=#1A202C;" vertex="1" parent="ts_hdr">
+      <mxGeometry y="85" width="640" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="t4" value="• ILB health check 必须通过，否则 Backend Service 不会选中该 Pod" style="text;html=1;stroke=none;fill=none;align=left;fontSize=10;fontColor=#1A202C;" vertex="1" parent="ts_hdr">
+      <mxGeometry y="110" width="640" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="t5" value="• PSC NEG、Service Attachment、ILB 必须在同一 Region" style="text;html=1;stroke=none;fill=none;align=left;fontSize=10;fontColor=#1A202C;" vertex="1" parent="ts_hdr">
+      <mxGeometry y="135" width="640" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="t6" value="• PeerAuthentication STRICT 模式下，无 Sidecar 的 Pod 无法通过 mTLS 验证" style="text;html=1;stroke=none;fill=none;align=left;fontSize=10;fontColor=#1A202C;" vertex="1" parent="ts_hdr">
+      <mxGeometry y="160" width="640" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="t7" value="• 整条链路是串联架构，任一组件故障都会导致 5xx" style="text;html=1;stroke=none;fill=none;align=left;fontSize=10;fontColor=#1A202C;" vertex="1" parent="ts_hdr">
+      <mxGeometry y="185" width="640" height="20" as="geometry"/>
+    </mxCell>
+
+  </root>
+</mxGraphModel>
