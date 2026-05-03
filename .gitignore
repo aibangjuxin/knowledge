@@ -43,5 +43,18 @@ service-account.json
 # Build / Alma snapshots
 .alma-snapshots/
 
+# Obsidian
+.obsidian/
+
+# Agent / AI tool configs
+.agent/
+.claude/
+.gemini/
+.kilo/
+.qwen/
+
+# Maven wrapper
+java-code/.mvn/
+
 # OS
 Thumbs.db
