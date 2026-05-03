@@ -1,6 +1,47 @@
-.*/
+# macOS
 .DS_Store
-.! !.DS_Store
-.env.*
+.AppleDouble
+.LSOverride
+._*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Credentials & Secrets
 .env
-.alma-snapshots
+.env.*
+*.pem
+*.key
+credentials.json
+service-account.json
+
+# Build / Alma snapshots
+.alma-snapshots/
+
+# OS
+Thumbs.db
