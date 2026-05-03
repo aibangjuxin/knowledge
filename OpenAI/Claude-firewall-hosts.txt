@@ -1,0 +1,41 @@
+# Claude Desktop — firewall allowlist (SNI hostnames; HTTPS/443 unless a custom port was configured)
+
+# Core (VM bundle + Claude CLI binary)
+downloads.claude.ai
+
+# Auto-updates
+claude.ai
+api.anthropic.com
+
+# Essential telemetry
+*.sentry.io
+*.ingest.us.sentry.io
+sentry.io
+browser-intake-datadoghq.com
+browser-intake-us3-datadoghq.com
+browser-intake-us5-datadoghq.com
+browser-intake-ap1-datadoghq.com
+browser-intake-ap2-datadoghq.com
+browser-intake-datadoghq.eu
+browser-intake-ddog-gov.com
+
+# Nonessential telemetry
+a-cdn.anthropic.com
+a-api.anthropic.com
+
+# Nonessential services
+www.google.com
+*.gstatic.com
+www.claudeusercontent.com
+cdnjs.cloudflare.com
+fonts.googleapis.com
+cdn.jsdelivr.net
+
+# Desktop extensions (Python runtime)
+github.com
+objects.githubusercontent.com
+pypi.org
+files.pythonhosted.org
+
+# Gateway base URL
+127.0.0.1
