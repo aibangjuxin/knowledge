@@ -8,10 +8,10 @@
 
 根据 [Cloud SQL PSC 文档](https://cloud.google.com/sql/docs/mysql/about-private-service-connect)，PSC 提供了两种连接端口：
 
-| 端口 | 用途 | 说明 |
-|------|------|------|
+| 端口     | 用途                                  | 说明                                    |
+| -------- | ------------------------------------- | --------------------------------------- |
 | **3306** | 直接连接 / Managed Connection Pooling | MySQL 默认端口，用于原生 MySQL 协议连接 |
-| **3307** | Cloud SQL Auth Proxy | 通过 Auth Proxy 的连接端口 |
+| **3307** | Cloud SQL Auth Proxy                  | 通过 Auth Proxy 的连接端口              |
 
 ## 为什么需要同时允许两个端口
 
@@ -125,22 +125,22 @@ egress:
 
 ## 总结
 
-| 问题 | 答案 |
-|------|------|
-| 为什么需要 3306？ | 直接连接和 Managed Connection Pooling 使用 |
-| 为什么需要 3307？ | Cloud SQL Auth Proxy 使用 |
+| 问题               | 答案                                                                                                              |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| 为什么需要 3306？  | 直接连接和 Managed Connection Pooling 使用                                                                        |
+| 为什么需要 3307？  | Cloud SQL Auth Proxy 使用                                                                                         |
 | 必须两个都允许吗？ | 取决于你的连接方式。如果只用 Auth Proxy，只需 3307；如果只用直接连接，只需 3306。但同时允许两者可以应对所有场景。 |
-| 禁止 3307 会怎样？ | 如果应用使用 Auth Proxy，连接会被 NetworkPolicy 拒绝 |
+| 禁止 3307 会怎样？ | 如果应用使用 Auth Proxy，连接会被 NetworkPolicy 拒绝                                                              |
 
 ## PostgreSQL PSC 端口说明
 
 根据 [Cloud SQL PostgreSQL PSC 文档](https://cloud.google.com/sql/docs/postgres/about-private-service-connect)，PostgreSQL PSC 支持以下端口：
 
-| 端口 | 用途 | 说明 |
-|------|------|------|
-| **5432** | 直接连接 / Managed Connection Pooling | PostgreSQL 默认端口，原生协议连接 |
+| 端口     | 用途                                   | 说明                                             |
+| -------- | -------------------------------------- | ------------------------------------------------ |
+| **5432** | 直接连接 / Managed Connection Pooling  | PostgreSQL 默认端口，原生协议连接                |
 | **6432** | PgBouncer (Managed Connection Pooling) | PostgreSQL 托管连接池使用 PgBouncer，端口为 6432 |
-| **3307** | Cloud SQL Auth Proxy | Auth Proxy 出站连接端口 (与 MySQL 相同) |
+| **3307** | Cloud SQL Auth Proxy                   | Auth Proxy 出站连接端口 (与 MySQL 相同)          |
 
 ### 关键发现：Auth Proxy 使用 3307 而非 5432
 
@@ -185,6 +185,13 @@ egress:
 
 - [Private Service Connect overview - Cloud SQL MySQL](https://cloud.google.com/sql/docs/mysql/about-private-service-connect)
 - [Private Service Connect overview - Cloud SQL PostgreSQL](https://cloud.google.com/sql/docs/postgres/about-private-service-connect)
+  - https://docs.cloud.google.com/sql/docs/postgres/about-private-service-connect#psc-backend
+  - The supported serving ports for PostgreSQL are as follows:
+  - TCP port 5432 for direct connections to PostgreSQL database server.
+  - TCP port 6432 for direct connections to PgBouncer server when using Managed Connection Pooling.
+  - TCP port 3307 for connections through Cloud SQL Auth Proxy.
+    - https://docs.cloud.google.com/sql/docs/postgres/connect-kubernetes-engine
+    - https://docs.cloud.google.com/sql/docs/postgres/connect-kubernetes-engine#proxy-sidecar-pattern
 - [Connect to an instance using Private Service Connect](https://cloud.google.com/sql/docs/mysql/configure-private-service-connect)
 - [Connect to an instance using Private Service Connect - PostgreSQL](https://cloud.google.com/sql/docs/postgres/configure-private-service-connect)
 - [Cloud SQL Auth Proxy](https://cloud.google.com/sql/docs/mysql/sql-proxy)
