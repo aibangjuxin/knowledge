@@ -192,6 +192,8 @@ egress:
   - TCP port 3307 for connections through Cloud SQL Auth Proxy.
     - https://docs.cloud.google.com/sql/docs/postgres/connect-kubernetes-engine
     - https://docs.cloud.google.com/sql/docs/postgres/connect-kubernetes-engine#proxy-sidecar-pattern
+  - https://docs.cloud.google.com/sql/docs/postgres/sql-proxy
+    - ![Cloud SQL Auth Proxy - PostgreSQL](https://docs.cloud.google.com/static/sql/images/proxyconnection.svg)
 - [Connect to an instance using Private Service Connect](https://cloud.google.com/sql/docs/mysql/configure-private-service-connect)
 - [Connect to an instance using Private Service Connect - PostgreSQL](https://cloud.google.com/sql/docs/postgres/configure-private-service-connect)
 - [Cloud SQL Auth Proxy](https://cloud.google.com/sql/docs/mysql/sql-proxy)
