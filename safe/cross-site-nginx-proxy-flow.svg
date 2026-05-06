@@ -1,0 +1,160 @@
+<svg viewBox="0 0 1000 700" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+    </marker>
+    <marker id="arrowhead-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+    </marker>
+    <marker id="arrowhead-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+    </marker>
+    <marker id="arrowhead-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" />
+    </marker>
+    <marker id="arrowhead-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" />
+    </marker>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+
+  <!-- Background Grid -->
+  <rect width="100%" height="100%" fill="#020617" />
+  <rect width="100%" height="100%" fill="url(#grid)" />
+
+  <!-- Title -->
+  <text x="30" y="28" fill="white" font-family="JetBrains Mono, monospace" font-size="14" font-weight="700">Cross-Site Cookie Solution — Option 2: Nginx Proxy Architecture</text>
+  <text x="30" y="44" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="10">Single Origin: Browser sees same site for all cookies | Recommended</text>
+
+  <!-- ==================== BROWSER / CLIENT ==================== -->
+  <rect x="30" y="220" width="120" height="80" rx="8" fill="#0f172a"/>
+  <rect x="30" y="220" width="120" height="80" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="90" y="250" fill="white" font-family="JetBrains Mono, monospace" font-size="12" font-weight="600" text-anchor="middle">Browser</text>
+  <text x="90" y="268" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="9" text-anchor="middle">Chrome / Firefox</text>
+  <text x="90" y="283" fill="#fbbf24" font-family="JetBrains Mono, monospace" font-size="8" text-anchor="middle">www.aibang.com</text>
+
+  <!-- ==================== NGINX PROXY REGION ==================== -->
+  <rect x="170" y="40" width="800" height="620" rx="12" fill="rgba(251, 191, 36, 0.03)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+  <text x="185" y="58" fill="#fbbf24" font-family="JetBrains Mono, monospace" font-size="10" font-weight="600">Nginx Proxy — Single Origin (www.aibang.com)</text>
+
+  <!-- ==================== NGINX PROXY COMPONENT ==================== -->
+  <rect x="210" y="100" width="200" height="80" rx="8" fill="#0f172a"/>
+  <rect x="210" y="100" width="200" height="80" rx="8" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="310" y="128" fill="white" font-family="JetBrains Mono, monospace" font-size="12" font-weight="600" text-anchor="middle">Nginx Proxy</text>
+  <text x="310" y="146" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="9" text-anchor="middle">Reverse Proxy / Load Balancer</text>
+  <text x="310" y="163" fill="#fbbf24" font-family="JetBrains Mono, monospace" font-size="8" text-anchor="middle">:443 HTTPS</text>
+
+  <!-- ==================== STATIC CACHE REGION ==================== -->
+  <rect x="460" y="65" width="130" height="130" rx="8" fill="transparent" stroke="#22d3ee" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="468" y="79" fill="#22d3ee" font-family="JetBrains Mono, monospace" font-size="8">Cache Zone</text>
+
+  <!-- Frontend Static -->
+  <rect x="475" y="90" width="100" height="55" rx="6" fill="#0f172a"/>
+  <rect x="475" y="90" width="100" height="55" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="525" y="112" fill="white" font-family="JetBrains Mono, monospace" font-size="10" font-weight="600" text-anchor="middle">Frontend</text>
+  <text x="525" y="128" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8" text-anchor="middle">Static Assets</text>
+  <text x="525" y="140" fill="#22d3ee" font-family="JetBrains Mono, monospace" font-size="7" text-anchor="middle">CSS/JS/IMG</text>
+
+  <!-- Cache Store -->
+  <rect x="475" y="155" width="100" height="30" rx="4" fill="#0f172a"/>
+  <rect x="475" y="155" width="100" height="30" rx="4" fill="rgba(251, 146, 60, 0.2)" stroke="#fb923c" stroke-width="1"/>
+  <text x="525" y="174" fill="#fb923c" font-family="JetBrains Mono, monospace" font-size="8" text-anchor="middle">Cache (1d TTL)</text>
+
+  <!-- ==================== API BACKEND ==================== -->
+  <rect x="460" y="250" width="130" height="60" rx="6" fill="#0f172a"/>
+  <rect x="460" y="250" width="130" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="525" y="275" fill="white" font-family="JetBrains Mono, monospace" font-size="11" font-weight="600" text-anchor="middle">API Backend</text>
+  <text x="525" y="293" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="9" text-anchor="middle">Internal / Microservices</text>
+
+  <!-- ==================== COOKIE ANNOTATION ==================== -->
+  <rect x="630" y="235" width="310" height="90" rx="6" fill="#0f172a"/>
+  <rect x="630" y="235" width="310" height="90" rx="6" fill="rgba(136, 19, 55, 0.15)" stroke="#fb7185" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="640" y="252" fill="#fb7185" font-family="JetBrains Mono, monospace" font-size="9" font-weight="600">Set-Cookie Response Headers:</text>
+  <text x="640" y="268" fill="#e2e8f0" font-family="JetBrains Mono, monospace" font-size="8">ajbx1_session=abc123; SameSite=Lax; Secure; HttpOnly</text>
+  <text x="640" y="282" fill="#e2e8f0" font-family="JetBrains Mono, monospace" font-size="8">abjx2_session=def456; SameSite=Lax; Secure; HttpOnly</text>
+  <text x="640" y="300" fill="#64748b" font-family="JetBrains Mono, monospace" font-size="7">Cookie Domain: aibang.com  →  shared across all subdomains</text>
+  <text x="640" y="314" fill="#64748b" font-family="JetBrains Mono, monospace" font-size="7">Browser sees: First-Party Cookie (same origin)</text>
+
+  <!-- ==================== ARROWS ==================== -->
+
+  <!-- Browser to Nginx (HTTPS) -->
+  <line x1="150" y1="260" x2="208" y2="260" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+  <text x="179" y="254" fill="#22d3ee" font-family="JetBrains Mono, monospace" font-size="9" text-anchor="middle">HTTPS</text>
+
+  <!-- Request: GET / -->
+  <line x1="310" y1="180" x2="310" y2="120" stroke="#22d3ee" stroke-width="1" stroke-dasharray="3,3"/>
+  <text x="322" y="152" fill="#64748b" font-family="JetBrains Mono, monospace" font-size="8">GET /</text>
+
+  <!-- Nginx to Frontend (static) -->
+  <line x1="410" y1="120" x2="473" y2="120" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+  <text x="441" y="114" fill="#22d3ee" font-family="JetBrains Mono, monospace" font-size="9" text-anchor="middle">Static</text>
+
+  <!-- Frontend to Cache -->
+  <line x1="525" y1="145" x2="525" y2="153" stroke="#fb923c" stroke-width="1" marker-end="url(#arrowhead)"/>
+  <text x="538" y="151" fill="#fb923c" font-family="JetBrains Mono, monospace" font-size="8">cache</text>
+
+  <!-- Nginx to API -->
+  <line x1="410" y1="260" x2="458" y2="260" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)"/>
+  <text x="434" y="254" fill="#34d399" font-family="JetBrains Mono, monospace" font-size="9" text-anchor="middle">/api/*</text>
+
+  <!-- API Response with cookies -->
+  <line x1="590" y1="280" x2="628" y2="280" stroke="#fb7185" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#arrowhead-rose)"/>
+  <text x="609" y="274" fill="#fb7185" font-family="JetBrains Mono, monospace" font-size="8">Response + Set-Cookie</text>
+
+  <!-- ==================== SAME-SITE EXPLANATION ==================== -->
+  <rect x="30" y="400" width="940" height="130" rx="8" fill="rgba(30, 41, 59, 0.3)" stroke="#1e293b" stroke-width="1"/>
+  <text x="45" y="422" fill="white" font-family="JetBrains Mono, monospace" font-size="10" font-weight="600">Why This Works: Same-Site Cookie Classification</text>
+
+  <text x="45" y="445" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">Before (Without Nginx Proxy):</text>
+  <text x="45" y="460" fill="#fb7185" font-family="JetBrains Mono, monospace" font-size="8">  Frontend: www.aibang.com  |  API: api.otherdomain.com  |  → Cross-Site Cookie (3rd party) → Blocked by Firefox</text>
+
+  <text x="45" y="480" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">After (With Nginx Proxy — Option 2):</text>
+  <text x="45" y="495" fill="#34d399" font-family="JetBrains Mono, monospace" font-size="8">  All requests: www.aibang.com  |  API routed internally  |  → Same-Site Cookie (1st party) → Accepted</text>
+
+  <text x="45" y="518" fill="#64748b" font-family="JetBrains Mono, monospace" font-size="8">Key insight: Browser only sees www.aibang.com origin. Nginx handles routing internally. Cookie appears to come from same site.</text>
+
+  <!-- ==================== NGINX CONFIG SNIPPET ==================== -->
+  <rect x="30" y="545" width="940" height="115" rx="8" fill="rgba(30, 41, 59, 0.3)" stroke="#1e293b" stroke-width="1"/>
+  <text x="45" y="567" fill="white" font-family="JetBrains Mono, monospace" font-size="10" font-weight="600">Nginx Configuration — Static vs API Routing</text>
+
+  <text x="45" y="585" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">location ~* \.(css|js|images?|fonts?|ico|svg|woff2?)$ {</text>
+  <text x="65" y="600" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">  proxy_pass http://frontend;</text>
+  <text x="65" y="615" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">  proxy_cache static_cache;</text>
+  <text x="65" y="630" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">  proxy_cache_valid 200 1d;</text>
+  <text x="45" y="645" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">}</text>
+
+  <text x="350" y="585" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">location /api/ {</text>
+  <text x="370" y="600" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">  proxy_pass http://api-backend;</text>
+  <text x="370" y="615" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">  proxy_buffering off;</text>
+  <text x="370" y="630" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">  proxy_cookie_path / "/; SameSite=Lax; Secure; HttpOnly";</text>
+  <text x="350" y="645" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">}</text>
+
+  <!-- ==================== LEGEND ==================== -->
+  <text x="780" y="70" fill="white" font-family="JetBrains Mono, monospace" font-size="10" font-weight="600">Legend</text>
+
+  <rect x="780" y="84" width="16" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+  <text x="802" y="92" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">Client/Browser</text>
+
+  <rect x="780" y="100" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+  <text x="802" y="108" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">Nginx Proxy</text>
+
+  <rect x="780" y="116" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+  <text x="802" y="124" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">Frontend</text>
+
+  <rect x="780" y="132" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+  <text x="802" y="140" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">API Backend</text>
+
+  <rect x="780" y="148" width="16" height="10" rx="2" fill="rgba(136, 19, 55, 0.15)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,3"/>
+  <text x="802" y="156" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">Cookie Flow</text>
+
+  <line x1="780" y1="170" x2="796" y2="170" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+  <text x="802" y="173" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">HTTPS Request</text>
+
+  <line x1="780" y1="184" x2="796" y2="184" stroke="#fb7185" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#arrowhead-rose)"/>
+  <text x="802" y="187" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">Cookie Response</text>
+
+  <rect x="780" y="196" width="16" height="10" rx="2" fill="rgba(251, 146, 60, 0.2)" stroke="#fb923c" stroke-width="1"/>
+  <text x="802" y="204" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">Cache Layer</text>
+</svg>
