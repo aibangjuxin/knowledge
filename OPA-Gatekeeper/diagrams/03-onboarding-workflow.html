@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OPA Gatekeeper Team Onboarding Workflow</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', monospace; background: #020617; min-height: 100vh; padding: 2rem; color: white; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #34d399; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container { background: rgba(15, 23, 42, 0.5); border-radius: 1rem; border: 1px solid #1e293b; padding: 1.5rem; overflow-x: auto; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 2rem; }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; } .card-dot.emerald { background: #34d399; } .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; } .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="header-row"><div class="pulse-dot"></div><h1>Team Onboarding Workflow</h1></div>
+    <p class="subtitle">From New Team Request to Active Tenant — Automated via GitOps</p>
+  </div>
+  <div class="diagram-container">
+    <svg viewBox="0 0 1000 760">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/></marker>
+        <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/></marker>
+        <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/></marker>
+        <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/></marker>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/></pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#grid)"/>
+
+      <!-- ========== STEP 1: New Team Request ========== -->
+      <rect x="30" y="20" width="130" height="100" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="95" y="43" fill="#22d3ee" font-size="9" font-weight="700" text-anchor="middle">STEP 1</text>
+      <text x="95" y="62" fill="white" font-size="10" font-weight="600" text-anchor="middle">New Team</text>
+      <text x="95" y="78" fill="white" font-size="10" font-weight="600" text-anchor="middle">Request</text>
+      <text x="95" y="97" fill="#94a3b8" font-size="8" text-anchor="middle">team-name</text>
+      <text x="95" y="110" fill="#94a3b8" font-size="8" text-anchor="middle">lead@email.com</text>
+
+      <!-- Arrow 1->2 -->
+      <line x1="160" y1="70" x2="195" y2="70" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+
+      <!-- ========== STEP 2: Platform Review ========== -->
+      <rect x="200" y="20" width="130" height="100" rx="8" fill="rgba(251,191,36,0.12)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="265" y="43" fill="#fbbf24" font-size="9" font-weight="700" text-anchor="middle">STEP 2</text>
+      <text x="265" y="62" fill="white" font-size="10" font-weight="600" text-anchor="middle">Platform</text>
+      <text x="265" y="78" fill="white" font-size="10" font-weight="600" text-anchor="middle">Review</text>
+      <text x="265" y="97" fill="#94a3b8" font-size="8" text-anchor="middle">identity verify</text>
+      <text x="265" y="110" fill="#94a3b8" font-size="8" text-anchor="middle">NS naming</text>
+
+      <!-- Arrow 2->3 -->
+      <line x1="330" y1="70" x2="365" y2="70" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+
+      <!-- ========== STEP 3: Namespace Creation ========== -->
+      <rect x="370" y="20" width="130" height="100" rx="8" fill="rgba(6,78,59,0.35)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="435" y="43" fill="#34d399" font-size="9" font-weight="700" text-anchor="middle">STEP 3</text>
+      <text x="435" y="62" fill="white" font-size="10" font-weight="600" text-anchor="middle">Namespace</text>
+      <text x="435" y="78" fill="white" font-size="10" font-weight="600" text-anchor="middle">Creation</text>
+      <text x="435" y="97" fill="#94a3b8" font-size="8" text-anchor="middle">team-{name}-{env}</text>
+      <text x="435" y="110" fill="#94a3b8" font-size="8" text-anchor="middle">Labels applied</text>
+
+      <!-- Arrow 3->4 -->
+      <line x1="500" y1="70" x2="535" y2="70" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+
+      <!-- ========== STEP 4: Baseline Policies ========== -->
+      <rect x="540" y="20" width="130" height="100" rx="8" fill="rgba(76,29,149,0.35)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="605" y="43" fill="#a78bfa" font-size="9" font-weight="700" text-anchor="middle">STEP 4</text>
+      <text x="605" y="62" fill="white" font-size="10" font-weight="600" text-anchor="middle">Baseline</text>
+      <text x="605" y="78" fill="white" font-size="10" font-weight="600" text-anchor="middle">Policies</text>
+      <text x="605" y="97" fill="#94a3b8" font-size="8" text-anchor="middle">platform-baseline</text>
+      <text x="605" y="110" fill="#94a3b8" font-size="8" text-anchor="middle">GitOps apply</text>
+
+      <!-- Arrow 4->5 -->
+      <line x1="670" y1="70" x2="705" y2="70" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow)"/>
+
+      <!-- ========== STEP 5: Template Assignment ========== -->
+      <rect x="710" y="20" width="130" height="100" rx="8" fill="rgba(136,19,55,0.3)" stroke="#fb7185" stroke-width="1.5"/>
+      <text x="775" y="43" fill="#fb7185" font-size="9" font-weight="700" text-anchor="middle">STEP 5</text>
+      <text x="775" y="62" fill="white" font-size="10" font-weight="600" text-anchor="middle">Template</text>
+      <text x="775" y="78" fill="white" font-size="10" font-weight="600" text-anchor="middle">Assignment</text>
+      <text x="775" y="97" fill="#94a3b8" font-size="8" text-anchor="middle">v1.2.0 locked</text>
+      <text x="775" y="110" fill="#94a3b8" font-size="8" text-anchor="middle">30d dryrun</text>
+
+      <!-- Arrow 5->6 -->
+      <line x1="840" y1="70" x2="875" y2="70" stroke="#fb7185" stroke-width="2" marker-end="url(#arrow)"/>
+
+      <!-- ========== STEP 6: Active Tenant ========== -->
+      <rect x="880" y="20" width="90" height="100" rx="8" fill="rgba(34,211,238,0.2)" stroke="#22d3ee" stroke-width="2"/>
+      <text x="925" y="43" fill="#22d3ee" font-size="9" font-weight="700" text-anchor="middle">STEP 6</text>
+      <text x="925" y="65" fill="white" font-size="10" font-weight="600" text-anchor="middle">Active</text>
+      <text x="925" y="81" fill="white" font-size="10" font-weight="600" text-anchor="middle">Tenant</text>
+      <text x="925" y="103" fill="#34d399" font-size="9" font-weight="700" text-anchor="middle">✓ LIVE</text>
+
+      <!-- ========== NAMESPACE CLAIM YAML ========== -->
+      <rect x="30" y="145" width="940" height="95" rx="8" fill="rgba(30,41,59,0.5)" stroke="#1e293b" stroke-width="1"/>
+      <text x="45" y="165" fill="#fbbf24" font-size="9" font-weight="600">NamespaceClaim CRD — Submitted by New Team</text>
+      <text x="45" y="182" fill="#94a3b8" font-size="8">apiVersion: tenant.platform.io/v1alpha1  |  kind: NamespaceClaim</text>
+      <text x="45" y="197" fill="#34d399" font-size="8">team.name: "team-d"  |  team.lead: "team-d-lead@company.com"  |  tenantType: "standard"</text>
+      <text x="45" y="212" fill="#22d3ee" font-size="8">namespaces: [team-d-dev (4C/16Gi), team-d-prod (8C/32Gi)]  |  templateSet: "v1.2.0"</text>
+      <text x="45" y="227" fill="#94a3b8" font-size="8">resourceEstimate: cpu=12, memory=48Gi, storage=250Gi</text>
+
+      <!-- ========== GENERATED RESOURCES (below) ========== -->
+      <text x="30" y="260" fill="white" font-size="10" font-weight="700">GitOps Auto-Generates These Resources on Onboarding:</text>
+
+      <!-- Generated: Namespace -->
+      <rect x="30" y="272" width="290" height="115" rx="6" fill="rgba(6,78,59,0.2)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="45" y="292" fill="#34d399" font-size="9" font-weight="600">1. Namespace Manifest</text>
+      <text x="45" y="308" fill="#94a3b8" font-size="8">kind: Namespace</text>
+      <text x="45" y="323" fill="#94a3b8" font-size="8">name: team-d-prod</text>
+      <text x="45" y="338" fill="#94a3b8" font-size="8">tenant.platform.io/name: "team-d"</text>
+      <text x="45" y="353" fill="#94a3b8" font-size="8">tenant.platform.io/type: "standard"</text>
+      <text x="45" y="368" fill="#94a3b8" font-size="8">tenant.platform.io/template-set: "v1.2.0"</text>
+      <text x="45" y="380" fill="#fbbf24" font-size="7">environment: prod  |  owner: team-d-lead@...</text>
+
+      <!-- Generated: ResourceQuota -->
+      <rect x="335" y="272" width="290" height="115" rx="6" fill="rgba(8,51,68,0.3)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="350" y="292" fill="#22d3ee" font-size="9" font-weight="600">2. ResourceQuota</text>
+      <text x="350" y="308" fill="#94a3b8" font-size="8">kind: ResourceQuota</text>
+      <text x="350" y="323" fill="#94a3b8" font-size="8">namespace: team-d-prod</text>
+      <text x="350" y="338" fill="#94a3b8" font-size="8">requests.cpu: "8"</text>
+      <text x="350" y="353" fill="#94a3b8" font-size="8">requests.memory: 32Gi</text>
+      <text x="350" y="368" fill="#94a3b8" font-size="8">persistentvolumeclaims: "10"</text>
+      <text x="350" y="380" fill="#fbbf24" font-size="7">pods: "50"</text>
+
+      <!-- Generated: Baseline Constraints -->
+      <rect x="640" y="272" width="330" height="115" rx="6" fill="rgba(76,29,149,0.25)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="655" y="292" fill="#a78bfa" font-size="9" font-weight="600">3. Baseline Constraints (Auto-provisioned)</text>
+      <text x="655" y="308" fill="#94a3b8" font-size="8">K8sAllowedRepos → platform-team-d-prod-allowed-repos</text>
+      <text x="655" y="323" fill="#94a3b8" font-size="8">  repos: [docker.io, gcr.io, ghcr.io]  |  enforcementAction: deny</text>
+      <text x="655" y="338" fill="#94a3b8" font-size="8">K8sRequiredLabels → team-d-prod-required-labels</text>
+      <text x="655" y="353" fill="#94a3b8" font-size="8">  labels: [app, team, environment, managed-by]  |  enforcementAction: deny</text>
+      <text x="655" y="368" fill="#94a3b8" font-size="8">K8sContainerLimits → team-d-prod-container-limits</text>
+      <text x="655" y="380" fill="#fbbf24" font-size="7">  cpu: 8, memory: 32Gi  |  enforcementAction: dryrun (30d)</text>
+
+      <!-- ========== DRYRUN TRANSITION TIMELINE ========== -->
+      <text x="30" y="415" fill="white" font-size="10" font-weight="700">30-Day Dryrun → Deny Transition Timeline:</text>
+
+      <rect x="30" y="427" width="940" height="60" rx="8" fill="rgba(30,41,59,0.4)" stroke="#1e293b" stroke-width="1"/>
+
+      <!-- Timeline bar -->
+      <rect x="45" y="458" width="870" height="8" rx="4" fill="rgba(251,191,36,0.15)"/>
+      <rect x="45" y="458" width="290" height="8" rx="4" fill="#fbbf24"/>
+      <text x="190" y="452" fill="#fbbf24" font-size="8" font-weight="600" text-anchor="middle">Day 0-7: DRYRUN</text>
+
+      <rect x="335" y="458" width="290" height="8" rx="0" fill="#fbbf24"/>
+      <text x="480" y="452" fill="#fbbf24" font-size="8" font-weight="600" text-anchor="middle">Day 7-23: DRYRUN (Monitor)</text>
+
+      <rect x="625" y="458" width="290" height="8" rx="0" fill="#fb7185"/>
+      <text x="770" y="452" fill="#fb7185" font-size="8" font-weight="600" text-anchor="middle">Day 23-30: DRYRUN → DENY</text>
+
+      <line x1="625" y1="455" x2="625" y2="465" stroke="#fb7185" stroke-width="1.5"/>
+      <text x="625" y="476" fill="#fb7185" font-size="7" text-anchor="middle">Day 23</text>
+      <text x="625" y="484" fill="#94a3b8" font-size="7" text-anchor="middle">Team notified</text>
+
+      <line x1="915" y1="455" x2="915" y2="465" stroke="#34d399" stroke-width="1.5"/>
+      <text x="915" y="476" fill="#34d399" font-size="7" text-anchor="middle">Day 30</text>
+      <text x="915" y="484" fill="#94a3b8" font-size="7" text-anchor="middle">DENY active</text>
+
+      <text x="45" y="498" fill="#94a3b8" font-size="8">Week 1: All violations logged  |  Week 2-3: Review violation dashboard  |  Week 4: Final notice  |  Day 30: Deny enforcement activated</text>
+
+      <!-- ========== TEMPLATE SET SELECTION ========== -->
+      <text x="30" y="530" fill="white" font-size="10" font-weight="700">Template Set Assignment by Tenant Type:</text>
+
+      <rect x="30" y="542" width="940" height="110" rx="8" fill="rgba(30,41,59,0.3)" stroke="#1e293b" stroke-width="1"/>
+
+      <!-- Standard -->
+      <rect x="45" y="555" width="205" height="85" rx="6" fill="rgba(251,191,36,0.12)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="147" y="574" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">standard</text>
+      <text x="147" y="591" fill="#94a3b8" font-size="8" text-anchor="middle">template: v1.2.0 (stable)</text>
+      <text x="147" y="607" fill="#94a3b8" font-size="8" text-anchor="middle">adjustable: resource limits</text>
+      <text x="147" y="623" fill="#94a3b8" font-size="8" text-anchor="middle">custom: naming labels</text>
+      <text x="147" y="633" fill="#fbbf24" font-size="7" text-anchor="middle">Default for all teams</text>
+
+      <!-- Privileged -->
+      <rect x="265" y="555" width="205" height="85" rx="6" fill="rgba(136,19,55,0.3)" stroke="#fb7185" stroke-width="1.5"/>
+      <text x="367" y="574" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">privileged</text>
+      <text x="367" y="591" fill="#94a3b8" font-size="8" text-anchor="middle">template: v1.2.0 + extensions</text>
+      <text x="367" y="607" fill="#94a3b8" font-size="8" text-anchor="middle">extended limits: 32C/128Gi</text>
+      <text x="367" y="623" fill="#94a3b8" font-size="8" text-anchor="middle">GPU support, exceptions OK</text>
+      <text x="367" y="633" fill="#fb7185" font-size="7" text-anchor="middle">AI/ML, Big Data teams</text>
+
+      <!-- Infra -->
+      <rect x="485" y="555" width="205" height="85" rx="6" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="587" y="574" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">infra</text>
+      <text x="587" y="591" fill="#94a3b8" font-size="8" text-anchor="middle">template: v1.2.0 (platform)</text>
+      <text x="587" y="607" fill="#94a3b8" font-size="8" text-anchor="middle">same-as-platform controls</text>
+      <text x="587" y="623" fill="#94a3b8" font-size="8" text-anchor="middle">monitoring / ingress-ctrl</text>
+      <text x="587" y="633" fill="#34d399" font-size="7" text-anchor="middle">Highest trust level</text>
+
+      <!-- Sandbox -->
+      <rect x="705" y="555" width="205" height="85" rx="6" fill="rgba(76,29,149,0.25)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="807" y="574" fill="#a78bfa" font-size="9" font-weight="600" text-anchor="middle">sandbox</text>
+      <text x="807" y="591" fill="#94a3b8" font-size="8" text-anchor="middle">template: v1.1.0 (legacy)</text>
+      <text x="807" y="607" fill="#94a3b8" font-size="8" text-anchor="middle">relaxed: 2C/8Gi only</text>
+      <text x="807" y="623" fill="#94a3b8" font-size="8" text-anchor="middle">dev-only, no prod</text>
+      <text x="807" y="633" fill="#a78bfa" font-size="7" text-anchor="middle">POC / Experiments</text>
+
+      <!-- Legend -->
+      <text x="30" y="680" fill="white" font-size="10" font-weight="600">Legend</text>
+      <line x1="30" y1="695" x2="50" y2="695" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+      <text x="58" y="698" fill="#94a3b8" font-size="8">Request flow</text>
+      <rect x="130" y="688" width="12" height="9" rx="2" fill="rgba(76,29,149,0.25)" stroke="#a78bfa" stroke-width="1"/>
+      <text x="148" y="698" fill="#94a3b8" font-size="8">Auto-generated</text>
+      <rect x="260" y="688" width="12" height="9" rx="2" fill="rgba(251,191,36,0.12)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="278" y="698" fill="#94a3b8" font-size="8">GitOps managed</text>
+      <rect x="380" y="688" width="12" height="9" rx="2" fill="rgba(34,211,238,0.2)" stroke="#22d3ee" stroke-width="1"/>
+      <text x="398" y="698" fill="#94a3b8" font-size="8">Final state</text>
+      <rect x="490" y="688" width="80" height="9" rx="2" fill="rgba(251,191,36,0.15)"/>
+      <text x="578" y="698" fill="#94a3b8" font-size="8">Dryrun window</text>
+      <rect x="680" y="688" width="80" height="9" rx="2" fill="rgba(136,19,55,0.3)"/>
+      <text x="768" y="698" fill="#94a3b8" font-size="8">Deny active</text>
+    </svg>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <div class="card-header"><div class="card-dot emerald"></div><h3>Automation (GitOps)</h3></div>
+      <ul>
+        <li>• NamespaceClaim CRD triggers full automation pipeline</li>
+        <li>• GitOps (ArgoCD/Config Sync) auto-applies all resources</li>
+        <li>• 30-day dryrun window before deny enforcement</li>
+        <li>• Team notified at Day 0, Day 23, and Day 30</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-dot amber"></div><h3>Template Version Locking</h3></div>
+      <ul>
+        <li>• New teams always get latest stable version (v1.2.0)</li>
+        <li>• Template version pinned at onboarding time</li>
+        <li>• Sandbox tenants stay on legacy v1.1.0</li>
+        <li>• Version upgrades handled separately via migration process</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-dot cyan"></div><h3>Tenant Type Determines Quota</h3></div>
+      <ul>
+        <li>• Standard: 8C/32Gi per prod namespace</li>
+        <li>• Privileged: 32C/128Gi + GPU support (needs approval)</li>
+        <li>• Infra: Platform-grade, unlimited within policy</li>
+        <li>• Sandbox: 2C/8Gi, dev-only, no production access</li>
+      </ul>
+    </div>
+  </div>
+  <p class="footer">OPA Gatekeeper Team Onboarding • GitOps-driven • 30-Day Dryrun Transition</p>
+</div>
+</body>
+</html>
