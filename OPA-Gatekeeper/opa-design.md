@@ -10,15 +10,15 @@
 
 1. [Executive Summary](#1-executive-summary)
 2. [Design Principles](#2-design-principles)
-3. [Multi-Cluster Topology](#3-multi-cluster-topology)
+3. [Multi-Cluster Topology](#3-multi-cluster-topology) *(📊 [Diagram: Fleet Architecture](diagrams/01-fleet-architecture.html))*
 4. [Tenant Model](#4-tenant-model)
-5. [Policy Hierarchy & Scope](#5-policy-hierarchy--scope)
+5. [Policy Hierarchy & Scope](#5-policy-hierarchy--scope) *(📊 [Diagram: Policy Hierarchy](diagrams/02-policy-hierarchy.html))*
 6. [ConstraintTemplate Design](#6-constrainttemplate-design)
 7. [Constraint Lifecycle](#7-constraint-lifecycle)
 8. [Template Maintenance & Versioning](#8-template-maintenance--versioning)
-9. [Team Onboarding Workflow](#9-team-onboarding-workflow)
+9. [Team Onboarding Workflow](#9-team-onboarding-workflow) *(📊 [Diagram: Onboarding](diagrams/03-onboarding-workflow.html))*
 10. [Exception Handling](#10-exception-handling)
-11. [GitOps Integration](#11-gitops-integration)
+11. [GitOps Integration](#11-gitops-integration) *(📊 [Diagram: CI/CD Pipeline](diagrams/04-gitops-pipeline.html))*
 12. [Migration Strategy](#12-migration-strategy)
 13. [Monitoring & Audit](#13-monitoring--audit)
 14. [Decision Matrix](#14-decision-matrix)
@@ -85,7 +85,27 @@ A multi-tenant Kubernetes platform serving multiple teams (tenants) requires cen
 
 ### 3.1 Fleet Architecture
 
-```
+````{=html}
+<!-- Diagram: diagrams/01-fleet-architecture.html -->
+<details open>
+<summary><strong>📊 Architecture Diagram — Multi-Cluster Fleet</strong> <a href="diagrams/01-fleet-architecture.html" target="_blank"><img src="https://img.shields.io/badge/View-HTML%20Diagram-22d3ee?style=flat-square&logo=google-chrome" alt="Open HTML Diagram"/></a></summary>
+
+**Open `diagrams/01-fleet-architecture.html` in a browser to view the full interactive diagram.**
+
+| Layer | Component | Description |
+|-------|-----------|-------------|
+| Hub | Config Sync / Policy Controller | Fleet-wide policy management |
+| Hub | Template Registry | Versioned ConstraintTemplates (v1.2.0) |
+| Hub | Constraint Store | Cluster + Tenant level constraints |
+| Leaf | prod-1 / prod-2 | Production clusters, 3 replicas each |
+| Leaf | staging-1 | Staging cluster, 2 replicas |
+| Leaf | dev-1 | Dev cluster, 1 replica |
+| Platform | Cluster-wide Enforcement | Security / PSP / Reliability / Ingress / Labels |
+
+</details>
+````
+
+```{.ascii}
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                        Config Controller (Hub Cluster)                     │
 │  ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────────────┐ │
@@ -220,6 +240,24 @@ metadata:
 ---
 
 ## 5. Policy Hierarchy & Scope
+
+````{=html}
+<!-- Diagram: diagrams/02-policy-hierarchy.html -->
+<details open>
+<summary><strong>📊 Architecture Diagram — Policy Hierarchy & Scope</strong> <a href="diagrams/02-policy-hierarchy.html" target="_blank"><img src="https://img.shields.io/badge/View-HTML%20Diagram-22d3ee?style=flat-square&logo=google-chrome" alt="Open HTML Diagram"/></a></summary>
+
+**Open `diagrams/02-policy-hierarchy.html` in a browser to view the full interactive diagram.**
+
+| Layer | Name | Owner | Enforcement | Scope |
+|-------|------|-------|-------------|-------|
+| Layer 1 | Platform / Cluster-Wide | Platform Team | ALWAYS DENY | All namespaces |
+| Layer 2 | Tenant / Team-Level | Team Lead | deny (adjustable) | Tenant NS only |
+| Layer 3 | Namespace / Workload | Team Member | dryrun or deny | Single NS |
+
+**Conflict Rule:** Cluster > Tenant > Namespace (upper layers always win)
+
+</details>
+````
 
 ### 5.1 Policy Layer Architecture
 
@@ -380,21 +418,90 @@ spec:
 
 ### 6.1 Template Categories
 
+GKE Policy Controller ships **55+ built-in ConstraintTemplates** across 8 categories. Below is the full catalog sourced from the GKE Policy Controller gallery, plus custom templates for platform-specific needs.
+
+#### 6.1.1 Built-in Templates (GKE Policy Controller)
+
 | Category | Template | Purpose | Built-in? |
 |----------|----------|---------|:---------:|
-| **Security** | `K8sAllowedRepos` | Whitelist image registries | ✅ |
-| **Security** | `K8sPSP*` (20+) | Pod Security Standards | ✅ |
-| **Security** | `K8sBlockNodePort` | Prevent NodePort | ✅ |
-| **Security** | `K8sExternalIPs` | Restrict external IP | ✅ |
-| **Reliability** | `K8sContainerLimits` | Resource limits | ✅ |
-| **Reliability** | `K8sReplicaLimits` | Replica bounds | ✅ |
-| **Reliability** | `K8sRequiredProbes` | Health checks | ✅ |
-| **Ingress** | `K8sHttpsOnly` | Force HTTPS | ✅ |
-| **Storage** | `K8sStorageClass` | Approved storage | ✅ |
-| **Labels** | `K8sRequiredLabels` | Mandatory labels | ✅ |
-| **Custom** | `K8sImmutableFields` | Lock fields | ❌ |
-| **Custom** | `K8sOwnerReference` | Enforce owner chain | ❌ |
-| **Custom** | `K8sPriorityClass` | Require priority class | ❌ |
+| **Certificate / Secret** | `certificate-deny-duplicate-secret-name-in-the-same-namespace` | Deny duplicate TLS cert Secret names in the same Namespace | ✅ |
+| **Cluster Resource** | `cluster-resource-quota` | Enforce cluster-wide resource quota tracking | ✅ |
+| **Container — Deny** | `container-deny-added-caps` | Deny containers that add Linux capabilities | ✅ |
+| **Container — Deny** | `container-deny-env-var-secrets` | Deny env vars referencing Kubernetes Secrets | ✅ |
+| **Container — Deny** | `container-deny-escalation` | Deny container privilege escalation | ✅ |
+| **Container — Deny** | `container-deny-latest-tag` | Deny containers using `:latest` image tag | ✅ |
+| **Container — Deny** | `container-deny-privileged` | Deny privileged containers | ✅ |
+| **Container — Deny** | `container-deny-run-as-system-user` | Deny containers running as root/system user (UID < 10000) | ✅ |
+| **Container — Deny** | `container-deny-without-resource-requests` | Deny containers without CPU/memory requests | ✅ |
+| **Container — Deny** | `container-deny-without-runasnonroot` | Deny containers not explicitly running as non-root | ✅ |
+| **Container — Deny** | `container-deny-writable-root-filesystem` | Deny containers with writable root filesystem | ✅ |
+| **Container — Capabilities** | `container-drop-all-caps` | Require dropping all capabilities (CAP_ALL) | ✅ |
+| **Container — Image** | `container-image-pull-policy-always` | Require `imagePullPolicy: Always` | ✅ |
+| **Container — Whitelist** | `container-whitelist-image-prefix` | Whitelist approved image registry prefixes | ✅ |
+| **Container — Whitelist** | `containers-whitelist-apparmor-profiles` | Whitelist allowed AppArmor profiles | ✅ |
+| **Container — Whitelist** | `containers-whitelist-seccomp-profiles` | Whitelist allowed Seccomp profiles | ✅ |
+| **CRD** | `crd-group-blocklist` | Block specific CRD API groups | ✅ |
+| **Container Signing (CSCS)** | `cscs-deny-attestation-verification-failed` | Deny unsigned/unverified container images | ✅ |
+| **Container Signing (CSCS)** | `cscs-deny-attestation-verification-failed-customer` | Customer-managed key variant of above | ✅ |
+| **DNS** | `deny-duplicate-dns-names` | Deny duplicate Ingress hostnames | ✅ |
+| **DNS** | `dns-endpoint-deny-dns-name-prefixes` | Deny DNS names with blocked prefixes | ✅ |
+| **DNS** | `dns-endpoint-deny-invalid-records` | Deny malformed DNS records | ✅ |
+| **DNS** | `dns-endpoint-whitelist-dns-name-suffixes` | Whitelist allowed DNS name suffixes | ✅ |
+| **Flux** | `deny-flux-conflict` | Deny Flux CD conflicting resource definitions | ✅ |
+| **Gateway / Envoy** | `envoy-gateway-deny-custom-gateway-class` | Deny custom GatewayClass resources | ✅ |
+| **Gateway / Envoy** | `gateway-deny-priv-port` | Deny Gateway listeners on privileged ports (< 1024) | ✅ |
+| **Gateway / Envoy** | `gateway-whitelist-ciphersuites` | Whitelist allowed TLS cipher suites | ✅ |
+| **Gateway / Envoy** | `gateway-whitelist-min-protocol-version` | Require minimum TLS protocol version | ✅ |
+| **Gateway / Envoy** | `gateway-whitelist-protocols` | Whitelist allowed Gateway protocols | ✅ |
+| **Ingress** | `ingress-deny-host-prefixes` | Deny Ingress with blocked host prefixes | ✅ |
+| **Namespace** | `namespace-deny-system-interaction` | Deny resources in `kube-system` / `kube-public` | ✅ |
+| **Namespace** | `deny-system-resources-interaction` | Deny interaction with system namespaces | ✅ |
+| **PersistentVolume** | `persistent-volume-deny-duplicate-csi-volume-handle` | Deny duplicate CSI VolumeHandle claims | ✅ |
+| **PersistentVolume** | `persistent-volume-deny-system-claimed` | Deny PVs claimed by system components | ✅ |
+| **PersistentVolume** | `persistent-volume-whitelist-csi-driver` | Whitelist allowed CSI drivers | ✅ |
+| **Pod — Deny** | `pod-deny-blocking-scale-down` | Deny Pods that block cluster scale-down | ✅ |
+| **Pod — Deny** | `pod-deny-host-ipc` | Deny Pods using host IPC namespace | ✅ |
+| **Pod — Deny** | `pod-deny-host-network` | Deny Pods using host network | ✅ |
+| **Pod — Deny** | `pod-deny-host-pid` | Deny Pods using host PID namespace | ✅ |
+| **Pod — Deny** | `pod-deny-priority-class` | Deny Pods without a valid PriorityClass | ✅ |
+| **Pod — Deny** | `pod-deny-root-fsgroup` | Deny Pods with root fsGroup (UID 0) | ✅ |
+| **Pod — Whitelist** | `pod-whitelist-volumes` | Whitelist allowed Volume types | ✅ |
+| **PriorityClass** | `priority-class-deny-system-interaction` | Deny PriorityClass references to system classes | ✅ |
+| **Prometheus** | `prometheus-rule-whitelist-metadata` | Require metadata labels on PrometheusRule CRDs | ✅ |
+| **RBAC** | `rbac-deny-modify-labeled-cluster-role-and-binding` | Deny modifications to protected ClusterRole/Binding | ✅ |
+| **RBAC** | `role-binding-whitelist-subjects` | Whitelist allowed RBAC subject principals | ✅ |
+| **StorageClass** | `storage-class-deny-default-annotations` | Deny StorageClass with default annotation overrides | ✅ |
+| **StorageClass** | `storage-class-warn-missing-cmek-encryption` | Warn on StorageClass missing CMEK encryption | ✅ |
+| **StorageClass** | `storage-class-whitelist-provisioners` | Whitelist allowed storage provisioners | ✅ |
+| **Validation** | `unexpected-admission-webhook-audit` | Audit unexpected admission webhooks | ✅ |
+| **VolumeSnapshot** | `volume-snapshot-class-whitelist-csi-driver` | Whitelist allowed VolumeSnapshotClass CSI drivers | ✅ |
+
+#### 6.1.2 Custom Platform Templates
+
+| Category | Template | Purpose | Built-in? |
+|----------|----------|---------|:---------:|
+| **Custom** | `K8sImmutableFields` | Lock specific resource fields from modification | ❌ |
+| **Custom** | `K8sOwnerReference` | Enforce owner chain on resources | ❌ |
+| **Custom** | `K8sPriorityClass` | Require all Pods to specify a PriorityClass | ❌ |
+| **Custom** | `K8sRequiredLabels` | Require mandatory labels (app, team, environment) | ❌ |
+
+#### 6.1.3 Category Summary
+
+| Category | Count | Key Templates |
+|----------|:-----:|--------------|
+| Container Security (Deny) | 10 | privileged, escalation, writable-rootfs, latest-tag |
+| Container Security (Whitelist) | 4 | image-prefix, apparmor, seccomp |
+| Pod Security (Deny) | 6 | host-ipc, host-network, host-pid, priority-class |
+| Gateway / Envoy | 5 | priv-port, ciphersuites, min-tls-version |
+| DNS | 4 | duplicate-names, prefix-block, suffix-allow |
+| StorageClass | 3 | provisioners, cmek-warning, default-annotations |
+| RBAC | 2 | clusterrole-modify, subject-whitelist |
+| PersistentVolume | 3 | csi-driver-whitelist, duplicate-handle |
+| Container Signing (CSCS) | 2 | attestation-verification |
+| Other | 7 | cluster-quota, crd-blocklist, flux, prometheus, webhook-audit |
+| **Total Built-in** | **51** | GKE Policy Controller gallery |
+| **Custom** | **4** | Platform-specific extensions |
+| **Total** | **55** | |
 
 ### 6.2 Template Versioning Strategy
 
@@ -608,6 +715,27 @@ opa-templates/
 ---
 
 ## 9. Team Onboarding Workflow
+
+````{=html}
+<!-- Diagram: diagrams/03-onboarding-workflow.html -->
+<details open>
+<summary><strong>📊 Architecture Diagram — Team Onboarding Workflow</strong> <a href="diagrams/03-onboarding-workflow.html" target="_blank"><img src="https://img.shields.io/badge/View-HTML%20Diagram-22d3ee?style=flat-square&logo=google-chrome" alt="Open HTML Diagram"/></a></summary>
+
+**Open `diagrams/03-onboarding-workflow.html` in a browser to view the full interactive diagram.**
+
+| Step | Phase | Description |
+|------|-------|-------------|
+| 1 | New Team Request | Submit NamespaceClaim CRD |
+| 2 | Platform Review | Identity verification, naming |
+| 3 | Namespace Creation | team-{name}-{env} with labels |
+| 4 | Baseline Policies | GitOps auto-applies platform baseline |
+| 5 | Template Assignment | v1.2.0 locked, 30-day dryrun |
+| 6 | Active Tenant | Deny enforcement active |
+
+**GitOps Automation:** All 6 steps are automated via ArgoCD / Config Sync upon NamespaceClaim submission.
+
+</details>
+````
 
 ### 9.1 Onboarding Flow
 
@@ -901,6 +1029,31 @@ done
 ---
 
 ## 11. GitOps Integration
+
+````{=html}
+<!-- Diagram: diagrams/04-gitops-pipeline.html -->
+<details open>
+<summary><strong>📊 Architecture Diagram — GitOps CI/CD Pipeline</strong> <a href="diagrams/04-gitops-pipeline.html" target="_blank"><img src="https://img.shields.io/badge/View-HTML%20Diagram-22d3ee?style=flat-square&logo=google-chrome" alt="Open HTML Diagram"/></a></summary>
+
+**Open `diagrams/04-gitops-pipeline.html` in a browser to view the full interactive diagram.**
+
+| Phase | Stage | Tool | Description |
+|-------|-------|------|-------------|
+| Authoring | PR Created | GitHub | CI auto-triggered |
+| CI | Rego Lint | opa / conftest | Syntax & best practice check |
+| CI | Unit Tests | opa test | Test case execution |
+| CI | Dry-run Apply | kubectl | Server-side validation |
+| CI | Policy Diff | kubectl gk | Change impact analysis |
+| CI | Review Gate | GitHub | Required: platform-team |
+| Review | Approval | GitHub PR | 2+ reviewers required |
+| Sync | ArgoCD Apply | kubectl SSA | Server-side apply |
+| Sync | Gatekeeper | Gatekeeper | Constraints enforced |
+| Sync | Notify | Slack | #team-alerts posted |
+
+**All policy changes go through this full pipeline — no direct cluster access required.**
+
+</details>
+````
 
 ### 11.1 Repository Structure
 
