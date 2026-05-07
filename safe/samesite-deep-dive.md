@@ -647,12 +647,12 @@ Safari → Web Inspector → Storage：
 ```nginx
 # 错误：proxy_pass 会剥离 Set-Cookie 属性
 location / {
-    proxy_pass http://backend;
+    proxy_pass https://backend;
 }
 
 # 正确：显式传递并补充 SameSite
 location / {
-    proxy_pass http://backend;
+    proxy_pass https://backend;
     proxy_cookie_path / "/; SameSite=Lax; Secure; HttpOnly";
     proxy_set_header Host $host;
 }

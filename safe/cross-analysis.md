@@ -106,23 +106,38 @@ Browser → nginx proxy (same origin for frontend and API)
 **Performance Mitigation for Static Content:**
 
 ```nginx
-# Enable caching for static assets
+# Enable HTTPS upstream for backend services
+upstream frontend-upstream {
+    server frontend.internal:443;
+}
+
+upstream api-backend-upstream {
+    server api.internal:443;
+}
+
 proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=static_cache:10m max_size=1g;
 
 server {
+    # TLS termination at nginx
+    listen 443 ssl;
+    ssl_certificate /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
+
     location / {
         # Static content — cache aggressively
         location ~* \.(css|js|images?|fonts?|ico|svg|woff2?)$ {
-            proxy_pass http://frontend;
+            proxy_pass https://frontend-upstream;
             proxy_cache static_cache;
             proxy_cache_valid 200 1d;
             add_header X-Cache-Status $upstream_cache_status;
         }
 
-        # API requests — no caching
+        # API requests — no caching, HTTPS upstream
         location /api/ {
-            proxy_pass http://api-backend;
+            proxy_pass https://api-backend-upstream;
             proxy_buffering off;
+            proxy_set_header Host $host;
+            proxy_cookie_path / "/; SameSite=Lax; Secure; HttpOnly";
         }
     }
 }
@@ -147,9 +162,10 @@ Even with a single proxy, ensure cookies have correct attributes:
 ```nginx
 # In nginx proxy configuration
 proxy_cookie_path / "/; SameSite=Lax; Secure; HttpOnly";
+proxy_set_header Host $host;
 ```
 
-Or fix at the **API backend** directly:
+Or fix at the **API backend** directly (all internal HTTPS):
 
 ```
 Set-Cookie: ajbx1_session=abc123; SameSite=Lax; Secure; HttpOnly; Path=/

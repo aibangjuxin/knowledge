@@ -312,17 +312,20 @@
         <rect x="30" y="545" width="940" height="115" rx="8" fill="rgba(30, 41, 59, 0.3)" stroke="#1e293b" stroke-width="1"/>
         <text x="45" y="567" fill="white" font-size="10" font-weight="600">Nginx Configuration — Static vs API Routing</text>
 
-        <text x="45" y="585" fill="#94a3b8" font-size="8"><span style="color:#fb7185">location</span> ~* \.(css|js|images?|fonts?|ico|svg|woff2?)$ {</text>
-        <text x="65" y="600" fill="#94a3b8" font-size="8">  proxy_pass http://frontend;</text>
-        <text x="65" y="615" fill="#94a3b8" font-size="8">  proxy_cache static_cache;</text>
-        <text x="65" y="630" fill="#94a3b8" font-size="8">  proxy_cache_valid 200 1d;</text>
-        <text x="45" y="645" fill="#94a3b8" font-size="8">}</text>
+  <!-- Nginx Config Block 1: Static -->
+        <text x="45" y="585" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8"><tspan fill="#fb7185">location</tspan> ~* \.(css|js|images?|fonts?|ico|svg|woff2?)$ {</text>
+        <text x="65" y="600" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">  <tspan fill="#fb923c">proxy_pass</tspan> <tspan fill="#34d399">https://frontend-upstream</tspan>;</text>
+        <text x="65" y="615" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">  <tspan fill="#fb923c">proxy_cache</tspan> static_cache;</text>
+        <text x="65" y="630" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">  <tspan fill="#fb923c">proxy_cache_valid</tspan> 200 1d;</text>
+        <text x="45" y="645" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">}</text>
 
-        <text x="350" y="585" fill="#94a3b8" font-size="8"><span style="color:#fb7185">location</span> /api/ {</text>
-        <text x="370" y="600" fill="#94a3b8" font-size="8">  proxy_pass http://api-backend;</text>
-        <text x="370" y="615" fill="#94a3b8" font-size="8">  proxy_buffering off;</text>
-        <text x="370" y="630" fill="#94a3b8" font-size="8">  <span style="color:#fb7185">proxy_cookie_path</span> / "/; SameSite=Lax; Secure; HttpOnly";</text>
-        <text x="350" y="645" fill="#94a3b8" font-size="8">}</text>
+        <!-- Nginx Config Block 2: API -->
+        <text x="350" y="585" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8"><tspan fill="#fb7185">location</tspan> /api/ {</text>
+        <text x="370" y="600" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">  <tspan fill="#fb923c">proxy_pass</tspan> <tspan fill="#34d399">https://api-backend-upstream</tspan>;</text>
+        <text x="370" y="615" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">  <tspan fill="#fb923c">proxy_buffering</tspan> off;</text>
+        <text x="370" y="630" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">  <tspan fill="#fb923c">proxy_set_header</tspan> Host $host;</text>
+        <text x="370" y="645" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">  <tspan fill="#fb923c">proxy_cookie_path</tspan> ~^ / "/; SameSite=Lax; Secure; HttpOnly";</text>
+        <text x="350" y="660" fill="#94a3b8" font-family="JetBrains Mono, monospace" font-size="8">}</text>
 
         <!-- ==================== LEGEND ==================== -->
         <text x="780" y="70" fill="white" font-size="10" font-weight="600">Legend</text>
