@@ -319,92 +319,98 @@ kubectl get constrainttemplates
 
 **Output:**
 ```
-NAME                                                    AGE
-allowedserviceportname                                  57s
-asmauthzpolicydisallowedprefix                          61s
-asmauthzpolicyenforcesourceprincipals                   56s
-asmauthzpolicynormalization                             60s
-asmauthzpolicysafepattern                               64s
-asmingressgatewaylabel                                  66s
-asmpeerauthnstrictmtls                                  48s
-asmrequestauthnprohibitedoutputheaders                  51s
-asmsidecarinjection                                     45s
-destinationruletlsenabled                               61s
-disallowedauthzprefix                                   59s
-gcpstoragelocationconstraintv1                          55s
-k8sallowedrepos                                         56s
-k8savoiduseofsystemmastersgroup                         43s
-k8sblockallingress                                      50s
-k8sblockcreationwithdefaultserviceaccount               46s
-k8sblockendpointeditdefaultrole                         46s
-k8sblockloadbalancer                                    65s
-k8sblocknodeport                                        44s
-k8sblockobjectsoftype                                   53s
-k8sblockprocessnamespacesharing                         45s
-k8sblockwildcardingress                                 65s
-k8scontainerephemeralstoragelimit                       65s
-k8scontainerlimits                                      60s
-k8scontainerratios                                      44s
-k8scontainerrequests                                    52s
-k8scronjoballowedrepos                                  43s
-k8sdisallowanonymous                                    50s
-k8sdisallowedrepos                                      45s
-k8sdisallowedrolebindingsubjects                        42s
-k8sdisallowedtags                                       48s
-k8sdisallowinteractivetty                               58s
-k8senforcecloudarmorbackendconfig                       55s
-k8sexternalips                                          46s
-k8shttpsonly                                            50s
-k8simagedigests                                         49s
-k8slocalstoragerequiresafetoevict                       62s
-k8smemoryrequestequalslimit                             51s
-k8snoenvvarsecrets                                      53s
-k8snoexternalservices                                   67s
-k8spodresourcesbestpractices                            54s
-k8spodsrequiresecuritycontext                           56s
-k8sprohibitrolewildcardaccess                           58s
-k8spspallowedusers                                      59s
-k8spspallowprivilegeescalationcontainer                 65s
-k8spspapparmor                                          60s
-k8spspautomountserviceaccounttokenpod                    54s
-k8spspcapabilities                                      54s
-k8spspflexvolumes                                       49s
-k8spspforbiddensysctls                                  65s
-k8spspfsgroup                                           64s
-k8spsphostfilesystem                                    55s
-k8spsphostnamespace                                     44s
-k8spsphostnetworkingports                               43s
-k8spspprivilegedcontainer                               49s
-k8spspprocmount                                         66s
-k8spspreadonlyrootfilesystem                            64s
-k8spspseccomp                                           61s
-k8spspselinuxv2                                         50s
-k8spspvolumetypes                                       59s
-k8spspwindowshostprocess                                51s
-k8spssrunasnonroot                                      59s
-k8sreplicalimits                                        57s
-k8srequirecosnodeimage                                  52s
-k8srequiredannotations                                  44s
-k8srequiredlabels                                       52s
-k8srequiredprobes                                       48s
-k8srequiredresources                                    47s
-k8srequirevalidrangesfornetworks                        61s
-k8srestrictadmissioncontroller                           56s
-k8srestrictautomountserviceaccounttokens                 51s
-k8srestrictlabels                                       57s
-k8srestrictnamespaces                                   57s
-k8srestrictnfsurls                                      58s
-k8srestrictrbacsubjects                                 53s
-k8srestrictrolebindings                                 64s
-k8srestrictrolerules                                    63s
-noupdateserviceaccount                                  47s
-policystrictonly                                        47s
-restrictnetworkexclusions                               62s
-sourcenotallauthz                                       47s
-verifydeprecatedapi                                     60s
+NAME                                                    AGE   DESCRIPTION
+─────────────────────────────────────────────────────────────────────────────
+allowedserviceportname                                  57s   限制 Service 端口名称格式（必须符合 ^[a-z][a-z0-9-]*$ 且 ≤15 字符）
+asmauthzpolicydisallowedprefix                          61s   禁止 Istio AuthorizationPolicy 使用不允许的 prefix 规则
+asmauthzpolicyenforcesourceprincipals                   56s   要求 Istio AuthorizationPolicy 必须指定 source.principals（强制 mTLS）
+asmauthzpolicynormalization                             60s   要求 Istio AuthorizationPolicy 必须经过标准化处理
+asmauthzpolicysafepattern                               64s   要求 AuthorizationPolicy 遵循安全默认拒绝模式
+asmingressgatewaylabel                                  66s   要求 Istio IngressGateway 必须有指定 label
+asmpeerauthnstrictmtls                                  48s   要求 Istio PeerAuthentication 必须设置 STRICT mTLS 模式
+asmrequestauthnprohibitedoutputheaders                  51s   禁止 AuthorizationPolicy 输出包含敏感 HTTP headers
+asmsidecarinjection                                     45s   要求命名空间必须启用/禁用 Istio sidecar injection
+destinationruletlsenabled                               61s   要求 Istio DestinationRule 必须启用 TLS
+disallowedauthzprefix                                   59s   禁止 AuthorizationPolicy 使用不允许的 prefix
+gcpstoragelocationconstraintv1                          55s   限制 Cloud Storage Bucket 只能部署到允许的 GCP 区域
+k8sallowedrepos                                         56s   白名单允许的容器镜像仓库（限制只能从可信仓库拉取镜像）
+k8savoiduseofsystemmastersgroup                         43s   禁止将任何主体绑定为 system:masters 组（防止权限提升）
+k8sblockallingress                                      50s   禁止创建任何 Ingress 资源（阻止所有入站流量）
+k8sblockcreationwithdefaultserviceaccount               46s   禁止使用默认 ServiceAccount
+k8sblockendpointeditdefaultrole                         46s   禁止修改使用 system:controller: 前缀 SA 的 Endpoint
+k8sblockloadbalancer                                    65s   禁止创建 LoadBalancer 类型 Service（防止公网暴露）
+k8sblocknodeport                                        44s   禁止创建 NodePort 类型 Service（防止端口冲突）
+k8sblockobjectsoftype                                   53s   禁止创建指定类型的 Kubernetes 资源（如某些 CRD）
+k8sblockprocessnamespacesharing                         45s   要求 Pod 不能共享其他 Pod 的进程命名空间
+k8sblockwildcardingress                                 65s   禁止 Ingress 使用通配符 hostname（如 *.example.com）
+k8scontainerephemeralstoragelimit                       65s   要求容器必须设置 ephemeral-storage 的 limits
+k8scontainerlimits                                      60s   要求容器必须设置 CPU 和 Memory 的 limits
+k8scontainerratios                                      44s   限制容器 requests 与 limits 的比例
+k8scontainerrequests                                    52s   要求容器必须设置 CPU 和 Memory 的 requests
+k8scronjoballowedrepos                                  43s   白名单允许 CronJob 容器镜像仓库
+k8sdisallowedanonymous                                  50s   禁止将 system:anonymous 绑定到任何 Role/ClusterRole
+k8sdisallowedrepos                                      45s   黑名单禁止的镜像仓库
+k8sdisallowedrolebindingsubjects                        42s   禁止将 RoleBinding 绑定到白名单外的主体类型
+k8sdisallowedtags                                       48s   禁止镜像使用特定 tag（如 :latest）
+k8sdisallowinteractivetty                               58s   禁止 Pod 分配 TTY 和交互式 stdin
+k8senforcecloudarmorbackendconfig                       55s   要求 Kubernetes Service 必须关联 Cloud Armor Security Policy
+k8sexternalips                                          46s   禁止 Service 使用非白名单的 externalIPs
+k8shttpsonly                                            50s   要求 Ingress 必须使用 HTTPS（强制 TLS）
+k8simagedigests                                         49s   要求镜像必须指定 SHA256 digest（而非 tag）
+k8slocalstoragerequiresafetoevict                       62s   要求使用 local storage 的 Pod 必须设置安全驱逐注解
+k8smemoryrequestequalslimit                             51s   要求 Memory 的 requests 必须等于 limits
+k8snoenvvarsecrets                                      53s   禁止将 Secret 挂载为容器环境变量（强制 volume 挂载）
+k8snoexternalservices                                   67s   禁止创建 ExternalName 类型 Service
+k8spodresourcesbestpractices                            54s   要求 Pod 遵循资源管理最佳实践
+k8spodsrequiresecuritycontext                           56s   要求 Pod 必须定义 SecurityContext
+k8sprohibitrolewildcardaccess                           58s   禁止 Role/ClusterRole 使用通配符 * 权限
+k8spspallowedusers                                      59s   限制 Pod 运行的用户 UID 范围
+k8spspallowprivilegeescalationcontainer                 65s   禁止容器启用 privilege escalation
+k8spspapparmor                                          60s   要求容器必须使用已批准的 AppArmor Profile
+k8spspautomountserviceaccounttokenpod                    54s   禁止 Pod 自动挂载 ServiceAccount Token
+k8spspcapabilities                                      54s   限制容器可添加的 Linux capabilities
+k8spspflexvolumes                                       49s   白名单允许的 FlexVolume driver 路径
+k8spspforbiddensysctls                                  65s   禁止使用特定的 sysctl 参数
+k8spspfsgroup                                           64s   要求 Pod 必须指定 fsGroup
+k8spsphostfilesystem                                    55s   限制容器对宿主机文件系统目录的访问
+k8spsphostnamespace                                     44s   禁止 Pod 使用宿主机的 PID/IPC/Network 命名空间
+k8spsphostnetworkingports                               43s   禁止 Pod 使用宿主机网络端口（hostPort）
+k8spspprivilegedcontainer                               49s   禁止运行特权容器（privileged: true）
+k8spspprocmount                                         66s   限制容器对宿主进程空间的挂载
+k8spspreadonlyrootfilesystem                            64s   要求容器根文件系统必须为只读
+k8spspseccomp                                           61s   要求 Pod/容器必须使用已批准的 Seccomp Profile
+k8spspselinuxv2                                         50s   要求容器必须指定 SELinux 安全上下文
+k8spspvolumetypes                                       59s   白名单允许的 volume 类型（如禁止 hostPath/glusterfs）
+k8spspwindowshostprocess                                51s   禁止 Windows 容器使用宿主进程（hostProcess）
+k8spssrunasnonroot                                      59s   要求容器必须声明为非 root 运行（runAsNonRoot: true）
+k8sreplicalimits                                        57s   限制 Deployment/ReplicaSet 的 replicas 最大值
+k8srequirecosnodeimage                                  52s   要求节点必须使用 Container-Optimized OS 镜像
+k8srequiredannotations                                  44s   要求指定资源必须包含特定 annotations
+k8srequiredlabels                                       52s   要求命名空间必须包含特定 labels（如 environment、team）
+k8srequiredprobes                                       48s   要求容器必须配置 liveness 和 readiness probe
+k8srequiredresources                                    47s   要求容器必须设置资源 requests
+k8srequirevalidrangesfornetworks                        61s   要求 NetworkPolicy 必须有有效的 CIDR 范围
+k8srestrictadmissioncontroller                           56s   限制允许启用的 Admission Controllers
+k8srestrictautomountserviceaccounttokens                 51s   禁止 ServiceAccount 自动挂载 Token
+k8srestrictlabels                                       57s   白名单允许的 label keys
+k8srestrictnamespaces                                   57s   限制 Pod 可以部署到的命名空间
+k8srestrictnfsurls                                      58s   禁止挂载 NFS 存储（或白名单 NFS 服务器）
+k8srestrictrbacsubjects                                 53s   限制 RBAC 允许的主体类型
+k8srestrictrolebindings                                 64s   限制谁可以在哪些命名空间创建 RoleBinding
+k8srestrictrolerules                                    63s   限制 Role/ClusterRole 可以定义的规则
+noupdateserviceaccount                                  47s   禁止更新现有 ServiceAccount 的某些字段
+policystrictonly                                        47s   要求所有资源必须被某个 Policy 约束
+restrictnetworkexclusions                               62s   限制可以排除在网络策略之外的命名空间/Pod
+sourcenotallauthz                                       47s   禁止 AuthorizationPolicy 使用空 source（允许所有）
+verifydeprecatedapi                                     60s   审计已废弃的 Kubernetes API 版本使用
 ```
 
-**Description:** 70+ constraint templates are installed, including security policies (PSP), required labels, container limits, etc.
+**Description:** 82 个 Constraint Templates 已安装，其中：
+- **PSP 相关（19个）**：Pod Security Policies，覆盖特权容器、capabilities、AppArmor、Seccomp、SELinux、hostNamespace 等
+- **Kubernetes 通用（39个）**：覆盖镜像仓库、资源限制、RBAC、Ingress、Service、NetworkPolicy 等
+- **ASM/Anthos Service Mesh（10个）**：覆盖 AuthorizationPolicy、PeerAuthentication、SidecarInjection、DestinationRule 等
+- **GCP 特定（3个）**：Cloud Storage 区域限制、Cloud Armor 后端配置
+- **网络安全（6个）**：Ingress HTTPS 强制、ExternalIPs 限制、NetworkPolicy CIDR 等
 
 ### 5.5 Check Specific Constraint Template Status
 
