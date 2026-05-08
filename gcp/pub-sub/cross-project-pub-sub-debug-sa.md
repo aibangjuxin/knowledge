@@ -1,5 +1,34 @@
 # Cross-Project Pub/Sub + GKE Workload Identity Debug Guide
 
+---
+
+## Solution Summary (Root Cause)
+
+**The actual issue in this case:**
+
+A single Deployment connected to **multiple Pub/Sub subscriptions** across projects, but only **one subscription** had the GSA (`gke-rt-sa@souce-project.iam.gserviceaccount.com`) authorized. The other subscriptions returned 403 because they had no IAM binding for the GSA.
+
+**Fix:** Add `roles/pubsub.subscriber` to **all** subscriptions the Deployment connects to.
+
+```bash
+# Example: binding for multiple subscriptions in target project
+gcloud pubsub subscriptions add-iam-policy-binding subscription-a \
+  --project=targetproject \
+  --member="serviceAccount:gke-rt-sa@souce-project.iam.gserviceaccount.com" \
+  --role="roles/pubsub.subscriber"
+
+gcloud pubsub subscriptions add-iam-policy-binding subscription-b \
+  --project=targetproject \
+  --member="serviceAccount:gke-rt-sa@souce-project.iam.gserviceaccount.com" \
+  --role="roles/pubsub.subscriber"
+
+# ... repeat for every subscription the deployment accesses
+```
+
+**This is the #1 most overlooked cause** in multi-subscription deployments. The deployment itself starts fine — the 403 only appears when the code actually tries to access each subscription.
+
+---
+
 ## Problem Summary
 
 ```
@@ -9,12 +38,85 @@ Error: 403 IAM_PERMISSION_DENIED on "pubsub.subscriptions.get"
 
 **Setup:**
 - Source Project GKE cluster with Deployment using KSA annotated to GSA `gke-rt-sa@souce-project.iam.gserviceaccount.com`
-- Target Project has subscription `topic-pub-sub` with GSA bound to `roles/pubsub.subscriber`
-- Pod starts normally but API call fails with 403
+- Target Project has subscription(s) — only some may have GSA bound
+- Pod starts normally but API call fails with 403 on one or more subscriptions
 
 ---
 
-## Debug Path
+## Validation: Check All Subscriptions at Once
+
+Before debugging, find every subscription your deployment actually accesses, then check which ones are authorized.
+
+### Step 1: Identify all subscriptions the Deployment references
+
+```bash
+# Look in your deployment/config for subscription names
+kubectl get deployment YOUR_DEPLOYMENT -n YOUR_NAMESPACE -o yaml | grep -E "subscription|topic"
+
+# Or search in your codebase / config files
+grep -r "pubsub.googleapis.com.*projects.*subscriptions\|pubsub.googleapis.com.*projects.*topics" . \
+  --include="*.yaml" --include="*.json" --include="*.env" | \
+  grep -oE "projects/[^/]+/subscriptions/[^']+" | sort -u
+```
+
+### Step 2: Batch-check IAM for all subscriptions
+
+Replace `SOURCE_GSA` and `TARGET_PROJECT`, then run:
+
+```bash
+SOURCE_GSA="serviceAccount:gke-rt-sa@souce-project.iam.gserviceaccount.com"
+TARGET_PROJECT="targetproject"
+SUBSCRIPTIONS=("sub-a" "sub-b" "sub-c")  # Add your subscription names here
+
+echo "=== Batch IAM Check ==="
+for SUB in "${SUBSCRIPTIONS[@]}"; do
+  echo ""
+  echo "Subscription: $SUB"
+  POLICY=$(gcloud pubsub subscriptions get-iam-policy "$SUB" --project="$TARGET_PROJECT" 2>/dev/null)
+  if echo "$POLICY" | grep -q "$SOURCE_GSA"; then
+    echo "  ✓ GSA found"
+  else
+    echo "  ✗ GSA MISSING — no binding for this subscription"
+    echo "  Missing binding:"
+    echo "    gcloud pubsub subscriptions add-iam-policy-binding $SUB \\"
+    echo "      --project=$TARGET_PROJECT \\"
+    echo "      --member=\"$SOURCE_GSA\" \\"
+    echo "      --role=\"roles/pubsub.subscriber\""
+  fi
+done
+```
+
+Expected output when one is missing:
+```
+Subscription: topic-pub-sub
+  ✗ GSA MISSING — no binding for this subscription
+  Missing binding:
+    gcloud pubsub subscriptions add-iam-policy-binding topic-pub-sub \
+      --project=targetproject \
+      --member="serviceAccount:gke-rt-sa@souce-project.iam.gserviceaccount.com" \
+      --role="roles/pubsub.subscriber"
+```
+
+### Step 3: Batch-add missing bindings
+
+```bash
+SOURCE_GSA="serviceAccount:gke-rt-sa@souce-project.iam.gserviceaccount.com"
+TARGET_PROJECT="targetproject"
+SUBSCRIPTIONS=("sub-a" "sub-b" "sub-c")
+
+for SUB in "${SUBSCRIPTIONS[@]}"; do
+  gcloud pubsub subscriptions add-iam-policy-binding "$SUB" \
+    --project="$TARGET_PROJECT" \
+    --member="$SOURCE_GSA" \
+    --role="roles/pubsub.subscriber" 2>&1 | tee /dev/stderr | grep -v "^$"
+done
+```
+
+---
+
+## Debug Path (Full)
+
+If batch-check passes and you still get 403, follow through the phases below.
 
 ### Phase 1: Verify Workload Identity is Actually Working
 
@@ -62,37 +164,27 @@ workloadMetadataConfig:
 
 #### 1.3 Verify what token your pod is actually getting
 
-Inside the pod, compare:
+Inside the pod:
 
 ```bash
-# Token from metadata server (what your curl uses)
-TOKEN1=$(curl -s -H "Metadata-Flavor: Google" \
-  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email")
-echo "Service Account: $TOKEN1"
-
-# Get the actual access token
+# What SA is the token from?
 curl -s -H "Metadata-Flavor: Google" \
-  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" | \
-  python3 -c "import sys,json; d=json.load(sys.stdin); print('Token expires:', d.get('expires_in'), 'seconds')"
+  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
 ```
 
-If WI is working → the token should be for `gke-rt-sa@souce-project.iam.gserviceaccount.com`
-If WI is NOT working → the token will be for the **Node's default SA** (something like `PROJECT_NUMBER-compute@developer.gserviceaccount.com`)
-
-**This is the #1 most likely cause.** If the node's default SA token is being used, it won't have permission on the target project.
+- If WI is working → shows `gke-rt-sa@souce-project.iam.gserviceaccount.com`
+- If WI is NOT working → shows `PROJECT_NUMBER-compute@developer.gserviceaccount.com` (node's default SA)
 
 #### 1.4 Quick test: verify GSA can access subscription
 
-From a GCE VM in Source Project (or Cloud Shell), attach the GSA:
+From a GCE VM or Cloud Shell with the GSA attached:
 
 ```bash
-# Create a temporary test VM with the GSA attached
 gcloud compute instances create test-wi-vm \
   --zone=europe-west2-a \
   --service-account=gke-rt-sa@souce-project.iam.gserviceaccount.com \
   --scopes=https://www.googleapis.com/auth/pubsub
 
-# SSH and test
 gcloud compute ssh test-wi-vm --zone=europe-west2-a
 
 # Inside VM:
@@ -106,13 +198,13 @@ If this works, GSA permissions are correct. The problem is in the pod's WI chain
 
 ### Phase 2: Verify Pub/Sub Subscription IAM
 
-#### 2.1 Get the actual IAM policy on the subscription
+#### 2.1 Get the actual IAM policy on a subscription
 
 ```bash
 gcloud pubsub subscriptions get-iam-policy topic-pub-sub --project=targetproject
 ```
 
-Check that the GSA appears with `roles/pubsub.subscriber`:
+Check for GSA with `roles/pubsub.subscriber`:
 
 ```json
 {
@@ -123,14 +215,13 @@ Check that the GSA appears with `roles/pubsub.subscriber`:
         "serviceAccount:gke-rt-sa@souce-project.iam.gserviceaccount.com"
       ]
     }
-  ],
-  "etag": "..."
+  ]
 }
 ```
 
-**Important**: If you only see bindings at the **project** level (not subscription level), that's not enough. Pub/Sub subscription IAM is separate from project IAM.
+**Important**: Pub/Sub subscription IAM is separate from project IAM. Project-level bindings do **not** automatically apply to subscriptions.
 
-#### 2.2 Binding at subscription level (if not already)
+#### 2.2 Binding at subscription level
 
 ```bash
 gcloud pubsub subscriptions add-iam-policy-binding topic-pub-sub \
@@ -139,15 +230,14 @@ gcloud pubsub subscriptions add-iam-policy-binding topic-pub-sub \
   --role="roles/pubsub.subscriber"
 ```
 
-#### 2.3 Also check if Target Project needs the API enabled
+#### 2.3 Check API is enabled in both projects
 
 ```bash
+# Source Project
+gcloud services list --project=souce-project | grep pubsub
+
+# Target Project
 gcloud services list --project=targetproject | grep pubsub
-```
-
-If `pubsub.googleapis.com` is not enabled:
-```bash
-gcloud services enable pubsub.googleapis.com --project=targetproject
 ```
 
 ---
@@ -156,17 +246,17 @@ gcloud services enable pubsub.googleapis.com --project=targetproject
 
 #### Pitfall 1: WI annotation on wrong resource
 
-The annotation must be on the **KSA**, not the Deployment. Kubernetes applies it from KSA → Pod.
+The annotation must be on the **KSA**, not the Deployment.
 
 ```yaml
-# WRONG - annotation on Deployment
+# WRONG — annotation on Deployment spec.template.metadata
 spec:
   template:
     metadata:
       annotations:
         iam.gke.io/gcp-service-account: gke-rt-sa@souce-project.iam.gserviceaccount.com
 
-# CORRECT - annotation on KSA (referenced by Deployment)
+# CORRECT — annotation on KSA itself
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -180,155 +270,118 @@ kind: Deployment
 spec:
   template:
     spec:
-      serviceAccountName: your-ksa   # <-- references the KSA
+      serviceAccountName: your-ksa   # references the annotated KSA
 ```
 
 #### Pitfall 2: Node pool WI not enabled
 
 Even with correct KSA annotation, if the node pool wasn't created with `--workload-pool`, pods still use the node's default SA token.
 
-**Solution**: Recreate the node pool with WI enabled:
+**Fix**: Recreate node pool with WI enabled:
 ```bash
 gcloud container node-pools create NEW_POOL \
   --cluster=YOUR_CLUSTER \
   --region=europe-west2 \
-  --workload-pool=souce-project.svc.id.goog \
-  # ... other flags same as existing pool
+  --workload-pool=souce-project.svc.id.goog
 ```
 
-Then migrate workloads to the new pool.
+#### Pitfall 3: Multi-subscription — only some authorized
 
-#### Pitfall 3: Wrong token endpoint
-
-The user used the legacy endpoint:
-```
-/computeMetadata/v1/instance/service-accounts/default/token
-```
-
-This still works but prefer the newer one:
-```
-/computeMetadata/v1/instance/service-accounts/default/identity?audience=pubsub.googleapis.com
-```
-
-For a proper OIDC token for Pub/Sub:
-```bash
-# Get OIDC token for Pub/Sub
-curl -s -H "Metadata-Flavor: Google" \
-  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=pubsub.googleapis.com"
-```
+The deployment connects to multiple subscriptions, but only one has the GSA binding. This is the **most common** cause in complex deployments. Use the batch-check script above.
 
 #### Pitfall 4: Pub/Sub API not enabled in Source Project
 
-Even with WI working, the Source Project needs the Pub/Sub API enabled to make API calls:
 ```bash
 gcloud services enable pubsub.googleapis.com --project=souce-project
 ```
 
 ---
 
-### Phase 4: Full Debug Script
-
-Run this inside the failing pod:
+### Phase 4: Full Debug Script (run inside the failing pod)
 
 ```bash
 #!/bin/bash
 set -e
 
-echo "=== Workload Identity Debug ==="
+METADATA_URL="http://metadata.google.internal/computeMetadata/v1/instance/service-accounts"
 
-# 1. Who is the KSA?
+echo "=== KSA Info ==="
 echo "KSA: $(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)/$(cat /var/run/secrets/kubernetes.io/serviceaccount/name)"
 
-# 2. What token are we getting?
 echo ""
-echo "=== Token Info ==="
-METADATA_URL="http://metadata.google.internal/computeMetadata/v1/instance/service-accounts"
-EMAIL=$(curl -s -H "Metadata-Flavor: Google" "$METADATA_URL/default/email")
-echo "Service Account Email: $EMAIL"
+echo "=== Token SA (should be GSA, not node's default SA) ==="
+curl -s -H "Metadata-Flavor: Google" "$METADATA_URL/default/email"
 
-# 3. Test Pub/Sub access
 echo ""
-echo "=== Testing Pub/Sub Access ==="
-TOKEN=$(curl -s -H "Metadata-Flavor: Google" \
-  -H "Authorization: Bearer $(curl -s -H 'Metadata-Flavor: Google' '$METADATA_URL/default/token' | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"access_token\"])')" \
-  "https://pubsub.googleapis.com/v1/projects/targetproject/subscriptions/topic-pub-sub" 2>&1)
+echo "=== JWT Header & Claims ==="
+RAW_TOKEN=$(curl -s -H "Metadata-Flavor: Google" "$METADATA_URL/default/token" | \
+  python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+echo "$RAW_TOKEN" | cut -d'.' -f1,2 | base64 -d 2>/dev/null | python3 -m json.tool || echo "decode failed"
 
-echo "$TOKEN"
-
-# 4. Decode JWT to verify issuer
 echo ""
-echo "=== JWT Decoded (header.claims) ==="
-RAW_TOKEN=$(curl -s -H "Metadata-Flavor: Google" "$METADATA_URL/default/token" | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
-echo "$RAW_TOKEN" | cut -d'.' -f1,2 | base64 -d 2>/dev/null | python3 -m json.tool || echo "Could not decode"
+echo "=== Pub/Sub Access Tests (replace SUBSCRIPTIONS list) ==="
+# Add the subscriptions your app actually uses
+SUBSCRIPTIONS=(
+  "projects/targetproject/subscriptions/sub-a"
+  "projects/targetproject/subscriptions/sub-b"
+)
+TOKEN=$(curl -s -H "Metadata-Flavor: Google" "$METADATA_URL/default/token" | \
+  python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+
+for SUB in "${SUBSCRIPTIONS[@]}"; do
+  RESULT=$(curl -s -H "Authorization: Bearer $TOKEN" \
+    "https://pubsub.googleapis.com/v1/$SUB" 2>&1)
+  if echo "$RESULT" | grep -q '"error"'; then
+    echo "✗ $SUB — FAILED"
+    echo "  $(echo "$RESULT" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["error"]["message"])')"
+  else
+    echo "✓ $SUB — OK"
+  fi
+done
 ```
 
 ---
 
 ## Solution Checklist
 
-After fixing, verify in order:
-
+- [ ] Batch-check: all subscriptions the Deployment references have GSA IAM binding
 - [ ] KSA has correct annotation: `iam.gke.io/gcp-service-account: gke-rt-sa@souce-project.iam.gserviceaccount.com`
 - [ ] Node pool has WI enabled: `workloadMetadataConfig.mode = GKE_METADATA`
-- [ ] Pod is using the KSA (not default): `spec.serviceAccountName: your-ksa`
-- [ ] GSA has `roles/pubsub.subscriber` on the **subscription** (not just project)
-- [ ] Pub/Sub API enabled in both Source and Target projects
+- [ ] Pod is using the annotated KSA (not default): `spec.serviceAccountName: your-ksa`
 - [ ] Pod actually gets GSA token (not node's default SA token)
+- [ ] Pub/Sub API enabled in both Source and Target projects
 
 ---
 
 ## Quick Fix Commands
 
-### If WI not enabled on node pool:
+### Add binding to all subscriptions at once
 
 ```bash
-# Option A: Recreate node pool (preferred for prod)
+GSA="serviceAccount:gke-rt-sa@souce-project.iam.gserviceaccount.com"
+PROJECT="targetproject"
+
+# List all subscriptions — adjust filter as needed
+gcloud pubsub subscriptions list --project="$PROJECT" --format="value(name)" | \
+  while read SUB; do
+    echo "Adding binding to: $SUB"
+    gcloud pubsub subscriptions add-iam-policy-binding "$SUB" \
+      --project="$PROJECT" \
+      --member="$GSA" \
+      --role="roles/pubsub.subscriber"
+  done
+```
+
+### Enable WI on node pool (if needed)
+
+```bash
+# Recreate node pool (preferred for prod)
 gcloud container node-pools create new-pool-with-wi \
   --cluster=dev-lon-cluster-xxxxxx \
   --region=europe-west2 \
   --workload-pool=souce-project.svc.id.goog \
-  --image-type=cos_containerd \
-  --num-nodes=1
-
-# Option B: For testing only - enable on existing pool (may cause restarts)
-gcloud container clusters update dev-lon-cluster-xxxxxx \
-  --region=europe-west2 \
-  --workload-pool=souce-project.svc.id.goog
+  --image-type=cos_containerd
 ```
-
-### If GSA not bound to subscription:
-
-```bash
-gcloud pubsub subscriptions add-iam-policy-binding topic-pub-sub \
-  --project=targetproject \
-  --member="serviceAccount:gke-rt-sa@souce-project.iam.gserviceaccount.com" \
-  --role="roles/pubsub.subscriber"
-```
-
-### Verify fix inside pod:
-
-```bash
-# Should show gke-rt-sa@souce-project.iam.gserviceaccount.com
-curl -s -H "Metadata-Flavor: Google" \
-  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
-
-# Should return subscription details (not 403)
-curl -s -H "Metadata-Flavor: Google" \
-  -H "Authorization: Bearer $(curl -s -H 'Metadata-Flavor: Google' 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token' | python3 -c 'import sys,json;print(json.load(sys.stdin)[\"access_token\"])'))" \
-  "https://pubsub.googleapis.com/v1/projects/targetproject/subscriptions/topic-pub-sub"
-```
-
----
-
-## Your Case: Most Likely Cause
-
-Based on your description (Pod works but Pub/Sub fails), the **most likely issue** is:
-
-**Node pool doesn't have Workload Identity enabled.**
-
-Even though the KSA annotation exists, if the node pool wasn't created with `--workload-pool`, pods still get tokens from the node's default service account, which doesn't have cross-project Pub/Sub permissions.
-
-**Fix**: Recreate the node pool with WI enabled, then test again.
 
 ---
 
