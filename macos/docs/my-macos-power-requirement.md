@@ -1,17 +1,45 @@
 # Mac mini 电源管理方案
 
-## 状态：已生效
+## 状态：已生效（2026-05-09 复核）
 
-| 设置         | 当前值          | 说明                       |
-| ------------ | --------------- | -------------------------- |
-| 系统睡眠     | `1`（启用）     | idle 1 分钟后允许进入睡眠  |
-| 磁盘休眠     | `10`（分钟）    | 无操作 10 分钟后磁盘停转   |
-| 显示器休眠   | `10`（分钟）    | 无操作 10 分钟后显示器关闭 |
-| 网络唤醒     | `womp=1`        | 允许网络唤醒               |
-| 断电自启     | `autorestart=1` | 断电恢复后自动开机         |
-| 计划睡眠     | `23:30` 每天    | 自动进入系统睡眠           |
-| 计划唤醒     | `06:00` 每天    | 自动从睡眠中唤醒           |
-| LaunchDaemon | 已部署          | 开机自动应用电源计划       |
+> ⚠️ 以下为**文档描述的配置**，实际机器当前状态见「当前运行配置」小节。
+
+| 设置 | 文档值 | 说明 |
+| ---- | ------ | ---- |
+| 系统睡眠 | `1`（启用） | idle 1 分钟后允许进入睡眠 |
+| 磁盘休眠 | `10`（分钟） | 无操作 10 分钟后磁盘停转 |
+| 显示器休眠 | `10`（分钟） | 无操作 10 分钟后显示器关闭 |
+| 网络唤醒 | `womp=1` | 允许网络唤醒 |
+| 断电自启 | `autorestart=1` | 断电恢复后自动开机 |
+| 计划睡眠 | `23:30` 每天 | 自动进入系统睡眠 |
+| 计划唤醒 | `06:00` 每天 | 自动从睡眠中唤醒 |
+| LaunchDaemon | 已部署 | 开机自动应用电源计划 |
+
+---
+
+### 当前运行配置（live, 2026-05-09）
+
+```bash
+$ pmset -g custom
+ sleep                0   ← 禁用系统休眠
+ displaysleep         0   ← 禁用显示器休眠
+ disksleep           10
+ womp                 1
+ autorestart          1
+
+$ pmset -g sched
+← 无定时计划（repeat 已失效）
+
+$ launchctl list | grep com.lex
+← LaunchDaemon 未加载
+```
+
+**结论：机器实际已处于"永不休眠"状态（`sleep=0`，无定时计划）。`displaysleep=0` 对外接显示器手动关闭的使用场景无影响。**
+
+**开机自启已部署（2026-05-09）：**
+- Plist：`/Library/LaunchDaemons/com.lex.macos-no-sleep.plist`
+- 命令：`pmset -a sleep 0 displaysleep 0`
+- 加载方式：`launchctl bootstrap system`
 
 ---
 
@@ -196,8 +224,73 @@ sudo pmset restoredefaults
 # 卸载 LaunchDaemon
 sudo launchctl bootout system/com.lex.macos-power-schedule
 sudo rm /Library/LaunchDaemons/com.lex.macos-power-schedule.plist
+```
 
+---
 
+## 7. 用户目标结论：「主机永不休眠 + 手动关闭显示器」
+
+### 目标
+
+| # | 目标 | 说明 |
+|---|------|------|
+| G1 | 主机永不自动睡眠 | 不需要定时睡眠/唤醒 |
+| G2 | 手动关闭显示器 | 按显示器电源键关闭，不需要 macOS 自动管理 |
+
+### 当前配置是否满足目标
+
+```bash
+$ pmset -g custom | grep -E "^[[:space:]]+(sleep|displaysleep)[[:space:]]"
+ sleep                0   ← ✓ 系统休眠已禁用
+ displaysleep         0   ← ✓ 显示器休眠已禁用
+```
+
+| 目标 | 状态 | 说明 |
+|------|------|------|
+| G1 主机不睡眠 | ✅ 已满足 | `sleep=0` 永久禁用系统睡眠 |
+| G2 手动关显示器 | ✅ 无冲突 | `displaysleep=0` 不干预手动关闭 |
+
+### 验证方法
+
+```bash
+# 1. 确认系统睡眠已禁用
+pmset -g custom | grep "^[[:space:]]*sleep[[:space:]]"
+# 期望输出：sleep 0
+
+# 2. 确认无定时睡眠计划
+pmset -g sched
+# 期望输出：无 sleep/wake 相关的 Repeating power events
+
+# 3. 确认没有 caffeinate 占用（可选，排除干扰）
+ps aux | grep caffeinate | grep -v grep
+# 如果有不需要的 caffeinate 进程，kill 掉
+
+# 4. 实际测试：等待显示器进入休眠后，手动按显示器电源键关闭
+#    Mac mini 不应被唤醒，ping 保持连通
+ping -i 2 你的macmini.ip
+```
+
+### 如需重新应用文档中的定时计划
+
+如果将来想恢复「夜间 23:30 睡眠 + 早晨 06:00 唤醒」的计划：
+
+```bash
+# 重新设置定时计划
+sudo pmset repeat wakeorpoweron MTWRFSU 06:00:00 sleep MTWRFSU 23:30:00
+
+# 重新加载 LaunchDaemon
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.lex.macos-power-schedule.plist
+
+# 验证
+pmset -g sched
+```
+
+### 如需完全恢复 macOS 默认
+
+```bash
+sudo pmset restoredefaults
+sudo launchctl bootout system/com.lex.macos-power-schedule
+```
 
 
 ```
