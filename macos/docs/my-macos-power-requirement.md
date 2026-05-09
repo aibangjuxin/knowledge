@@ -294,3 +294,28 @@ sudo launchctl bootout system/com.lex.macos-power-schedule
 
 
 ```
+
+➜  knowledge git:(main) ✗ cat /tmp/com.lex.macos-no-sleep.plist
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.lex.macos-no-sleep</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>pmset -a sleep 0 displaysleep 0</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>LaunchOnlyOnce</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/var/log/com.lex.macos-no-sleep.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/com.lex.macos-no-sleep.err</string>
+</dict>
+</plist>
+
