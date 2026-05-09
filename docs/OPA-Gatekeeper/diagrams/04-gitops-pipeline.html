@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OPA Gatekeeper GitOps CI/CD Pipeline</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', monospace; background: #020617; min-height: 100vh; padding: 2rem; color: white; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #fbbf24; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container { background: rgba(15, 23, 42, 0.5); border-radius: 1rem; border: 1px solid #1e293b; padding: 1.5rem; overflow-x: auto; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 2rem; }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; } .card-dot.emerald { background: #34d399; } .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; } .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="header-row"><div class="pulse-dot"></div><h1>GitOps CI/CD Pipeline</h1></div>
+    <p class="subtitle">Policy Change Lifecycle: Author → Review → CI → GitOps Sync → Clusters</p>
+  </div>
+  <div class="diagram-container">
+    <svg viewBox="0 0 1000 800">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/></marker>
+        <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/></marker>
+        <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/></marker>
+        <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/></marker>
+        <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/></marker>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/></pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#grid)"/>
+
+      <!-- ========== GIT REPOSITORY ========== -->
+      <rect x="390" y="15" width="220" height="65" rx="8" fill="rgba(30,41,59,0.6)" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="500" y="38" fill="white" font-size="11" font-weight="600" text-anchor="middle">gitops-platform</text>
+      <text x="500" y="54" fill="#94a3b8" font-size="9" text-anchor="middle">github.com/org/gitops-platform</text>
+      <text x="500" y="68" fill="#fbbf24" font-size="8" text-anchor="middle">branch: main / per-cluster</text>
+
+      <!-- ========== AUTHORING PHASE ========== -->
+      <text x="30" y="105" fill="#94a3b8" font-size="8" font-weight="600">AUTHORING</text>
+      <rect x="30" y="112" width="200" height="65" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="130" y="132" fill="white" font-size="10" font-weight="600" text-anchor="middle">PR Author</text>
+      <text x="130" y="148" fill="#94a3b8" font-size="8" text-anchor="middle">Edits constraint YAML</text>
+      <text x="130" y="163" fill="#94a3b8" font-size="8" text-anchor="middle">or ConstraintTemplate Rego</text>
+
+      <line x1="230" y1="145" x2="265" y2="145" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+      <text x="248" y="138" fill="#22d3ee" font-size="7">fork</text>
+
+      <rect x="270" y="112" width="200" height="65" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="370" y="132" fill="white" font-size="10" font-weight="600" text-anchor="middle">GitHub PR Created</text>
+      <text x="370" y="148" fill="#94a3b8" font-size="8" text-anchor="middle">CI pipeline triggered</text>
+      <text x="370" y="163" fill="#94a3b8" font-size="8" text-anchor="middle">auto-assign reviewers</text>
+
+      <!-- ========== CI PIPELINE ========== -->
+      <text x="30" y="205" fill="#94a3b8" font-size="8" font-weight="600">CI PIPELINE (GitHub Actions)</text>
+
+      <!-- Stage 1: Rego Lint -->
+      <rect x="30" y="215" width="150" height="80" rx="6" fill="rgba(76,29,149,0.3)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="105" y="237" fill="#a78bfa" font-size="9" font-weight="600" text-anchor="middle">1. Rego Lint</text>
+      <text x="105" y="254" fill="#94a3b8" font-size="8" text-anchor="middle">opa check</text>
+      <text x="105" y="268" fill="#94a3b8" font-size="8" text-anchor="middle">conftest verify</text>
+      <text x="105" y="285" fill="#34d399" font-size="8" font-weight="600" text-anchor="middle">✓ PASS</text>
+
+      <line x1="180" y1="255" x2="200" y2="255" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- Stage 2: Unit Tests -->
+      <rect x="205" y="215" width="150" height="80" rx="6" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="280" y="237" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">2. Unit Tests</text>
+      <text x="280" y="254" fill="#94a3b8" font-size="8" text-anchor="middle">opa test</text>
+      <text x="280" y="268" fill="#94a3b8" font-size="8" text-anchor="middle">regal analyze</text>
+      <text x="280" y="285" fill="#34d399" font-size="8" font-weight="600" text-anchor="middle">✓ PASS</text>
+
+      <line x1="355" y1="255" x2="375" y2="255" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+
+      <!-- Stage 3: Dry-run Apply -->
+      <rect x="380" y="215" width="150" height="80" rx="6" fill="rgba(251,191,36,0.12)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="455" y="237" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">3. Dry-run Apply</text>
+      <text x="455" y="254" fill="#94a3b8" font-size="8" text-anchor="middle">kubectl apply</text>
+      <text x="455" y="268" fill="#94a3b8" font-size="8" text-anchor="middle">--dry-run=server</text>
+      <text x="455" y="285" fill="#fbbf24" font-size="8" font-weight="600" text-anchor="middle">⚠ VALIDATE</text>
+
+      <line x1="530" y1="255" x2="550" y2="255" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrow-amber)"/>
+
+      <!-- Stage 4: Policy Diff -->
+      <rect x="555" y="215" width="150" height="80" rx="6" fill="rgba(136,19,55,0.25)" stroke="#fb7185" stroke-width="1.5"/>
+      <text x="630" y="237" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">4. Policy Diff</text>
+      <text x="630" y="254" fill="#94a3b8" font-size="8" text-anchor="middle">kubectl gk show diff</text>
+      <text x="630" y="268" fill="#94a3b8" font-size="8" text-anchor="middle">upload artifact</text>
+      <text x="630" y="285" fill="#fb7185" font-size="8" font-weight="600" text-anchor="middle">⚠ REVIEW</text>
+
+      <line x1="705" y1="255" x2="725" y2="255" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrow-rose)"/>
+
+      <!-- Stage 5: Require Reviewers -->
+      <rect x="730" y="215" width="150" height="80" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="805" y="237" fill="#22d3ee" font-size="9" font-weight="600" text-anchor="middle">5. Review Gate</text>
+      <text x="805" y="254" fill="#94a3b8" font-size="8" text-anchor="middle">platform-team: REQUIRED</text>
+      <text x="805" y="268" fill="#94a3b8" font-size="8" text-anchor="middle">security-team: OPTIONAL</text>
+      <text x="805" y="285" fill="#22d3ee" font-size="8" font-weight="600" text-anchor="middle">⏳ PENDING</text>
+
+      <!-- CI Result -> GitHub PR -->
+      <line x1="805" y1="295" x2="805" y2="320" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+      <rect x="705" y="325" width="200" height="40" rx="6" fill="rgba(30,41,59,0.4)" stroke="#1e293b" stroke-width="1"/>
+      <text x="805" y="342" fill="#94a3b8" font-size="8" text-anchor="middle">CI: ALL CHECKS PASS → Reviewers Approved</text>
+      <text x="805" y="356" fill="#34d399" font-size="8" font-weight="600" text-anchor="middle">✓ PR READY TO MERGE</text>
+
+      <!-- ========== REVIEW & APPROVAL ========== -->
+      <text x="30" y="390" fill="#94a3b8" font-size="8" font-weight="600">REVIEW & APPROVAL</text>
+      <rect x="30" y="400" width="910" height="70" rx="8" fill="rgba(251,191,36,0.05)" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,4"/>
+
+      <!-- Reviewers -->
+      <rect x="45" y="415" width="180" height="40" rx="6" fill="rgba(136,19,55,0.3)" stroke="#fb7185" stroke-width="1.5"/>
+      <text x="135" y="432" fill="white" font-size="9" font-weight="600" text-anchor="middle">Platform Team</text>
+      <text x="135" y="447" fill="#fb7185" font-size="8" text-anchor="middle">REQUIRED (all changes)</text>
+
+      <rect x="240" y="415" width="180" height="40" rx="6" fill="rgba(136,19,55,0.25)" stroke="#fb7185" stroke-width="1"/>
+      <text x="330" y="432" fill="white" font-size="9" font-weight="600" text-anchor="middle">Tenant Team Lead</text>
+      <text x="330" y="447" fill="#94a3b8" font-size="8" text-anchor="middle">REQUIRED (tenant NS changes)</text>
+
+      <rect x="435" y="415" width="180" height="40" rx="6" fill="rgba(136,19,55,0.15)" stroke="#fb7185" stroke-width="1"/>
+      <text x="525" y="432" fill="white" font-size="9" font-weight="600" text-anchor="middle">Security Team</text>
+      <text x="525" y="447" fill="#94a3b8" font-size="8" text-anchor="middle">REQUIRED (security policies)</text>
+
+      <rect x="630" y="415" width="180" height="40" rx="6" fill="rgba(6,78,59,0.2)" stroke="#34d399" stroke-width="1"/>
+      <text x="720" y="432" fill="white" font-size="9" font-weight="600" text-anchor="middle">GKE Policy Review</text>
+      <text x="720" y="447" fill="#94a3b8" font-size="8" text-anchor="middle">REQUIRED (GKE-specific)</text>
+
+      <!-- Merge -->
+      <line x1="500" y1="470" x2="500" y2="495" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+      <rect x="370" y="498" width="260" height="40" rx="6" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="2"/>
+      <text x="500" y="516" fill="white" font-size="10" font-weight="600" text-anchor="middle">PR Approved + Merged to main</text>
+      <text x="500" y="530" fill="#94a3b8" font-size="8" text-anchor="middle">All reviews in ✓  |  Branch protected</text>
+
+      <!-- ========== ARGO CD SYNC ========== -->
+      <text x="30" y="565" fill="#94a3b8" font-size="8" font-weight="600">GITOPS SYNC (ArgoCD / Config Sync)</text>
+
+      <!-- ArgoCD Application -->
+      <rect x="30" y="575" width="280" height="90" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="170" y="597" fill="#22d3ee" font-size="10" font-weight="600" text-anchor="middle">ArgoCD Application</text>
+      <text x="170" y="614" fill="#94a3b8" font-size="8" text-anchor="middle">gatekeeper-policies-prod</text>
+      <text x="170" y="629" fill="#94a3b8" font-size="8" text-anchor="middle">Sync Mode: automated</text>
+      <text x="170" y="644" fill="#94a3b8" font-size="8" text-anchor="middle">Prune: true  |  SelfHeal: true</text>
+
+      <line x1="310" y1="620" x2="345" y2="620" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+
+      <!-- kubectl apply -->
+      <rect x="350" y="575" width="200" height="90" rx="8" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="450" y="597" fill="white" font-size="10" font-weight="600" text-anchor="middle">kubectl apply</text>
+      <text x="450" y="614" fill="#94a3b8" font-size="8" text-anchor="middle">Server-Side Apply</text>
+      <text x="450" y="629" fill="#94a3b8" font-size="8" text-anchor="middle">Templates → CRDs registered</text>
+      <text x="450" y="644" fill="#94a3b8" font-size="8" text-anchor="middle">Constraints → gatekeeper-system</text>
+
+      <line x1="550" y1="620" x2="585" y2="620" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+
+      <!-- Gatekeeper Sync -->
+      <rect x="590" y="575" width="180" height="90" rx="8" fill="rgba(6,78,59,0.35)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="680" y="597" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">Gatekeeper Sync</text>
+      <text x="680" y="614" fill="#94a3b8" font-size="8" text-anchor="middle">ConstraintTemplate synced</text>
+      <text x="680" y="629" fill="#94a3b8" font-size="8" text-anchor="middle">Constraint instances synced</text>
+      <text x="680" y="644" fill="#34d399" font-size="8" font-weight="600" text-anchor="middle">✓ Enforcement Active</text>
+
+      <line x1="770" y1="620" x2="805" y2="620" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+
+      <!-- Slack Notification -->
+      <rect x="810" y="575" width="160" height="90" rx="8" fill="rgba(251,191,36,0.1)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="890" y="597" fill="#fbbf24" font-size="10" font-weight="600" text-anchor="middle">Notification</text>
+      <text x="890" y="614" fill="#94a3b8" font-size="8" text-anchor="middle">Slack: #team-alerts</text>
+      <text x="890" y="629" fill="#94a3b8" font-size="8" text-anchor="middle">Policy deployed</text>
+      <text x="890" y="644" fill="#94a3b8" font-size="8" text-anchor="middle">prod-1: ✓ synced</text>
+
+      <!-- ========== CLUSTER DEPLOYMENT ========== -->
+      <text x="30" y="690" fill="#94a3b8" font-size="8" font-weight="600">CLUSTER DEPLOYMENT (per-cluster branches)</text>
+      <rect x="30" y="700" width="940" height="55" rx="8" fill="rgba(30,41,59,0.3)" stroke="#1e293b" stroke-width="1"/>
+
+      <!-- prod-1 -->
+      <rect x="45" y="712" width="200" height="30" rx="5" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="145" y="731" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">prod-1: SYNCED ✓</text>
+
+      <!-- prod-2 -->
+      <rect x="260" y="712" width="200" height="30" rx="5" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="360" y="731" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">prod-2: SYNCED ✓</text>
+
+      <!-- staging-1 -->
+      <rect x="475" y="712" width="200" height="30" rx="5" fill="rgba(251,191,36,0.15)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="575" y="731" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">staging-1: SYNCED ✓</text>
+
+      <!-- dev-1 -->
+      <rect x="690" y="712" width="200" height="30" rx="5" fill="rgba(76,29,149,0.25)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="790" y="731" fill="#a78bfa" font-size="9" font-weight="600" text-anchor="middle">dev-1: SYNCED ✓</text>
+
+      <!-- Legend -->
+      <text x="30" y="775" fill="white" font-size="10" font-weight="600">Legend</text>
+      <rect x="30" y="787" width="12" height="9" rx="2" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+      <text x="48" y="795" fill="#94a3b8" font-size="8">Authoring / GitHub</text>
+      <rect x="160" y="787" width="12" height="9" rx="2" fill="rgba(76,29,149,0.3)" stroke="#a78bfa" stroke-width="1"/>
+      <text x="178" y="795" fill="#94a3b8" font-size="8">Rego Lint</text>
+      <rect x="250" y="787" width="12" height="9" rx="2" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="1"/>
+      <text x="268" y="795" fill="#94a3b8" font-size="8">Unit Test</text>
+      <rect x="340" y="787" width="12" height="9" rx="2" fill="rgba(251,191,36,0.12)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="358" y="795" fill="#94a3b8" font-size="8">Dry-run Apply</text>
+      <rect x="440" y="787" width="12" height="9" rx="2" fill="rgba(136,19,55,0.25)" stroke="#fb7185" stroke-width="1"/>
+      <text x="458" y="795" fill="#94a3b8" font-size="8">Policy Diff</text>
+      <rect x="540" y="787" width="12" height="9" rx="2" fill="rgba(6,78,59,0.35)" stroke="#34d399" stroke-width="1"/>
+      <text x="558" y="795" fill="#94a3b8" font-size="8">Gatekeeper Sync</text>
+      <line x1="660" y1="792" x2="680" y2="792" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+      <text x="688" y="795" fill="#94a3b8" font-size="8">Flow</text>
+    </svg>
+  </div>
+  <div class="cards">
+    <div class="card">
+      <div class="card-header"><div class="card-dot amber"></div><h3>CI Quality Gates</h3></div>
+      <ul>
+        <li>• Rego lint: opa check + conftest verify</li>
+        <li>• Unit tests: opa test with test cases</li>
+        <li>• Dry-run: kubectl apply --dry-run=server</li>
+        <li>• Policy diff: kubectl gk show diff artifact</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-dot emerald"></div><h3>Review Requirements</h3></div>
+      <ul>
+        <li>• Platform Team: REQUIRED for all changes</li>
+        <li>• Tenant Team Lead: REQUIRED for tenant NS changes</li>
+        <li>• Security Team: REQUIRED for security policies</li>
+        <li>• Protected branch: no force-push, linear history</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-dot cyan"></div><h3>GitOps Sync</h3></div>
+      <ul>
+        <li>• ArgoCD App: automated sync with prune+selfHeal</li>
+        <li>• Server-Side Apply: no drift, field ownership</li>
+        <li>• Per-cluster branches: isolated cluster overrides</li>
+        <li>• Slack notification on every sync completion</li>
+      </ul>
+    </div>
+  </div>
+  <p class="footer">OPA Gatekeeper GitOps CI/CD • GitHub Actions + ArgoCD • Server-Side Apply</p>
+</div>
+</body>
+</html>
