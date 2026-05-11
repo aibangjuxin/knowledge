@@ -315,6 +315,170 @@ resource "google_compute_service_attachment" "example" {
 
 ---
 
+---
+
+## 附录：三个核心指标的深度解析（Console Public Service 详情页）
+
+在 GCP Console → Private Service Connect → Published Services → 点击某个 Service Attachment 进入详情页，会看到以下三个关键指标：
+
+### A. Connected Forwarding Rules
+
+**定义：** 连接到该 Service Attachment 的消费者侧 PSC Forwarding Rule 的数量。
+
+**数据来源：**
+GCP 会在控制面持续检测所有引用了该 Service Attachment 的 `compute.googleapis.com/ForwardingRule` 资源。只要某个 PSC Forwarding Rule（通常是 `VPC_IP` 类型的入站规则）指向了这个 Service Attachment，它就算作一个"connected" forwarding rule。
+
+**数量由什么决定：**
+- 消费者侧创建了多少个 PSC Forwarding Rule 来引用你的 Service Attachment
+- 每个消费者 VPC（或者同一 VPC 内的不同 Endpoint）可以各自创建自己的 PSC Forwarding Rule
+- 同一个消费者可能创建多个规则（不同协议、不同 Endpoint 用途）
+
+**是否变化：**
+- **是，会动态变化**
+- 消费者新建/删除 PSC Forwarding Rule → 数值立即增减
+- 这是一个**实时计数**，反映当前有多少条通道正在引用你的服务
+
+**示例：**
+```
+Consumer-A 创建了 2 条 PSC Forwarding Rule (TCP + HTTPS)
+Consumer-B 创建了 1 条 PSC Forwarding Rule (TCP)
+→ Connected Forwarding Rules = 3
+```
+
+---
+
+### B. NAT IP Address In Use
+
+**定义：** 在 PSC NAT Subnet 中，当前被 GCP 分配给活跃 NAT 转换使用的 IP 数量。
+
+**这是最核心也是最容易误解的一个指标，理解它的关键是搞清楚 GCP 是如何分配和保留 NAT IP 的。**
+
+**IP 分配机制（GCP PSC NAT 工作原理）：**
+
+```
+Consumer VPC (源IP: 10.0.1.50)
+    │
+    │  ← PSC 隧道到达 Producer 侧
+    ▼
+Service Attachment
+    │
+    │  ← GCP 在这里执行 SNAT
+    ▼
+NAT Subnet 分配一个 IP 作为转换后的源IP
+    │
+    ▼
+Producer Internal LB → GKE Pod
+```
+
+当一个新连接首次从 Consumer 侧进入 Service Attachment 时，GCP 会：
+
+1. **从 NAT Subnet 中分配一个 IP** 给这个连接做源地址转换（SNAT）
+2. GCP 维护一个 **IP-to-Connection 映射表**
+3. 同一个 NAT IP 可以被**多个连接复用**（这就是 PSC NAT 和传统 1:1 NAT 的本质区别）
+
+**"In Use"的精确含义：**
+
+GCP 内部维护一个 NAT IP 分配池，以下情况 IP 会进入 "in use" 状态：
+
+| 场景 | IP 是否算 "in use" |
+|:---|:---|
+| 有活跃连接正在使用该 IP | ✅ 是 |
+| 连接已关闭但处于 TCP TIME_WAIT（默认 60s） | ✅ 仍然算 |
+| GCP 已将 IP 预分配给某个 Forwarding Rule | ✅ 算 |
+| IP 刚从 TIME_WAIT 释放，但 GCP 尚未归还到空闲池 | ✅ 仍然算 |
+| 完全空闲，尚未被分配 | ❌ 不算 |
+
+**关键洞察：这不是瞬时并发连接计数，而是累计分配量。**
+
+GCP 的 IP 分配策略并不是"连接结束立即归还 IP"，而是：
+- **保留最近使用过的 IP**（缓存思想），因为这些 IP 很可能立即被新连接复用
+- **TIME_WAIT 期间 IP 仍被锁定**，防止迷途报文（stray packets）被错误路由
+- IP 的回收是**异步延迟进行**的，不由单条连接的断开发起
+
+**由什么决定 NAT IP "in use" 的数量：**
+
+不是由"有多少 Forwarding Rule"直接决定，而是由：
+1. **并发活跃连接数** — 同一时刻有多少条 TCP/UDP 流正在使用 NAT
+2. **连接的分布情况** — 如果所有连接都能被少数 NAT IP 承载，则 IP 用得少
+3. **GCP 内部的负载均衡策略** — GCP 会在可用 NAT IP 之间分散连接，以避免单 IP 过热（per-IP connection limit）
+4. **TIME_WAIT 超时窗口** — 连接关闭后 IP 被锁定的时间越长，同一时刻"in use"的 IP 就越多
+
+**是否变化：**
+- **是，持续动态变化**
+- 新连接建立 → 分配 NAT IP（in use 可能上升）
+- TIME_WAIT 超时到期 → IP 进入待回收状态（in use 暂时不变）
+- GCP 异步回收完成 → IP 归还空闲池（in use 下降）
+- 流量突发 → GCP 可能预分配额外 IP（in use 快速上升）
+
+---
+
+### C. Open Connections
+
+**定义：** 当前**正在传输数据**的活跃 TCP/UDP 连接数量。
+
+**这是最直观的指标：** 任意时刻，有多少条连接正处在 ESTABLISHED 状态（对于 TCP）或等效活跃状态（对于 UDP）。
+
+**由什么决定：**
+- Consumer 侧发起了多少请求，当前尚未完成
+- 长连接（Keep-alive/HTTP persistent connection）场景下，一个连接可以承载多个请求
+- 短连接场景下，每个请求对可能触发一个独立连接
+
+**与 NAT IP In Use 的关系：**
+
+```
+Open Connections 多
+    ↓
+需要更多 NAT IP 来分散连接（避免单 IP 过热）
+    ↓
+NAT IP In Use 上升
+```
+
+但它们不是 1:1 的关系。理论上 65535 个连接可以被**1个 NAT IP** 承载（因为每个 IP 有 65535 个源端口），但实际上 GCP 会将连接分散到多个 NAT IP 以实现更好的哈希分布。
+
+**是否变化：**
+- **是，变化最剧烈的指标**
+- 业务流量高峰 → 快速上升
+- 流量低谷 → 快速下降
+- 变化频率远高于 NAT IP In Use（因为连接级别的变化比 IP 分配级别更细粒度）
+
+---
+
+### 三者的关系与变化节奏
+
+```
+Connected Forwarding Rules          NAT IP Address In Use         Open Connections
+│
+│  变化最慢、最稳定                 │  变化较慢，有滞后              │  变化最快、最剧烈
+│  消费者创建/删除规则时变化        │  新连接建立时分配             │  流量进来就涨
+│  数值反映跨消费者的接入拓扑       │  TIME_WAIT/GC回收有延迟       │  流量停止就跌
+│                                  │  数值反映NAT池的分配压力       │  数值反映即时负载
+```
+
+**一个形象的比喻：**
+
+把 PSC Service Attachment 比作一个电话总机：
+
+| GCP PSC 指标 | 对应电话总机的概念 |
+|:---|:---|
+| Connected Forwarding Rules | **有多少根外线接入总机**（固话线数量） |
+| NAT IP Address In Use | **总机正在使用的出局号码数量**（号码池里的占用数） |
+| Open Connections | **当前正在通话的数量**（并发通话数） |
+
+- 有10根外线接入，不等于10个人都在通话（Connected → In Use）
+- 通话结束了，外线可能还"占着"号码，因为总机要确保对方还能打回来（In Use 的延迟释放）
+- 同时有1000个人在打电话，但出局号码可能只需要50个（Open Connections → NAT IP 多对一复用）
+
+---
+
+### 实战中的观察建议
+
+1. **Connected Forwarding Rules 应该是稳定的** — 如果你发现它不断增长但你没有新增消费者，说明有异常接入
+2. **NAT IP In Use 跟 Open Connections 不成正比** — 看到 Open Connections 很高但 NAT IP In Use 很低是正常现象（说明 NAT IP 复用做得好）
+3. **NAT IP In Use 持续不下降** — 可能是因为连接都是长连接，IP 被持续占用；或者是 TIME_WAIT 期间还没有完成 GC 回收
+4. **真正需要担心的是：NAT IP In Use 接近 NAT Subnet 可用 IP 总数** — 这意味着 NAT 池即将耗尽，新连接将被拒绝
+
+---
+
 ## 附录：你的知识库文件清单
 
 已在生成文档前阅读以下文件：
