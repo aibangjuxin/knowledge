@@ -479,6 +479,236 @@ Connected Forwarding Rules          NAT IP Address In Use         Open Connectio
 
 ---
 
+## 附录：官方文档精读 — NAT Subnet IP 消耗规则与多项目场景分析
+
+> 官方原文来源：[About VPC hosted services - PSC Subnet](https://cloud.google.com/vpc/docs/about-vpc-hosted-services#psc-subnet)
+
+### 官方原文核心摘录
+
+> **NAT 子网大小决定了可以连接到您的服务的使用方数量。**
+> 如果 NAT 子网中的所有 IP 地址都已使用，则任何额外的 Private Service Connect 连接都会失败。
+
+**关键消耗规则（官方说法）：**
+
+| 消耗主体 | 占用 NAT IP 数量 | 说明 |
+|:---|:---|:---|
+| 每个 Consumer Endpoint 或 Backend | **1 个 IP** | 独立占用，不区分 TCP/UDP 连接数 |
+| 每个连接传播到的 VPC spoke | **1 个额外 IP** | 仅在使用连接传播（Connection Propagation）时 |
+| 多租户服务或多点访问使用方 | **N 个 IP** | 按端点/后端数量叠加计算 |
+
+> ⚠️ **重要：** TCP 或 UDP 连接数量**不影响** NAT IP 消耗。1000 条 TCP 连接从同一个 Consumer Endpoint 发出，仍然只占用 **1 个** NAT IP。
+
+---
+
+### 你的具体场景：20 个 Talent Project 接入
+
+**问题：** 假如有 20 个不同工程（Talent Project）连接到 Master Project 发布的 Service Attachment，是否最少占用 20 个 IP？
+
+**答案：取决于接入方式。**
+
+#### 场景 A：每个 Talent Project 用一个 PSC Endpoint 接入
+
+```
+Master Project (Producer)
+  └── Service Attachment
+        └── NAT Subnet (e.g., 192.168.240.0/26)
+              ├── 192.168.240.3  ← Talent-Project-01 的 PSC Endpoint
+              ├── 192.168.240.4  ← Talent-Project-02 的 PSC Endpoint
+              ├── ...
+              └── 192.168.240.22 ← Talent-Project-20 的 PSC Endpoint
+
+→ NAT IP In Use = 20
+→ 每个 Project 独占 1 个 NAT IP
+```
+
+**每个 PSC Endpoint 在 NAT Subnet 中占用 1 个 IP**，无论该 Project 内有多少台 VM、有多少 GKE 集群、发起多少 TCP 连接。
+
+#### 场景 B：同一个 Project 内多个 Endpoint
+
+```
+Talent-Project-01 (us-east4)
+  ├── PSC Endpoint A (GKE Cluster 1)
+  └── PSC Endpoint B (GKE Cluster 2)
+      → NAT IP In Use = 2（同一个 Project 但不同 Endpoint）
+
+Talent-Project-02 (us-west4)
+  └── PSC Endpoint C
+      → NAT IP In Use = 3（累计）
+```
+
+**同一个 Project 的不同 Endpoint 各自独立计 IP**，因为它们是不同的接入点。
+
+#### 场景 C：使用了连接传播（Connection Propagation）
+
+```
+Master Project
+  └── Service Attachment
+        └── NAT Subnet
+
+Talent-Project-01 的一个 Endpoint 配置了连接传播到 3 个 VPC Spoke
+  → NAT IP In Use = 1 (Endpoint 本身) + 3 (Spoke) = 4 个 IP
+
+Talent-Project-02 的一个 Endpoint 配置了连接传播到 5 个 VPC Spoke
+  → NAT IP In Use = 1 (Endpoint 本身) + 5 (Spoke) = 6 个 IP
+```
+
+**连接传播会将每个 VPC Spoke 映射为一个额外 IP**，这也是官方明确指出的消耗场景。
+
+#### 场景 D：多点访问（Multi-spot Access）
+
+```
+Talent-Project-01 通过 3 个不同区域的 PSC Endpoint 访问同一个 Service Attachment
+  → NAT IP In Use = 3（每个 Endpoint 独立计 IP）
+```
+
+如果一个使用方跨多个区域、多点接入服务，每个接入点都计 IP。
+
+---
+
+### 20 个 Project 的最小 IP 占用计算
+
+**最节省 IP 的接入方式：** 每个 Project 使用 **1 个 PSC Endpoint**，不启用连接传播。
+
+```
+20 个 Talent Projects
+  × 1 个 PSC Endpoint 每个 Project
+  = 20 个 NAT IP
+
+/26 子网可用 IP = 60
+→ 利用率 = 20/60 ≈ 33%
+```
+
+**如果某个 Project 启用了连接传播到 3 个 VPC Spoke：**
+
+```
+基础: 20 个 Endpoint = 20 IP
+额外: 1 个 Project × 3 个 Spoke = 3 IP
+合计: 23 IP
+```
+
+**结论：20 个 Project 最少占用 20 个 NAT IP（每个 Project 1 个 Endpoint 的情况下）。**
+
+---
+
+### 为什么连接数量不影响 NAT IP 消耗？
+
+这是 PSC NAT 与传统 NAT 的核心区别之一：
+
+```
+传统 NAT (e.g., 家宽路由器):
+  内部: 192.168.1.1:50000 → NAT → 公网: 1.2.3.4:50000
+  每个内部 IP + 端口组合 = 1 个公网 IP
+  连接数直接影响 IP 消耗
+
+PSC NAT:
+  Consumer VPC: 10.0.1.50:ANY_PORT → NAT → NAT-IP-1:ANY_PORT
+  Consumer VPC: 10.0.1.51:ANY_PORT → NAT → NAT-IP-1:ANY_PORT  (复用)
+  Consumer VPC: 10.0.1.52:ANY_PORT → NAT → NAT-IP-1:ANY_PORT  (复用)
+  ...
+  10000 条连接可以复用一个 NAT IP
+  连接数不影响 IP 消耗，Endpoint 数量才影响
+```
+
+**关键洞察：PSC NAT 是 EPERIC (Endpoint-per-Connection) 的对立面 — 它在 Endpoint 级别做 SNAT，而不是在每条连接级别。**
+
+---
+
+### 多 Project 接入的容量规划建议
+
+基于官方规则，20 个 Project 接入的容量规划：
+
+```
+场景：20 个 Talent Projects，最少 20 个 NAT IP
+
+推荐子网: /26 (60 可用 IP)
+  - 20 IP 预留给 Project 接入
+  - 剩余 40 IP 作为扩展缓冲
+  - 扩容触发点: 达到 50% (~30 IP) 时开始规划追加 Subnet
+
+如果某些 Project 需要连接传播:
+  每个启用了传播的 Project 额外 +N IP (N=Spoke 数量)
+  在 /26 中能容纳的 Project 数相应减少
+```
+
+| 子网大小 | 可用 NAT IP | 可容纳 Project 数（无连接传播） | 可容纳 Project 数（平均每个 Project 多占 2 IP） |
+|:---|:---|:---|:---|
+| /28 | 12 | 12 | ~4 |
+| /27 | 28 | 28 | ~9 |
+| **/26** | **60** | **60** | **20** |
+| /25 | 124 | 124 | ~41 |
+| /24 | 252 | 252 | ~84 |
+
+> ⚠️ **/26 是 20 个 Project 的最小安全起步**。如果任何 Project 启用了连接传播或有多个 Endpoint，立即考虑 /25。
+
+---
+
+### 连接传播（Connection Propagation）的 IP 消耗详解
+
+官方说明：
+> 如果使用方使用连接传播，则对于每个端点，系统会为连接所传播到的每个 VPC spoke 使用一个额外的 IP 地址。
+
+```
+连接传播工作原理：
+
+Talent-Project-01 (Hub VPC)
+  └── PSC Endpoint (1 个)
+        │
+        │  连接传播将流量路由到以下 Spoke:
+        ├── Spoke VPC A (us-east4)
+        ├── Spoke VPC B (us-west4)
+        └── Spoke VPC C (europe-west1)
+
+→ NAT IP 消耗: 1 (Endpoint 自身) + 3 (Spoke) = 4 个 IP
+```
+
+**连接传播数量限制**可以在 Service Attachment 侧配置，限制每个 Endpoint 最多传播到 N 个 Spoke，从而控制 IP 消耗：
+
+```bash
+# 配置每个 Endpoint 最多传播到 5 个 VPC Spoke
+gcloud compute service-attachments update ATTACHMENT_NAME \
+  --region=us-east4 \
+  --max-propagated-connections-per-endpoint=5
+```
+
+---
+
+### 总结：IP 消耗的准确公式
+
+```
+NAT IP In Use =
+  Σ (每个 Endpoint 占用 1 IP)
+  + Σ (每个连接传播 Spoke 占用 1 IP)
+  + GCP 内部管理地址 (.1 Gateway, .2 内部)
+
+与以下因素无关（官方明确）：
+  ✗ TCP/UDP 连接数量
+  ✗ 使用方 VPC 网络数量
+  ✗ 流量大小 (QPS/带宽)
+  ✗ 端口数量
+```
+
+---
+
+## 附录：官方文档勘误与注意
+
+> 官方文档中有一处文字错误："129 NAT 子网有4个可用的IP地址" 应为 "/26 NAT 子网有 60 个可用的 IP 地址"。
+
+**正确的子网可用 IP 数量：**
+
+| 子网 | 总 IP | GCP 保留 | **可用 NAT IP** | 说明 |
+|:---|:---|:---|:---|:---|
+| /30 | 4 | 4 | **0** | 太小，无法用于 PSC NAT |
+| /29 | 8 | 4 | **4** | 最小可用，测试场景 |
+| /28 | 16 | 4 | **12** | 最小生产单元 |
+| /27 | 32 | 4 | **28** | 小规模 |
+| **/26** | **64** | **4** | **60** | **生产默认起步** |
+| /25 | 128 | 4 | 124 | 中等规模 |
+| /24 | 256 | 4 | 252 | 高流量/平台共享 |
+
+GCP 保留的 4 个 IP 始终为：网络地址、Gateway（通常 .1）、GCP 内部使用（通常 .2）、广播地址。
+
+---
+
 ## 附录：你的知识库文件清单
 
 已在生成文档前阅读以下文件：
