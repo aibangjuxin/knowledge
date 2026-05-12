@@ -569,3 +569,19 @@ hosts:
 [ ] 保留旧入口配置备份
 [ ] 确认 kubectl delete httproute api2-kong-route 只影响 API2
 ```
+
+
+Client
+
+
+整个流程图涵盖了文档的四个核心层次：
+
+**① TLS 握手阶段** — Gateway Listener 用 `*.appdev.abjx` 证书终止 HTTPS，SNI 匹配 wildcard
+
+**② HTTP 路由阶段** — 解密后按 `Host + Path` 分两条 HTTPRoute：
+- 左路 API1 → `api1-runtime-svc`，Host 保持不变
+- 右路 API2 → `URLRewrite.hostname` 改写为 `www.intrakong.com`，附带静态 `X-Original-Host`
+
+**③ Kong 路由命中** — Kong Route 按 `hosts: www.intrakong.com + paths: /api-path/e2e` 匹配
+
+**④ 禁止用法红区** — 底部汇总了原文档四处错误，方便对照排查
