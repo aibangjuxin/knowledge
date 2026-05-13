@@ -112,3 +112,53 @@ graph TD
 | **A (Original)** | GLB → Nginx L7 | /teamA/* | Kong Gateway → GKE Runtime |
 | **A (Original)** | GLB → Nginx L7 | /teamB/* | GKE Gateway → HTTPRoutes |
 | **B (NEW)** | PSC Attachment (Cross-Project) | /iip/* | IIP → Gateway 2.0 → Kong GW 2.0 / Direct |
+
+```mermaid
+flowchart TD
+    Client["Client\nHTTPS 请求 / TLS SNI"]
+
+    subgraph Phase1["① TLS 握手阶段"]
+        GWL["GKE Gateway Listener\nhostname: *.appdev.abjx | port: 443\ncertificate: *.appdev.abjx | TLS mode: Terminate"]
+    end
+
+    subgraph Phase2["② HTTP 路由阶段 - L7 分流 Host + Path"]
+        R1["HTTPRoute: api1-runtime-route\nhostnames: api1.appdev.abjx\npath: /api1/*\nfilter: 无，Host 保持不变"]
+        R2["HTTPRoute: api2-kong-route\nhostnames: api2.appdev.abjx\npath: /api-path/e2e/*\nfilter: URLRewrite.hostname"]
+        RW["URLRewrite 效果\nClient Host: api2.appdev.abjx\n转发 Host: www.intrakong.com\nX-Original-Host: api2.appdev.abjx"]
+    end
+
+    subgraph Phase3["③ 后端服务层"]
+        SVC1["api1-runtime-svc\nGKE runtime Pod | port: 8080"]
+        KONG["kong-dp-svc\nKong DP Pod | port: 8000"]
+        KR["Kong Route 匹配\nhosts: www.intrakong.com\npaths: /api-path/e2e\nstrip_path: false"]
+    end
+
+    subgraph Phase4["④ Upstream"]
+        UP1["API1 upstream service"]
+        UP2["existing upstream APIs"]
+    end
+
+    subgraph Forbidden["❌ 禁止用法 - 原文档错误项"]
+        F1["RequestHeaderModifier 修改 Host\nHost 是 forbidden header\n规范明确禁止"]
+        F2["%{request.host}% 变量模板\nGKE Gateway 不支持 Envoy/Nginx 风格\n改用静态写入 X-Original-Host"]
+        F3["rules.matches.hostname 无效字段\n应放在 spec.hostnames"]
+        F4["RequestHeaderModifier.set 写成 map\n必须用 name/value 数组格式"]
+    end
+
+    Client -->|"HTTPS"| GWL
+    GWL -->|"TLS 终止 → HTTP"| R1
+    GWL -->|"TLS 终止 → HTTP"| R2
+    R2 --> RW
+    R1 -->|"Host: api1.appdev.abjx"| SVC1
+    RW -->|"Host: www.intrakong.com"| KONG
+    KONG --> KR
+    SVC1 --> UP1
+    KR --> UP2
+
+    style Forbidden fill:#fff0f0,stroke:#e24b4a,stroke-dasharray:5 3
+    style F1 fill:#fff0f0,stroke:#e24b4a
+    style F2 fill:#fff0f0,stroke:#e24b4a
+    style F3 fill:#fff0f0,stroke:#e24b4a
+    style F4 fill:#fff0f0,stroke:#e24b4a
+    style RW fill:#f0f0ff,stroke:#534ab7
+```
