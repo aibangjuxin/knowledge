@@ -570,18 +570,265 @@ hosts:
 [ ] 确认 kubectl delete httproute api2-kong-route 只影响 API2
 ```
 
+---
 
-Client
+## 13. 新增 PSC 入口：解决 Gateway 2.0 后挂 Kong 的问题
 
+### 13.1 背景与问题
 
-整个流程图涵盖了文档的四个核心层次：
+当外部项目（跨 Project）需要通过 **Private Service Connect（PSC）** 访问本项目的 Gateway 2.0，并且 Gateway 2.0 后端挂有 Kong DP 时，原有 GLB → Nginx 的路径无法满足跨 Project 的 VPC 级隔离诉求。
 
-**① TLS 握手阶段** — Gateway Listener 用 `*.appdev.abjx` 证书终止 HTTPS，SNI 匹配 wildcard
+**新入口链路（参见架构图 Entry Point B）**：
 
-**② HTTP 路由阶段** — 解密后按 `Host + Path` 分两条 HTTPRoute：
-- 左路 API1 → `api1-runtime-svc`，Host 保持不变
-- 右路 API2 → `URLRewrite.hostname` 改写为 `www.intrakong.com`，附带静态 `X-Original-Host`
+```text
+External Project Client
+        |  (PSC Attachment)
+        v
+PSC Attachment（Cross-Project Endpoint，Producer: External Project）
+        |  (VPC-level 隔离)
+        v
+IIP（Internal Ingress Proxy，内部代理，本项目作为入口接收方）
+  - 负责 Header/Path Validation
+  - proxy_pass 到 Gateway 2.0 内网 IP
+        |
+        v
+Gateway 2.0（GKE Gateway，Internal ILB，如 10.100.0.100）
+  - HTTPRoute 按 path 分流
+        |
+        +──→ /iip/kong/*  ──→ Kong Gateway 2.0 ──→ GKE Runtime (iip namespace)
+        |
+        +──→ /iip/direct/* ──→ GKE Runtime Direct ──→ Runtime Pods (iip namespace)
+```
 
-**③ Kong 路由命中** — Kong Route 按 `hosts: www.intrakong.com + paths: /api-path/e2e` 匹配
+### 13.2 与原 GLB 路径的对比
 
-**④ 禁止用法红区** — 底部汇总了原文档四处错误，方便对照排查
+| 对比项 | Entry A：GLB Ingress（原有） | Entry B：PSC 新入口（新增） |
+|---|---|---|
+| 入口类型 | 公网 GLB + Cloud Armor | PSC Endpoint（内网，跨 Project） |
+| 前置代理 | Nginx L7（路径分流） | IIP（Header/Path Validation） |
+| 后端 Kong | Kong Gateway（Original） | Kong Gateway 2.0 |
+| 命名空间 | 各 tenant namespace | `iip` namespace |
+| 适用场景 | 公网/公司内多团队流量 | 跨 Project VPC 级隔离流量 |
+
+### 13.3 PSC 服务暴露配置
+
+本项目作为 PSC **Producer**，需先将 Gateway 2.0 的 ILB 作为 PSC Service Attachment 发布：
+
+```yaml
+# Step 1: 确认 Gateway 2.0 已使用 Internal Regional LB
+# GatewayClass 选择内网区域入口
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway-2-internal
+  namespace: gateway-system
+spec:
+  gatewayClassName: gke-l7-rilb            # 内网区域 ILB
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: All
+```
+
+```bash
+# Step 2: 获取 ILB 的 Forwarding Rule，用于创建 PSC Service Attachment
+gcloud compute forwarding-rules list --filter="loadBalancingScheme=INTERNAL_MANAGED"
+
+# Step 3: 在 GCP 控制台 or gcloud 创建 PSC Service Attachment
+gcloud compute service-attachments create gateway-2-psc-attachment \
+  --region=<region> \
+  --producer-forwarding-rule=<ilb-forwarding-rule-name> \
+  --connection-preference=ACCEPT_AUTOMATIC \
+  --nat-subnets=<psc-nat-subnet>
+```
+
+### 13.4 IIP 代理配置（Nginx 示例）
+
+IIP 接收 PSC 流量后，根据 Header/Path 校验后 `proxy_pass` 到 Gateway 2.0：
+
+```nginx
+server {
+    listen 80;
+
+    # Header 校验（可选：检查约定的内部标识）
+    if ($http_x_psc_source = "") {
+        return 403;
+    }
+
+    location /iip/ {
+        proxy_pass         http://10.100.0.100;    # Gateway 2.0 Internal ILB IP
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### 13.5 Gateway 2.0 后挂 Kong 的 HTTPRoute
+
+Gateway 2.0 根据 path 分流到 Kong Gateway 2.0（iip namespace）或直接到 Runtime：
+
+```yaml
+# 路由到 Kong Gateway 2.0
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: iip-kong-route
+  namespace: iip
+spec:
+  parentRefs:
+  - name: gateway-2-internal
+    namespace: gateway-system
+    sectionName: http
+  hostnames:
+  - "*.intrakong.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /iip/kong
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        hostname: www.intrakong.com    # 改写为 Kong 期望的 Host
+    backendRefs:
+    - name: kong-dp-svc
+      namespace: kong-system           # 跨 namespace 引用需要 ReferenceGrant（见第 14 章）
+      port: 8000
+---
+# 路由直接到 GKE Runtime
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: iip-direct-route
+  namespace: iip
+spec:
+  parentRefs:
+  - name: gateway-2-internal
+    namespace: gateway-system
+    sectionName: http
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /iip/direct
+    backendRefs:
+    - name: iip-direct-svc
+      port: 8080
+```
+
+> **注意**：`iip-kong-route` 中 `backendRefs` 引用了 `kong-system` namespace 的 Service，这需要配置 `ReferenceGrant` 授权（详见第 14 章）。
+
+---
+
+## 14. ReferenceGrant — 允许 HTTPRoute 跨 namespace 选择 Service
+
+### 14.1 概念说明
+
+Gateway API 默认**不允许** HTTPRoute 引用其他 namespace 的 Service 作为 `backendRef`，这是出于安全隔离考虑。`ReferenceGrant` 是 Gateway API 提供的授权资源，由**目标 namespace 的管理员**创建，显式允许来自指定 namespace 的特定资源类型访问本 namespace 的资源。
+
+```text
+HTTPRoute (namespace: iip)
+    |
+    | backendRefs: kong-dp-svc (namespace: kong-system)
+    |
+    ↓
+❌ 默认拒绝（跨 namespace 引用）
+
+需要在 kong-system namespace 创建 ReferenceGrant ↓
+
+ReferenceGrant (namespace: kong-system)
+    from: HTTPRoute in namespace iip
+    to: Service in namespace kong-system
+    ↓
+✅ 允许
+```
+
+### 14.2 资源定义
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-iip-to-kong-system
+  namespace: kong-system          # 必须在「被引用资源」所在的 namespace 创建
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: iip                # 允许来自 iip namespace 的 HTTPRoute 发起引用
+  to:
+  - group: ""
+    kind: Service                 # 允许引用本 namespace（kong-system）的 Service
+```
+
+### 14.3 字段说明
+
+| 字段 | 说明 |
+|---|---|
+| `metadata.namespace` | **必须**是被引用 Service 所在的 namespace（即 kong-system）|
+| `spec.from[].namespace` | 允许发起引用的 HTTPRoute 所在 namespace（即 iip）|
+| `spec.from[].kind` | 允许的资源类型，通常为 `HTTPRoute` |
+| `spec.to[].kind` | 被引用的资源类型，通常为 `Service` |
+| `spec.to[].group` | `""` 表示 core API group（即 v1 Service）|
+
+### 14.4 多租户场景：一个 ReferenceGrant 覆盖多个 HTTPRoute
+
+如果多个 namespace 的 HTTPRoute 都需要访问 `kong-system` 的 Service，可以在 `from` 中列出多个来源：
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-multi-ns-to-kong-system
+  namespace: kong-system
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: iip
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: team-a
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: team-b
+  to:
+  - group: ""
+    kind: Service
+```
+
+### 14.5 验证 ReferenceGrant 是否生效
+
+```bash
+# 查看 ReferenceGrant
+kubectl get referencegrant -n kong-system
+
+# 检查 HTTPRoute 状态，若 ReferenceGrant 未配置，会报 RefNotPermitted
+kubectl describe httproute -n iip iip-kong-route
+```
+
+期望 `status.conditions` 中出现：
+
+```yaml
+conditions:
+- type: Accepted
+  status: "True"
+  reason: Accepted
+- type: ResolvedRefs
+  status: "True"    # ← 若此处为 False + reason: RefNotPermitted，说明 ReferenceGrant 未生效
+  reason: ResolvedRefs
+```
+
+### 14.6 Gateway Listener 与 ReferenceGrant 的区别
+
+| 资源 | 控制方向 | 创建方 |
+|---|---|---|
+| `allowedRoutes.namespaces` in Gateway | Gateway 允许哪些 namespace 的 HTTPRoute 附加到此 Gateway | Gateway 管理员 |
+| `ReferenceGrant` | HTTPRoute 允许引用哪个 namespace 的 Service | 目标 Service 所在 namespace 的管理员 |
+
+> 两者需**同时满足**才能完整打通跨 namespace 流量。
