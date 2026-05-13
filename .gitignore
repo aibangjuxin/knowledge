@@ -58,3 +58,6 @@ java-code/.mvn/
 
 # OS
 Thumbs.db
+
+# Safe — certificate data (do not commit real certs/keys)
+safe/certs/
