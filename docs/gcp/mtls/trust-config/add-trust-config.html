@@ -1,0 +1,443 @@
+<!DOCTYPE html><html><head>
+      <title>add-trust-config</title>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      
+      <link rel="stylesheet" href="file:////Users/lex/.trae/extensions/shd101wyy.markdown-preview-enhanced-0.8.18-universal/crossnote/dependencies/katex/katex.min.css">
+      
+      
+      <script type="text/javascript" src="file:////Users/lex/.trae/extensions/shd101wyy.markdown-preview-enhanced-0.8.18-universal/crossnote/dependencies/mermaid/mermaid.min.js" charset="UTF-8"></script>
+      
+      
+      <style>
+      code[class*=language-],pre[class*=language-]{color:#333;background:0 0;font-family:Consolas,"Liberation Mono",Menlo,Courier,monospace;text-align:left;white-space:pre;word-spacing:normal;word-break:normal;word-wrap:normal;line-height:1.4;-moz-tab-size:8;-o-tab-size:8;tab-size:8;-webkit-hyphens:none;-moz-hyphens:none;-ms-hyphens:none;hyphens:none}pre[class*=language-]{padding:.8em;overflow:auto;border-radius:3px;background:#f5f5f5}:not(pre)>code[class*=language-]{padding:.1em;border-radius:.3em;white-space:normal;background:#f5f5f5}.token.blockquote,.token.comment{color:#969896}.token.cdata{color:#183691}.token.doctype,.token.macro.property,.token.punctuation,.token.variable{color:#333}.token.builtin,.token.important,.token.keyword,.token.operator,.token.rule{color:#a71d5d}.token.attr-value,.token.regex,.token.string,.token.url{color:#183691}.token.atrule,.token.boolean,.token.code,.token.command,.token.constant,.token.entity,.token.number,.token.property,.token.symbol{color:#0086b3}.token.prolog,.token.selector,.token.tag{color:#63a35c}.token.attr-name,.token.class,.token.class-name,.token.function,.token.id,.token.namespace,.token.pseudo-class,.token.pseudo-element,.token.url-reference .token.variable{color:#795da3}.token.entity{cursor:help}.token.title,.token.title .token.punctuation{font-weight:700;color:#1d3e81}.token.list{color:#ed6a43}.token.inserted{background-color:#eaffea;color:#55a532}.token.deleted{background-color:#ffecec;color:#bd2c00}.token.bold{font-weight:700}.token.italic{font-style:italic}.language-json .token.property{color:#183691}.language-markup .token.tag .token.punctuation{color:#333}.language-css .token.function,code.language-css{color:#0086b3}.language-yaml .token.atrule{color:#63a35c}code.language-yaml{color:#183691}.language-ruby .token.function{color:#333}.language-markdown .token.url{color:#795da3}.language-makefile .token.symbol{color:#795da3}.language-makefile .token.variable{color:#183691}.language-makefile .token.builtin{color:#0086b3}.language-bash .token.keyword{color:#0086b3}pre[data-line]{position:relative;padding:1em 0 1em 3em}pre[data-line] .line-highlight-wrapper{position:absolute;top:0;left:0;background-color:transparent;display:block;width:100%}pre[data-line] .line-highlight{position:absolute;left:0;right:0;padding:inherit 0;margin-top:1em;background:hsla(24,20%,50%,.08);background:linear-gradient(to right,hsla(24,20%,50%,.1) 70%,hsla(24,20%,50%,0));pointer-events:none;line-height:inherit;white-space:pre}pre[data-line] .line-highlight:before,pre[data-line] .line-highlight[data-end]:after{content:attr(data-start);position:absolute;top:.4em;left:.6em;min-width:1em;padding:0 .5em;background-color:hsla(24,20%,50%,.4);color:#f4f1ef;font:bold 65%/1.5 sans-serif;text-align:center;vertical-align:.3em;border-radius:999px;text-shadow:none;box-shadow:0 1px #fff}pre[data-line] .line-highlight[data-end]:after{content:attr(data-end);top:auto;bottom:.4em}html body{font-family:'Helvetica Neue',Helvetica,'Segoe UI',Arial,freesans,sans-serif;font-size:16px;line-height:1.6;color:#333;background-color:#fff;overflow:initial;box-sizing:border-box;word-wrap:break-word}html body>:first-child{margin-top:0}html body h1,html body h2,html body h3,html body h4,html body h5,html body h6{line-height:1.2;margin-top:1em;margin-bottom:16px;color:#000}html body h1{font-size:2.25em;font-weight:300;padding-bottom:.3em}html body h2{font-size:1.75em;font-weight:400;padding-bottom:.3em}html body h3{font-size:1.5em;font-weight:500}html body h4{font-size:1.25em;font-weight:600}html body h5{font-size:1.1em;font-weight:600}html body h6{font-size:1em;font-weight:600}html body h1,html body h2,html body h3,html body h4,html body h5{font-weight:600}html body h5{font-size:1em}html body h6{color:#5c5c5c}html body strong{color:#000}html body del{color:#5c5c5c}html body a:not([href]){color:inherit;text-decoration:none}html body a{color:#08c;text-decoration:none}html body a:hover{color:#00a3f5;text-decoration:none}html body img{max-width:100%}html body>p{margin-top:0;margin-bottom:16px;word-wrap:break-word}html body>ol,html body>ul{margin-bottom:16px}html body ol,html body ul{padding-left:2em}html body ol.no-list,html body ul.no-list{padding:0;list-style-type:none}html body ol ol,html body ol ul,html body ul ol,html body ul ul{margin-top:0;margin-bottom:0}html body li{margin-bottom:0}html body li.task-list-item{list-style:none}html body li>p{margin-top:0;margin-bottom:0}html body .task-list-item-checkbox{margin:0 .2em .25em -1.8em;vertical-align:middle}html body .task-list-item-checkbox:hover{cursor:pointer}html body blockquote{margin:16px 0;font-size:inherit;padding:0 15px;color:#5c5c5c;background-color:#f0f0f0;border-left:4px solid #d6d6d6}html body blockquote>:first-child{margin-top:0}html body blockquote>:last-child{margin-bottom:0}html body hr{height:4px;margin:32px 0;background-color:#d6d6d6;border:0 none}html body table{margin:10px 0 15px 0;border-collapse:collapse;border-spacing:0;display:block;width:100%;overflow:auto;word-break:normal;word-break:keep-all}html body table th{font-weight:700;color:#000}html body table td,html body table th{border:1px solid #d6d6d6;padding:6px 13px}html body dl{padding:0}html body dl dt{padding:0;margin-top:16px;font-size:1em;font-style:italic;font-weight:700}html body dl dd{padding:0 16px;margin-bottom:16px}html body code{font-family:Menlo,Monaco,Consolas,'Courier New',monospace;font-size:.85em;color:#000;background-color:#f0f0f0;border-radius:3px;padding:.2em 0}html body code::after,html body code::before{letter-spacing:-.2em;content:'\00a0'}html body pre>code{padding:0;margin:0;word-break:normal;white-space:pre;background:0 0;border:0}html body .highlight{margin-bottom:16px}html body .highlight pre,html body pre{padding:1em;overflow:auto;line-height:1.45;border:#d6d6d6;border-radius:3px}html body .highlight pre{margin-bottom:0;word-break:normal}html body pre code,html body pre tt{display:inline;max-width:initial;padding:0;margin:0;overflow:initial;line-height:inherit;word-wrap:normal;background-color:transparent;border:0}html body pre code:after,html body pre code:before,html body pre tt:after,html body pre tt:before{content:normal}html body blockquote,html body dl,html body ol,html body p,html body pre,html body ul{margin-top:0;margin-bottom:16px}html body kbd{color:#000;border:1px solid #d6d6d6;border-bottom:2px solid #c7c7c7;padding:2px 4px;background-color:#f0f0f0;border-radius:3px}@media print{html body{background-color:#fff}html body h1,html body h2,html body h3,html body h4,html body h5,html body h6{color:#000;page-break-after:avoid}html body blockquote{color:#5c5c5c}html body pre{page-break-inside:avoid}html body table{display:table}html body img{display:block;max-width:100%;max-height:100%}html body code,html body pre{word-wrap:break-word;white-space:pre}}.markdown-preview{width:100%;height:100%;box-sizing:border-box}.markdown-preview ul{list-style:disc}.markdown-preview ul ul{list-style:circle}.markdown-preview ul ul ul{list-style:square}.markdown-preview ol{list-style:decimal}.markdown-preview ol ol,.markdown-preview ul ol{list-style-type:lower-roman}.markdown-preview ol ol ol,.markdown-preview ol ul ol,.markdown-preview ul ol ol,.markdown-preview ul ul ol{list-style-type:lower-alpha}.markdown-preview .newpage,.markdown-preview .pagebreak{page-break-before:always}.markdown-preview pre.line-numbers{position:relative;padding-left:3.8em;counter-reset:linenumber}.markdown-preview pre.line-numbers>code{position:relative}.markdown-preview pre.line-numbers .line-numbers-rows{position:absolute;pointer-events:none;top:1em;font-size:100%;left:0;width:3em;letter-spacing:-1px;border-right:1px solid #999;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none}.markdown-preview pre.line-numbers .line-numbers-rows>span{pointer-events:none;display:block;counter-increment:linenumber}.markdown-preview pre.line-numbers .line-numbers-rows>span:before{content:counter(linenumber);color:#999;display:block;padding-right:.8em;text-align:right}.markdown-preview .mathjax-exps .MathJax_Display{text-align:center!important}.markdown-preview:not([data-for=preview]) .code-chunk .code-chunk-btn-group{display:none}.markdown-preview:not([data-for=preview]) .code-chunk .status{display:none}.markdown-preview:not([data-for=preview]) .code-chunk .output-div{margin-bottom:16px}.markdown-preview .md-toc{padding:0}.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link{display:inline;padding:.25rem 0}.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link div,.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link p{display:inline}.markdown-preview .md-toc .md-toc-link-wrapper.highlighted .md-toc-link{font-weight:800}.scrollbar-style::-webkit-scrollbar{width:8px}.scrollbar-style::-webkit-scrollbar-track{border-radius:10px;background-color:transparent}.scrollbar-style::-webkit-scrollbar-thumb{border-radius:5px;background-color:rgba(150,150,150,.66);border:4px solid rgba(150,150,150,.66);background-clip:content-box}html body[for=html-export]:not([data-presentation-mode]){position:relative;width:100%;height:100%;top:0;left:0;margin:0;padding:0;overflow:auto}html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{position:relative;top:0;min-height:100vh}@media screen and (min-width:914px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{padding:2em calc(50% - 457px + 2em)}}@media screen and (max-width:914px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{padding:2em}}@media screen and (max-width:450px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{font-size:14px!important;padding:1em}}@media print{html body[for=html-export]:not([data-presentation-mode]) #sidebar-toc-btn{display:none}}html body[for=html-export]:not([data-presentation-mode]) #sidebar-toc-btn{position:fixed;bottom:8px;left:8px;font-size:28px;cursor:pointer;color:inherit;z-index:99;width:32px;text-align:center;opacity:.4}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] #sidebar-toc-btn{opacity:1}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc{position:fixed;top:0;left:0;width:300px;height:100%;padding:32px 0 48px 0;font-size:14px;box-shadow:0 0 4px rgba(150,150,150,.33);box-sizing:border-box;overflow:auto;background-color:inherit}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar{width:8px}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar-track{border-radius:10px;background-color:transparent}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar-thumb{border-radius:5px;background-color:rgba(150,150,150,.66);border:4px solid rgba(150,150,150,.66);background-clip:content-box}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc a{text-decoration:none}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc{padding:0 16px}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link{display:inline;padding:.25rem 0}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link div,html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link p{display:inline}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper.highlighted .md-toc-link{font-weight:800}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{left:300px;width:calc(100% - 300px);padding:2em calc(50% - 457px - 300px / 2);margin:0;box-sizing:border-box}@media screen and (max-width:1274px){html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{padding:2em}}@media screen and (max-width:450px){html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{width:100%}}html body[for=html-export]:not([data-presentation-mode]):not([html-show-sidebar-toc]) .markdown-preview{left:50%;transform:translateX(-50%)}html body[for=html-export]:not([data-presentation-mode]):not([html-show-sidebar-toc]) .md-sidebar-toc{display:none}
+/* Please visit the URL below for more information: */
+/*   https://shd101wyy.github.io/markdown-preview-enhanced/#/customize-css */
+
+      </style>
+      <!-- The content below will be included at the end of the <head> element. --><script type="text/javascript">
+  document.addEventListener("DOMContentLoaded", function () {
+    // your code here
+  });
+</script></head><body for="html-export">
+    
+    
+      <div class="crossnote markdown-preview  ">
+      
+<p>在 GCP 的 mTLS（Mutual TLS） 配置中，尤其是使用 GKE Gateway (或 Gateway API) 时，trustConfig 是用于配置可信根（trustAnchors）和中间证书（intermediateCAs）等内容的关键部分。当你需要进行 增量配置（比如追加新的中间证书或根证书）时，以下是一个比较清晰、可靠的处理流程和格式管理建议：</p>
+<p>⸻</p>
+<ol>
+<li>推荐的逻辑流程：导出现有配置 + 追加新证书</li>
+</ol>
+<p>你需要做到的是「不可破坏已有配置」并「增量式地添加新证书」，流程如下：</p>
+<div class="mermaid">graph TD;
+    A[导出现有的 trustConfig YAML] --&gt; B[解析并提取 trustAnchors 和 intermediateCAs];
+    B --&gt; C[追加新的 PEM 格式证书内容];
+    C --&gt; D[验证格式一致性（PEM 正确、缩进无误）];
+    D --&gt; E[更新 YAML 配置，重新部署];
+</div><p>⸻</p>
+<ol start="2">
+<li>操作细节：</li>
+</ol>
+<p>a. 导出现有配置</p>
+<p>kubectl get trustconfig your-trustconfig-name -n your-namespace -o yaml &gt; trustconfig-backup.yaml</p>
+<p>你可以直接从 trustStores.trustAnchors.pemCertificate 或 trustStores.intermediateCas.pemCertificate 中读取已有 PEM 格式证书。</p>
+<p>⸻</p>
+<p>b. 追加新证书逻辑（格式保持统一）</p>
+<p>建议将 PEM 证书的内容以 YAML 数组的形式追加：</p>
+<pre data-role="codeBlock" data-info="yaml" class="language-yaml yaml"><code><span class="token key atrule">trustStores</span><span class="token punctuation">:</span>
+  <span class="token key atrule">trustAnchors</span><span class="token punctuation">:</span>
+    <span class="token key atrule">pemCertificate</span><span class="token punctuation">:</span>
+      <span class="token punctuation">-</span> <span class="token punctuation">|</span><span class="token scalar string">
+        -----BEGIN CERTIFICATE-----
+        ...
+        -----END CERTIFICATE-----</span>
+      <span class="token punctuation">-</span> <span class="token punctuation">|</span><span class="token scalar string">
+        -----BEGIN CERTIFICATE-----
+        ...
+        -----END CERTIFICATE-----</span>
+  <span class="token key atrule">intermediateCas</span><span class="token punctuation">:</span>
+    <span class="token key atrule">pemCertificate</span><span class="token punctuation">:</span>
+      <span class="token punctuation">-</span> <span class="token punctuation">|</span><span class="token scalar string">
+        -----BEGIN CERTIFICATE-----
+        ...
+        -----END CERTIFICATE-----</span>
+</code></pre><pre class="language-text">•	每个 - | 下是一个独立的 PEM 格式证书
+•	确保 YAML 缩进一致（通常两个空格）
+•	PEM 本体不要有额外空行
+•	多个证书不要合并到一个 PEM 中，否则解析容易出错
+</pre>
+<p>⸻</p>
+<p>c. 验证 PEM 格式正确性</p>
+<p>可使用 openssl 做基本的校验：</p>
+<p><code>openssl x509 -in new_cert.pem -noout -text</code></p>
+<p>你可以写一个小的 shell 脚本把多个 .pem 文件合并为 YAML 片段：</p>
+<pre data-role="codeBlock" data-info="shell" class="language-shell shell"><code><span class="token builtin class-name">echo</span> <span class="token string">"    pemCertificate:"</span> <span class="token operator">&gt;</span> append.yaml
+<span class="token keyword keyword-for">for</span> <span class="token for-or-select variable">cert</span> <span class="token keyword keyword-in">in</span> certs/*.pem<span class="token punctuation">;</span> <span class="token keyword keyword-do">do</span>
+  <span class="token builtin class-name">echo</span> <span class="token string">"      - |"</span> <span class="token operator">&gt;&gt;</span> append.yaml
+  <span class="token function">sed</span> <span class="token string">'s/^/        /'</span> <span class="token string">"<span class="token variable">$cert</span>"</span> <span class="token operator">&gt;&gt;</span> append.yaml
+<span class="token keyword keyword-done">done</span>
+</code></pre><p>⸻</p>
+<ol start="3">
+<li>格式化建议与最佳实践</li>
+</ol>
+<p>项	说明<br>
+缩进	建议 2 空格，不要混用 tab<br>
+PEM 格式	每个证书单独一段 `-<br>
+版本控制	推荐将 trustConfig YAML 放入 Git 管理版本<br>
+自动化	可编写小工具（Python / Bash）做 YAML 的 merge 操作</p>
+<p>⸻</p>
+<ol start="4">
+<li>示例：完整 YAML 段落结构</li>
+</ol>
+<pre data-role="codeBlock" data-info="yaml" class="language-yaml yaml"><code><span class="token key atrule">apiVersion</span><span class="token punctuation">:</span> networking.gke.io/v1
+<span class="token key atrule">kind</span><span class="token punctuation">:</span> TrustConfig
+<span class="token key atrule">metadata</span><span class="token punctuation">:</span>
+  <span class="token key atrule">name</span><span class="token punctuation">:</span> example<span class="token punctuation">-</span>trust
+  <span class="token key atrule">namespace</span><span class="token punctuation">:</span> default
+<span class="token key atrule">spec</span><span class="token punctuation">:</span>
+  <span class="token key atrule">trustStores</span><span class="token punctuation">:</span>
+    <span class="token key atrule">trustAnchors</span><span class="token punctuation">:</span>
+      <span class="token key atrule">pemCertificate</span><span class="token punctuation">:</span>
+        <span class="token punctuation">-</span> <span class="token punctuation">|</span><span class="token scalar string">
+          -----BEGIN CERTIFICATE-----
+          MIIDdzCCAl+gAwIBAgIEb...
+          -----END CERTIFICATE-----</span>
+        <span class="token punctuation">-</span> <span class="token punctuation">|</span><span class="token scalar string">
+          -----BEGIN CERTIFICATE-----
+          MIIDeTCCAmGgAwIBAgI...
+          -----END CERTIFICATE-----</span>
+    <span class="token key atrule">intermediateCas</span><span class="token punctuation">:</span>
+      <span class="token key atrule">pemCertificate</span><span class="token punctuation">:</span>
+        <span class="token punctuation">-</span> <span class="token punctuation">|</span><span class="token scalar string">
+          -----BEGIN CERTIFICATE-----
+          MIIDdTCCAl2gAwIBAg...
+          -----END CERTIFICATE-----</span>
+</code></pre><p>⸻</p>
+<p>如果你有多个证书需要自动追加，我也可以帮你生成一个 bash 脚本或 yaml patch 的方式来处理，是否需要？</p>
+<p>在 Google Cloud Platform (GCP) 的 mTLS 配置中，增量更新 Trust Config 的 YAML 文件涉及向 trustStores 中的 trustAnchors 和 intermediateCas 添加新的 pemCertificate，同时保持现有配置的完整性。以下是处理这一逻辑的推荐步骤，以及如何格式化和管理的详细建议。这些建议基于 GCP 官方文档和最佳实践，结合增量更新的需求。</p>
+<ol>
+<li>理解 Trust Config 的 YAML 结构<br>
+根据 GCP 的 Certificate Manager 文档，Trust Config 的 YAML 结构如下：</li>
+</ol>
+<pre data-role="codeBlock" data-info="yaml" class="language-yaml yaml"><code><span class="token key atrule">name</span><span class="token punctuation">:</span> <span class="token string">"TRUST_CONFIG_ID"</span>
+<span class="token key atrule">trustStores</span><span class="token punctuation">:</span>
+  <span class="token punctuation">-</span> <span class="token key atrule">trustAnchors</span><span class="token punctuation">:</span>
+      <span class="token punctuation">-</span> <span class="token key atrule">pemCertificate</span><span class="token punctuation">:</span> <span class="token string">"CERTIFICATE_PEM_PAYLOAD_1"</span>
+      <span class="token punctuation">-</span> <span class="token key atrule">pemCertificate</span><span class="token punctuation">:</span> <span class="token string">"CERTIFICATE_PEM_PAYLOAD_2"</span>
+    <span class="token key atrule">intermediateCas</span><span class="token punctuation">:</span>
+      <span class="token punctuation">-</span> <span class="token key atrule">pemCertificate</span><span class="token punctuation">:</span> <span class="token string">"INTER_CERT_PEM_PAYLOAD_1"</span>
+      <span class="token punctuation">-</span> <span class="token key atrule">pemCertificate</span><span class="token punctuation">:</span> <span class="token string">"INTER_CERT_PEM_PAYLOAD_2"</span>
+    <span class="token key atrule">allowlistedCertificates</span><span class="token punctuation">:</span>
+      <span class="token punctuation">-</span> <span class="token key atrule">pemCertificate</span><span class="token punctuation">:</span> <span class="token string">"ALLOWLISTED_CERT_1"</span>
+      <span class="token punctuation">-</span> <span class="token key atrule">pemCertificate</span><span class="token punctuation">:</span> <span class="token string">"ALLOWLISTED_CERT_2"</span>
+</code></pre><pre class="language-text">•	trustAnchors：包含根证书（Root CA）的 PEM 编码证书。
+•	intermediateCas：包含中间证书（Intermediate CA）的 PEM 编码证书。
+•	allowlistedCertificates：可选，包含始终视为有效的证书（例如自签名证书）。
+•	每个 pemCertificate 字段包含一个完整的 PEM 证书（包括 -----BEGIN CERTIFICATE----- 和 -----END CERTIFICATE-----）。
+</pre>
+<p>增量更新的目标是在 trustAnchors 和 intermediateCas 中追加新的证书，而不覆盖现有配置。</p>
+<ol start="2">
+<li>增量更新的逻辑处理<br>
+为了实现增量更新，建议采用以下步骤：<br>
+步骤 1：导出当前的 Trust Config 配置<br>
+GCP 提供了 gcloud 命令来导出 Trust Config 的当前配置到一个 YAML 文件：</li>
+</ol>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code>gcloud certificate-manager trust-configs <span class="token builtin class-name">export</span> TRUST_CONFIG_ID <span class="token punctuation">\</span>
+  <span class="token parameter variable">--project</span><span class="token operator">=</span>PROJECT_ID <span class="token punctuation">\</span>
+  <span class="token parameter variable">--location</span><span class="token operator">=</span>LOCATION <span class="token punctuation">\</span>
+  <span class="token parameter variable">--destination</span><span class="token operator">=</span>trust_config_old.yaml
+</code></pre><pre class="language-text">•	TRUST_CONFIG_ID：Trust Config 的唯一 ID。
+•	PROJECT_ID：GCP 项目 ID。
+•	LOCATION：Trust Config 存储的位置（例如 global 或特定区域）。
+•	trust_config_old.yaml：导出的 YAML 文件路径。
+</pre>
+<p>导出的 YAML 文件将包含当前的 trustStores 配置，包括现有的 trustAnchors 和 intermediateCas。<br>
+步骤 2：准备新的证书<br>
+确保新的根证书或中间证书已经格式化为正确的 PEM 格式。PEM 证书应包含以下结构：<br>
+-----BEGIN CERTIFICATE-----</p>
+<p>-----END CERTIFICATE-----<br>
+为了保持一致性，建议对新的 PEM 证书进行格式化处理，去除多余的换行符或空格。可以借助脚本（例如 Python 或 Bash）来规范化 PEM 证书：<br>
+Python 示例：格式化 PEM 证书</p>
+<pre data-role="codeBlock" data-info="python" class="language-python python"><code><span class="token keyword keyword-import">import</span> base64
+<span class="token keyword keyword-import">import</span> textwrap
+
+<span class="token keyword keyword-def">def</span> <span class="token function">format_pem_certificate</span><span class="token punctuation">(</span>cert_content<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    <span class="token comment"># 移除多余的换行符和空格</span>
+    cert_content <span class="token operator">=</span> cert_content<span class="token punctuation">.</span>strip<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment"># 提取证书内容（去除 BEGIN/END 标记）</span>
+    <span class="token keyword keyword-if">if</span> cert_content<span class="token punctuation">.</span>startswith<span class="token punctuation">(</span><span class="token string">"-----BEGIN CERTIFICATE-----"</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+        cert_content <span class="token operator">=</span> cert_content<span class="token punctuation">.</span>replace<span class="token punctuation">(</span><span class="token string">"-----BEGIN CERTIFICATE-----"</span><span class="token punctuation">,</span> <span class="token string">""</span><span class="token punctuation">)</span><span class="token punctuation">.</span>replace<span class="token punctuation">(</span><span class="token string">"-----END CERTIFICATE-----"</span><span class="token punctuation">,</span> <span class="token string">""</span><span class="token punctuation">)</span>
+        cert_content <span class="token operator">=</span> cert_content<span class="token punctuation">.</span>strip<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token comment"># 重新格式化为每行 64 字符</span>
+    wrapped <span class="token operator">=</span> textwrap<span class="token punctuation">.</span>wrap<span class="token punctuation">(</span>cert_content<span class="token punctuation">,</span> width<span class="token operator">=</span><span class="token number">64</span><span class="token punctuation">)</span>
+    <span class="token comment"># 拼接 PEM 格式</span>
+    pem <span class="token operator">=</span> <span class="token string">"-----BEGIN CERTIFICATE-----\n"</span> <span class="token operator">+</span> <span class="token string">"\n"</span><span class="token punctuation">.</span>join<span class="token punctuation">(</span>wrapped<span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token string">"\n-----END CERTIFICATE-----"</span>
+    <span class="token keyword keyword-return">return</span> pem
+
+<span class="token comment"># 示例：读取证书文件并格式化</span>
+<span class="token keyword keyword-with">with</span> <span class="token builtin">open</span><span class="token punctuation">(</span><span class="token string">"new_cert.pem"</span><span class="token punctuation">,</span> <span class="token string">"r"</span><span class="token punctuation">)</span> <span class="token keyword keyword-as">as</span> f<span class="token punctuation">:</span>
+    cert <span class="token operator">=</span> f<span class="token punctuation">.</span>read<span class="token punctuation">(</span><span class="token punctuation">)</span>
+formatted_cert <span class="token operator">=</span> format_pem_certificate<span class="token punctuation">(</span>cert<span class="token punctuation">)</span>
+<span class="token keyword keyword-print">print</span><span class="token punctuation">(</span>formatted_cert<span class="token punctuation">)</span>
+Bash 示例：格式化 PEM 证书
+<span class="token comment"># 使用 openssl 规范化 PEM 证书</span>
+openssl x509 <span class="token operator">-</span><span class="token keyword keyword-in">in</span> new_cert<span class="token punctuation">.</span>pem <span class="token operator">-</span>out formatted_cert<span class="token punctuation">.</span>pem
+<span class="token comment"># 或者使用 base64 重新编码</span>
+cat new_cert<span class="token punctuation">.</span>pem <span class="token operator">|</span> grep <span class="token operator">-</span>v <span class="token string">"-----"</span> <span class="token operator">|</span> tr <span class="token operator">-</span>d <span class="token string">'\n'</span> <span class="token operator">|</span> fold <span class="token operator">-</span>w <span class="token number">64</span> <span class="token operator">|</span> sed <span class="token string">'s/^/    /'</span> <span class="token operator">|</span> <span class="token punctuation">(</span>echo <span class="token string">"-----BEGIN CERTIFICATE-----"</span> <span class="token operator">&amp;</span><span class="token operator">&amp;</span> cat <span class="token operator">&amp;</span><span class="token operator">&amp;</span> echo <span class="token string">"-----END CERTIFICATE-----"</span><span class="token punctuation">)</span> <span class="token operator">&gt;</span> formatted_cert<span class="token punctuation">.</span>pem
+步骤 <span class="token number">3</span>：追加新证书到 YAML 文件
+手动或通过脚本将新的 pemCertificate 追加到导出的 YAML 文件中的 trustAnchors 或 intermediateCas 部分。
+手动编辑 打开 trust_config_old<span class="token punctuation">.</span>yaml，在 trustAnchors 或 intermediateCas 下添加新的 pemCertificate 条目。例如：
+```yaml
+trustStores<span class="token punctuation">:</span>
+  <span class="token operator">-</span> trustAnchors<span class="token punctuation">:</span>
+      <span class="token operator">-</span> pemCertificate<span class="token punctuation">:</span> <span class="token string">"EXISTING_CERTIFICATE_PEM_PAYLOAD"</span>
+      <span class="token operator">-</span> pemCertificate<span class="token punctuation">:</span> <span class="token string">"NEW_CERTIFICATE_PEM_PAYLOAD"</span>  <span class="token comment"># 新增的根证书</span>
+    intermediateCas<span class="token punctuation">:</span>
+      <span class="token operator">-</span> pemCertificate<span class="token punctuation">:</span> <span class="token string">"EXISTING_INTER_CERT_PEM_PAYLOAD"</span>
+      <span class="token operator">-</span> pemCertificate<span class="token punctuation">:</span> <span class="token string">"NEW_INTER_CERT_PEM_PAYLOAD"</span>  <span class="token comment"># 新增的中间证书</span>
+</code></pre><p>脚本自动化（推荐） 为了避免手动编辑出错，建议使用脚本解析和修改 YAML 文件。以下是一个 Python 示例，使用 PyYAML 库来追加证书：</p>
+<pre data-role="codeBlock" data-info="Python" class="language-python Python"><code><span class="token keyword keyword-import">import</span> yaml
+
+<span class="token comment"># 读取导出的 YAML 文件 {#读取导出的-yaml-文件 }</span>
+<span class="token keyword keyword-with">with</span> <span class="token builtin">open</span><span class="token punctuation">(</span><span class="token string">"trust_config_old.yaml"</span><span class="token punctuation">,</span> <span class="token string">"r"</span><span class="token punctuation">)</span> <span class="token keyword keyword-as">as</span> f<span class="token punctuation">:</span>
+    config <span class="token operator">=</span> yaml<span class="token punctuation">.</span>safe_load<span class="token punctuation">(</span>f<span class="token punctuation">)</span>
+
+<span class="token comment"># 新证书内容（已格式化） {#新证书内容已格式化 }</span>
+new_trust_anchor <span class="token operator">=</span> <span class="token string">"-----BEGIN CERTIFICATE-----\n\n-----END CERTIFICATE-----"</span>
+new_intermediate_ca <span class="token operator">=</span> <span class="token string">"-----BEGIN CERTIFICATE-----\n\n-----END CERTIFICATE-----"</span>
+
+<span class="token comment"># 获取或初始化 trustStores {#获取或初始化-truststores }</span>
+trust_stores <span class="token operator">=</span> config<span class="token punctuation">.</span>setdefault<span class="token punctuation">(</span><span class="token string">"trustStores"</span><span class="token punctuation">,</span> <span class="token punctuation">[</span><span class="token punctuation">{</span><span class="token punctuation">}</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+trust_anchors <span class="token operator">=</span> trust_stores<span class="token punctuation">.</span>setdefault<span class="token punctuation">(</span><span class="token string">"trustAnchors"</span><span class="token punctuation">,</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+intermediate_cas <span class="token operator">=</span> trust_stores<span class="token punctuation">.</span>setdefault<span class="token punctuation">(</span><span class="token string">"intermediateCas"</span><span class="token punctuation">,</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+
+<span class="token comment"># 追加新证书 {#追加新证书 }</span>
+trust_anchors<span class="token punctuation">.</span>append<span class="token punctuation">(</span><span class="token punctuation">{</span><span class="token string">"pemCertificate"</span><span class="token punctuation">:</span> new_trust_anchor<span class="token punctuation">}</span><span class="token punctuation">)</span>
+intermediate_cas<span class="token punctuation">.</span>append<span class="token punctuation">(</span><span class="token punctuation">{</span><span class="token string">"pemCertificate"</span><span class="token punctuation">:</span> new_intermediate_ca<span class="token punctuation">}</span><span class="token punctuation">)</span>
+
+<span class="token comment"># 保存修改后的 YAML 文件 {#保存修改后的-yaml-文件 }</span>
+<span class="token keyword keyword-with">with</span> <span class="token builtin">open</span><span class="token punctuation">(</span><span class="token string">"trust_config_new.yaml"</span><span class="token punctuation">,</span> <span class="token string">"w"</span><span class="token punctuation">)</span> <span class="token keyword keyword-as">as</span> f<span class="token punctuation">:</span>
+    yaml<span class="token punctuation">.</span>safe_dump<span class="token punctuation">(</span>config<span class="token punctuation">,</span> f<span class="token punctuation">,</span> default_flow_style<span class="token operator">=</span><span class="token boolean">False</span><span class="token punctuation">,</span> sort_keys<span class="token operator">=</span><span class="token boolean">False</span><span class="token punctuation">)</span>
+</code></pre><p>确保安装 PyYAML：<br>
+pip install pyyaml<br>
+步骤 4：验证 YAML 文件<br>
+在导入新的 YAML 文件之前，验证其格式和内容：<br>
+•	检查 YAML 语法：使用 yaml 工具或在线 YAML 验证器。<br>
+•	检查 PEM 证书：确保每个 pemCertificate 的格式正确（包含 BEGIN/END 标记，每行 64 字符）。<br>
+•	检查证书有效性：使用 openssl 验证证书：openssl x509 -in formatted_cert.pem -text -noout<br>
+•	<br>
+步骤 5：导入更新后的 Trust Config<br>
+使用 gcloud 命令将修改后的 YAML 文件导入，覆盖现有的 Trust Config：</p>
+<pre data-role="codeBlock" data-info="bash" class="language-bash bash"><code>gcloud certificate-manager trust-configs <span class="token function">import</span> TRUST_CONFIG_ID <span class="token punctuation">\</span>
+  <span class="token parameter variable">--project</span><span class="token operator">=</span>PROJECT_ID <span class="token punctuation">\</span>
+  <span class="token parameter variable">--source</span><span class="token operator">=</span>trust_config_new.yaml <span class="token punctuation">\</span>
+  <span class="token parameter variable">--location</span><span class="token operator">=</span>LOCATION
+</code></pre><pre class="language-text">•	如果 Trust Config 已被 ServerTlsPolicy 引用，确保导入不会破坏现有的 mTLS 配置（例如，验证新证书是否与现有链兼容）。
+•	如果需要回滚，保留 trust_config_old.yaml 作为备份。
+</pre>
+<ol start="3">
+<li>
+<p>格式化证书的注意事项<br>
+为了确保 pemCertificate 字段的一致性和正确性，遵循以下格式化规则：<br>
+1	标准 PEM 格式：<br>
+◦	每行 64 个字符（不包括换行符）。<br>
+◦	以 -----BEGIN CERTIFICATE----- 开头，以 -----END CERTIFICATE----- 结尾。<br>
+◦	证书内容为 Base64 编码。<br>
+2	避免多余字符：<br>
+◦	移除多余的换行符、空格或制表符。<br>
+◦	确保 YAML 缩进正确（通常为 2 或 4 个空格）。<br>
+3	环境变量辅助（可选）： 如果证书内容需要动态注入，可以将证书存储为环境变量并在 YAML 文件中使用。例如：export NEW_ROOT_CERT=<span style="color: #ee7f49; font-weight: 500;">ParseError: KaTeX parse error: Undefined control sequence: \n at position 49: …[ ]*//g' | tr '\̲n̲' '\\n')
+ 4	exp…</span>(cat new_inter_cert.pem | sed 's/<sup class="footnote-ref"><a href="#fn1" id="fnref1">[1]</a></sup>*//g' | tr '\n' '\n')<br>
+5	cat &lt;&lt; EOF &gt; trust_config_new.yaml<br>
+6	name: "TRUST_CONFIG_ID"<br>
+7	trustStores:<br>
+8	  - trustAnchors:<br>
+9	      - pemCertificate: "<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mi>N</mi><mi>E</mi><msub><mi>W</mi><mi>R</mi></msub><mi>O</mi><mi>O</mi><msub><mi>T</mi><mi>C</mi></msub><mi>E</mi><mi>R</mi><mi>T</mi></mrow><mi mathvariant="normal">"</mi><mn>10</mn><mi>i</mi><mi>n</mi><mi>t</mi><mi>e</mi><mi>r</mi><mi>m</mi><mi>e</mi><mi>d</mi><mi>i</mi><mi>a</mi><mi>t</mi><mi>e</mi><mi>C</mi><mi>a</mi><mi>s</mi><mo>:</mo><mn>11</mn><mo>−</mo><mi>p</mi><mi>e</mi><mi>m</mi><mi>C</mi><mi>e</mi><mi>r</mi><mi>t</mi><mi>i</mi><mi>f</mi><mi>i</mi><mi>c</mi><mi>a</mi><mi>t</mi><mi>e</mi><mo>:</mo><mi mathvariant="normal">"</mi></mrow><annotation encoding="application/x-tex">{NEW_ROOT_CERT}"
+ 10	    intermediateCas:
+ 11	      - pemCertificate: "</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.05764em;">NE</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.00773em;">R</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right:0.02778em;">OO</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">T</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.07153em;">C</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord mathnormal" style="margin-right:0.13889em;">ERT</span></span><span class="mord">"10</span><span class="mord mathnormal">in</span><span class="mord mathnormal">t</span><span class="mord mathnormal" style="margin-right:0.02778em;">er</span><span class="mord mathnormal">m</span><span class="mord mathnormal">e</span><span class="mord mathnormal">d</span><span class="mord mathnormal">ia</span><span class="mord mathnormal">t</span><span class="mord mathnormal">e</span><span class="mord mathnormal" style="margin-right:0.07153em;">C</span><span class="mord mathnormal">a</span><span class="mord mathnormal">s</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">:</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">11</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span><span class="mord mathnormal">e</span><span class="mord mathnormal">m</span><span class="mord mathnormal" style="margin-right:0.07153em;">C</span><span class="mord mathnormal" style="margin-right:0.02778em;">er</span><span class="mord mathnormal">t</span><span class="mord mathnormal">i</span><span class="mord mathnormal" style="margin-right:0.10764em;">f</span><span class="mord mathnormal">i</span><span class="mord mathnormal">c</span><span class="mord mathnormal">a</span><span class="mord mathnormal">t</span><span class="mord mathnormal">e</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">:</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord">"</span></span></span></span>{NEW_INTER_CERT}"<br>
+12	EOF<br>
+13	注意：这种方法需要确保环境变量中的换行符 (\n) 被正确处理。<br>
+14	批量处理多个证书： 如果需要添加多个证书，建议使用脚本循环处理。例如：for cert_file in ["cert1.pem", "cert2.pem"]:<br>
+15	    with open(cert_file, "r") as f:<br>
+16	        cert = format_pem_certificate(f.read())<br>
+17	        trust_anchors.append({"pemCertificate": cert})<br>
+18</p>
+</li>
+<li>
+<p>优化增量更新的逻辑<br>
+为了使增量更新更健壮和可维护，考虑以下最佳实践：<br>
+1	版本控制 YAML 文件：<br>
+◦	将 Trust Config 的 YAML 文件纳入 Git 仓库，记录每次更新的变更历史。<br>
+◦	使用 Git diff 检查新旧 YAML 文件的差异。<br>
+2	去重检查：<br>
+◦	在追加新证书前，检查是否已存在相同的证书（基于证书的指纹或序列号）。<br>
+◦	使用 openssl 获取证书指纹：openssl x509 -in cert.pem -noout -fingerprint -sha256<br>
+◦	<br>
+3	自动化流水线：<br>
+◦	使用 CI/CD 工具（例如 GitHub Actions 或 Cloud Build）自动化导出、修改和导入 Trust Config 的流程。<br>
+◦	示例工作流：<br>
+1	触发条件：新证书推送到 Git 仓库。<br>
+2	运行脚本：导出当前 Trust Config，追加新证书，验证 YAML。<br>
+3	执行 gcloud 导入命令。<br>
+4	监控和验证：<br>
+◦	更新 Trust Config 后，验证 mTLS 配置是否正常工作（例如，通过测试客户端连接）。<br>
+◦	使用 GCP 的日志和监控工具检查是否有证书验证失败的错误。<br>
+5	回滚计划：<br>
+◦	在导入新配置前备份现有 Trust Config。<br>
+◦	如果更新失败，使用备份文件快速恢复：gcloud certificate-manager trust-configs import TRUST_CONFIG_ID <br>
+◦	  --project=PROJECT_ID <br>
+◦	  --source=trust_config_old.yaml <br>
+◦	  --location=LOCATION<br>
+◦</p>
+</li>
+<li>
+<p>处理复杂场景<br>
+1	多 Trust Store： 如果需要支持多个 trustStores，确保在 YAML 中正确组织。例如：trustStores:<br>
+2	  - trustAnchors: [...]<br>
+3	    intermediateCas: [...]<br>
+4	  - trustAnchors: [...]<br>
+5	    intermediateCas: [...]<br>
+6	增量更新时，指定目标 trustStores 索引。<br>
+7	证书过期管理：<br>
+◦	定期检查 trustAnchors 和 intermediateCas 中的证书有效期：openssl x509 -in cert.pem -noout -dates<br>
+◦	<br>
+◦	替换即将过期的证书，保持链的完整性。<br>
+8	区域 vs 全局 Trust Config：<br>
+◦	确保 LOCATION 参数与负载均衡器类型匹配（全局负载均衡器使用 global，区域负载均衡器使用特定区域）。<br>
+◦	如果需要跨区域同步，复制 YAML 文件并调整 location。</p>
+</li>
+<li>
+<p>示例：完整的增量更新脚本<br>
+以下是一个综合的 Python 脚本，集成了导出、追加和导入逻辑：</p>
+</li>
+</ol>
+<pre data-role="codeBlock" data-info="Python" class="language-python Python"><code><span class="token keyword keyword-import">import</span> yaml
+<span class="token keyword keyword-import">import</span> subprocess
+<span class="token keyword keyword-import">import</span> os
+
+<span class="token keyword keyword-def">def</span> <span class="token function">run_gcloud_command</span><span class="token punctuation">(</span>args<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    result <span class="token operator">=</span> subprocess<span class="token punctuation">.</span>run<span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token string">"gcloud"</span><span class="token punctuation">]</span> <span class="token operator">+</span> args<span class="token punctuation">,</span> capture_output<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">,</span> text<span class="token operator">=</span><span class="token boolean">True</span><span class="token punctuation">)</span>
+    <span class="token keyword keyword-if">if</span> result<span class="token punctuation">.</span>returncode <span class="token operator">!=</span> <span class="token number">0</span><span class="token punctuation">:</span>
+        <span class="token keyword keyword-raise">raise</span> Exception<span class="token punctuation">(</span><span class="token string-interpolation"><span class="token string">f"gcloud command failed: </span><span class="token interpolation"><span class="token punctuation">{</span>result<span class="token punctuation">.</span>stderr<span class="token punctuation">}</span></span><span class="token string">"</span></span><span class="token punctuation">)</span>
+    <span class="token keyword keyword-return">return</span> result<span class="token punctuation">.</span>stdout
+
+<span class="token keyword keyword-def">def</span> <span class="token function">format_pem_certificate</span><span class="token punctuation">(</span>cert_content<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    cert_content <span class="token operator">=</span> cert_content<span class="token punctuation">.</span>strip<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token keyword keyword-if">if</span> cert_content<span class="token punctuation">.</span>startswith<span class="token punctuation">(</span><span class="token string">"-----BEGIN CERTIFICATE-----"</span><span class="token punctuation">)</span><span class="token punctuation">:</span>
+        cert_content <span class="token operator">=</span> cert_content<span class="token punctuation">.</span>replace<span class="token punctuation">(</span><span class="token string">"-----BEGIN CERTIFICATE-----"</span><span class="token punctuation">,</span> <span class="token string">""</span><span class="token punctuation">)</span><span class="token punctuation">.</span>replace<span class="token punctuation">(</span><span class="token string">"-----END CERTIFICATE-----"</span><span class="token punctuation">,</span> <span class="token string">""</span><span class="token punctuation">)</span>
+        cert_content <span class="token operator">=</span> cert_content<span class="token punctuation">.</span>strip<span class="token punctuation">(</span><span class="token punctuation">)</span>
+    wrapped <span class="token operator">=</span> textwrap<span class="token punctuation">.</span>wrap<span class="token punctuation">(</span>cert_content<span class="token punctuation">,</span> width<span class="token operator">=</span><span class="token number">64</span><span class="token punctuation">)</span>
+    <span class="token keyword keyword-return">return</span> <span class="token string">"-----BEGIN CERTIFICATE-----\n"</span> <span class="token operator">+</span> <span class="token string">"\n"</span><span class="token punctuation">.</span>join<span class="token punctuation">(</span>wrapped<span class="token punctuation">)</span> <span class="token operator">+</span> <span class="token string">"\n-----END CERTIFICATE-----"</span>
+
+<span class="token comment"># 配置参数 {#配置参数 }</span>
+TRUST_CONFIG_ID <span class="token operator">=</span> <span class="token string">"my-trust-config"</span>
+PROJECT_ID <span class="token operator">=</span> <span class="token string">"my-project"</span>
+LOCATION <span class="token operator">=</span> <span class="token string">"global"</span>
+NEW_ROOT_CERT_FILE <span class="token operator">=</span> <span class="token string">"new_root_cert.pem"</span>
+NEW_INTER_CERT_FILE <span class="token operator">=</span> <span class="token string">"new_inter_cert.pem"</span>
+
+<span class="token comment"># 步骤 1：导出当前 Trust Config {#步骤-1导出当前-trust-config }</span>
+run_gcloud_command<span class="token punctuation">(</span><span class="token punctuation">[</span>
+    <span class="token string">"certificate-manager"</span><span class="token punctuation">,</span> <span class="token string">"trust-configs"</span><span class="token punctuation">,</span> <span class="token string">"export"</span><span class="token punctuation">,</span> TRUST_CONFIG_ID<span class="token punctuation">,</span>
+    <span class="token string-interpolation"><span class="token string">f"--project=</span><span class="token interpolation"><span class="token punctuation">{</span>PROJECT_ID<span class="token punctuation">}</span></span><span class="token string">"</span></span><span class="token punctuation">,</span>
+    <span class="token string-interpolation"><span class="token string">f"--location=</span><span class="token interpolation"><span class="token punctuation">{</span>LOCATION<span class="token punctuation">}</span></span><span class="token string">"</span></span><span class="token punctuation">,</span>
+    <span class="token string">"--destination=trust_config_old.yaml"</span>
+<span class="token punctuation">]</span><span class="token punctuation">)</span>
+
+<span class="token comment"># 步骤 2：读取和格式化新证书 {#步骤-2读取和格式化新证书 }</span>
+<span class="token keyword keyword-with">with</span> <span class="token builtin">open</span><span class="token punctuation">(</span>NEW_ROOT_CERT_FILE<span class="token punctuation">,</span> <span class="token string">"r"</span><span class="token punctuation">)</span> <span class="token keyword keyword-as">as</span> f<span class="token punctuation">:</span>
+    new_root_cert <span class="token operator">=</span> format_pem_certificate<span class="token punctuation">(</span>f<span class="token punctuation">.</span>read<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+<span class="token keyword keyword-with">with</span> <span class="token builtin">open</span><span class="token punctuation">(</span>NEW_INTER_CERT_FILE<span class="token punctuation">,</span> <span class="token string">"r"</span><span class="token punctuation">)</span> <span class="token keyword keyword-as">as</span> f<span class="token punctuation">:</span>
+    new_inter_cert <span class="token operator">=</span> format_pem_certificate<span class="token punctuation">(</span>f<span class="token punctuation">.</span>read<span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+
+<span class="token comment"># 步骤 3：修改 YAML 文件 {#步骤-3修改-yaml-文件 }</span>
+<span class="token keyword keyword-with">with</span> <span class="token builtin">open</span><span class="token punctuation">(</span><span class="token string">"trust_config_old.yaml"</span><span class="token punctuation">,</span> <span class="token string">"r"</span><span class="token punctuation">)</span> <span class="token keyword keyword-as">as</span> f<span class="token punctuation">:</span>
+    config <span class="token operator">=</span> yaml<span class="token punctuation">.</span>safe_load<span class="token punctuation">(</span>f<span class="token punctuation">)</span>
+
+trust_stores <span class="token operator">=</span> config<span class="token punctuation">.</span>setdefault<span class="token punctuation">(</span><span class="token string">"trustStores"</span><span class="token punctuation">,</span> <span class="token punctuation">[</span><span class="token punctuation">{</span><span class="token punctuation">}</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span>
+trust_anchors <span class="token operator">=</span> trust_stores<span class="token punctuation">.</span>setdefault<span class="token punctuation">(</span><span class="token string">"trustAnchors"</span><span class="token punctuation">,</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+intermediate_cas <span class="token operator">=</span> trust_stores<span class="token punctuation">.</span>setdefault<span class="token punctuation">(</span><span class="token string">"intermediateCas"</span><span class="token punctuation">,</span> <span class="token punctuation">[</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+
+<span class="token comment"># 追加新证书（检查是否重复） {#追加新证书检查是否重复 }</span>
+<span class="token keyword keyword-if">if</span> <span class="token keyword keyword-not">not</span> <span class="token builtin">any</span><span class="token punctuation">(</span>c<span class="token punctuation">[</span><span class="token string">"pemCertificate"</span><span class="token punctuation">]</span> <span class="token operator">==</span> new_root_cert <span class="token keyword keyword-for">for</span> c <span class="token keyword keyword-in">in</span> trust_anchors<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    trust_anchors<span class="token punctuation">.</span>append<span class="token punctuation">(</span><span class="token punctuation">{</span><span class="token string">"pemCertificate"</span><span class="token punctuation">:</span> new_root_cert<span class="token punctuation">}</span><span class="token punctuation">)</span>
+<span class="token keyword keyword-if">if</span> <span class="token keyword keyword-not">not</span> <span class="token builtin">any</span><span class="token punctuation">(</span>c<span class="token punctuation">[</span><span class="token string">"pemCertificate"</span><span class="token punctuation">]</span> <span class="token operator">==</span> new_inter_cert <span class="token keyword keyword-for">for</span> c <span class="token keyword keyword-in">in</span> intermediate_cas<span class="token punctuation">)</span><span class="token punctuation">:</span>
+    intermediate_cas<span class="token punctuation">.</span>append<span class="token punctuation">(</span><span class="token punctuation">{</span><span class="token string">"pemCertificate"</span><span class="token punctuation">:</span> new_inter_cert<span class="token punctuation">}</span><span class="token punctuation">)</span>
+
+<span class="token comment"># 保存新 YAML 文件 {#保存新-yaml-文件 }</span>
+<span class="token keyword keyword-with">with</span> <span class="token builtin">open</span><span class="token punctuation">(</span><span class="token string">"trust_config_new.yaml"</span><span class="token punctuation">,</span> <span class="token string">"w"</span><span class="token punctuation">)</span> <span class="token keyword keyword-as">as</span> f<span class="token punctuation">:</span>
+    yaml<span class="token punctuation">.</span>safe_dump<span class="token punctuation">(</span>config<span class="token punctuation">,</span> f<span class="token punctuation">,</span> default_flow_style<span class="token operator">=</span><span class="token boolean">False</span><span class="token punctuation">,</span> sort_keys<span class="token operator">=</span><span class="token boolean">False</span><span class="token punctuation">)</span>
+
+<span class="token comment"># 步骤 4：导入更新后的 Trust Config {#步骤-4导入更新后的-trust-config }</span>
+run_gcloud_command<span class="token punctuation">(</span><span class="token punctuation">[</span>
+    <span class="token string">"certificate-manager"</span><span class="token punctuation">,</span> <span class="token string">"trust-configs"</span><span class="token punctuation">,</span> <span class="token string">"import"</span><span class="token punctuation">,</span> TRUST_CONFIG_ID<span class="token punctuation">,</span>
+    <span class="token string-interpolation"><span class="token string">f"--project=</span><span class="token interpolation"><span class="token punctuation">{</span>PROJECT_ID<span class="token punctuation">}</span></span><span class="token string">"</span></span><span class="token punctuation">,</span>
+    <span class="token string-interpolation"><span class="token string">f"--source=trust_config_new.yaml"</span></span><span class="token punctuation">,</span>
+    <span class="token string-interpolation"><span class="token string">f"--location=</span><span class="token interpolation"><span class="token punctuation">{</span>LOCATION<span class="token punctuation">}</span></span><span class="token string">"</span></span>
+<span class="token punctuation">]</span><span class="token punctuation">)</span>
+
+<span class="token keyword keyword-print">print</span><span class="token punctuation">(</span><span class="token string">"Trust Config updated successfully!"</span><span class="token punctuation">)</span>
+</code></pre><ol start="7">
+<li>参考资料<br>
+•	GCP 官方文档：Manage Trust Configs []<br>
+•	GCP 官方文档：Set up frontend mTLS with user-provided certificates []<br>
+•	GCP 官方文档：Mutual TLS overview []</li>
+</ol>
+<p>总结<br>
+通过导出当前 Trust Config、格式化新证书、脚本化追加证书、验证和导入的流程，可以高效地实现增量更新。使用脚本自动化（如 Python 或 Bash）可以减少手动错误，并支持版本控制和 CI/CD 集成。关键是确保 PEM 证书格式正确、YAML 语法无误，并在更新前后验证 mTLS 配置的正确性。如果需要进一步优化或处理特定场景，请提供更多细节，我可以为你定制更具体的解决方案！</p>
+<hr class="footnotes-sep">
+<section class="footnotes">
+<ol class="footnotes-list">
+<li id="fn1" class="footnote-item"><p>  <a href="#fnref1" class="footnote-backref">↩︎</a></p>
+</li>
+</ol>
+</section>
+
+      </div>
+      
+      
+    
+    
+    <script type="module">
+// TODO: If ZenUML gets integrated into mermaid in the future,
+//      we can remove the following lines.
+
+
+var MERMAID_CONFIG = ({"startOnLoad":false});
+if (typeof MERMAID_CONFIG !== 'undefined') {
+  MERMAID_CONFIG.startOnLoad = false
+  MERMAID_CONFIG.cloneCssStyles = false
+  MERMAID_CONFIG.theme = "default"
+}
+
+mermaid.initialize(MERMAID_CONFIG || {})
+if (typeof(window['Reveal']) !== 'undefined') {
+  function mermaidRevealHelper(event) {
+    var currentSlide = event.currentSlide
+    var diagrams = currentSlide.querySelectorAll('.mermaid')
+    for (var i = 0; i < diagrams.length; i++) {
+      var diagram = diagrams[i]
+      if (!diagram.hasAttribute('data-processed')) {
+        mermaid.init(null, diagram, ()=> {
+          Reveal.slide(event.indexh, event.indexv)
+        })
+      }
+    }
+  }
+  Reveal.addEventListener('slidetransitionend', mermaidRevealHelper)
+  Reveal.addEventListener('ready', mermaidRevealHelper)
+  await mermaid.run({
+    nodes: document.querySelectorAll('.mermaid')
+  })
+} else {
+  await mermaid.run({
+    nodes: document.querySelectorAll('.mermaid')
+  })
+}
+</script>
+    
+    
+    
+  
+    </body></html>

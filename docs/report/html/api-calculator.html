@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API 平台成本计算器 - 增强版</title>
+    <link href="https://cdn.jsdelivr.net/npm/chart.js" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            /* Enhanced Color Palette */
+            --primary: #4f46e5;
+            --primary-light: #e0e7ff;
+            --primary-dark: #3730a3;
+            --secondary: #10b981;
+            --secondary-light: #d1fae5;
+            --accent: #f59e0b;
+            --accent-light: #fef3c7;
+            
+            /* Neutral Colors */
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+            
+            /* Semantic Colors */
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --info: #3b82f6;
+            
+            /* Light Theme Variables */
+            --bg-primary: var(--gray-50);
+            --bg-secondary: #ffffff;
+            --bg-tertiary: var(--gray-100);
+            --text-primary: var(--gray-900);
+            --text-secondary: var(--gray-600);
+            --text-muted: var(--gray-400);
+            --border: var(--gray-200);
+            --border-focus: var(--primary);
+            
+            /* Shadows */
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            
+            /* Gradients */
+            --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --gradient-secondary: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --gradient-accent: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            
+            /* Typography */
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+            
+            /* Spacing Scale */
+            --space-1: 0.25rem;
+            --space-2: 0.5rem;
+            --space-3: 0.75rem;
+            --space-4: 1rem;
+            --space-5: 1.25rem;
+            --space-6: 1.5rem;
+            --space-8: 2rem;
+            --space-10: 2.5rem;
+            --space-12: 3rem;
+            --space-16: 4rem;
+            --space-20: 5rem;
+            
+            /* Border Radius */
+            --radius-sm: 0.375rem;
+            --radius: 0.5rem;
+            --radius-md: 0.75rem;
+            --radius-lg: 1rem;
+            --radius-xl: 1.5rem;
+            --radius-full: 9999px;
+            
+            /* Transitions */
+            --transition-fast: 150ms ease;
+            --transition: 200ms ease;
+            --transition-slow: 300ms ease;
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: var(--gray-900);
+            --bg-secondary: var(--gray-800);
+            --bg-tertiary: var(--gray-700);
+            --text-primary: var(--gray-100);
+            --text-secondary: var(--gray-300);
+            --text-muted: var(--gray-500);
+            --border: var(--gray-600);
+            --primary-light: rgba(79, 70, 229, 0.1);
+            --secondary-light: rgba(16, 185, 129, 0.1);
+            --accent-light: rgba(245, 158, 11, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            font-size: 14px;
+            transition: background-color var(--transition), color var(--transition);
+            min-height: 100vh;
+        }
+
+        /* Header Styles */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: var(--space-6) 0;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            backdrop-filter: blur(8px);
+            transition: all var(--transition);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 var(--space-6);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--gradient-primary);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.2rem;
+            box-shadow: var(--shadow-md);
+        }
+
+        .theme-toggle {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: var(--space-3);
+            border-radius: var(--radius-full);
+            transition: all var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+        }
+
+        .theme-toggle:hover {
+            background: var(--primary-light);
+            border-color: var(--primary);
+            color: var(--primary);
+            transform: scale(1.05);
+        }
+
+        /* Main Layout */
+        .calculator-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: var(--space-8) var(--space-6);
+            display: grid;
+            grid-template-columns: 420px 1fr;
+            gap: var(--space-8);
+            min-height: calc(100vh - 120px);
+        }
+
+        /* Configuration Panel */
+        .configuration-panel {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-lg);
+            padding: var(--space-8);
+            height: fit-content;
+            border: 1px solid var(--border);
+            transition: all var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .configuration-panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--gradient-primary);
+        }
+
+        .configuration-panel:hover {
+            box-shadow: var(--shadow-xl);
+            transform: translateY(-2px);
+        }
+
+        /* Result Panel */
+        .result-panel {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-6);
+        }
+
+        /* Section Styles */
+        .section {
+            margin-bottom: var(--space-8);
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: var(--space-6);
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+            position: relative;
+        }
+
+        .section-title::after {
+            content: '';
+            flex: 1;
+            height: 2px;
+            background: linear-gradient(90deg, var(--primary) 0%, transparent 100%);
+            margin-left: var(--space-4);
+        }
+
+        .section-title i {
+            color: var(--primary);
+            font-size: 1.2rem;
+        }
+
+        /* Form Styles */
+        .form-group {
+            margin-bottom: var(--space-6);
+        }
+
+        .form-group label {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            margin-bottom: var(--space-3);
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: var(--text-primary);
+        }
+
+        .form-group label i {
+            color: var(--primary);
+            font-size: 0.9rem;
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: var(--space-4) var(--space-5);
+            padding-right: var(--space-12);
+            border: 2px solid var(--border);
+            border-radius: var(--radius-md);
+            font-size: 1rem;
+            font-weight: 500;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            transition: all var(--transition);
+            outline: none;
+        }
+
+        input[type="number"]:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px var(--primary-light);
+            transform: translateY(-1px);
+        }
+
+        input[type="number"]:hover {
+            border-color: var(--primary);
+        }
+
+        .input-suffix {
+            position: absolute;
+            right: var(--space-4);
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            font-weight: 600;
+            pointer-events: none;
+        }
+
+        .input-error {
+            border-color: var(--error) !important;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+        }
+
+        .error-message {
+            color: var(--error);
+            font-size: 0.8rem;
+            margin-top: var(--space-2);
+            display: none;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .error-message i {
+            font-size: 0.7rem;
+        }
+
+        .help-text {
+            margin-top: var(--space-2);
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .help-text i {
+            color: var(--info);
+            font-size: 0.7rem;
+        }
+
+        /* Enhanced Slider Styles */
+        .slider-container {
+            margin-top: var(--space-4);
+            padding: var(--space-2) 0;
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            background: var(--bg-tertiary);
+            outline: none;
+            border-radius: var(--radius-full);
+            transition: all var(--transition);
+            cursor: pointer;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--gradient-primary);
+            cursor: pointer;
+            transition: all var(--transition);
+            box-shadow: var(--shadow-md);
+            border: 3px solid white;
+        }
+
+        .slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .slider::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--gradient-primary);
+            cursor: pointer;
+            border: 3px solid white;
+            box-shadow: var(--shadow-md);
+        }
+
+        .range-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: var(--space-2);
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        /* Enhanced Button Styles */
+        .button {
+            background: var(--gradient-primary);
+            color: white;
+            border: none;
+            padding: var(--space-4) var(--space-6);
+            border-radius: var(--radius-md);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition);
+            width: 100%;
+            box-shadow: var(--shadow-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .button:hover::before {
+            left: 100%;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-xl);
+        }
+
+        .button:active {
+            transform: translateY(0);
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-3);
+            margin-top: var(--space-6);
+        }
+
+        .action-button {
+            background: var(--secondary);
+            color: white;
+            border: none;
+            padding: var(--space-3) var(--space-4);
+            border-radius: var(--radius);
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-2);
+            box-shadow: var(--shadow);
+        }
+
+        .action-button:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .action-button.secondary {
+            background: var(--accent);
+        }
+
+        /* Enhanced Cost Summary */
+        .cost-summary {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+            border: 1px solid var(--border);
+            position: relative;
+        }
+
+        .cost-header {
+            background: var(--gradient-primary);
+            padding: var(--space-8);
+            color: white;
+            text-align: center;
+            position: relative;
+        }
+
+        .cost-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="75" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="10" r="0.5" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+            opacity: 0.3;
+        }
+
+        .total-cost {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: var(--space-2);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 1;
+        }
+
+        .cost-period {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-2);
+        }
+
+        .cost-breakdown {
+            padding: var(--space-6);
+        }
+
+        .cost-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-4) 0;
+            border-bottom: 1px solid var(--border);
+            transition: all var(--transition);
+        }
+
+        .cost-item:last-child {
+            border-bottom: none;
+        }
+
+        .cost-item:hover {
+            background: var(--primary-light);
+            margin: 0 calc(-1 * var(--space-2));
+            padding: var(--space-4) var(--space-2);
+            border-radius: var(--radius);
+        }
+
+        .cost-item-label {
+            color: var(--text-secondary);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .cost-item-label i {
+            color: var(--primary);
+            font-size: 0.9rem;
+        }
+
+        .cost-item-value {
+            font-weight: 700;
+            color: var(--primary);
+            font-size: 1.1rem;
+        }
+
+        /* Enhanced Chart Container */
+        .chart-container {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-lg);
+            padding: var(--space-6);
+            border: 1px solid var(--border);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chart-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--gradient-accent);
+        }
+
+        /* Enhanced Info Cards */
+        .info-card {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-lg);
+            padding: var(--space-6);
+            border: 1px solid var(--border);
+            transition: all var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .info-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--gradient-secondary);
+        }
+
+        .info-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-xl);
+        }
+
+        .info-card-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: var(--space-4);
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+        }
+
+        .info-card-title i {
+            font-size: 1.1rem;
+        }
+
+        .info-card-content {
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+
+        .info-card-list {
+            list-style: none;
+            margin-top: var(--space-4);
+        }
+
+        .info-card-list li {
+            margin-bottom: var(--space-3);
+            position: relative;
+            padding-left: var(--space-6);
+            line-height: 1.6;
+            transition: all var(--transition);
+        }
+
+        .info-card-list li:hover {
+            color: var(--text-primary);
+            transform: translateX(4px);
+        }
+
+        .info-card-list li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0.6rem;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--gradient-primary);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .info-card-list li strong {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        /* Animations */
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .configuration-panel,
+        .cost-summary,
+        .info-card,
+        .chart-container {
+            animation: slideInUp 0.6s ease-out;
+        }
+
+        .cost-summary {
+            animation-delay: 0.1s;
+        }
+
+        .info-card:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .info-card:nth-child(3) {
+            animation-delay: 0.3s;
+        }
+
+        /* Success/Error States */
+        .success-state {
+            background: var(--success) !important;
+            animation: pulse 0.6s ease-in-out;
+        }
+
+        .error-state {
+            background: var(--error) !important;
+            animation: pulse 0.6s ease-in-out;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .calculator-container {
+                grid-template-columns: 1fr;
+                padding: var(--space-4);
+                gap: var(--space-6);
+            }
+
+            .configuration-panel {
+                padding: var(--space-6);
+            }
+
+            .header-content {
+                padding: 0 var(--space-4);
+            }
+
+            .total-cost {
+                font-size: 2.5rem;
+            }
+
+            .action-buttons {
+                grid-template-columns: 1fr;
+            }
+
+            .logo {
+                font-size: 1.2rem;
+            }
+
+            .section-title {
+                font-size: 1.3rem;
+            }
+        }
+
+        /* Reduced Motion */
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* Focus Styles for Accessibility */
+        *:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+
+        /* Loading State */
+        .loading {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .loading::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">
+                    <i class="fas fa-calculator"></i>
+                </div>
+                API 平台成本计算器
+            </div>
+            <button class="theme-toggle" onclick="toggleTheme()" aria-label="切换主题">
+                <i class="fas fa-moon" id="theme-icon"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="calculator-container">
+        <div class="configuration-panel">
+            <div class="section">
+                <div class="section-title">
+                    <i class="fas fa-cogs"></i>
+                    API 资源配置
+                </div>
+                
+                <div class="form-group">
+                    <label for="cpu">
+                        <i class="fas fa-microchip"></i>
+                        CPU 数量 (vCPU)
+                    </label>
+                    <div class="input-wrapper">
+                        <input type="number" id="cpu" min="0" step="1" value="2" 
+                               onchange="validateAndUpdate(this, 0, 96); updateCost();">
+                        <span class="input-suffix">vCPU</span>
+                    </div>
+                    <div class="error-message" id="cpuError">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        请输入0-96之间的值
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" min="0" max="96" value="2" class="slider" id="cpuSlider" 
+                               oninput="updateInputFromSlider('cpu', 'cpuSlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>0</span>
+                            <span>96</span>
+                        </div>
+                    </div>
+                    <div class="help-text">
+                        <i class="fas fa-info-circle"></i>
+                        每个API实例分配的CPU核心数
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="memory">
+                        <i class="fas fa-memory"></i>
+                        内存大小 (GB)
+                    </label>
+                    <div class="input-wrapper">
+                        <input type="number" id="memory" min="0" step="0.5" value="4" 
+                               onchange="validateAndUpdate(this, 0, 128); updateCost();">
+                        <span class="input-suffix">GB</span>
+                    </div>
+                    <div class="error-message" id="memoryError">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        请输入0-128之间的值
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" min="0" max="128" value="4" step="0.5" class="slider" id="memorySlider" 
+                               oninput="updateInputFromSlider('memory', 'memorySlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>0</span>
+                            <span>128</span>
+                        </div>
+                    </div>
+                    <div class="help-text">
+                        <i class="fas fa-info-circle"></i>
+                        每个API实例分配的内存大小
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="maxReplicas">
+                        <i class="fas fa-clone"></i>
+                        最大副本数
+                    </label>
+                    <div class="input-wrapper">
+                        <input type="number" id="maxReplicas" min="1" step="1" value="4" 
+                               onchange="validateAndUpdate(this, 1, 20); updateCost();">
+                        <span class="input-suffix">个</span>
+                    </div>
+                    <div class="error-message" id="maxReplicasError">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        请输入1-20之间的值
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" min="1" max="20" value="4" class="slider" id="replicasSlider" 
+                               oninput="updateInputFromSlider('maxReplicas', 'replicasSlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>1</span>
+                            <span>20</span>
+                        </div>
+                    </div>
+                    <div class="help-text">
+                        <i class="fas fa-info-circle"></i>
+                        API的最大实例副本数量
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="apiCount">
+                        <i class="fas fa-layer-group"></i>
+                        API 数量
+                    </label>
+                    <div class="input-wrapper">
+                        <input type="number" id="apiCount" min="1" step="1" value="1" 
+                               onchange="validateAndUpdate(this, 1, 100); updateCost();">
+                        <span class="input-suffix">个</span>
+                    </div>
+                    <div class="error-message" id="apiCountError">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        请输入1-100之间的值
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" min="1" max="100" value="1" class="slider" id="apiSlider" 
+                               oninput="updateInputFromSlider('apiCount', 'apiSlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>1</span>
+                            <span>100</span>
+                        </div>
+                    </div>
+                    <div class="help-text">
+                        <i class="fas fa-info-circle"></i>
+                        用户需要部署的API总数量
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <button class="button" onclick="updateCost()">
+                    <i class="fas fa-calculator"></i>
+                    重新计算成本
+                </button>
+                <div class="action-buttons">
+                    <button class="action-button" onclick="saveConfiguration()">
+                        <i class="fas fa-save"></i>
+                        保存配置
+                    </button>
+                    <button class="action-button secondary" onclick="loadConfiguration()">
+                        <i class="fas fa-upload"></i>
+                        加载配置
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="result-panel">
+            <div class="cost-summary">
+                <div class="cost-header">
+                    <div class="total-cost" id="totalCostDisplay">$332.00</div>
+                    <div class="cost-period">
+                        <i class="fas fa-calendar-alt"></i>
+                        预估每月成本
+                    </div>
+                </div>
+
+                <div class="cost-breakdown">
+                    <div class="cost-item">
+                        <div class="cost-item-label">
+                            <i class="fas fa-server"></i>
+                            基础设施成本
+                        </div>
+                        <div class="cost-item-value" id="baseCostDisplay">$180.00</div>
+                    </div>
+
+                    <div class="cost-item">
+                        <div class="cost-item-label">
+                            <i class="fas fa-microchip"></i>
+                            CPU 成本
+                        </div>
+                        <div class="cost-item-value" id="cpuCostDisplay">$76.00</div>
+                    </div>
+
+                    <div class="cost-item">
+                        <div class="cost-item-label">
+                            <i class="fas fa-memory"></i>
+                            内存成本
+                        </div>
+                        <div class="cost-item-value" id="memoryCostDisplay">$76.00</div>
+                    </div>
+
+                    <div class="cost-item">
+                        <div class="cost-item-label">
+                            <i class="fas fa-times"></i>
+                            副本成本系数
+                        </div>
+                        <div class="cost-item-value" id="replicaFactorDisplay">x2.00</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="costChart" style="max-height: 300px;"></canvas>
+            </div>
+
+            <div class="info-card">
+                <div class="info-card-title">
+                    <i class="fas fa-calculator"></i>
+                    计费公式说明
+                </div>
+                <div class="info-card-content">
+                    本计算器基于以下定价公式为用户API计算平台使用费用：
+                    <div class="info-card-list">
+                        <li><strong>基础成本:</strong> $180/月 (平台基础设施费用)</li>
+                        <li><strong>CPU 成本:</strong> $19 × vCPU数量 × 副本数 ÷ 2</li>
+                        <li><strong>内存成本:</strong> $19 × 内存GB × 副本数 ÷ 2</li>
+                        <li><strong>总成本:</strong> (基础成本 + CPU成本 + 内存成本) × API数量</li>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-card-title">
+                    <i class="fas fa-user-tie"></i>
+                    PM 使用指南
+                </div>
+                <div class="info-card-content">
+                    <div class="info-card-list">
+                        <li>根据用户API的资源需求调整CPU和内存配置</li>
+                        <li>副本数决定API的高可用性和负载承受能力</li>
+                        <li>可保存常用配置模板，提高报价效率</li>
+                        <li>成本计算结果可直接用于客户报价和内部成本核算</li>
+                        <li>建议为不同规模的客户准备标准化的配置方案</li>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Theme Management
+        function toggleTheme() {
+            const body = document.body;
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            const themeIcon = document.getElementById('theme-icon');
+            
+            body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            
+            // Update theme icon
+            themeIcon.className = newTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+            
+            updateChartTheme();
+        }
+
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            const themeIcon = document.getElementById('theme-icon');
+            
+            if (savedTheme) {
+                document.body.setAttribute('data-theme', savedTheme);
+                themeIcon.className = savedTheme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+            } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                document.body.setAttribute('data-theme', 'dark');
+                themeIcon.className = 'fas fa-sun';
+            }
+        }
+
+        // Input Validation
+        function validateAndUpdate(input, min, max) {
+            const value = parseFloat(input.value);
+            const errorElement = document.getElementById(input.id + 'Error');
+            
+            if (isNaN(value) || value < min || value > max) {
+                input.classList.add('input-error');
+                errorElement.style.display = 'flex';
+                return false;
+            }
+            
+            input.classList.remove('input-error');
+            errorElement.style.display = 'none';
+            updateSliderValue(input.id + 'Slider', input.id);
+            return true;
+        }
+
+        function updateInputFromSlider(inputId, sliderId) {
+            const slider = document.getElementById(sliderId);
+            const input = document.getElementById(inputId);
+            input.value = slider.value;
+            input.classList.remove('input-error');
+            document.getElementById(inputId + 'Error').style.display = 'none';
+        }
+
+        function updateSliderValue(sliderId, inputId) {
+            const slider = document.getElementById(sliderId);
+            const input = document.getElementById(inputId);
+            if (slider) {
+                slider.value = input.value;
+            }
+        }
+
+        // Cost Calculation - Maintaining Original Formula
+        function calculateCost() {
+            let cpu = parseFloat(document.getElementById("cpu").value) || 0;
+            let memory = parseFloat(document.getElementById("memory").value) || 0;
+            let maxReplicas = parseInt(document.getElementById("maxReplicas").value) || 4;
+            let apiCount = parseInt(document.getElementById("apiCount").value) || 1;
+            
+            // Original calculation formula
+            let base_cost = 180;
+            let cpu_cost = 19 * cpu * maxReplicas / 2;
+            let memory_cost = 19 * memory * maxReplicas / 2;
+            let total_cost = (base_cost + cpu_cost + memory_cost) * apiCount;
+            
+            return {
+                total: total_cost,
+                base: base_cost * apiCount,
+                cpu: cpu_cost * apiCount,
+                memory: memory_cost * apiCount,
+                replicaFactor: maxReplicas / 2
+            };
+        }
+
+        // Cost Display Updates
+        let costChart;
+        
+        function updateCost() {
+            const costs = calculateCost();
+            
+            // Animate number changes
+            animateValue('totalCostDisplay', costs.total, '$');
+            animateValue('baseCostDisplay', costs.base, '$');
+            animateValue('cpuCostDisplay', costs.cpu, '$');
+            animateValue('memoryCostDisplay', costs.memory, '$');
+            
+            document.getElementById("replicaFactorDisplay").innerText = "x" + costs.replicaFactor.toFixed(2);
+
+            updateChart(costs);
+        }
+
+        function animateValue(elementId, endValue, prefix = '') {
+            const element = document.getElementById(elementId);
+            const startValue = parseFloat(element.innerText.replace(/[^0-9.-]+/g, '')) || 0;
+            const duration = 800;
+            const startTime = performance.now();
+
+            function animate(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                
+                // Easing function
+                const easeOutQuart = 1 - Math.pow(1 - progress, 4);
+                const currentValue = startValue + (endValue - startValue) * easeOutQuart;
+                
+                element.innerText = prefix + currentValue.toFixed(2);
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                }
+            }
+            
+            requestAnimationFrame(animate);
+        }
+
+        // Enhanced Chart
+        function updateChart(costs) {
+            const ctx = document.getElementById('costChart').getContext('2d');
+            const isDark = document.body.getAttribute('data-theme') === 'dark';
+            const textColor = isDark ? '#f3f4f6' : '#111827';
+            const gridColor = isDark ? '#374151' : '#e5e7eb';
+
+            if (costChart) {
+                costChart.destroy();
+            }
+
+            const gradient1 = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient1.addColorStop(0, '#4f46e5');
+            gradient1.addColorStop(1, '#7c3aed');
+
+            const gradient2 = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient2.addColorStop(0, '#10b981');
+            gradient2.addColorStop(1, '#059669');
+
+            const gradient3 = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient3.addColorStop(0, '#f59e0b');
+            gradient3.addColorStop(1, '#d97706');
+
+            costChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['基础设施', 'CPU', '内存'],
+                    datasets: [{
+                        data: [costs.base, costs.cpu, costs.memory],
+                        backgroundColor: [gradient1, gradient2, gradient3],
+                        borderWidth: 0,
+                        hoverOffset: 8,
+                        cutout: '60%'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        animateRotate: true,
+                        duration: 1000,
+                        easing: 'easeOutQuart'
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: textColor,
+                                font: {
+                                    family: 'Inter, sans-serif',
+                                    size: 14,
+                                    weight: '500'
+                                },
+                                padding: 20,
+                                usePointStyle: true,
+                                pointStyle: 'circle'
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: isDark ? '#1f2937' : '#ffffff',
+                            titleColor: textColor,
+                            bodyColor: textColor,
+                            borderColor: '#4f46e5',
+                            borderWidth: 2,
+                            cornerRadius: 8,
+                            displayColors: true,
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw;
+                                    const percentage = ((value / costs.total) * 100).toFixed(1);
+                                    return `$${value.toFixed(2)} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateChartTheme() {
+            if (costChart) {
+                const costs = calculateCost();
+                updateChart(costs);
+            }
+        }
+
+        // Configuration Management
+        function getCurrentConfiguration() {
+            return {
+                cpu: parseFloat(document.getElementById("cpu").value),
+                memory: parseFloat(document.getElementById("memory").value),
+                maxReplicas: parseInt(document.getElementById("maxReplicas").value),
+                apiCount: parseInt(document.getElementById("apiCount").value)
+            };
+        }
+
+        function saveConfiguration() {
+            const config = getCurrentConfiguration();
+            localStorage.setItem('api-cost-calculator-config', JSON.stringify(config));
+            
+            const button = event.target;
+            const originalText = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-check"></i> 已保存!';
+            button.classList.add('success-state');
+            
+            setTimeout(() => {
+                button.innerHTML = originalText;
+                button.classList.remove('success-state');
+            }, 2000);
+        }
+
+        function loadConfiguration() {
+            const savedConfig = localStorage.getItem('api-cost-calculator-config');
+            const button = event.target;
+            const originalText = button.innerHTML;
+            
+            if (savedConfig) {
+                const config = JSON.parse(savedConfig);
+                
+                document.getElementById("cpu").value = config.cpu || 2;
+                document.getElementById("memory").value = config.memory || 4;
+                document.getElementById("maxReplicas").value = config.maxReplicas || 4;
+                document.getElementById("apiCount").value = config.apiCount || 1;
+                
+                // Update sliders
+                document.getElementById("cpuSlider").value = config.cpu || 2;
+                document.getElementById("memorySlider").value = config.memory || 4;
+                document.getElementById("replicasSlider").value = config.maxReplicas || 4;
+                document.getElementById("apiSlider").value = config.apiCount || 1;
+                
+                updateCost();
+                
+                button.innerHTML = '<i class="fas fa-check"></i> 已加载!';
+                button.classList.add('success-state');
+            } else {
+                button.innerHTML = '<i class="fas fa-times"></i> 无配置';
+                button.classList.add('error-state');
+            }
+            
+            setTimeout(() => {
+                button.innerHTML = originalText;
+                button.classList.remove('success-state', 'error-state');
+            }, 2000);
+        }
+
+        // Initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            updateCost();
+            
+            // Add loading animation to chart container
+            const chartContainer = document.querySelector('.chart-container');
+            chartContainer.classList.add('loading');
+            
+            setTimeout(() => {
+                chartContainer.classList.remove('loading');
+            }, 1000);
+        });
+
+        // System theme change listener
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+            if (!localStorage.getItem('theme')) {
+                document.body.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+                const themeIcon = document.getElementById('theme-icon');
+                themeIcon.className = e.matches ? 'fas fa-sun' : 'fas fa-moon';
+                updateChartTheme();
+            }
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case 's':
+                        e.preventDefault();
+                        saveConfiguration();
+                        break;
+                    case 'l':
+                        e.preventDefault();
+                        loadConfiguration();
+                        break;
+                    case 'r':
+                        e.preventDefault();
+                        updateCost();
+                        break;
+                }
+            }
+        });
+    </script>
+</body>
+</html>

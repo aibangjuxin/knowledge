@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GKE ASM Ambient Mode 架构</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', monospace; background: #020617; min-height: 100vh; padding: 2rem; color: white; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #34d399; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container { background: rgba(15, 23, 42, 0.5); border-radius: 1rem; border: 1px solid #1e293b; padding: 1.5rem; overflow-x: auto; }
+    svg { width: 100%; min-width: 1000px; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: 2rem; }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="header-row">
+      <div class="pulse-dot"></div>
+      <h1>GKE ASM Ambient Mode 架构</h1>
+    </div>
+    <p class="subtitle">GKE 默认安装的 ASM (Anthos Service Mesh) Ambient Mode — 无需 Sidecar 的零信任网络</p>
+  </div>
+
+  <div class="diagram-container">
+    <svg viewBox="0 0 1080 580">
+      <defs>
+        <marker id="ah" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+        </marker>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#grid)"/>
+
+      <!-- ===================== GCP LAYER ===================== -->
+      <rect x="20" y="20" width="1040" height="540" rx="12" fill="rgba(251, 191, 36, 0.03)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+      <text x="32" y="38" fill="#fbbf24" font-size="10" font-weight="700">GCP Project / VPC</text>
+
+      <!-- ===================== CLIENT LAYER ===================== -->
+      <rect x="40" y="60" width="100" height="56" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="90" y="82" fill="white" font-size="11" font-weight="600" text-anchor="middle">🌐 Client</text>
+      <text x="90" y="98" fill="#94a3b8" font-size="9" text-anchor="middle">HTTP/gRPC</text>
+
+      <!-- ILB -->
+      <rect x="40" y="140" width="100" height="56" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="90" y="162" fill="white" font-size="11" font-weight="600" text-anchor="middle">⚖️ ILB</text>
+      <text x="90" y="178" fill="#94a3b8" font-size="9" text-anchor="middle">GCP Internal LB</text>
+      <line x1="90" y1="116" x2="90" y2="138" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah)"/>
+
+      <!-- ===================== INT-ISTIO NAMESPACE ===================== -->
+      <rect x="170" y="60" width="230" height="190" rx="10" fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,4"/>
+      <text x="182" y="78" fill="#fbbf24" font-size="10" font-weight="700">namespace: int-istio</text>
+      <text x="182" y="92" fill="#fbbf24" font-size="9">Gateway 专属命名空间</text>
+
+      <!-- Gateway Node -->
+      <rect x="186" y="104" width="198" height="58" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="285" y="126" fill="white" font-size="11" font-weight="600" text-anchor="middle">Gateway Deployment</text>
+      <text x="285" y="142" fill="#94a3b8" font-size="9" text-anchor="middle">int-istio-gw · Envoy sidecar</text>
+      <text x="285" y="156" fill="#22d3ee" font-size="8" text-anchor="middle">✅ 已注入 Envoy Proxy</text>
+
+      <!-- Gateway SVC -->
+      <rect x="186" y="174" width="198" height="40" rx="4" fill="rgba(8, 51, 68, 0.3)" stroke="#22d3ee" stroke-width="1"/>
+      <text x="285" y="198" fill="#94a3b8" font-size="9" text-anchor="middle">SVC LoadBalancer · selector: app=int-istio-gw</text>
+
+      <!-- Gateway CRD -->
+      <rect x="186" y="226" width="198" height="32" rx="4" fill="rgba(120, 53, 15, 0.2)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="285" y="246" fill="#fbbf24" font-size="9" text-anchor="middle">Gateway CRD · hosts / TLS / selector</text>
+
+      <!-- ILB → Gateway -->
+      <line x1="140" y1="168" x2="184" y2="168" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#ah)"/>
+      <text x="162" y="162" fill="#94a3b8" font-size="9" text-anchor="middle">HTTPS</text>
+
+      <!-- ===================== WAYPOINT PROXY (Ambient) ===================== -->
+      <rect x="440" y="60" width="220" height="190" rx="10" fill="rgba(52, 211, 153, 0.05)" stroke="#34d399" stroke-width="1.5" stroke-dasharray="6,4"/>
+      <text x="452" y="78" fill="#34d399" font-size="10" font-weight="700">Ambient: Waypoint Proxy</text>
+      <text x="452" y="92" fill="#94a3b8" font-size="9">namespace: api-runtime</text>
+      <text x="452" y="104" fill="#34d399" font-size="8">Gateway API (not Istio CRD)</text>
+
+      <!-- Waypoint Deployment -->
+      <rect x="454" y="114" width="192" height="58" rx="6" fill="rgba(52, 211, 153, 0.2)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="550" y="136" fill="white" font-size="11" font-weight="600" text-anchor="middle">WaypointProxy</text>
+      <text x="550" y="152" fill="#94a3b8" font-size="9" text-anchor="middle">api-backend-waypoint</text>
+      <text x="550" y="166" fill="#34d399" font-size="8" text-anchor="middle">✅ ztunnel + Envoy</text>
+
+      <!-- GatewayClass -->
+      <rect x="454" y="184" width="192" height="28" rx="4" fill="rgba(52, 211, 153, 0.1)" stroke="#34d399" stroke-width="1"/>
+      <text x="550" y="202" fill="#34d399" font-size="9" text-anchor="middle">GatewayClass: istio</text>
+
+      <!-- HTTPRoute -->
+      <rect x="454" y="220" width="192" height="28" rx="4" fill="rgba(250, 204, 21, 0.15)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="550" y="238" fill="#fbbf24" font-size="9" text-anchor="middle">HTTPRoute / GRPCRoute</text>
+
+      <!-- Arrow: Gateway → Waypoint -->
+      <line x1="400" y1="168" x2="452" y2="168" stroke="#34d399" stroke-width="1.5" marker-end="url(#ah)"/>
+      <text x="426" y="162" fill="#94a3b8" font-size="9" text-anchor="middle">路由</text>
+
+      <!-- ===================== RUNTIME NAMESPACE (Ambient Node) ===================== -->
+      <rect x="700" y="60" width="340" height="320" rx="10" fill="rgba(52, 211, 153, 0.03)" stroke="#34d399" stroke-width="1.5" stroke-dasharray="6,4"/>
+      <text x="712" y="78" fill="#34d399" font-size="10" font-weight="700">namespace: api-runtime</text>
+      <text x="712" y="92" fill="#94a3b8" font-size="9">istio.io/rev=asm-managed (Ambient)</text>
+
+      <!-- Ztunnel DaemonSet (node-level) -->
+      <rect x="718" y="108" width="308" height="58" rx="6" fill="rgba(52, 211, 153, 0.2)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="872" y="130" fill="white" font-size="11" font-weight="600" text-anchor="middle">ztunnel DaemonSet (Node 级)</text>
+      <text x="872" y="146" fill="#94a3b8" font-size="9" text-anchor="middle">每个 Node 一个 ztunnel Pod</text>
+      <text x="872" y="160" fill="#34d399" font-size="8" text-anchor="middle">L4 mTLS 透明加密 · 零 sidecar</text>
+
+      <!-- App Pod (NO sidecar in ambient!) -->
+      <rect x="718" y="182" width="148" height="72" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="792" y="204" fill="white" font-size="10" font-weight="600" text-anchor="middle">Pod (无 Sidecar)</text>
+      <text x="792" y="220" fill="#94a3b8" font-size="9" text-anchor="middle">api-backend v1</text>
+      <text x="792" y="234" fill="#fb7185" font-size="8" text-anchor="middle">❌ 无 istio-proxy</text>
+      <text x="792" y="248" fill="#94a3b8" font-size="8" text-anchor="middle">原生容器 · 无侵入</text>
+
+      <rect x="876" y="182" width="148" height="72" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="950" y="204" fill="white" font-size="10" font-weight="600" text-anchor="middle">Pod (无 Sidecar)</text>
+      <text x="950" y="220" fill="#94a3b8" font-size="9" text-anchor="middle">api-backend v2</text>
+      <text x="950" y="234" fill="#fb7185" font-size="8" text-anchor="middle">❌ 无 istio-proxy</text>
+      <text x="950" y="248" fill="#94a3b8" font-size="8" text-anchor="middle">原生容器 · 无侵入</text>
+
+      <!-- Service -->
+      <rect x="718" y="272" width="308" height="44" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="872" y="294" fill="white" font-size="10" font-weight="600" text-anchor="middle">Service: api-backend</text>
+      <text x="872" y="310" fill="#94a3b8" font-size="9" text-anchor="middle">selector: app=api-backend · port: 80 → 8080</text>
+
+      <!-- AuthorizationPolicy -->
+      <rect x="718" y="330" width="308" height="32" rx="4" fill="rgba(136, 19, 55, 0.2)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="872" y="350" fill="#fb7185" font-size="9" text-anchor="middle">AuthorizationPolicy (L4/L7 策略 · ztunnel 执行)</text>
+
+      <!-- PeerAuthentication -->
+      <rect x="718" y="370" width="308" height="32" rx="4" fill="rgba(136, 19, 55, 0.2)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="872" y="390" fill="#fb7185" font-size="9" text-anchor="middle">PeerAuthentication (mTLS STRICT · ztunnel 执行)</text>
+
+      <!-- ===================== istiod (Control Plane) ===================== -->
+      <rect x="30" y="420" width="300" height="120" rx="10" fill="rgba(167, 139, 250, 0.08)" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="6,4"/>
+      <text x="42" y="440" fill="#a78bfa" font-size="10" font-weight="700">namespace: istio-system</text>
+      <text x="42" y="456" fill="#94a3b8" font-size="9">ASM Managed istiod · Ambient 模式</text>
+
+      <rect x="50" y="468" width="120" height="56" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="110" y="490" fill="white" font-size="10" font-weight="600" text-anchor="middle">istiod</text>
+      <text x="110" y="506" fill="#94a3b8" font-size="8" text-anchor="middle">xDS API</text>
+      <text x="110" y="518" fill="#94a3b8" font-size="8" text-anchor="middle">ConfigController</text>
+
+      <rect x="190" y="468" width="120" height="56" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="250" y="490" fill="white" font-size="10" font-weight="600" text-anchor="middle">istiod</text>
+      <text x="250" y="506" fill="#94a3b8" font-size="8" text-anchor="middle">Waypoint 控制器</text>
+      <text x="250" y="518" fill="#94a3b8" font-size="8" text-anchor="middle">ztunnel 配置</text>
+
+      <!-- istiod → waypoint -->
+      <line x1="330" y1="496" x2="452" y2="168" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#ah)"/>
+      <text x="390" y="330" fill="#a78bfa" font-size="8">xDS</text>
+
+      <!-- istiod → ztunnel -->
+      <line x1="180" y1="524" x2="718" y2="137" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#ah)"/>
+      <text x="440" y="335" fill="#a78bfa" font-size="8">ztunnel 配置</text>
+
+      <!-- ===================== SIDE-BY-SIDE COMPARISON (bottom right) ===================== -->
+      <rect x="700" y="420" width="340" height="120" rx="10" fill="rgba(15, 23, 42, 0.9)" stroke="#1e293b" stroke-width="1"/>
+      <text x="720" y="440" fill="#94a3b8" font-size="10" font-weight="600">Ambient vs Sidecar 模式对比</text>
+
+      <rect x="720" y="452" width="140" height="38" rx="4" fill="rgba(52, 211, 153, 0.15)" stroke="#34d399" stroke-width="1"/>
+      <text x="790" y="466" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">Ambient (GKE ASM 默认)</text>
+      <text x="790" y="480" fill="#94a3b8" font-size="8" text-anchor="middle">ztunnel Node 级 + Waypoint</text>
+      <text x="790" y="492" fill="#34d399" font-size="8" text-anchor="middle">✅ 无 Sidecar</text>
+
+      <rect x="870" y="452" width="160" height="38" rx="4" fill="rgba(8, 51, 68, 0.3)" stroke="#22d3ee" stroke-width="1"/>
+      <text x="950" y="466" fill="#22d3ee" font-size="9" font-weight="600" text-anchor="middle">Sidecar (传统模式)</text>
+      <text x="950" y="480" fill="#94a3b8" font-size="8" text-anchor="middle">每 Pod 一个 Envoy</text>
+      <text x="950" y="492" fill="#94a3b8" font-size="8" text-anchor="middle">istio-proxy 注入</text>
+
+      <text x="720" y="514" fill="#94a3b8" font-size="9">GKE ASM 1.20+ 默认 Ambient 模式 · 无需修改业务 Pod</text>
+      <text x="720" y="530" fill="#94a3b8" font-size="9">切换: --profile=default (Ambient) / --profile=sidecar</text>
+
+      <!-- ===================== LEGEND ===================== -->
+      <text x="370" y="420" fill="white" font-size="10" font-weight="600">图例</text>
+      <rect x="370" y="434" width="14" height="9" rx="2" fill="rgba(52, 211, 153, 0.2)" stroke="#34d399" stroke-width="1"/>
+      <text x="390" y="442" fill="#94a3b8" font-size="8">Ambient 组件</text>
+      <rect x="370" y="450" width="14" height="9" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+      <text x="390" y="458" fill="#94a3b8" font-size="8">Gateway + Sidecar</text>
+      <rect x="370" y="466" width="14" height="9" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+      <text x="390" y="474" fill="#94a3b8" font-size="8">控制面 istiod</text>
+      <line x1="370" y1="488" x2="384" y2="488" stroke="#34d399" stroke-width="1.5" marker-end="url(#ah)"/>
+      <text x="390" y="492" fill="#94a3b8" font-size="8">数据流量</text>
+      <line x1="370" y1="504" x2="384" y2="504" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="390" y="508" fill="#94a3b8" font-size="8">xDS 控制流</text>
+    </svg>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="card-header"><div class="card-dot emerald"></div><h3>Ambient Mode 核心组件</h3></div>
+      <ul>
+        <li>• ztunnel: Node 级 DaemonSet，L4 mTLS 透明加密</li>
+        <li>• Waypoint Proxy: 命名空间级 Envoy 代理</li>
+        <li>• Gateway API: HTTPRoute/GRPCRoute 路由 CRD</li>
+        <li>• 无需 Pod 内注入 sidecar，不改业务容器</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-dot amber"></div><h3>流量路径 (Ambient)</h3></div>
+      <ul>
+        <li>• Client → ILB → Gateway (int-istio)</li>
+        <li>• Gateway → ztunnel (Node 级 L4 mTLS)</li>
+        <li>• ztunnel → App Pod (原生无 sidecar)</li>
+        <li>• 加密在 Node 层面完成，App 零感知</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-dot violet"></div><h3>GKE ASM 默认配置</h3></div>
+      <ul>
+        <li>• GKE 1.20+ 自动安装 ASM Ambient Mode</li>
+        <li>• namespace 标签 istio.io/rev=asm-managed</li>
+        <li>• 业务 Pod 无需 istio-injection label</li>
+        <li>• 支持 Sidecar 模式并存 (migration)</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="footer">GKE ASM Ambient Mode: 零 sidecar 侵入 + Node 级 ztunnel + 命名空间级 Waypoint · 欲了解 Sidecar 模式参见 istio-ingress-flow.html</p>
+</div>
+</body>
+</html>

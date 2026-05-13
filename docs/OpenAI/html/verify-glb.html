@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Industry Trends & Market Research Infographic</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <!-- Infographic Narrative Plan:
+        1. Hero Section: Title and brief introduction to the market analysis.
+        2. Market Overview: Key metrics like current market size and projected growth.
+        3. Market Segmentation: Analysis of different market segments.
+        4. Competitive Landscape: Market share of key players and their strategic positioning.
+        5. Consumer Insights: Demographics and technology adoption trends.
+        6. SWOT Analysis: Strengths, Weaknesses, Opportunities, and Threats.
+        7. Key Industry Trends: Highlighting transformative trends shaping the future.
+        8. Future Outlook & Projections: Forecasts and concluding remarks.
+        9. Illustrative Process Flow: Example of a value chain or process.
+    -->
+    <!-- Visualization Choices:
+        - Market Size: Big Number (HTML/CSS) - Goal: Inform
+        - Growth Projection: Line Chart (Chart.js) - Goal: Change
+        - Market Segmentation (by Region): Donut Chart (Chart.js) - Goal: Compare
+        - Market Share (Key Players): Bar Chart (Chart.js) - Goal: Compare
+        - Consumer Demographics (Age Groups): Pie Chart (Chart.js) - Goal: Compare
+        - Technology Adoption Rate: Stacked Bar Chart (Chart.js) - Goal: Compare/Change
+        - SWOT Analysis: Structured HTML/CSS - Goal: Organize
+        - Key Trends Impact: Bubble Chart (Chart.js) - Goal: Compare/Relationships
+        - Future Revenue Forecast: Area Chart (Chart.js) - Goal: Change
+        - Competitive Feature Matrix: Heatmap (Plotly.js, Canvas) - Goal: Relationships/Compare
+        - Value Chain Process: Structured HTML/CSS - Goal: Organize
+        All chart implementations will use Canvas rendering. Diagrams via HTML/CSS. NO SVG, NO MERMAID JS.
+    -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F8F9FA;
+            color: #264653;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px; /* Default max-width, can be overridden by Tailwind max-w classes */
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px; 
+            max-height: 400px; /* Default max-height */
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+        .section-title {
+            color: #2A9D8F; /* Persian Green */
+        }
+        .card {
+            background-color: #FFFFFF;
+            border-radius: 0.5rem; /* rounded-lg */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); /* shadow-md */
+            padding: 1.5rem; /* p-6 */
+            margin-bottom: 1.5rem; /* mb-6 */
+        }
+        .stat-number {
+            color: #E76F51; /* Burnt Sienna */
+            font-weight: 700; /* bold */
+        }
+        .swot-item {
+            border: 1px solid #E9C46A; /* Saffron */
+            padding: 1rem;
+            border-radius: 0.375rem; /* rounded-md */
+            min-height: 150px;
+        }
+        .flow-step {
+            background-color: #2A9D8F;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.375rem;
+            text-align: center;
+            min-width: 120px;
+        }
+        .flow-arrow {
+            font-size: 2rem;
+            color: #2A9D8F;
+            margin: 0 0.5rem;
+            align-self: center;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <header class="bg-gradient-to-r from-[#264653] to-[#2A9D8F] text-white py-12 px-4 sm:px-6 lg:px-8 text-center">
+        <h1 class="text-4xl md:text-5xl font-bold mb-4">Comprehensive Analysis of Current Industry Trends</h1>
+        <p class="text-lg md:text-xl max-w-3xl mx-auto">An in-depth exploration of market dynamics, competitive landscapes, and future projections shaping the industry.</p>
+    </header>
+
+    <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <section id="market-overview" class="mb-12">
+            <h2 class="text-3xl font-semibold section-title mb-6 text-center">Market Overview</h2>
+            <div class="text-center mb-8 card">
+                <h3 class="text-xl font-semibold text-[#264653] mb-2">Current Market Valuation</h3>
+                <p class="text-5xl stat-number">$150.7 Billion</p>
+                <p class="text-[#2A9D8F] mt-2">As of Q4 2024</p>
+                <p class="mt-4 text-gray-700">The global market demonstrates robust health, driven by significant technological advancements and increasing consumer demand across key sectors. This valuation reflects a strong recovery and sustained growth momentum.</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-1 gap-8">
+                <div class="card">
+                    <h3 class="text-xl font-semibold text-[#264653] mb-4 text-center">Projected Market Growth (CAGR)</h3>
+                    <div class="chart-container h-[300px] md:h-[400px] max-w-3xl">
+                        <canvas id="marketGrowthChart"></canvas>
+                    </div>
+                    <p class="mt-4 text-sm text-gray-600 text-center">Analysis indicates a Compound Annual Growth Rate (CAGR) of 8.5% over the next five years, signaling strong expansion opportunities and investor confidence. Key drivers include innovation in AI and sustainable technologies.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="market-segmentation" class="mb-12">
+            <h2 class="text-3xl font-semibold section-title mb-6 text-center">Market Segmentation Analysis</h2>
+             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="card">
+                    <h3 class="text-xl font-semibold text-[#264653] mb-4 text-center">Segmentation by Region</h3>
+                    <div class="chart-container h-[300px] md:h-[400px] max-w-lg">
+                        <canvas id="regionalMarketShareChart"></canvas>
+                    </div>
+                    <p class="mt-4 text-sm text-gray-600 text-center">North America currently leads market share, followed by Asia-Pacific. Emerging markets in LATAM and Africa show promising growth potential due to increased digital adoption and infrastructure development.</p>
+                </div>
+                <div class="card">
+                    <h3 class="text-xl font-semibold text-[#264653] mb-4 text-center">Segmentation by Product Type</h3>
+                     <div class="chart-container h-[300px] md:h-[400px] max-w-lg">
+                        <canvas id="productTypeMarketShareChart"></canvas>
+                    </div>
+                    <p class="mt-4 text-sm text-gray-600 text-center">Type A products dominate the market, however, Type B products are rapidly gaining traction due to recent innovations and shifting consumer preferences towards sustainable solutions.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section id="competitive-landscape" class="mb-12">
+            <h2 class="text-3xl font-semibold section-title mb-6 text-center">Competitive Landscape</h2>
+            <div class="card">
+                <h3 class="text-xl font-semibold text-[#264653] mb-4 text-center">Key Player Market Share</h3>
+                <div class="chart-container h-[350px] md:h-[450px] max-w-3xl">
+                    <canvas id="keyPlayersMarketShareChart"></canvas>
+                </div>
+                <p class="mt-4 text-sm text-gray-600 text-center">The market is characterized by a mix of established leaders and agile innovators. Company Alpha and Company Beta hold significant shares, while emerging players are disrupting the status quo with niche offerings.</p>
+            </div>
+        </section>
+
+        <section id="consumer-insights" class="mb-12">
+            <h2 class="text-3xl font-semibold section-title mb-6 text-center">Consumer Insights</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="card">
+                    <h3 class="text-xl font-semibold text-[#264653] mb-4 text-center">Consumer Demographics (Age Groups)</h3>
+                    <div class="chart-container h-[300px] md:h-[400px] max-w-lg">
+                        <canvas id="consumerDemographicsChart"></canvas>
+                    </div>
+                    <p class="mt-4 text-sm text-gray-600 text-center">The 25-34 age group represents the largest consumer segment, driven by their digital fluency and early adoption of new technologies. Tailored marketing strategies are crucial for engagement.</p>
+                </div>
+                <div class="card">
+                    <h3 class="text-xl font-semibold text-[#264653] mb-4 text-center">Technology Adoption Rate (By Sector)</h3>
+                    <div class="chart-container h-[300px] md:h-[400px] max-w-lg">
+                        <canvas id="techAdoptionRateChart"></canvas>
+                    </div>
+                    <p class="mt-4 text-sm text-gray-600 text-center">The Tech and Finance sectors exhibit the highest adoption rates for new platform technologies, while traditional sectors like Manufacturing are steadily increasing their investment in digital transformation.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="swot-analysis" class="mb-12">
+            <h2 class="text-3xl font-semibold section-title mb-6 text-center">SWOT Analysis</h2>
+            <p class="text-center text-gray-700 mb-6 max-w-2xl mx-auto">A strategic overview of the industry's internal strengths and weaknesses, alongside external opportunities and threats, providing a comprehensive framework for decision-making.</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="swot-item bg-green-50 border-green-500">
+                    <h3 class="text-xl font-semibold text-green-700 mb-2">Strengths 💪</h3>
+                    <ul class="list-disc list-inside text-gray-700 space-y-1">
+                        <li>Strong innovation pipeline</li>
+                        <li>Growing global demand</li>
+                        <li>Skilled workforce availability</li>
+                        <li>Established infrastructure</li>
+                    </ul>
+                </div>
+                <div class="swot-item bg-red-50 border-red-500">
+                    <h3 class="text-xl font-semibold text-red-700 mb-2">Weaknesses 📉</h3>
+                    <ul class="list-disc list-inside text-gray-700 space-y-1">
+                        <li>High R&D costs</li>
+                        <li>Dependency on supply chains</li>
+                        <li>Regulatory complexities</li>
+                        <li>Talent retention challenges</li>
+                    </ul>
+                </div>
+                <div class="swot-item bg-blue-50 border-blue-500">
+                    <h3 class="text-xl font-semibold text-blue-700 mb-2">Opportunities 🚀</h3>
+                    <ul class="list-disc list-inside text-gray-700 space-y-1">
+                        <li>Emerging markets penetration</li>
+                        <li>Strategic partnerships</li>
+                        <li>AI and ML integration</li>
+                        <li>Sustainable practices adoption</li>
+                    </ul>
+                </div>
+                <div class="swot-item bg-yellow-50 border-yellow-500">
+                    <h3 class="text-xl font-semibold text-yellow-700 mb-2">Threats ⚠️</h3>
+                    <ul class="list-disc list-inside text-gray-700 space-y-1">
+                        <li>Intense competitive rivalry</li>
+                        <li>Cybersecurity risks</li>
+                        <li>Economic downturn potential</li>
+                        <li>Rapid technological obsolescence</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="key-trends" class="mb-12">
+            <h2 class="text-3xl font-semibold section-title mb-6 text-center">Key Industry Trends & Impact</h2>
+            <div class="card">
+                 <h3 class="text-xl font-semibold text-[#264653] mb-4 text-center">Impact of Emerging Technologies</h3>
+                <div class="chart-container h-[400px] md:h-[500px] max-w-3xl">
+                    <canvas id="keyTrendsImpactChart"></canvas>
+                </div>
+                <p class="mt-4 text-sm text-gray-600 text-center">This bubble chart visualizes the relative market impact and adoption speed of key emerging technologies. Artificial Intelligence and IoT are leading in terms of transformative potential and current market penetration.</p>
+            </div>
+        </section>
+
+        <section id="future-outlook" class="mb-12">
+            <h2 class="text-3xl font-semibold section-title mb-6 text-center">Future Outlook & Projections</h2>
+            <div class="card">
+                <h3 class="text-xl font-semibold text-[#264653] mb-4 text-center">Revenue Forecast (Next 5 Years)</h3>
+                <div class="chart-container h-[300px] md:h-[400px] max-w-3xl">
+                    <canvas id="revenueForecastChart"></canvas>
+                </div>
+                <p class="mt-4 text-sm text-gray-600 text-center">The industry is poised for substantial revenue growth, driven by innovation and expanding market reach. Projections indicate a steady upward trend, with an accelerated growth phase anticipated from 2026 onwards.</p>
+            </div>
+        </section>
+
+        <section id="competitive-features" class="mb-12">
+            <h2 class="text-3xl font-semibold section-title mb-6 text-center">Competitive Feature Matrix</h2>
+            <div class="card md:col-span-2">
+                <h3 class="text-xl font-semibold text-[#264653] mb-4 text-center">Feature Strength Comparison (Selected Players)</h3>
+                <div id="featureHeatmap" class="chart-container h-[400px] md:h-[500px] w-full max-w-4xl"></div>
+                <p class="mt-4 text-sm text-gray-600 text-center">This heatmap illustrates the perceived strength of key competitors across critical product features. Darker shades indicate stronger performance or market perception in that feature category.</p>
+            </div>
+        </section>
+        
+        <section id="process-flow" class="mb-12">
+            <h2 class="text-3xl font-semibold section-title mb-6 text-center">Illustrative Industry Value Chain</h2>
+            <p class="text-center text-gray-700 mb-8 max-w-2xl mx-auto">A simplified representation of the typical value chain in this industry, highlighting key stages from raw material sourcing to end-consumer delivery and post-sale support.</p>
+            <div class="flex flex-col md:flex-row items-center justify-center space-y-4 md:space-y-0 md:space-x-4 overflow-x-auto pb-4">
+                <div class="flow-step">Research & Development</div>
+                <div class="flow-arrow hidden md:block">&rarr;</div>
+                <div class="flow-step">Raw Material Sourcing</div>
+                <div class="flow-arrow hidden md:block">&rarr;</div>
+                <div class="flow-step">Manufacturing & Assembly</div>
+                <div class="flow-arrow hidden md:block">&rarr;</div>
+                <div class="flow-step">Distribution & Logistics</div>
+                <div class="flow-arrow hidden md:block">&rarr;</div>
+                <div class="flow-step">Marketing & Sales</div>
+                <div class="flow-arrow hidden md:block">&rarr;</div>
+                <div class="flow-step">End Consumer</div>
+                <div class="flow-arrow hidden md:block">&rarr;</div>
+                <div class="flow-step">After-Sales Service</div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-[#264653] text-white py-8 text-center">
+        <p>&copy; 2025 Market Research Insights. All rights reserved.</p>
+        <p class="text-sm text-gray-400 mt-1">This infographic is for illustrative purposes based on aggregated placeholder data.</p>
+    </footer>
+
+    <script>
+        const primaryColor = '#264653'; // Charcoal
+        const secondaryColor = '#2A9D8F'; // Persian Green
+        const accent1Color = '#E9C46A'; // Saffron
+        const accent2Color = '#F4A261'; // Sandy Brown
+        const accent3Color = '#E76F51'; // Burnt Sienna
+        const lightGray = '#F8F9FA';
+
+        // Helper function for Chart.js label wrapping
+        function wrapLabels(label, maxWidth) {
+            if (typeof label !== 'string' || label.length <= maxWidth) {
+                return label;
+            }
+            const words = label.split(' ');
+            let currentLine = '';
+            const lines = [];
+            words.forEach(word => {
+                if ((currentLine + word).length > maxWidth && currentLine.length > 0) {
+                    lines.push(currentLine.trim());
+                    currentLine = '';
+                }
+                currentLine += word + ' ';
+            });
+            lines.push(currentLine.trim());
+            return lines;
+        }
+        
+        const commonChartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: {
+                        color: primaryColor
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        title: function(tooltipItems) {
+                            const item = tooltipItems[0];
+                            let label = item.chart.data.labels[item.dataIndex];
+                            if (Array.isArray(label)) {
+                              return label.join(' ');
+                            } else {
+                              return label;
+                            }
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    ticks: { color: primaryColor },
+                    grid: { color: 'rgba(0,0,0,0.05)' }
+                },
+                x: {
+                    ticks: { color: primaryColor },
+                    grid: { color: 'rgba(0,0,0,0.05)' }
+                }
+            }
+        };
+
+        // 1. Market Growth Chart (Line Chart)
+        const marketGrowthCtx = document.getElementById('marketGrowthChart').getContext('2d');
+        new Chart(marketGrowthCtx, {
+            type: 'line',
+            data: {
+                labels: ['2020', '2021', '2022', '2023', '2024', '2025 (P)', '2026 (P)', '2027 (P)'],
+                datasets: [{
+                    label: 'Market Value (USD Billion)',
+                    data: [100, 105, 115, 130, 150.7, 165, 180, 200],
+                    borderColor: accent3Color,
+                    backgroundColor: 'rgba(231, 111, 81, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: commonChartOptions
+        });
+
+        // 2. Regional Market Share (Donut Chart)
+        const regionalMarketShareCtx = document.getElementById('regionalMarketShareChart').getContext('2d');
+        new Chart(regionalMarketShareCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['North America', 'Asia-Pacific', 'Europe', 'Latin America', 'MEA'],
+                datasets: [{
+                    label: 'Market Share by Region',
+                    data: [40, 30, 20, 5, 5],
+                    backgroundColor: [secondaryColor, accent1Color, accent2Color, accent3Color, '#A9A9A9' /* DarkGray */],
+                    borderColor: lightGray,
+                    borderWidth: 2
+                }]
+            },
+            options: { ...commonChartOptions, cutout: '60%' }
+        });
+
+        // 2b. Product Type Market Share (Donut Chart)
+        const productTypeMarketShareCtx = document.getElementById('productTypeMarketShareChart').getContext('2d');
+        new Chart(productTypeMarketShareCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Product Type A', 'Product Type B', 'Product Type C', 'Other Types'],
+                datasets: [{
+                    label: 'Market Share by Product Type',
+                    data: [55, 25, 15, 5],
+                    backgroundColor: [accent1Color, accent3Color, secondaryColor, '#6c757d' /* Gray */],
+                    borderColor: lightGray,
+                    borderWidth: 2
+                }]
+            },
+            options: { ...commonChartOptions, cutout: '60%' }
+        });
+
+
+        // 3. Key Players Market Share (Bar Chart)
+        const keyPlayersMarketShareCtx = document.getElementById('keyPlayersMarketShareChart').getContext('2d');
+        const rawLabelsKeyPlayers = ['Company Alpha Solutions', 'Company Beta Innovations Corp.', 'Gamma Tech Global', 'Delta Services Ltd.', 'Epsilon Products Inc.'];
+        new Chart(keyPlayersMarketShareCtx, {
+            type: 'bar',
+            data: {
+                labels: rawLabelsKeyPlayers.map(label => wrapLabels(label, 16)),
+                datasets: [{
+                    label: 'Market Share (%)',
+                    data: [30, 25, 15, 10, 8],
+                    backgroundColor: [secondaryColor, accent1Color, accent2Color, accent3Color, '#264653'],
+                    borderColor: [secondaryColor, accent1Color, accent2Color, accent3Color, '#264653'],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                ...commonChartOptions,
+                indexAxis: 'y', // Horizontal bar chart for better label readability
+                 scales: {
+                    y: {
+                        ticks: { color: primaryColor, font: {size: 10} },
+                        grid: { display: false }
+                    },
+                    x: {
+                        ticks: { color: primaryColor },
+                        grid: { color: 'rgba(0,0,0,0.05)' }
+                    }
+                }
+            }
+        });
+
+        // 4. Consumer Demographics (Pie Chart)
+        const consumerDemographicsCtx = document.getElementById('consumerDemographicsChart').getContext('2d');
+        new Chart(consumerDemographicsCtx, {
+            type: 'pie',
+            data: {
+                labels: ['18-24 years', '25-34 years', '35-44 years', '45-54 years', '55+ years'],
+                datasets: [{
+                    label: 'Consumer Age Groups',
+                    data: [20, 35, 25, 15, 5],
+                    backgroundColor: [accent1Color, accent3Color, secondaryColor, accent2Color, '#6c757d'],
+                    borderColor: lightGray,
+                    borderWidth: 2
+                }]
+            },
+            options: commonChartOptions
+        });
+
+        // 5. Technology Adoption Rate (Stacked Bar Chart)
+        const techAdoptionRateCtx = document.getElementById('techAdoptionRateChart').getContext('2d');
+        const rawLabelsTechAdoption = ['Finance Sector Technology Stack', 'Healthcare Sector Technology Stack', 'Retail Sector Technology Stack', 'Manufacturing Sector Technology Stack'];
+        new Chart(techAdoptionRateCtx, {
+            type: 'bar',
+            data: {
+                labels: rawLabelsTechAdoption.map(label => wrapLabels(label, 16)),
+                datasets: [
+                    {
+                        label: 'Legacy Systems',
+                        data: [20, 30, 40, 50],
+                        backgroundColor: '#A9A9A9', // DarkGray
+                    },
+                    {
+                        label: 'Modern Cloud Platforms',
+                        data: [50, 45, 35, 30],
+                        backgroundColor: accent2Color,
+                    },
+                    {
+                        label: 'Cutting-Edge AI/ML',
+                        data: [30, 25, 25, 20],
+                        backgroundColor: secondaryColor,
+                    }
+                ]
+            },
+            options: {
+                ...commonChartOptions,
+                scales: {
+                    x: { stacked: true, ticks: { color: primaryColor, font: {size: 10} }, grid: { display: false } },
+                    y: { stacked: true, ticks: { color: primaryColor }, grid: { color: 'rgba(0,0,0,0.05)' } }
+                }
+            }
+        });
+
+        // 6. Key Trends Impact (Bubble Chart)
+        const keyTrendsImpactCtx = document.getElementById('keyTrendsImpactChart').getContext('2d');
+        new Chart(keyTrendsImpactCtx, {
+            type: 'bubble',
+            data: {
+                datasets: [
+                    {
+                        label: 'Artificial Intelligence',
+                        data: [{ x: 8, y: 9, r: 25 }],
+                        backgroundColor: 'rgba(231, 111, 81, 0.7)', // accent3Color
+                        borderColor: accent3Color
+                    },
+                    {
+                        label: 'Internet of Things (IoT)',
+                        data: [{ x: 7, y: 7.5, r: 20 }],
+                        backgroundColor: 'rgba(42, 157, 143, 0.7)', // secondaryColor
+                        borderColor: secondaryColor
+                    },
+                    {
+                        label: 'Blockchain Technology',
+                        data: [{ x: 5, y: 6, r: 15 }],
+                        backgroundColor: 'rgba(233, 196, 106, 0.7)', // accent1Color
+                        borderColor: accent1Color
+                    },
+                    {
+                        label: '5G Connectivity',
+                        data: [{ x: 6, y: 8, r: 18 }],
+                        backgroundColor: 'rgba(244, 162, 97, 0.7)', // accent2Color
+                        borderColor: accent2Color
+                    },
+                     {
+                        label: 'Sustainable Tech Solutions',
+                        data: [{ x: 7.5, y: 7, r: 22 }],
+                        backgroundColor: 'rgba(38, 70, 83, 0.7)', // primaryColor
+                        borderColor: primaryColor
+                    }
+                ]
+            },
+            options: {
+                ...commonChartOptions,
+                plugins: {
+                    ...commonChartOptions.plugins,
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += `(Impact: ${context.raw.x}, Adoption: ${context.raw.y}, Market Size: ${context.raw.r})`;
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: { 
+                        title: { display: true, text: 'Adoption Speed / Maturity', color: primaryColor},
+                        ticks: { color: primaryColor },
+                        grid: { color: 'rgba(0,0,0,0.05)' }
+                    },
+                    x: { 
+                        title: { display: true, text: 'Market Impact Score', color: primaryColor},
+                        ticks: { color: primaryColor },
+                        grid: { color: 'rgba(0,0,0,0.05)' }
+                    }
+                }
+            }
+        });
+
+        // 7. Revenue Forecast (Area Chart)
+        const revenueForecastCtx = document.getElementById('revenueForecastChart').getContext('2d');
+        new Chart(revenueForecastCtx, {
+            type: 'line', // Area chart is a line chart with fill
+            data: {
+                labels: ['2025', '2026', '2027', '2028', '2029'],
+                datasets: [{
+                    label: 'Projected Revenue (USD Billion)',
+                    data: [165, 185, 210, 240, 275],
+                    borderColor: secondaryColor,
+                    backgroundColor: 'rgba(42, 157, 143, 0.2)', // secondaryColor with alpha
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: commonChartOptions
+        });
+
+        // 8. Competitive Feature Matrix (Plotly.js Heatmap)
+        const featureHeatmapData = [{
+            z: [ // Strength scores (1-10)
+                [8, 7, 9, 6, 7], // Feature 1 by Player A, B, C, D, E
+                [7, 9, 6, 8, 8], // Feature 2
+                [9, 6, 7, 7, 9], // Feature 3
+                [6, 8, 8, 9, 6], // Feature 4
+                [7, 7, 6, 8, 7]  // Feature 5
+            ],
+            x: ['Player Alpha', 'Player Beta', 'Player Gamma', 'Player Delta', 'Player Epsilon'],
+            y: ['Feature One (Innovation)', 'Feature Two (Usability)', 'Feature Three (Support)', 'Feature Four (Pricing)', 'Feature Five (Scalability)'],
+            type: 'heatmap',
+            colorscale: [ // Custom colorscale: light to dark based on our palette
+                [0, lightGray],
+                [0.25, '#F4A261'], // Sandy Brown (Lighter)
+                [0.5, '#E76F51'], // Burnt Sienna
+                [0.75, '#2A9D8F'], // Persian Green
+                [1, '#264653']  // Charcoal (Darker)
+            ],
+            hoverongaps: false,
+            showscale: true
+        }];
+
+        const featureHeatmapLayout = {
+            title: { 
+                text: null // Title is handled by HTML h3
+            },
+            xaxis: {
+                tickangle: -25,
+                automargin: true,
+                tickfont: { color: primaryColor }
+            },
+            yaxis: {
+                automargin: true,
+                tickfont: { color: primaryColor }
+            },
+            autosize: true,
+            margin: { l: 200, r: 50, b: 100, t: 20, pad: 4 }, // Adjusted margins
+            paper_bgcolor: lightGray,
+            plot_bgcolor: lightGray,
+            font: {
+                family: 'Inter, sans-serif',
+                color: primaryColor
+            }
+        };
+        
+        const config = {responsive: true, displayModeBar: false};
+
+        Plotly.newPlot('featureHeatmap', featureHeatmapData, featureHeatmapLayout, config);
+
+
+        // Ensure Plotly chart resizes with window
+        window.addEventListener('resize', function() {
+            Plotly.Plots.resize(document.getElementById('featureHeatmap'));
+        });
+
+    </script>
+</body>
+</html>

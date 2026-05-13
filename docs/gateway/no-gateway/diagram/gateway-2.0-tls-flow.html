@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gateway 2.0 TLS 终止与 Host Header 转写流程图</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+
+    .container {
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+
+    .header {
+      margin-bottom: 2rem;
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #38bdf8;
+      margin-bottom: 0.5rem;
+    }
+
+    .header p {
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+
+    /* ===== FLOWCHART ===== */
+    .flowchart {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+
+    .phase {
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #0f172a;
+    }
+
+    .phase-label {
+      padding: 0.6rem 1.2rem;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border-bottom: 1px solid #1e293b;
+    }
+
+    .phase-1 .phase-label { background: #0c2340; color: #38bdf8; border-left: 3px solid #38bdf8; }
+    .phase-2 .phase-label { background: #1a1a3e; color: #a78bfa; border-left: 3px solid #a78bfa; }
+    .phase-3 .phase-label { background: #1a2e1a; color: #4ade80; border-left: 3px solid #4ade80; }
+    .phase-4 .phase-label { background: #2e1a1a; color: #fb923c; border-left: 3px solid #fb923c; }
+    .phase-forbidden .phase-label { background: #2e1a1a; color: #f87171; border-left: 3px solid #f87171; }
+
+    .phase-body {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      padding: 1.2rem;
+    }
+
+    .node {
+      background: #1e293b;
+      border-radius: 10px;
+      padding: 1rem 1.2rem;
+      border: 1px solid #334155;
+      transition: border-color 0.2s;
+    }
+
+    .node:hover {
+      border-color: #475569;
+    }
+
+    .node-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #e2e8f0;
+      margin-bottom: 0.4rem;
+    }
+
+    .node-sub {
+      font-size: 0.65rem;
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+
+    .node-sub strong {
+      color: #e2e8f0;
+    }
+
+    .node-client .node-title { color: #38bdf8; }
+    .node-gwl .node-title    { color: #38bdf8; }
+    .node-r1 .node-title     { color: #a78bfa; }
+    .node-r2 .node-title     { color: #a78bfa; }
+    .node-rw .node-title     { color: #818cf8; }
+    .node-svc1 .node-title   { color: #4ade80; }
+    .node-kong .node-title   { color: #4ade80; }
+    .node-kr .node-title     { color: #fb923c; }
+    .node-up1 .node-title    { color: #94a3b8; }
+    .node-up2 .node-title    { color: #94a3b8; }
+
+    .node-highlight {
+      background: #1e1b4b;
+      border-color: #4c1d95;
+    }
+
+    .node-success {
+      border-left: 3px solid #4ade80;
+    }
+
+    .node-rewrite {
+      background: #1e1b4b;
+      border-color: #4c1d95;
+    }
+
+    /* Forbidden nodes */
+    .node-forbidden {
+      background: #1c1010;
+      border-color: #7f1d1d;
+    }
+
+    .node-forbidden .node-title {
+      color: #f87171;
+    }
+
+    /* ===== ARROWS ===== */
+    .arrows {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 0;
+    }
+
+    .arrow {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.65rem;
+      color: #475569;
+    }
+
+    .arrow-line {
+      width: 2px;
+      height: 24px;
+      background: linear-gradient(to bottom, #38bdf8, #a78bfa);
+      border-radius: 1px;
+    }
+
+    .arrow-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #a78bfa;
+    }
+
+    /* ===== FLOW ROWS ===== */
+    .flow-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
+      padding: 1rem 1.2rem;
+      border-top: 1px solid #1e293b;
+    }
+
+    .flow-col {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .flow-step {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.6rem 0.8rem;
+      background: #0f172a;
+      border-radius: 8px;
+      border: 1px solid #1e293b;
+      font-size: 0.65rem;
+      color: #94a3b8;
+    }
+
+    .flow-step .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .flow-step .dot-blue  { background: #38bdf8; }
+    .flow-step .dot-purple{ background: #a78bfa; }
+    .flow-step .dot-green { background: #4ade80; }
+    .flow-step .dot-orange{ background: #fb923c; }
+    .flow-step .dot-red   { background: #f87171; }
+
+    .flow-step strong { color: #e2e8f0; }
+    .flow-step code {
+      background: #1e293b;
+      padding: 0.1rem 0.3rem;
+      border-radius: 4px;
+      color: #38bdf8;
+      font-size: 0.6rem;
+    }
+
+    /* Phase divider arrows */
+    .phase-transition {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.3rem;
+      color: #334155;
+      font-size: 0.65rem;
+    }
+
+    .phase-transition::before,
+    .phase-transition::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #1e293b;
+    }
+
+    .phase-transition span {
+      padding: 0 1rem;
+      color: #475569;
+    }
+
+    /* ===== LEGEND ===== */
+    .legend {
+      margin-top: 2rem;
+      padding: 1rem 1.2rem;
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      font-size: 0.65rem;
+      color: #64748b;
+    }
+
+    .legend-title {
+      font-weight: 700;
+      color: #94a3b8;
+      margin-bottom: 0.6rem;
+      font-size: 0.7rem;
+    }
+
+    .legend-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.8rem 2rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .legend-item .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+
+    .legend-item .swatch-blue  { background: #0c2340; border: 1px solid #38bdf8; }
+    .legend-item .swatch-purple{ background: #1a1a3e; border: 1px solid #a78bfa; }
+    .legend-item .swatch-green { background: #1a2e1a; border: 1px solid #4ade80; }
+    .legend-item .swatch-orange{ background: #2e1a1a; border: 1px solid #fb923c; }
+    .legend-item .swatch-red   { background: #1c1010; border: 1px solid #f87171; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      body { padding: 1rem; }
+      .phase-body { grid-template-columns: 1fr; }
+      .flow-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="header">
+      <h1>Gateway 2.0 TLS 终止与 Host Header 转写流程图</h1>
+      <p>GKE Gateway 2.0 · Gateway API v1 · *.appdev.abjx wildcard cert</p>
+    </div>
+
+    <!-- ===== CLIENT ===== -->
+    <div class="phase phase-1">
+      <div class="phase-label">① TLS 握手阶段 · Client → GKE Gateway</div>
+      <div class="flow-row">
+        <div class="flow-col">
+          <div class="node node-client node-success">
+            <div class="node-title">Client</div>
+            <div class="node-sub">
+              HTTPS 请求<br>
+              TLS SNI: <strong>api2.appdev.abjx</strong><br>
+              Server Name 匹配 <code>*.appdev.abjx</code>
+            </div>
+          </div>
+        </div>
+        <div class="flow-col">
+          <div class="node node-gwl node-success">
+            <div class="node-title">GKE Gateway Listener</div>
+            <div class="node-sub">
+              hostname: <code>*.appdev.abjx</code> · port: <code>443</code><br>
+              certificate: <code>*.appdev.abjx</code><br>
+              TLS mode: <strong>Terminate</strong>（在 Gateway 终止 HTTPS）
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase-transition"><span>↓ TLS 终止 → 解密为 HTTP ↓</span></div>
+
+    <!-- ===== PHASE 2: HTTP Routing ===== -->
+    <div class="phase phase-2">
+      <div class="phase-label">② HTTP 路由阶段 · L7 分流：Host + Path 匹配</div>
+      <div class="phase-body">
+        <div class="node node-r1">
+          <div class="node-title">HTTPRoute: api1-runtime-route</div>
+          <div class="node-sub">
+            hostnames: <code>api1.appdev.abjx</code><br>
+            path: <code>/api1/*</code><br>
+            filter: <strong>无</strong>，Host 保持不变
+          </div>
+        </div>
+        <div class="node node-r2">
+          <div class="node-title">HTTPRoute: api2-kong-route</div>
+          <div class="node-sub">
+            hostnames: <code>api2.appdev.abjx</code><br>
+            path: <code>/api-path/e2e/*</code><br>
+            filter: <strong>URLRewrite.hostname</strong>
+          </div>
+        </div>
+        <div class="node node-rw node-rewrite">
+          <div class="node-title">URLRewrite 效果</div>
+          <div class="node-sub">
+            Client Host: <code>api2.appdev.abjx</code><br>
+            转发 Host: <code>www.intrakong.com</code><br>
+            X-Original-Host: <code>api2.appdev.abjx</code><br>
+            X-Entry-Point: <code>api2</code>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase-transition"><span>↓ 按 HTTPRoute 分流 ↓</span></div>
+
+    <!-- ===== PHASE 3: Backend ===== -->
+    <div class="phase phase-3">
+      <div class="phase-label">③ 后端服务层</div>
+      <div class="phase-body">
+        <div class="node node-svc1">
+          <div class="node-title">api1-runtime-svc</div>
+          <div class="node-sub">
+            GKE runtime Pod · port: <code>8080</code><br>
+            收到 Host: <code>api1.appdev.abjx</code><br>
+            <strong>Host 保持不变</strong>
+          </div>
+        </div>
+        <div class="node node-kong">
+          <div class="node-title">kong-dp-svc</div>
+          <div class="node-sub">
+            Kong DP Pod · port: <code>8000</code><br>
+            收到 Host: <code>www.intrakong.com</code><br>
+            （由 URLRewrite.hostname 改写）
+          </div>
+        </div>
+        <div class="node node-kr">
+          <div class="node-title">Kong Route 匹配</div>
+          <div class="node-sub">
+            hosts: <code>www.intrakong.com</code><br>
+            paths: <code>/api-path/e2e</code><br>
+            strip_path: <code>false</code>（保留路径前缀）
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase-transition"><span>↓ Kong Route 命中 → Upstream ↓</span></div>
+
+    <!-- ===== PHASE 4: Upstream ===== -->
+    <div class="phase phase-4">
+      <div class="phase-label">④ Upstream</div>
+      <div class="phase-body">
+        <div class="node node-up1">
+          <div class="node-title">API1 Upstream Service</div>
+          <div class="node-sub">
+            直接返回业务响应<br>
+            Host: <code>api1.appdev.abjx</code>（Gateway 透传）
+          </div>
+        </div>
+        <div class="node node-up2">
+          <div class="node-title">API2 Upstream Services</div>
+          <div class="node-sub">
+            Kong Route: <code>www.intrakong.com</code> → upstream<br>
+            路径: <code>/api-path/e2e/v1/resource</code>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase-transition" style="margin-top: 1rem;"><span>❌ 禁止用法 · 原文档错误项 ❌</span></div>
+
+    <!-- ===== FORBIDDEN ===== -->
+    <div class="phase phase-forbidden">
+      <div class="phase-label">❌ 禁止用法 · 原文档错误项</div>
+      <div class="phase-body">
+        <div class="node node-forbidden">
+          <div class="node-title">❌ RequestHeaderModifier 修改 Host</div>
+          <div class="node-sub">
+            <strong>Host 是 forbidden header</strong><br>
+            规范明确禁止通过 RequestHeaderModifier 修改<br>
+            ✅ 改用 <code>URLRewrite.hostname</code>
+          </div>
+        </div>
+        <div class="node node-forbidden">
+          <div class="node-title">❌ %{request.host}% 变量模板</div>
+          <div class="node-sub">
+            GKE Gateway <strong>不支持</strong> Envoy/Nginx 风格变量<br>
+            支持格式: <code>{client_region}</code>（Google Cloud LB）<br>
+            ✅ 改用静态值 <code>X-Original-Host: api2.appdev.abjx</code>
+          </div>
+        </div>
+        <div class="node node-forbidden">
+          <div class="node-title">❌ rules.matches.hostname 无效字段</div>
+          <div class="node-sub">
+            hostname <strong>不在</strong> <code>rules.matches</code> 里<br>
+            应放在 <code>spec.hostnames</code> 层<br>
+            ✅ <code>spec.hostnames</code> → <code>rules[].matches[]</code>
+          </div>
+        </div>
+        <div class="node node-forbidden">
+          <div class="node-title">❌ RequestHeaderModifier.set 写成 map</div>
+          <div class="node-sub">
+            错误: <code>set: { Host: xxx }</code><br>
+            ✅ 正确: <code>set: [{ name: X-Upstream, value: xxx }]</code><br>
+            必须使用 <strong>name/value 数组格式</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== LEGEND ===== -->
+    <div class="legend">
+      <div class="legend-title">图例 · Legend</div>
+      <div class="legend-items">
+        <div class="legend-item"><div class="swatch swatch-blue"></div>① TLS 握手阶段</div>
+        <div class="legend-item"><div class="swatch swatch-purple"></div>② HTTP 路由阶段</div>
+        <div class="legend-item"><div class="swatch swatch-green"></div>③ 后端服务层</div>
+        <div class="legend-item"><div class="swatch swatch-orange"></div>④ Upstream</div>
+        <div class="legend-item"><div class="swatch swatch-red"></div>❌ 禁止用法</div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

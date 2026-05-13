@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNS Flow - GKE & Istio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --paper: #faf7f2;
+            --paper-2: #f2ede4;
+            --ink: #1c1917;
+            --muted: #57534e;
+            --soft: #78716c;
+            --accent: #b5523a;
+            --accent-tint: rgba(181,82,58,0.08);
+            --link: #2563eb;
+        }
+        body {
+            background: var(--paper);
+            color: var(--ink);
+            font-family: 'Geist', sans-serif;
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .eyebrow {
+            font-family: 'Geist Mono', monospace;
+            font-size: 8px;
+            font-weight: 500;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--soft);
+        }
+        h1 {
+            font-family: 'Instrument Serif', serif;
+            font-size: 2rem;
+            font-weight: 400;
+            margin: 0.5rem 0;
+        }
+        .diagram-container {
+            background: var(--paper-2);
+            border: 1px solid rgba(28,25,23,0.12);
+            border-radius: 8px;
+            padding: 2rem;
+            overflow-x: auto;
+            max-width: 100%;
+        }
+        svg {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <p class="eyebrow">Visual Flow</p>
+        <h1>Pod DNS Resolution Path</h1>
+    </div>
+
+    <div class="diagram-container">
+        <svg width="600" height="600" viewBox="0 0 600 600" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+                    <circle cx="1" cy="1" r="0.9" fill="rgba(28,25,23,0.10)"/>
+                </pattern>
+                <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                    <polygon points="0 0, 8 3, 0 6" fill="#57534e"/>
+                </marker>
+                <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                    <polygon points="0 0, 8 3, 0 6" fill="#b5523a"/>
+                </marker>
+            </defs>
+            <rect width="100%" height="100%" fill="var(--paper)"/>
+            <rect width="100%" height="100%" fill="url(#dots)" opacity="0.6"/>
+
+            <!-- Arrows -->
+            <path d="M300 60 V100" stroke="#57534e" stroke-width="1" marker-end="url(#arrow)"/>
+            <path d="M300 140 V180" stroke="#b5523a" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+            
+            <!-- Sidecar Yes path -->
+            <path d="M360 210 H440 V260" stroke="#b5523a" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+            <!-- Sidecar No path -->
+            <path d="M300 240 V280" stroke="#57534e" stroke-width="1" marker-end="url(#arrow)"/>
+            
+            <!-- kube-dns Local path -->
+            <path d="M240 310 H140 V360" stroke="#57534e" stroke-width="1" marker-end="url(#arrow)"/>
+            <!-- kube-dns External path -->
+            <path d="M300 340 V380" stroke="#57534e" stroke-width="1" marker-end="url(#arrow)"/>
+
+            <!-- Nodes -->
+            <!-- Start -->
+            <rect x="250" y="20" width="100" height="40" rx="20" fill="var(--paper)" stroke="var(--ink)" stroke-width="1"/>
+            <text x="300" y="45" fill="var(--ink)" font-size="12" font-weight="600" text-anchor="middle">Start Query</text>
+
+            <!-- Pod Intercept -->
+            <rect x="230" y="100" width="140" height="40" rx="6" fill="var(--paper)" stroke="var(--ink)" stroke-width="1"/>
+            <text x="300" y="125" fill="var(--ink)" font-size="12" font-weight="600" text-anchor="middle">Pod Container</text>
+            <text x="300" y="145" fill="var(--soft)" font-size="8" font-family="'Geist Mono'" text-anchor="middle">/etc/resolv.conf</text>
+
+            <!-- Sidecar Decision -->
+            <path d="M300 180 L360 210 L300 240 L240 210 Z" fill="var(--accent-tint)" stroke="var(--accent)" stroke-width="1"/>
+            <text x="300" y="215" fill="var(--ink)" font-size="10" font-weight="600" text-anchor="middle">Istio Proxy?</text>
+
+            <!-- Sidecar Resolves -->
+            <rect x="380" y="260" width="120" height="40" rx="6" fill="var(--paper)" stroke="var(--accent)" stroke-width="1"/>
+            <text x="440" y="285" fill="var(--accent)" font-size="10" font-weight="600" text-anchor="middle">Internal IP</text>
+            <text x="440" y="305" fill="var(--soft)" font-size="8" font-family="'Geist Mono'" text-anchor="middle">ServiceEntry</text>
+
+            <!-- kube-dns -->
+            <rect x="230" y="280" width="140" height="60" rx="6" fill="var(--paper)" stroke="var(--ink)" stroke-width="1"/>
+            <text x="300" y="310" fill="var(--ink)" font-size="12" font-weight="600" text-anchor="middle">kube-dns</text>
+            <text x="300" y="325" fill="var(--soft)" font-size="8" font-family="'Geist Mono'" text-anchor="middle">(CoreDNS)</text>
+
+            <!-- Internal Service -->
+            <rect x="80" y="360" width="120" height="40" rx="6" fill="#ffffff" stroke="var(--ink)" stroke-width="1"/>
+            <text x="140" y="385" fill="var(--ink)" font-size="10" font-weight="600" text-anchor="middle">Cluster IP</text>
+            <text x="140" y="405" fill="var(--soft)" font-size="8" font-family="'Geist Mono'" text-anchor="middle">.svc.cluster.local</text>
+
+            <!-- Cloud DNS -->
+            <rect x="240" y="380" width="120" height="40" rx="6" fill="rgba(28,25,23,0.03)" stroke="rgba(28,25,23,0.30)" stroke-width="1"/>
+            <text x="300" y="405" fill="var(--ink)" font-size="10" font-weight="600" text-anchor="middle">Cloud DNS</text>
+            <text x="300" y="425" fill="var(--soft)" font-size="8" font-family="'Geist Mono'" text-anchor="middle">External Domains</text>
+
+            <!-- Labels -->
+            <rect x="370" y="200" width="30" height="15" rx="2" fill="var(--paper)"/>
+            <text x="385" y="210" fill="var(--accent)" font-size="8" font-family="'Geist Mono'" text-anchor="middle">YES</text>
+
+            <rect x="305" y="250" width="20" height="15" rx="2" fill="var(--paper)"/>
+            <text x="315" y="260" fill="var(--soft)" font-size="8" font-family="'Geist Mono'" text-anchor="middle">NO</text>
+
+            <rect x="180" y="300" width="40" height="15" rx="2" fill="var(--paper)"/>
+            <text x="200" y="310" fill="var(--soft)" font-size="8" font-family="'Geist Mono'" text-anchor="middle">LOCAL</text>
+
+            <!-- Legend -->
+            <line x1="50" y1="520" x2="550" y2="520" stroke="rgba(28,25,23,0.10)" stroke-width="0.8"/>
+            <text x="50" y="540" fill="var(--muted)" font-size="8" font-family="'Geist Mono'" letter-spacing="0.14em">LEGEND</text>
+            
+            <rect x="50" y="555" width="12" height="12" rx="2" fill="var(--accent-tint)" stroke="var(--accent)"/>
+            <text x="70" y="565" fill="var(--muted)" font-size="8" font-family="'Geist Mono'">FOCAL PATH</text>
+
+            <rect x="180" y="555" width="12" height="12" rx="2" fill="var(--paper)" stroke="var(--ink)"/>
+            <text x="200" y="565" fill="var(--muted)" font-size="8" font-family="'Geist Mono'">STANDARD STEP</text>
+
+            <rect x="310" y="555" width="12" height="12" rx="2" fill="rgba(28,25,23,0.03)" stroke="rgba(28,25,23,0.30)"/>
+            <text x="330" y="565" fill="var(--muted)" font-size="8" font-family="'Geist Mono'">EXTERNAL</text>
+        </svg>
+    </div>
+</body>
+</html>
