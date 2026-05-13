@@ -1,43 +1,17 @@
-# SSL 知识库
+# SSL / TLS
 
-## 目录描述
-本目录包含SSL/TLS证书、加密、安全通信和证书管理相关的知识。
+SSL/TLS 证书与安全协议知识库。
 
 ## 目录结构
+
 ```
 ssl/
-├── docs/                     # Markdown文档
-├── ingress-ssl/              # Ingress SSL配置相关内容
-├── scripts/                  # Shell脚本（SSL相关操作）
-├── text/                     # 文本文件
-└── README.md                 # 本说明文件
+├── docs/                  # SSL 文档（6 文件）
+├── ingress-ssl/           # Ingress SSL 配置
+├── scripts/               # 脚本
+└── text/                  # 文本资料
 ```
 
-## 子目录说明 (按功能分类)
-### docs/ - 文档
-- `pem-get-ssl.md`: PEM格式SSL证书相关
-- `read-cert.md`: 读取证书相关
-- `root.md`: 根证书相关
-- `Sans.md`: SAN（Subject Alternative Name）相关
-- `ssl-type.md`: SSL类型相关
-- `what-ssl.md`: SSL基础概念
+## 根目录残留文件
 
-### scripts/ - 脚本
-- `get-ssl*.sh`: SSL信息获取脚本
-
-### text/ - 文本文件
-- `one.txt`: 文本文件
-- `output*.txt`: 输出文件
-
-### ingress-ssl/ - Ingress SSL配置
-- Ingress SSL配置相关内容
-
-## 快速检索
-- 证书获取: 查看 `scripts/` 目录中的 `get-ssl*.sh` 脚本
-- 证书类型: 查看 `docs/` 目录中的 `ssl-type.md`
-- SAN扩展: 查看 `docs/` 目录中的 `Sans.md`
-- Ingress配置: 查看 `ingress-ssl/` 目录
-- 基础概念: 查看 `docs/` 目录中的 `what-ssl.md`
-- PEM格式: 查看 `docs/` 目录中的 `pem-get-ssl.md`
-- 证书读取: 查看 `docs/` 目录中的 `read-cert.md`
-- 根证书: 查看 `docs/` 目录中的 `root.md`
+OpenSSL-curl.md, README.md, certificate-truststore.md, compare-san-sni.md, cross-project-fqdn-best-practices.md, current-fqdn-status.md, debug-ssl-chatgpt.md, debug-ssl.md, gcp-glb-ssl-certificate-update.md, gskit.md, merged-scripts.md, openssl.md, verify-baidu.md, verify-domain-ssl-enhance.sh, verify-domain-ssl.sh, why-san.md
