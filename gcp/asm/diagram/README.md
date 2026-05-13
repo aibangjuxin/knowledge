@@ -1,3 +1,33 @@
+现在我来为你画这个 Cloud Service Mesh Ingress 流量路径图，使用 swimlane 风格区分不同的 namespace。流量路径图已画好，几个关键设计点说明：
+
+**数据面 (Data Plane) — 实线箭头**
+
+```
+Client → ILB (GCP Forwarding Rule)
+       → Gateway SVC (LoadBalancer)
+       → Gateway Pod (Envoy, sidecar)
+         ├─ host match → VirtualService (api-runtime) → Service → Pod
+         └─ host match → VirtualService (svc-runtime) → Service → Pod
+```
+
+**控制面 (Control Plane) — 紫色虚线**
+
+```
+istiod → xDS push → Gateway CRD → bind → Gateway Pod (Envoy listener config)
+```
+
+**Namespace 隔离设计的核心优势体现在图中：**
+
+| 关注点 | 说明 |
+|---|---|
+| `int-istio` ns 独立 | Gateway SVC / Pod / CRD 完全自治，可单独扩缩容 |
+| `api-runtime` / `svc-runtime` | 只持有 VirtualService + DestinationRule，零感知 Gateway 实现 |
+| cross-ns routing | VS 通过 `gateways: [int-istio/int-istio-gw]` 引用，不需要在同一 ns |
+| mTLS | DestinationRule 配置 `ISTIO_MUTUAL`，Pod sidecar 间端到端加密 |
+
+如需进一步展开某个层次（比如 Envoy xDS listener/cluster 的配置链路，或 PeerAuthentication + AuthorizationPolicy 的叠加逻辑），可以告诉我。
+
+
 # Istio Flow Diagrams — 目录索引
 
 > GKE ASM Istio 架构流程图集合 (dark-themed HTML SVG)
@@ -144,3 +174,44 @@ Pod Envoy → Egress Gateway (istio-egress)
 | `../asm-flow.md` | 原有的 Mermaid 流程图参考 |
 | `../istio-egress/` | 出口流量完整 YAML 配置示例 |
 | `../gloo/` | Gloo Gateway vs Istio 对比资料 |
+
+
+
+
+
+```mermaid
+graph TD
+    %% 外部/内部客户端
+    Client[Client / User] -- Request --> ILB
+
+    subgraph "GCP Infrastructure"
+        ILB[Internal Load Balancer<br/>L4/L7]
+    end
+
+    subgraph "int-istio Namespace (Shared Gateway Layer)"
+        ILB -- Forward --> GW_SVC[Gateway Service<br/>type: LoadBalancer]
+        GW_SVC --> GW_Pod[Gateway Deployment<br/>Envoy Proxy / Istio Ingress]
+        GW_Pod -. Reads .-> GW_CRD[Istio Gateway Resource]
+    end
+
+    subgraph "api-runtime Namespace (Business Layer A)"
+        GW_Pod -- Routes via Host/Path --> VS_A[VirtualService A]
+        VS_A -- mTLS / LoadBalancing --> DR_A[DestinationRule A]
+        DR_A --> SVC_A[Service A]
+        SVC_A --> Pod_A[Pods A]
+    end
+
+    subgraph "svc-runtime Namespace (Business Layer B)"
+        GW_Pod -- Routes via Host/Path --> VS_B[VirtualService B]
+        VS_B -- mTLS / LoadBalancing --> DR_B[DestinationRule B]
+        DR_B --> SVC_B[Service B]
+        SVC_B --> Pod_B[Pods B]
+    end
+
+    %% 定义样式
+    style ILB fill:#f9f,stroke:#333,stroke-width:2px
+    style GW_Pod fill:#bbf,stroke:#333,stroke-width:2px
+    style Pod_A fill:#dfd,stroke:#333
+    style Pod_B fill:#dfd,stroke:#333
+
+```
