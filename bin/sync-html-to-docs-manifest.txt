@@ -1,6 +1,6 @@
-safe/cross-site-cookie-deepseek-flow.html
-safe/cross-site-nginx-proxy-flow.html
-safe/cross-nginx-header-flow.html
+safe/cross-site/cross-site-cookie-deepseek-flow.html
+safe/cross-site/cross-site-nginx-proxy-flow.html
+safe/cross-site/cross-nginx-header-flow.html
 pipeline/release-dashboard/poe.html
 pipeline/release-dashboard/index.html
 pipeline/release-dashboard/Release.html
@@ -14,7 +14,9 @@ k8s/networkpolicy/dns-flow.html
 k8s/networkpolicy/istio-dns-resolution.html
 output/cover-GKE-DNS-解析原理.html
 game/snake.html
+gcp/asm/diagram/istio-ingress-source-flow.html
 gcp/asm/diagram/istio-crds-chain.html
+gcp/asm/diagram/asm_ingress_architecture_overview.html
 gcp/asm/diagram/istio-sidecar-injection.html
 gcp/asm/diagram/istio-ingress-flow.html
 gcp/asm/diagram/gke-asm-ambient-arch.html

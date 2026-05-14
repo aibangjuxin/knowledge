@@ -1,0 +1,154 @@
+<mxGraphModel>
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+
+    <!-- GKE Pod -->
+    <mxCell id="2" value="GKE Pod&#xa;(abjx-core namespace)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=12;arcSize=20;fontColor=#1a1a1a;" vertex="1" parent="1">
+      <mxGeometry x="370" y="40" width="180" height="60" as="geometry"/>
+    </mxCell>
+
+    <!-- Auth Proxy sidecar inside Pod -->
+    <mxCell id="6" value="Cloud SQL Auth Proxy&#xa;(Sidecar / Pod内)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=11;arcSize=15;fontColor=#1a1a1a;" vertex="1" parent="1">
+      <mxGeometry x="30" y="140" width="170" height="50" as="geometry"/>
+    </mxCell>
+
+    <!-- PSC Endpoint -->
+    <mxCell id="5" value="PSC Endpoint IP&#xa;(Consumer VPC)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=11;arcSize=15;fontColor=#1a1a1a;" vertex="1" parent="1">
+      <mxGeometry x="370" y="280" width="180" height="50" as="geometry"/>
+    </mxCell>
+
+    <!-- Service Attachment -->
+    <mxCell id="4" value="Service Attachment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=12;arcSize=15;fontColor=#1a1a1a;" vertex="1" parent="1">
+      <mxGeometry x="370" y="360" width="180" height="50" as="geometry"/>
+    </mxCell>
+
+    <!-- Cloud SQL -->
+    <mxCell id="3" value="Cloud SQL&#xa;(Producer)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=12;arcSize=20;fontColor=#1a1a1a;" vertex="1" parent="1">
+      <mxGeometry x="370" y="460" width="180" height="60" as="geometry"/>
+    </mxCell>
+
+    <!-- Edge: Pod to Auth Proxy -->
+    <mxCell id="7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#9673a6;exitX=0;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;" edge="1" parent="1" source="2" target="6">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Edge: Auth Proxy to PSC -->
+    <mxCell id="9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#9673a6;exitX=0.5;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;" edge="1" parent="1" source="6" target="5">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="115" y="215"/>
+          <mxPoint x="460" y="215"/>
+        </Array>
+      </mxGeometry>
+    </mxCell>
+
+    <!-- Edge: Pod direct to PSC -->
+    <mxCell id="11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#6c8ebf;exitX=0.5;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;dashed=1;dashPattern=1 3;" edge="1" parent="1" source="2" target="5">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Edge: PSC to SA -->
+    <mxCell id="13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#82b366;" edge="1" parent="1" source="5" target="4">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Edge: SA to Cloud SQL -->
+    <mxCell id="14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#d6b656;" edge="1" parent="1" source="4" target="3">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Swimlane: NetworkPolicy deny-all -->
+    <mxCell id="16" value="NetworkPolicy: deny-all" style="swimlane;fillColor=#f5f5f5;strokeColor=#999999;fontSize=12;fontColor=#333333;horizontal=0;horizontalPadding=12;verticalPadding=8;arcSize=10;swimlaneFillColor=#f5f5f5;" vertex="1" parent="1">
+      <mxGeometry x="600" y="60" width="220" height="240" as="geometry"/>
+    </mxCell>
+
+    <!-- NP: Step 1 - Pod emits TCP -->
+    <mxCell id="17" value="1. Pod 发出 TCP 包" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cccccc;fontSize=10;spacingLeft=4;fontColor=#333333;" vertex="1" parent="16">
+      <mxGeometry y="30" width="200" height="30" as="geometry"/>
+    </mxCell>
+
+    <!-- NP: Step 2 - Check egress -->
+    <mxCell id="18" value="2. 检查 egress 规则" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cccccc;fontSize=10;spacingLeft=4;fontColor=#333333;" vertex="1" parent="16">
+      <mxGeometry y="65" width="200" height="30" as="geometry"/>
+    </mxCell>
+
+    <!-- NP: Decision - 3306 allowed? -->
+    <mxCell id="19" value="3306 in&#xa;egress?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;align=center;spacingLeft=4;fontColor=#333333;" vertex="1" parent="16">
+      <mxGeometry y="100" width="200" height="50" as="geometry"/>
+    </mxCell>
+
+    <!-- NP: Decision - 3307 allowed? -->
+    <mxCell id="20" value="3307 in&#xa;egress?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;align=center;spacingLeft=4;fontColor=#333333;" vertex="1" parent="16">
+      <mxGeometry y="160" width="200" height="50" as="geometry"/>
+    </mxCell>
+
+    <!-- Edge: NP to PSC - YES 3306 -->
+    <mxCell id="23" value="YES&#xa;ALLOW" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontColor=#82b366;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="555" y="110" relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="23b" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#82b366;dashed=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="19" target="5">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Edge: NP to PSC - NO 3306 (deny) -->
+    <mxCell id="24" value="NO&#xa;DENY" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontColor=#b85450;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="555" y="170" relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="24b" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#b85450;dashed=1;dashPattern=1 3;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="20" target="5">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- NP label boxes -->
+    <mxCell id="21" value="ALLOW" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontColor=#82b366;fontStyle=1" vertex="1" parent="16">
+      <mxGeometry x="160" y="110" width="40" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="22" value="ALLOW" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontColor=#82b366;fontStyle=1" vertex="1" parent="16">
+      <mxGeometry x="160" y="170" width="40" height="20" as="geometry"/>
+    </mxCell>
+
+    <!-- SNAT annotation -->
+    <mxCell id="27" value="GKE 节点 SNAT:&#xa;Pod IP (100.64.x.x) → Node IP (192.168.64.x)" style="text;html=1;strokeColor=#999999;fillColor=#f9f9f9;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=9;fontColor=#666666;dashed=1;dashPattern=1 3;spacing=4;spacingTop=4;spacingLeft=6;spacingRight=6;spacingBottom=4;" vertex="1" parent="1">
+      <mxGeometry x="560" y="60" width="220" height="35" as="geometry"/>
+    </mxCell>
+
+    <!-- Legend box -->
+    <mxCell id="28" value="图例" style="swimlane;fillColor=#ffffff;strokeColor=#cccccc;fontSize=11;fontColor=#333333;horizontal=0;horizontalPadding=10;verticalPadding=6;arcSize=8;" vertex="1" parent="1">
+      <mxGeometry x="30" y="370" width="200" height="150" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="29" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalLabelPosition=bottom;verticalAlign=top;spacingLeft=6;spacingRight=6;spacingTop=4;spacingBottom=4;fontSize=10;" vertex="1" parent="28">
+      <mxGeometry x="10" y="30" width="80" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="30" value="GKE Pod" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="28">
+      <mxGeometry x="95" y="30" width="90" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="31" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;verticalLabelPosition=bottom;verticalAlign=top;spacingLeft=6;spacingRight=6;spacingTop=4;spacingBottom=4;fontSize=10;" vertex="1" parent="28">
+      <mxGeometry x="10" y="62" width="80" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="32" value="Cloud SQL Auth Proxy" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="28">
+      <mxGeometry x="95" y="62" width="90" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="33" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;verticalLabelPosition=bottom;verticalAlign=top;spacingLeft=6;spacingRight=6;spacingTop=4;spacingBottom=4;fontSize=10;" vertex="1" parent="28">
+      <mxGeometry x="10" y="94" width="80" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="34" value="PSC Endpoint" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="28">
+      <mxGeometry x="95" y="94" width="90" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="36" value="实线=Auth Proxy路径(3307)&#xa;虚线=直接连接路径(3306)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontColor=#666666;spacing=1;" vertex="1" parent="28">
+      <mxGeometry x="10" y="125" width="180" height="25" as="geometry"/>
+    </mxCell>
+
+    <!-- Port labels on edges (standalone text cells with parent=1) -->
+    <mxCell id="40" value=":3307&#xa;Auth Proxy" style="text;html=1;strokeColor=none;fillColor=#e1d5e7;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontColor=#9673a6;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="100" y="110" width="80" height="35" as="geometry"/>
+    </mxCell>
+    <mxCell id="41" value=":3306&#xa;直接连接" style="text;html=1;strokeColor=none;fillColor=#dae8fc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontColor=#6c8ebf;fontStyle=1;dashed=1;dashPattern=1 3;" vertex="1" parent="1">
+      <mxGeometry x="450" y="160" width="80" height="35" as="geometry"/>
+    </mxCell>
+    <mxCell id="42" value=":3306&#xa;(MySQL)" style="text;html=1;strokeColor=none;fillColor=#fff2cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontColor=#d6b656;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="455" y="420" width="80" height="35" as="geometry"/>
+    </mxCell>
+
+  </root>
+</mxGraphModel>
