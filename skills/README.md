@@ -1,28 +1,24 @@
-
-╭─ ⚕ Hermes ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-    从 169 个 skill 精简到 76 个，减少了 55%。
-
-    | | |
-    |---|---|
-    | 归档目录 | ~/.hermes/skills/.archive/skills-cleanup-20260513-185816/ |
-    | 移走 | 51 个目录 + 4 个文件 |
-    | 保留 | 17 项（含 76 个 skill） |
-
-    保留的 skill 清单：
-
-    | 类别 | Skills |
-    |------|--------|
-    | GCP/GKE | architectrue, gcp, google/skills/cloud/ (13个), apple/ (4个) |
-    | Diagrams | diagram-design, architecture-diagram, maitreya, drawio |
-    | Software | software-development/ (15+ 个) |
-    | Productivity | productivity/ (10+ 个) |
-    | AI Agents | autonomous-ai-agents/ |
-    | MLOps | mlops/ (14+ 个) |
-    | Research | research/ (arxiv, blogwatcher, llm-wiki, polymarket) |
-
-    完全移走的类别：creative, design, devops, dogfood, email, engineering, gaming, github, marketing, media, messaging, note-taking, smart-home, social-media, studio-operations, terraform, testing 等。
-
-    恢复方式：如果需要某个 skill，从归档目录里移回来即可。
-
-    下一步：重启 Hermes 新会话，默认就只加载这 76 个 skill 了，Token 消耗会明显降低。
-╰────────────────────────────────────────────────────────────────────────────────────────
+# Skills
+## 目录结构
+```skills/├── GCP-expert/├── agents/├── gke-policy-controller-vs-gatekeeper/├── architectrue/├── assets/├── dark-architecture/├── brand-guardian/├── ui-designer/├── ux-researcher/├── visual-storyteller/├── whimsy-injector/├── design/├── assets/├── docs/├── references/├── diagram-design/├── ai-engineer/├── backend-architect/├── devops-automator/├── frontend-developer/├── mobile-app-builder/├── rapid-prototyper/├── engineering/├── agents/├── englishmail/├── agents/├── extract-requirements-target/├── agents/├── files-to-requirements/├── cloud-sql-psc-ports/├── gatekeeper-constraints/├── gatekeeper-multi-tenant-governance/├── gcp-iap-tunnel/├── gke-ipam/├── gke-policy-controller-tep-analysis/├── gcp/├── assets/├── references/├── gke-basics/├── references/├── google-cloud-recipe-networking-observability/├── reference/├── google-cloud-recipe-onboarding/├── maitreya/├── app-store-optimizer/├── content-creator/├── growth-hacker/├── instagram-curator/├── reddit-community-builder/├── tiktok-strategist/├── twitter-engager/├── marketing/├── ob/├── feedback-synthesizer/├── sprint-prioritizer/├── trend-researcher/├── product/├── experiment-tracker/├── project-shipper/├── studio-producer/├── project-management/├── analytics-reporter/├── finance-tracker/├── infrastructure-maintainer/├── legal-compliance-checker/├── support-responder/├── studio-operations/├── api-tester/├── performance-benchmarker/├── test-results-analyzer/├── tool-evaluator/├── workflow-optimizer/├── testing/├── README.md├── antigravity-skill.md├── skills-main.zip```
+## 子目录内容
+- `GCP-expert/`: 文件: SKILL.md
+- `architectrue/`: 子目录: agents, gke-policy-controller-vs-gatekeeper
+- `dark-architecture/`: 子目录: assets
+- `design/`: 子目录: brand-guardian, ui-designer, ux-researcher, visual-storyteller, whimsy-injector
+- `diagram-design/`: 子目录: assets, docs, references
+- `engineering/`: 子目录: ai-engineer, backend-architect, devops-automator, frontend-developer, mobile-app-builder ... (共 6 个子目录)
+- `englishmail/`: 子目录: agents
+- `extract-requirements-target/`: 子目录: agents
+- `files-to-requirements/`: 子目录: agents
+- `gcp/`: 子目录: cloud-sql-psc-ports, gatekeeper-constraints, gatekeeper-multi-tenant-governance, gcp-iap-tunnel, gke-ipam ... (共 6 个子目录)
+- `gke-basics/`: 子目录: assets, references
+- `google-cloud-recipe-networking-observability/`: 子目录: references
+- `google-cloud-recipe-onboarding/`: 子目录: reference
+- `maitreya/`: 文件: SKILL.md
+- `marketing/`: 子目录: app-store-optimizer, content-creator, growth-hacker, instagram-curator, reddit-community-builder ... (共 7 个子目录)
+- `ob/`: 文件: SKILL.md
+- `product/`: 子目录: feedback-synthesizer, sprint-prioritizer, trend-researcher
+- `project-management/`: 子目录: experiment-tracker, project-shipper, studio-producer
+- `studio-operations/`: 子目录: analytics-reporter, finance-tracker, infrastructure-maintainer, legal-compliance-checker, support-responder
+- `testing/`: 子目录: api-tester, performance-benchmarker, test-results-analyzer, tool-evaluator, workflow-optimizer

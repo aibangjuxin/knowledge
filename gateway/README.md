@@ -1,16 +1,7 @@
 # Gateway
-
-网关相关知识库（Kong、GKE Gateway API 等）。
-
 ## 目录结构
-
-```
-gateway/
-├── docs/                  # 网关文档
-└── no-gateway/           # 非网关场景
-```
-
+```gateway/├── docs/├── docs/├── kongdp/├── scripts/├── kong/├── diagram/├── version-control/├── no-gateway/├── README.md```
 ## 子目录内容
-
-- `docs/`: Design.md, README.md, gke-gateway-quota.md
-- `no-gateway/`: Gateway-API-allowedRoutes.md, HealthCheckPolicy.md, TODO.md, explorer-no-gateway-gemini.md, explorer-no-gateway.md...
+- `docs/`: 文档目录
+- `kong/`: 子目录: docs, kongdp, scripts
+- `no-gateway/`: 子目录: diagram, version-control

@@ -1,17 +1,7 @@
 # AI
-
-人工智能相关知识库（LLM、Ollama、OCR、Agent 等）。
-
 ## 目录结构
-
-```
-ai/
-├── concept/               # AI 概念
-├── docs/                  # AI 相关文档
-└── __pycache__/           # (可忽略)
-```
-
+```ai/├── concept/├── docs/├── prompt/├── README.md```
 ## 子目录内容
-
-- `concept/`: INSTALL.md, PROJECT_SUMMARY.md, QUICKSTART.md, README.md, USAGE.md, demo.sh, kb_quick.py, kb_search.py...
-- `docs/`: Python-ocr.md, README.md, agent-tree.md, ai-agent.md, debug-ollama.md, last.py, llam-server.md, ocr-llama-fast.py...
+- `concept/`: 文件: INSTALL.md, PROJECT_SUMMARY.md, QUICKSTART.md, README.md, USAGE.md ... (共 12 个文件)
+- `docs/`: 文档目录
+- `prompt/`: 文件: English-prompt.md, README.md, architectrue-cn.md, architectrue.md, enhance-prompt.md ... (共 7 个文件)
