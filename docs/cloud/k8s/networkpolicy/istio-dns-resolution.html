@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Istio DNS Resolution — ServiceEntry Internal Routing</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --color-paper: #f5f4ed;
+  --color-ink: #0b0d0b;
+  --color-muted: #52534e;
+  --color-accent: #f7591f;
+  --font-sans: 'Geist', system-ui, sans-serif;
+  --font-serif: 'Instrument Serif', serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+}
+body {
+  font-family: var(--font-sans);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+}
+.frame { max-width: 1200px; width: 100%; }
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  margin-bottom: 0.5rem;
+}
+h1 {
+  font-family: var(--font-serif);
+  font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--color-ink);
+  margin-bottom: 1.5rem;
+}
+svg { width: 100%; min-width: 900px; display: block; }
+</style>
+</head>
+<body>
+<div class="frame">
+<p class="eyebrow">Architecture · GKE / Istio</p>
+<h1>Pod DNS Resolution: Default Path vs. ServiceEntry</h1>
+
+<svg viewBox="0 0 1000 620" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+<circle cx="1" cy="1" r="0.9" fill="rgba(11,13,11,0.10)"/>
+</pattern>
+<marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#52534e"/></marker>
+<marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#f7591f"/></marker>
+<marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#1a70c7"/></marker>
+<marker id="arrow-muted" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#78716c"/></marker>
+</defs>
+
+<rect width="100%" height="100%" fill="#f5f4ed"/>
+<rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
+
+<!-- VPC Boundary Left -->
+<rect x="40" y="52" width="440" height="448" rx="8" fill="none" stroke="rgba(28,25,23,0.14)" stroke-width="1" stroke-dasharray="6,4"/>
+<text x="56" y="76" fill="#78716c" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.1em">VPC BOUNDARY</text>
+
+<!-- VPC Boundary Right -->
+<rect x="520" y="52" width="440" height="448" rx="8" fill="none" stroke="rgba(28,25,23,0.14)" stroke-width="1" stroke-dasharray="6,4"/>
+<text x="536" y="76" fill="#78716c" font-size="9" font-family="'Geist Mono', monospace" letter-spacing="0.1em">VPC BOUNDARY</text>
+
+<!-- Section Labels -->
+<text x="260" y="112" fill="#0b0d0b" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Default: DNS goes public</text>
+<text x="740" y="112" fill="#0b0d0b" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Optimal: ServiceEntry intercepts</text>
+
+<!-- ==================== LEFT SIDE: Default Path ==================== -->
+
+<!-- Pod with Envoy (left) -->
+<rect x="80" y="140" width="120" height="72" rx="6" fill="#f5f4ed" stroke="#0b0d0b" stroke-width="1"/>
+<rect x="88" y="148" width="40" height="12" rx="2" fill="transparent" stroke="rgba(11,13,11,0.40)" stroke-width="0.8"/>
+<text x="108" y="157" fill="rgba(11,13,11,0.8)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">POD</text>
+<text x="140" y="170" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Pod A</text>
+<text x="140" y="185" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">envoy sidecar</text>
+<text x="140" y="200" fill="#1a70c7" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">www.abc.com</text>
+
+<!-- Arrow: Pod -> kube-dns -->
+<line x1="140" y1="212" x2="140" y2="244" stroke="#52534e" stroke-width="1" marker-end="url(#arrow)"/>
+<rect x="98" y="224" width="84" height="14" rx="2" fill="#f5f4ed"/>
+<text x="140" y="234" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">DNS query</text>
+
+<!-- kube-dns (left) -->
+<rect x="80" y="248" width="120" height="56" rx="6" fill="#ffffff" stroke="#0b0d0b" stroke-width="1"/>
+<rect x="88" y="256" width="40" height="12" rx="2" fill="transparent" stroke="rgba(11,13,11,0.40)" stroke-width="0.8"/>
+<text x="108" y="265" fill="rgba(11,13,11,0.8)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DNS</text>
+<text x="140" y="278" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">kube-dns</text>
+<text x="140" y="293" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">CoreDNS</text>
+
+<!-- Arrow: kube-dns -> Public DNS -->
+<line x1="200" y1="276" x2="300" y2="276" stroke="#52534e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow-muted)"/>
+<rect x="210" y="264" width="64" height="14" rx="2" fill="#f5f4ed"/>
+<text x="242" y="274" fill="#78716c" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">no record</text>
+
+<!-- Public DNS (Cloud DNS) -->
+<rect x="300" y="248" width="120" height="56" rx="6" fill="rgba(11,13,11,0.03)" stroke="rgba(11,13,11,0.30)" stroke-width="1"/>
+<rect x="308" y="256" width="40" height="12" rx="2" fill="transparent" stroke="rgba(11,13,11,0.30)" stroke-width="0.8"/>
+<text x="328" y="265" fill="rgba(11,13,11,0.7)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXTERNAL</text>
+<text x="360" y="278" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Cloud DNS</text>
+<text x="360" y="293" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">public IP 1.2.3.4</text>
+
+<!-- Arrow: Public DNS -> External GCLB -->
+<line x1="360" y1="304" x2="360" y2="336" stroke="#52534e" stroke-width="1" marker-end="url(#arrow)"/>
+<rect x="316" y="316" width="88" height="14" rx="2" fill="#f5f4ed"/>
+<text x="360" y="326" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">公网 IP</text>
+
+<!-- External GCLB -->
+<rect x="300" y="340" width="120" height="56" rx="6" fill="rgba(11,13,11,0.03)" stroke="rgba(11,13,11,0.30)" stroke-width="1"/>
+<rect x="308" y="348" width="40" height="12" rx="2" fill="transparent" stroke="rgba(11,13,11,0.30)" stroke-width="0.8"/>
+<text x="328" y="357" fill="rgba(11,13,11,0.7)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXTERNAL</text>
+<text x="360" y="370" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Ext. GCLB</text>
+<text x="360" y="385" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">www.abc.com:443</text>
+
+<!-- Arrow: External GCLB -> Gateway -->
+<line x1="300" y1="368" x2="220" y2="368" stroke="#52534e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow-muted)"/>
+<rect x="210" y="356" width="80" height="14" rx="2" fill="#f5f4ed"/>
+<text x="250" y="366" fill="#78716c" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">NAT / FW</text>
+
+<!-- Istio Gateway -->
+<rect x="140" y="340" width="120" height="56" rx="6" fill="#ffffff" stroke="#0b0d0b" stroke-width="1"/>
+<rect x="148" y="348" width="40" height="12" rx="2" fill="transparent" stroke="rgba(11,13,11,0.40)" stroke-width="0.8"/>
+<text x="168" y="357" fill="rgba(11,13,11,0.8)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ISTIO</text>
+<text x="200" y="370" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Gateway</text>
+<text x="200" y="385" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">public:443 → svc</text>
+
+<!-- Backend Service (left) -->
+<rect x="140" y="440" width="120" height="48" rx="6" fill="rgba(11,13,11,0.05)" stroke="rgba(11,13,11,0.20)" stroke-width="1"/>
+<text x="200" y="460" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">my-svc</text>
+<text x="200" y="476" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Pod A backend</text>
+
+<!-- Arrow: Gateway -> Backend -->
+<line x1="200" y1="396" x2="200" y2="436" stroke="#52534e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow-muted)"/>
+
+<!-- Delay label left -->
+<text x="140" y="510" fill="#b5523a" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">50–200ms latency</text>
+<text x="140" y="524" fill="#b5523a" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">绕公网，效率低</text>
+
+<!-- ==================== RIGHT SIDE: ServiceEntry Path ==================== -->
+
+<!-- Pod with Envoy (right) -->
+<rect x="680" y="140" width="120" height="72" rx="6" fill="#f5f4ed" stroke="#0b0d0b" stroke-width="1"/>
+<rect x="688" y="148" width="40" height="12" rx="2" fill="transparent" stroke="rgba(11,13,11,0.40)" stroke-width="0.8"/>
+<text x="708" y="157" fill="rgba(11,13,11,0.8)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">POD</text>
+<text x="740" y="170" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Pod A</text>
+<text x="740" y="185" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">envoy sidecar</text>
+<text x="740" y="200" fill="#1a70c7" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">www.abc.com</text>
+
+<!-- Arrow: Pod -> Envoy DNS proxy -->
+<line x1="740" y1="212" x2="740" y2="244" stroke="#52534e" stroke-width="1" marker-end="url(#arrow)"/>
+<rect x="698" y="224" width="84" height="14" rx="2" fill="#f5f4ed"/>
+<text x="740" y="234" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">DNS query</text>
+
+<!-- ServiceEntry (FOCAL - accent) -->
+<rect x="680" y="248" width="120" height="72" rx="6" fill="rgba(247,89,31,0.08)" stroke="#f7591f" stroke-width="1.5"/>
+<rect x="688" y="256" width="56" height="12" rx="2" fill="transparent" stroke="rgba(247,89,31,0.50)" stroke-width="0.8"/>
+<text x="716" y="265" fill="rgba(247,89,31,0.9)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ISTIO CRD</text>
+<text x="740" y="280" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ServiceEntry</text>
+<text x="740" y="295" fill="#0b0d0b" font-size="10" font-family="'Geist', sans-serif" text-anchor="middle">MESH_INTERNAL</text>
+<text x="740" y="310" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">10.112.1.100</text>
+
+<!-- Arrow: ServiceEntry -> Internal GCLB (accent) -->
+<line x1="740" y1="320" x2="740" y2="356" stroke="#f7591f" stroke-width="1.5" marker-end="url(#arrow-accent)"/>
+<rect x="688" y="334" width="104" height="14" rx="2" fill="#f5f4ed"/>
+<text x="740" y="344" fill="#f7591f" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">内网 IP 直连</text>
+
+<!-- Internal GCLB -->
+<rect x="680" y="360" width="120" height="56" rx="6" fill="#ffffff" stroke="#0b0d0b" stroke-width="1"/>
+<rect x="688" y="368" width="40" height="12" rx="2" fill="transparent" stroke="rgba(11,13,11,0.40)" stroke-width="0.8"/>
+<text x="708" y="377" fill="rgba(11,13,11,0.8)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">GCP</text>
+<text x="740" y="390" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Int. GCLB</text>
+<text x="740" y="405" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">10.112.1.100:443</text>
+
+<!-- Arrow: Internal GCLB -> Backend -->
+<line x1="740" y1="416" x2="740" y2="436" stroke="#52534e" stroke-width="1" marker-end="url(#arrow)"/>
+
+<!-- Backend Service (right) -->
+<rect x="680" y="440" width="120" height="48" rx="6" fill="rgba(11,13,11,0.05)" stroke="rgba(11,13,11,0.20)" stroke-width="1"/>
+<text x="740" y="460" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">my-svc</text>
+<text x="740" y="476" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Pod A backend</text>
+
+<!-- Delay label right -->
+<text x="740" y="510" fill="#0b0d0b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">1–5ms latency</text>
+<text x="740" y="524" fill="#0b0d0b" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">内网直连，效率高</text>
+
+<!-- Best practice annotation (right side) -->
+<rect x="820" y="248" width="132" height="80" rx="6" fill="rgba(11,13,11,0.03)" stroke="rgba(11,13,11,0.12)" stroke-width="1"/>
+<text x="832" y="268" fill="#0b0d0b" font-size="9" font-weight="600" font-family="'Geist', sans-serif">Best Practice</text>
+<text x="832" y="284" fill="#52534e" font-size="8" font-family="'Geist', sans-serif">svc.cluster.local</text>
+<text x="832" y="300" fill="#52534e" font-size="8" font-family="'Geist', sans-serif">→ 内网服务发现</text>
+<text x="832" y="316" fill="#52534e" font-size="8" font-family="'Geist', sans-serif">ServiceEntry</text>
+<text x="832" y="332" fill="#52534e" font-size="8" font-family="'Geist', sans-serif">→ 同域名内外分流</text>
+
+<!-- ==================== LEGEND ==================== -->
+<line x1="40" y1="568" x2="960" y2="568" stroke="rgba(11,13,11,0.10)" stroke-width="0.8"/>
+<text x="40" y="584" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">LEGEND</text>
+
+<!-- Legend items -->
+<rect x="100" y="573" width="12" height="12" rx="2" fill="#f5f4ed" stroke="#0b0d0b" stroke-width="1"/>
+<text x="120" y="583" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace">Pod / Service</text>
+
+<rect x="240" y="573" width="12" height="12" rx="2" fill="rgba(11,13,11,0.03)" stroke="rgba(11,13,11,0.30)" stroke-width="1"/>
+<text x="260" y="583" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace">External / Cloud</text>
+
+<rect x="380" y="573" width="12" height="12" rx="2" fill="rgba(247,89,31,0.08)" stroke="#f7591f" stroke-width="1.5"/>
+<text x="400" y="583" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace">ServiceEntry (focal)</text>
+
+<line x1="560" y1="579" x2="580" y2="579" stroke="#52534e" stroke-width="1" marker-end="url(#arrow)"/>
+<text x="590" y="583" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace">DNS / Traffic</text>
+
+<line x1="700" y1="579" x2="720" y2="579" stroke="#52534e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow-muted)"/>
+<text x="730" y="583" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace">Fallback / NAT</text>
+
+<line x1="840" y1="579" x2="860" y2="579" stroke="#f7591f" stroke-width="1.5" marker-end="url(#arrow-accent)"/>
+<text x="870" y="583" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace">Optimal path</text>
+
+</svg>
+</div>
+</body>
+</html>

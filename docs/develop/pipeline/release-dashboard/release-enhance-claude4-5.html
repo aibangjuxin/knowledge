@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Release Dashboard | {{API_NAME}} v{{VERSION}}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1e40af;
+      --success: #10.721;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+
+    .header-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 2rem;
+      border-radius: 16px;
+      margin-bottom: 2rem;
+      box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+
+    .status-success {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+      border: 2px solid var(--success);
+    }
+
+    .status-warning {
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--warning);
+      border: 2px solid var(--warning);
+    }
+
+    .status-danger {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--danger);
+      border: 2px solid var(--danger);
+    }
+
+    .status-pending {
+      background: rgba(156, 163, 175, 0.1);
+      color: var(--gray-500);
+      border: 2px solid var(--gray-300);
+    }
+
+    .status-progress {
+      background: rgba(37, 99, 235, 0.1);
+      color: var(--primary);
+      border: 2px solid var(--primary);
+    }
+
+    /* Enhanced Timeline Styles */
+    .timeline-container {
+      position: relative;
+      padding: 2rem 0;
+    }
+
+    .timeline-track {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+      padding: 0 2rem;
+    }
+
+    .timeline-line {
+      position: absolute;
+      top: 50%;
+      left: 10%;
+      right: 10%;
+      height: 4px;
+      background: var(--gray-200);
+      transform: translateY(-50%);
+      z-index: 0;
+    }
+
+    .timeline-progress {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      background: linear-gradient(90deg, var(--success) 0%, var(--primary) 100%);
+      transition: width 1s ease;
+      border-radius: 2px;
+    }
+
+    .timeline-stage {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+      flex: 1;
+    }
+
+    .timeline-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: white;
+      border: 4px solid var(--gray-200);
+      transition: all 0.4s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .timeline-stage.completed .timeline-icon {
+      background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
+      border-color: var(--success);
+      transform: scale(1.1);
+    }
+
+    .timeline-stage.active .timeline-icon {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      border-color: var(--primary);
+      animation: pulse 2s infinite;
+      transform: scale(1.15);
+    }
+
+    .timeline-stage.pending .timeline-icon {
+      background: var(--gray-100);
+      border-color: var(--gray-300);
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4);
+      }
+      50% {
+        box-shadow: 0 0 0 12px rgba(37, 99, 235, 0);
+      }
+    }
+
+    .timeline-label {
+      text-align: center;
+      min-width: 100px;
+    }
+
+    .timeline-label h4 {
+      font-weight: 700;
+      font-size: 0.875rem;
+      color: var(--gray-700);
+      margin-bottom: 0.25rem;
+    }
+
+    .timeline-label p {
+      font-size: 0.75rem;
+      color: var(--gray-500);
+    }
+
+    .timeline-stage.completed .timeline-label h4 {
+      color: var(--success);
+    }
+
+    .timeline-stage.active .timeline-label h4 {
+      color: var(--primary);
+    }
+
+    /* Region Cards */
+    .region-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .region-card {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      border: 2px solid var(--gray-200);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .region-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary) 0%, #764ba2 100%);
+      transform: scaleX(0);
+      transition: transform 0.3s ease;
+    }
+
+    .region-card:hover {
+      border-color: var(--primary);
+      box-shadow: 0 8px 24px rgba(37, 99, 235, 0.15);
+      transform: translateY(-4px);
+    }
+
+    .region-card:hover::before {
+      transform: scaleX(1);
+    }
+
+    .region-card.deployed {
+      border-color: var(--success);
+    }
+
+    .region-card.deployed::before {
+      background: var(--success);
+      transform: scaleX(1);
+    }
+
+    /* Scan Report Cards */
+    .scan-card {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      border-left: 4px solid var(--gray-300);
+      transition: all 0.3s ease;
+    }
+
+    .scan-card.passed {
+      border-left-color: var(--success);
+      background: linear-gradient(to right, rgba(16, 185, 129, 0.05) 0%, white 100%);
+    }
+
+    .scan-card.warning {
+      border-left-color: var(--warning);
+      background: linear-gradient(to right, rgba(245, 158, 11, 0.05) 0%, white 100%);
+    }
+
+    .scan-card.failed {
+      border-left-color: var(--danger);
+      background: linear-gradient(to right, rgba(239, 68, 68, 0.05) 0%, white 100%);
+    }
+
+    .scan-card.skipped {
+      border-left-color: var(--gray-300);
+      background: linear-gradient(to right, rgba(156, 163, 175, 0.05) 0%, white 100%);
+    }
+
+    /* File Upload Zone */
+    .upload-zone {
+      border: 3px dashed var(--gray-300);
+      border-radius: 12px;
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: var(--gray-50);
+    }
+
+    .upload-zone:hover {
+      border-color: var(--primary);
+      background: rgba(37, 99, 235, 0.05);
+    }
+
+    .upload-zone.drag-over {
+      border-color: var(--primary);
+      background: rgba(37, 99, 235, 0.1);
+      transform: scale(1.02);
+    }
+
+    /* File Item */
+    .file-item {
+      background: white;
+      border-radius: 8px;
+      padding: 1rem;
+      border: 1px solid var(--gray-200);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.3s ease;
+    }
+
+    .file-item:hover {
+      border-color: var(--primary);
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+    }
+
+    /* Execution Table */
+    .execution-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+
+    .execution-table thead {
+      background: linear-gradient(135deg, var(--gray-100) 0%, var(--gray-50) 100%);
+    }
+
+    .execution-table th {
+      padding: 1rem;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.875rem;
+      color: var(--gray-700);
+      border-bottom: 2px solid var(--gray-200);
+    }
+
+    .execution-table tbody tr {
+      transition: all 0.3s ease;
+    }
+
+    .execution-table tbody tr:hover {
+      background: var(--gray-50);
+      transform: scale(1.01);
+    }
+
+    .execution-table td {
+      padding: 1rem;
+      border-bottom: 1px solid var(--gray-200);
+      color: var(--gray-700);
+    }
+
+    /* Collapsible Section */
+    .collapsible {
+      border: 1px solid var(--gray-200);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .collapsible:hover {
+      border-color: var(--primary);
+    }
+
+    .collapsible-header {
+      padding: 1.5rem;
+      background: var(--gray-50);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.3s ease;
+    }
+
+    .collapsible-header:hover {
+      background: var(--gray-100);
+    }
+
+    .collapsible-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.5s ease;
+    }
+
+    .collapsible.open .collapsible-content {
+      max-height: 2000px;
+    }
+
+    .collapsible-body {
+      padding: 1.5rem;
+      background: white;
+    }
+
+    /* Animations */
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-fade-in {
+      animation: fadeInUp 0.6s ease-out forwards;
+    }
+
+    .animate-delay-1 { animation-delay: 0.1s; opacity: 0; }
+    .animate-delay-2 { animation-delay: 0.2s; opacity: 0; }
+    .animate-delay-3 { animation-delay: 0.3s; opacity: 0; }
+    .animate-delay-4 { animation-delay: 0.4s; opacity: 0; }
+    .animate-delay-5 { animation-delay: 0.5s; opacity: 0; }
+
+    /* Info Cards */
+    .info-card {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      border: 1px solid var(--gray-200);
+      transition: all 0.3s ease;
+    }
+
+    .info-card:hover {
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+      transform: translateY(-2px);
+    }
+
+    .info-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      margin-bottom: 0.5rem;
+    }
+
+    .info-value {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--gray-800);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Button Styles */
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-secondary {
+      background: white;
+      color: var(--gray-700);
+      border: 1px solid var(--gray-300);
+    }
+
+    .btn-secondary:hover {
+      background: var(--gray-50);
+      border-color: var(--gray-400);
+    }
+
+    .btn-icon {
+      padding: 0.5rem;
+      border-radius: 8px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      color: var(--gray-500);
+    }
+
+    .btn-icon:hover {
+      background: var(--gray-100);
+      color: var(--primary);
+    }
+
+    /* Section Headers */
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 2px solid var(--gray-200);
+    }
+
+    .section-header h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--gray-800);
+    }
+
+    .section-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: white;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      body {
+        padding: 1rem;
+      }
+
+      .timeline-track {
+        flex-direction: column;
+        gap: 2rem;
+      }
+
+      .timeline-line {
+        width: 4px;
+        height: 80%;
+        left: 50%;
+        top: 10%;
+        transform: translateX(-50%);
+      }
+
+      .timeline-progress {
+        width: 100% !important;
+        height: auto;
+      }
+
+      .region-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .header-card {
+        padding: 1.5rem;
+      }
+    }
+
+    /* Link Styles */
+    a {
+      color: var(--primary);
+      text-decoration: none;
+      transition: all 0.3s ease;
+      font-weight: 500;
+    }
+
+    a:hover {
+      color: var(--primary-dark);
+      text-decoration: underline;
+    }
+
+    /* Image Preview */
+    .image-preview {
+      max-width: 100%;
+      border-radius: 8px;
+      margin-top: 1rem;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 3rem 2rem;
+      color: var(--gray-500);
+    }
+
+    .empty-state-icon {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 1rem;
+      color: var(--gray-400);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header-card animate-fade-in">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1.5rem;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem;">
+            <div style="width: 48px; height: 48px; background: rgba(255, 255, 255, 0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+              <i data-lucide="rocket" style="width: 28px; height: 28px;"></i>
+            </div>
+            <div>
+              <h1 style="font-size: 1.875rem; font-weight: 700; margin-bottom: 0.25rem;">API Release Dashboard</h1>
+              <p style="opacity: 0.9; font-size: 0.875rem;">Real-time deployment tracking and release management</p>
+            </div>
+          </div>
+          <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1rem;">
+            <div class="status-badge" style="background: rgba(255, 255, 255, 0.2); color: white; border-color: rgba(255, 255, 255, 0.3);">
+              <i data-lucide="package" style="width: 16px; height: 16px;"></i>
+              <span id="apiName">order-service</span>
+            </div>
+            <div class="status-badge" style="background: rgba(255, 255, 255, 0.2); color: white; border-color: rgba(255, 255, 255, 0.3);">
+              <i data-lucide="tag" style="width: 16px; height: 16px;"></i>
+              <span id="apiVersion">v1.2.3</span>
+            </div>
+            <div class="status-badge" style="background: rgba(255, 255, 255, 0.2); color: white; border-color: rgba(255, 255, 255, 0.3);">
+              <i data-lucide="git-branch" style="width: 16px; height: 16px;"></i>
+              <span id="releaseBranch">release/2025-Q3</span>
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 0.75rem; align-items: center;">
+          <button class="btn btn-secondary" onclick="refreshPage()">
+            <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
+            Refresh
+          </button>
+          <button class="btn" style="background: white; color: var(--primary);" onclick="exportReport()">
+            <i data-lucide="download" style="width: 16px; height: 16px;"></i>
+            Export Report
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Release Overview -->
+    <section class="glass-card animate-fade-in animate-delay-1" style="padding: 2rem; margin-bottom: 2rem;">
+      <div class="section-header">
+        <div class="section-icon">
+          <i data-lucide="info" style="width: 18px; height: 18px;"></i>
+        </div>
+        <h2>Release Overview</h2>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
+        <div class="info-card">
+          <div class="info-label">Commit ID</div>
+          <div class="info-value">
+            <i data-lucide="git-commit" style="width: 20px; height: 20px; color: var(--primary);"></i>
+            <code id="commitId" style="font-family: 'Courier New', monospace; font-size: 0.875rem;">a1b2c3d4e5f6</code>
+          </div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Triggered By</div>
+          <div class="info-value">
+            <i data-lucide="user" style="width: 20px; height: 20px; color: var(--primary);"></i>
+            <span id="triggeredBy">Alex Johnson</span>
+          </div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Trigger Time</div>
+          <div class="info-value">
+            <i data-lucide="clock" style="width: 20px; height: 20px; color: var(--primary);"></i>
+            <span id="triggerTime">2025-09-30 09:45:12</span>
+          </div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Pipeline Status</div>
+          <div class="info-value">
+            <span id="overallStatus" class="status-badge status-progress">
+              <i data-lucide="loader" style="width: 16px; height: 16px;"></i>
+              In Progress
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="info-card" style="margin-top: 1.5rem;">
+        <div class="info-label">Release Reason</div>
+        <p id="releaseReason" style="color: var(--gray-700); line-height: 1.6; margin-top: 0.5rem;">
+          New feature integration for payment gateway with Stripe support. This release includes performance improvements and bug fixes for the user notification system.
+        </p>
+      </div>
+    </section>
+
+    <!-- Deployment Lifecycle -->
+    <section class="glass-card animate-fade-in animate-delay-2" style="padding: 2rem; margin-bottom: 2rem;">
+      <div class="section-header">
+        <div class="section-icon">
+          <i data-lucide="git-merge" style="width: 18px; height: 18px;"></i>
+        </div>
+        <h2>Deployment Lifecycle</h2>
+      </div>
+      <div class="timeline-container">
+        <div class="timeline-track">
+          <div class="timeline-line">
+            <div class="timeline-progress" id="timelineProgress" style="width: 40%;"></div>
+          </div>
+          
+          <!-- CI Stage -->
+          <div class="timeline-stage completed" data-stage="ci">
+            <div class="timeline-icon">
+              <i data-lucide="check-circle-2" style="width: 32px; height: 32px; color: white;"></i>
+            </div>
+            <div class="timeline-label">
+              <h4>CI Build</h4>
+              <p>Completed</p>
+              <p style="font-size: 0.7rem; margin-top: 0.25rem;">09:45:12</p>
+            </div>
+          </div>
+
+          <!-- DEV Stage -->
+          <div class="timeline-stage completed" data-stage="dev">
+            <div class="timeline-icon">
+              <i data-lucide="check-circle-2" style="width: 32px; height: 32px; color: white;"></i>
+            </div>
+            <div class="timeline-label">
+              <h4>DEV</h4>
+              <p>Deployed</p>
+              <p style="font-size: 0.7rem; margin-top: 0.25rem;">10:12:34</p>
+            </div>
+          </div>
+
+          <!-- SIT Stage -->
+          <div class="timeline-stage active" data-stage="sit">
+            <div class="timeline-icon">
+              <i data-lucide="loader" class="animate-spin" style="width: 32px; height: 32px; color: white;"></i>
+            </div>
+            <div class="timeline-label">
+              <h4>SIT</h4>
+              <p>In Progress</p>
+              <p style="font-size: 0.7rem; margin-top: 0.25rem;">Running...</p>
+            </div>
+          </div>
+
+          <!-- UAT Stage -->
+          <div class="timeline-stage pending" data-stage="uat">
+            <div class="timeline-icon">
+              <i data-lucide="circle-dashed" style="width: 32px; height: 32px; color: var(--gray-400);"></i>
+            </div>
+            <div class="timeline-label">
+              <h4>UAT</h4>
+              <p>Pending</p>
+              <p style="font-size: 0.7rem; margin-top: 0.25rem;">-</p>
+            </div>
+          </div>
+
+          <!-- PROD Stage -->
+          <div class="timeline-stage pending" data-stage="prod">
+            <div class="timeline-icon">
+              <i data-lucide="circle-dashed" style="width: 32px; height: 32px; color: var(--gray-400);"></i>
+            </div>
+            <div class="timeline-label">
+              <h4>Production</h4>
+              <p>Pending</p>
+              <p style="font-size: 0.7rem; margin-top: 0.25rem;">-</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Regional Deployment & Scan Reports Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 2rem; margin-bottom: 2rem;">
+      
+      <!-- Regional Deployment Status -->
+      <section class="glass-card animate-fade-in animate-delay-3" style="padding: 2rem;">
+        <div class="section-header">
+          <div class="section-icon">
+            <i data-lucide="globe-2" style="width: 18px; height: 18px;"></i>
+          </div>
+          <h2>Regional Deployment</h2>
+        </div>
+        <div class="region-grid">
+          <!-- Asia Pacific -->
+          <div class="region-card deployed">
+            <div style="display: flex; justify-content: between; align-items: flex-start; margin-bottom: 1rem;">
+              <div style="flex: 1;">
+                <h3 style="font-weight: 700; color: var(--gray-800); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <i data-lucide="map-pin" style="width: 18px; height: 18px; color: var(--primary);"></i>
+                  Asia Pacific
+                </h3>
+                <p style="font-size: 0.875rem; color: var(--gray-500);">Singapore (ap-southeast-1)</p>
+              </div>
+              <span class="status-badge status-success" style="font-size: 0.75rem;">
+                <i data-lucide="check-circle-2" style="width: 14px; height: 14px;"></i>
+                Deployed
+              </span>
+            </div>
+            <div style="background: var(--gray-50); padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                <span style="font-size: 0.875rem; font-weight: 600; color: var(--gray-700);">Change Request:</span>
+                <a href="#" class="status-badge" style="font-size: 0.75rem; background: rgba(37, 99, 235, 0.1); color: var(--primary); border-color: var(--primary);">
+                  CR-2025-001
+                  <i data-lucide="external-link" style="width: 12px; height: 12px;"></i>
+                </a>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.875rem; font-weight: 600; color: var(--gray-700);">IC Link:</span>
+                <a href="#" style="font-size: 0.875rem; display: flex; align-items: center; gap: 0.25rem;">
+                  View Details
+                  <i data-lucide="arrow-right" style="width: 14px; height: 14px;"></i>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Europe -->
+          <div class="region-card">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+              <div style="flex: 1;">
+                <h3 style="font-weight: 700; color: var(--gray-800); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <i data-lucide="map-pin" style="width: 18px; height: 18px; color: var(--gray-400);"></i>
+                  Europe
+                </h3>
+                <p style="font-size: 0.875rem; color: var(--gray-500);">Frankfurt (eu-central-1)</p>
+              </div>
+              <span class="status-badge status-pending" style="font-size: 0.75rem;">
+                <i data-lucide="clock" style="width: 14px; height: 14px;"></i>
+                Not Deployed
+              </span>
+            </div>
+            <div style="background: var(--gray-50); padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                <span style="font-size: 0.875rem; font-weight: 600; color: var(--gray-700);">Change Request:</span>
+                <button class="btn" style="font-size: 0.75rem; padding: 0.5rem 1rem; background: var(--primary); color: white;">
+                  <i data-lucide="plus" style="width: 12px; height: 12px;"></i>
+                  Create CR
+                </button>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.875rem; font-weight: 600; color: var(--gray-700);">IC Link:</span>
+                <span style="font-size: 0.875rem; color: var(--gray-400);">Pending</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- North America -->
+          <div class="region-card">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+              <div style="flex: 1;">
+                <h3 style="font-weight: 700; color: var(--gray-800); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <i data-lucide="map-pin" style="width: 18px; height: 18px; color: var(--gray-400);"></i>
+                  North America
+                </h3>
+                <p style="font-size: 0.875rem; color: var(--gray-500);">Virginia (us-east-1)</p>
+              </div>
+              <span class="status-badge status-pending" style="font-size: 0.75rem;">
+                <i data-lucide="clock" style="width: 14px; height: 14px;"></i>
+                Not Deployed
+              </span>
+            </div>
+            <div style="background: var(--gray-50); padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                <span style="font-size: 0.875rem; font-weight: 600; color: var(--gray-700);">Change Request:</span>
+                <button class="btn" style="font-size: 0.75rem; padding: 0.5rem 1rem; background: var(--primary); color: white;">
+                  <i data-lucide="plus" style="width: 12px; height: 12px;"></i>
+                  Create CR
+                </button>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.875rem; font-weight: 600; color: var(--gray-700);">IC Link:</span>
+                <span style="font-size: 0.875rem; color: var(--gray-400);">Pending</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scan Reports -->
+      <section class="glass-card animate-fade-in animate-delay-3" style="padding: 2rem;">
+        <div class="section-header">
+          <div class="section-icon">
+            <i data-lucide="shield-check" style="width: 18px; height: 18px;"></i>
+          </div>
+          <h2>Security & Quality Scans</h2>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <!-- PaaS Security Scan -->
+          <div class="scan-card passed">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+              <div style="flex: 1;">
+                <h3 style="font-weight: 700; color: var(--gray-800); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <i data-lucide="shield" style="width: 18px; height: 18px; color: var(--success);"></i>
+                  PaaS Security Scan
+                </h3>
+                <p style="font-size: 0.875rem; color: var(--gray-600);">No critical vulnerabilities detected</p>
+              </div>
+              <span class="status-badge status-success" style="font-size: 0.75rem;">
+                <i data-lucide="check-circle-2" style="width: 14px; height: 14px;"></i>
+                Passed
+              </span>
+            </div>
+            <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+              <div style="flex: 1; background: rgba(16, 185, 129, 0.1); padding: 0.75rem; border-radius: 6px; text-align: center;">
+                <div style="font-size: 1.5rem; font-weight: 700; color: var(--success);">0</div>
+                <div style="font-size: 0.75rem; color: var(--gray-600);">Critical</div>
+              </div>
+              <div style="flex: 1; background: rgba(245, 158, 11, 0.1); padding: 0.75rem; border-radius: 6px; text-align: center;">
+                <div style="font-size: 1.5rem; font-weight: 700; color: var(--warning);">2</div>
+                <div style="font-size: 0.75rem; color: var(--gray-600);">Medium</div>
+              </div>
+              <div style="flex: 1; background: rgba(156, 163, 175, 0.1); padding: 0.75rem; border-radius: 6px; text-align: center;">
+                <div style="font-size: 1.5rem; font-weight: 700; color: var(--gray-500);">5</div>
+                <div style="font-size: 0.75rem; color: var(--gray-600);">Low</div>
+              </div>
+            </div>
+            <a href="#" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; font-size: 0.875rem;">
+              View Full Report
+              <i data-lucide="external-link" style="width: 14px; height: 14px;"></i>
+            </a>
+          </div>
+
+          <!-- FaaS Code Quality -->
+          <div class="scan-card warning">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+              <div style="flex: 1;">
+                <h3 style="font-weight: 700; color: var(--gray-800); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <i data-lucide="code" style="width: 18px; height: 18px; color: var(--warning);"></i>
+                  FaaS Code Quality
+                </h3>
+                <p style="font-size: 0.875rem; color: var(--gray-600);">2 new code smells detected</p>
+              </div>
+              <span class="status-badge status-warning" style="font-size: 0.75rem;">
+                <i data-lucide="alert-triangle" style="width: 14px; height: 14px;"></i>
+                Warning
+              </span>
+            </div>
+            <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+              <div style="flex: 1; background: rgba(245, 158, 11, 0.1); padding: 0.75rem; border-radius: 6px; text-align: center;">
+                <div style="font-size: 1.5rem; font-weight: 700; color: var(--warning);">2</div>
+                <div style="font-size: 0.75rem; color: var(--gray-600);">Code Smells</div>
+              </div>
+              <div style="flex: 1; background: rgba(16, 185, 129, 0.1); padding: 0.75rem; border-radius: 6px; text-align: center;">
+                <div style="font-size: 1.5rem; font-weight: 700; color: var(--success);">92%</div>
+                <div style="font-size: 0.75rem; color: var(--gray-600);">Coverage</div>
+              </div>
+              <div style="flex: 1; background: rgba(37, 99, 235, 0.1); padding: 0.75rem; border-radius: 6px; text-align: center;">
+                <div style="font-size: 1.5rem; font-weight: 700; color: var(--primary);">A</div>
+                <div style="font-size: 0.75rem; color: var(--gray-600);">Grade</div>
+              </div>
+            </div>
+            <a href="#" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; font-size: 0.875rem;">
+              View Full Report
+              <i data-lucide="external-link" style="width: 14px; height: 14px;"></i>
+            </a>
+          </div>
+
+          <!-- Dependency Check -->
+          <div class="scan-card skipped">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+              <div style="flex: 1;">
+                <h3 style="font-weight: 700; color: var(--gray-800); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <i data-lucide="package" style="width: 18px; height: 18px; color: var(--gray-400);"></i>
+                  Dependency Check
+                </h3>
+                <p style="font-size: 0.875rem; color: var(--gray-600);">Scan was not configured for this pipeline</p>
+              </div>
+              <span class="status-badge status-pending" style="font-size: 0.75rem;">
+                <i data-lucide="minus-circle" style="width: 14px; height: 14px;"></i>
+                Skipped
+              </span>
+            </div>
+            <a href="#" style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; font-size: 0.875rem;">
+              Configure Scan
+              <i data-lucide="settings" style="width: 14px; height: 14px;"></i>
+            </a>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Execution Records -->
+    <section class="glass-card animate-fade-in animate-delay-4" style="padding: 2rem; margin-bottom: 2rem;">
+      <div class="section-header">
+        <div class="section-icon">
+          <i data-lucide="history" style="width: 18px; height: 18px;"></i>
+        </div>
+        <h2>Execution Records</h2>
+      </div>
+      <div style="overflow-x: auto; border-radius: 8px; border: 1px solid var(--gray-200);">
+        <table class="execution-table">
+          <thead>
+            <tr>
+              <th>Executor</th>
+              <th>Action</th>
+              <th>Environment</th>
+              <th>Region</th>
+              <th>Timestamp</th>
+              <th>Status</th>
+              <th>Job Link</th>
+            </tr>
+          </thead>
+          <tbody id="executionRecords">
+            <tr>
+              <td>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.875rem;">
+                    AJ
+                  </div>
+                  <span style="font-weight: 600;">Alex Johnson</span>
+                </div>
+              </td>
+              <td>Deploy to DEV</td>
+              <td>
+                <span class="status-badge" style="font-size: 0.75rem; padding: 0.25rem 0.75rem; background: rgba(37, 99, 235, 0.1); color: var(--primary); border-color: var(--primary);">
+                  DEV
+                </span>
+              </td>
+              <td>ap-southeast-1</td>
+              <td style="font-family: 'Courier New', monospace; font-size: 0.875rem;">2025-09-30 10:12:34</td>
+              <td>
+                <span class="status-badge status-success" style="font-size: 0.75rem; padding: 0.25rem 0.75rem;">
+                  <i data-lucide="check-circle-2" style="width: 12px; height: 12px;"></i>
+                  Success
+                </span>
+              </td>
+              <td>
+                <a href="#" style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem;">
+                  Job #12345
+                  <i data-lucide="external-link" style="width: 12px; height: 12px;"></i>
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--gray-400); display: flex; align-items: center; justify-content: center; color: white;">
+                    <i data-lucide="bot" style="width: 18px; height: 18px;"></i>
+                  </div>
+                  <span style="font-weight: 600;">Pipeline Bot</span>
+                </div>
+              </td>
+              <td>CI Build & Test</td>
+              <td>
+                <span class="status-badge" style="font-size: 0.75rem; padding: 0.25rem 0.75rem; background: rgba(107, 114, 128, 0.1); color: var(--gray-600); border-color: var(--gray-400);">
+                  CI
+                </span>
+              </td>
+              <td>-</td>
+              <td style="font-family: 'Courier New', monospace; font-size: 0.875rem;">2025-09-30 09:45:12</td>
+              <td>
+                <span class="status-badge status-success" style="font-size: 0.75rem; padding: 0.25rem 0.75rem;">
+                  <i data-lucide="check-circle-2" style="width: 12px; height: 12px;"></i>
+                  Success
+                </span>
+              </td>
+              <td>
+                <a href="#" style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem;">
+                  Job #12344
+                  <i data-lucide="external-link" style="width: 12px; height: 12px;"></i>
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.875rem;">
+                    SM
+                  </div>
+                  <span style="font-weight: 600;">Sarah Miller</span>
+                </div>
+              </td>
+              <td>Deploy to SIT</td>
+              <td>
+                <span class="status-badge" style="font-size: 0.75rem; padding: 0.25rem 0.75rem; background: rgba(245, 158, 11, 0.1); color: var(--warning); border-color: var(--warning);">
+                  SIT
+                </span>
+              </td>
+              <td>ap-southeast-1</td>
+              <td style="font-family: 'Courier New', monospace; font-size: 0.875rem;">2025-09-30 11:30:45</td>
+              <td>
+                <span class="status-badge status-progress" style="font-size: 0.75rem; padding: 0.25rem 0.75rem;">
+                  <i data-lucide="loader" class="animate-spin" style="width: 12px; height: 12px;"></i>
+                  Running
+                </span>
+              </td>
+              <td>
+                <a href="#" style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem;">
+                  Job #12346
+                  <i data-lucide="external-link" style="width: 12px; height: 12px;"></i>
+                </a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Attachments & Evidence -->
+    <section class="glass-card animate-fade-in animate-delay-5" style="padding: 2rem; margin-bottom: 2rem;">
+      <div class="section-header">
+        <div class="section-icon">
+          <i data-lucide="paperclip" style="width: 18px; height: 18px;"></i>
+        </div>
+        <h2>Attachments & Evidence</h2>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 2rem;">
+        <!-- Upload Zone -->
+        <div>
+          <div class="upload-zone" id="uploadZone">
+            <i data-lucide="upload-cloud" style="width: 48px; height: 48px; color: var(--gray-400); margin: 0 auto 1rem;"></i>
+            <p style="font-weight: 600; color: var(--gray-700); margin-bottom: 0.5rem;">Drag & Drop Files Here</p>
+            <p style="font-size: 0.875rem; color: var(--gray-500); margin-bottom: 1rem;">or</p>
+            <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+              <i data-lucide="folder-open" style="width: 16px; height: 16px;"></i>
+              Browse Files
+            </button>
+            <input type="file" id="fileInput" multiple style="display: none;" onchange="handleFileSelect(event)">
+            <p style="font-size: 0.75rem; color: var(--gray-400); margin-top: 1rem;">Supported: Images, PDF, Word, Excel</p>
+          </div>
+        </div>
+
+        <!-- File List -->
+        <div>
+          <div id="fileList" style="display: flex; flex-direction: column; gap: 1rem;">
+            <!-- Example files -->
+            <div class="file-item">
+              <div style="display: flex; align-items: center; gap: 1rem; flex: 1;">
+                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                  <i data-lucide="file-image" style="width: 24px; height: 24px; color: white;"></i>
+                </div>
+                <div style="flex: 1;">
+                  <h4 style="font-weight: 600; color: var(--gray-800); margin-bottom: 0.25rem;">deployment-evidence.png</h4>
+                  <p style="font-size: 0.875rem; color: var(--gray-500);">1.2 MB • Uploaded by Alex Johnson • 2 hours ago</p>
+                </div>
+              </div>
+              <div style="display: flex; gap: 0.5rem;">
+                <button class="btn-icon" title="Preview">
+                  <i data-lucide="eye" style="width: 18px; height: 18px;"></i>
+                </button>
+                <button class="btn-icon" title="Download">
+                  <i data-lucide="download" style="width: 18px; height: 18px;"></i>
+                </button>
+                <button class="btn-icon" title="Delete" style="color: var(--danger);">
+                  <i data-lucide="trash-2" style="width: 18px; height: 18px;"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="file-item">
+              <div style="display: flex; align-items: center; gap: 1rem; flex: 1;">
+                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                  <i data-lucide="file-text" style="width: 24px; height: 24px; color: white;"></i>
+                </div>
+                <div style="flex: 1;">
+                  <h4 style="font-weight: 600; color: var(--gray-800); margin-bottom: 0.25rem;">Release_Notes_v1.2.3.pdf</h4>
+                  <p style="font-size: 0.875rem; color: var(--gray-500);">856 KB • Uploaded by Sarah Miller • 5 hours ago</p>
+                </div>
+              </div>
+              <div style="display: flex; gap: 0.5rem;">
+                <button class="btn-icon" title="Preview">
+                  <i data-lucide="eye" style="width: 18px; height: 18px;"></i>
+                </button>
+                <button class="btn-icon" title="Download">
+                  <i data-lucide="download" style="width: 18px; height: 18px;"></i>
+                </button>
+                <button class="btn-icon" title="Delete" style="color: var(--danger);">
+                  <i data-lucide="trash-2" style="width: 18px; height: 18px;"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="file-item">
+              <div style="display: flex; align-items: center; gap: 1rem; flex: 1;">
+                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #10.721 0%, #059669 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                  <i data-lucide="file-spreadsheet" style="width: 24px; height: 24px; color: white;"></i>
+                </div>
+                <div style="flex: 1;">
+                  <h4 style="font-weight: 600; color: var(--gray-800); margin-bottom: 0.25rem;">test-results.xlsx</h4>
+                  <p style="font-size: 0.875rem; color: var(--gray-500);">245 KB • Uploaded by Pipeline Bot • 1 day ago</p>
+                </div>
+              </div>
+              <div style="display: flex; gap: 0.5rem;">
+                <button class="btn-icon" title="Preview">
+                  <i data-lucide="eye" style="width: 18px; height: 18px;"></i>
+                </button>
+                <button class="btn-icon" title="Download">
+                  <i data-lucide="download" style="width: 18px; height: 18px;"></i>
+                </button>
+                <button class="btn-icon" title="Delete" style="color: var(--danger);">
+                  <i data-lucide="trash-2" style="width: 18px; height: 18px;"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Release Features & Deployment Steps -->
+    <section class="glass-card animate-fade-in animate-delay-5" style="margin-bottom: 2rem;">
+      <div class="collapsible" id="releaseDetails">
+        <div class="collapsible-header" onclick="toggleCollapsible('releaseDetails')">
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <div class="section-icon">
+              <i data-lucide="list-checks" style="width: 18px; height: 18px;"></i>
+            </div>
+            <div>
+              <h2 style="margin-bottom: 0.25rem;">Release Features & Deployment Steps</h2>
+              <p style="font-size: 0.875rem; color: var(--gray-500); font-weight: normal;">View detailed information about this release</p>
+            </div>
+          </div>
+          <i data-lucide="chevron-down" id="releaseDetailsIcon" style="width: 24px; height: 24px; color: var(--gray-500); transition: transform 0.3s ease;"></i>
+        </div>
+        <div class="collapsible-content">
+          <div class="collapsible-body">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 3rem;">
+              <!-- Key Features -->
+              <div>
+                <h3 style="font-weight: 700; color: var(--gray-800); margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <i data-lucide="sparkles" style="width: 20px; height: 20px; color: var(--primary);"></i>
+                  Key Features
+                </h3>
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                  <div style="display: flex; gap: 1rem; padding: 1rem; background: var(--gray-50); border-radius: 8px;">
+                    <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--success) 0%, #059669 100%); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                      <i data-lucide="check" style="width: 18px; height: 18px; color: white;"></i>
+                    </div>
+                    <div>
+                      <h4 style="font-weight: 600; color: var(--gray-800); margin-bottom: 0.5rem;">Stripe Payment Integration</h4>
+                      <p style="font-size: 0.875rem; color: var(--gray-600); line-height: 1.6;">Added Stripe as a new payment provider with support for multiple currencies and payment methods.</p>
+                    </div>
+                  </div>
+                  <div style="display: flex; gap: 1rem; padding: 1rem; background: var(--gray-50); border-radius: 8px;">
+                    <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                      <i data-lucide="zap" style="width: 18px; height: 18px; color: white;"></i>
+                    </div>
+                    <div>
+                      <h4 style="font-weight: 600; color: var(--gray-800); margin-bottom: 0.5rem;">Performance Optimization</h4>
+                      <p style="font-size: 0.875rem; color: var(--gray-600); line-height: 1.6;">Improved order processing performance by 15% through database query optimization and caching strategies.</p>
+                    </div>
+                  </div>
+                  <div style="display: flex; gap: 1rem; padding: 1rem; background: var(--gray-50); border-radius: 8px;">
+                    <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--warning) 0%, #d97706 100%); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                      <i data-lucide="bug" style="width: 18px; height: 18px; color: white;"></i>
+                    </div>
+                    <div>
+                      <h4 style="font-weight: 600; color: var(--gray-800); margin-bottom: 0.5rem;">Bug Fixes</h4>
+                      <p style="font-size: 0.875rem; color: var(--gray-600); line-height: 1.6;">Fixed critical bug in the user notification system that caused delayed email deliveries.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Deployment Steps -->
+              <div>
+                <h3 style="font-weight: 700; color: var(--gray-800); margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                  <i data-lucide="list-ordered" style="width: 20px; height: 20px; color: var(--primary);"></i>
+                  Deployment Steps
+                </h3>
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                  <div style="display: flex; gap: 1rem;">
+                    <div style="display: flex; flex-direction: column; align-items: center;">
+                      <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; flex-shrink: 0;">
+                        1
+                      </div>
+                      <div style="width: 2px; height: 100%; background: var(--gray-200); margin: 0.5rem 0;"></div>
+                    </div>
+                    <div style="flex: 1; padding-bottom: 1rem;">
+                      <h4 style="font-weight: 600; color: var(--gray-800); margin-bottom: 0.5rem;">Database Migration</h4>
+                      <p style="font-size: 0.875rem; color: var(--gray-600); line-height: 1.6;">Run database migration scripts to update schema for new payment provider tables.</p>
+                      <code style="display: block; margin-top: 0.5rem; padding: 0.5rem; background: var(--gray-800); color: #10.721; border-radius: 4px; font-size: 0.75rem;">$ ./migrate.sh up</code>
+                    </div>
+                  </div>
+                  <div style="display: flex; gap: 1rem;">
+                    <div style="display: flex; flex-direction: column; align-items: center;">
+                      <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; flex-shrink: 0;">
+                        2
+                      </div>
+                      <div style="width: 2px; height: 100%; background: var(--gray-200); margin: 0.5rem 0;"></div>
+                    </div>
+                    <div style="flex: 1; padding-bottom: 1rem;">
+                      <h4 style="font-weight: 600; color: var(--gray-800); margin-bottom: 0.5rem;">Application Deployment</h4>
+                      <p style="font-size: 0.875rem; color: var(--gray-600); line-height: 1.6;">Deploy new application version to all pods using rolling update strategy.</p>
+                    </div>
+                  </div>
+                  <div style="display: flex; gap: 1rem;">
+                    <div style="display: flex; flex-direction: column; align-items: center;">
+                      <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; flex-shrink: 0;">
+                        3
+                      </div>
+                      <div style="width: 2px; height: 100%; background: var(--gray-200); margin: 0.5rem 0;"></div>
+                    </div>
+                    <div style="flex: 1; padding-bottom: 1rem;">
+                      <h4 style="font-weight: 600; color: var(--gray-800); margin-bottom: 0.5rem;">Health Checks</h4>
+                      <p style="font-size: 0.875rem; color: var(--gray-600); line-height: 1.6;">Perform comprehensive health checks on all services and endpoints.</p>
+                    </div>
+                  </div>
+                  <div style="display: flex; gap: 1rem;">
+                    <div style="display: flex; flex-direction: column; align-items: center;">
+                      <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; flex-shrink: 0;">
+                        4
+                      </div>
+                    </div>
+                    <div style="flex: 1;">
+                      <h4 style="font-weight: 600; color: var(--gray-800); margin-bottom: 0.5rem;">Post-Deployment Monitoring</h4>
+                      <p style="font-size: 0.875rem; color: var(--gray-600); line-height: 1.6;">Monitor error rates, response times, and system metrics for 15 minutes post-deployment.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer style="text-align: center; padding: 2rem 0; color: white;">
+      <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+        <i data-lucide="clock" style="width: 16px; height: 16px;"></i>
+        <span style="font-size: 0.875rem;">Last updated: <span id="lastUpdated">2025-09-30 11:45:23</span></span>
+      </div>
+      <p style="font-size: 0.875rem; opacity: 0.8;">&copy; 2025 API Release Management System. All rights reserved.</p>
+      <p style="font-size: 0.75rem; opacity: 0.6; margin-top: 0.5rem;">Generated by CAP Pipeline • Powered by GitHub</p>
+    </footer>
+  </div>
+
+  <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+
+    // Collapsible functionality
+    function toggleCollapsible(id) {
+      const element = document.getElementById(id);
+      const icon = document.getElementById(id + 'Icon');
+      element.classList.toggle('open');
+      
+      if (element.classList.contains('open')) {
+        icon.style.transform = 'rotate(180deg)';
+      } else {
+        icon.style.transform = 'rotate(0deg)';
+      }
+    }
+
+    // File upload functionality
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('drag-over');
+    });
+
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('drag-over');
+    });
+
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('drag-over');
+      handleFiles(e.dataTransfer.files);
+    });
+
+    uploadZone.addEventListener('click', () => {
+      fileInput.click();
+    });
+
+    function handleFileSelect(event) {
+      handleFiles(event.target.files);
+    }
+
+    function handleFiles(files) {
+      console.log('Files uploaded:', files.length);
+      // Here you would typically handle file upload to server
+      // For now, just show an alert
+      alert(`${files.length} file(s) selected for upload`);
+    }
+
+    // Refresh page functionality
+    function refreshPage() {
+      location.reload();
+    }
+
+    // Export report functionality
+    function exportReport() {
+      alert('Exporting release report...');
+      // Implementation would generate PDF or other format
+    }
+
+    // Update timestamp
+    function updateTimestamp() {
+      const now = new Date();
+      const timestamp = now.toISOString().slice(0, 19).replace('T', ' ');
+      document.getElementById('lastUpdated').textContent = timestamp;
+    }
+
+    // Update timestamp every minute
+    setInterval(updateTimestamp, 60000);
+
+    // Simulate timeline progress update
+    function updateTimelineProgress() {
+      // This would be called when deployment stages complete
+      // For demo purposes, showing how to update
+      const stages = document.querySelectorAll('.timeline-stage');
+      const completedStages = document.querySelectorAll('.timeline-stage.completed').length;
+      const totalStages = stages.length;
+      const progressPercent = (completedStages / totalStages) * 100;
+      
+      document.getElementById('timelineProgress').style.width = progressPercent + '%';
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function() {
+      lucide.createIcons();
+      updateTimelineProgress();
+    });
+
+    // Template replacement function (to be called by pipeline)
+    function updatePageData(data) {
+      // This function would be called by your pipeline to inject real data
+      // Example: updatePageData({ apiName: 'payment-service', version: 'v2.0.0', ... })
+      
+      if (data.apiName) document.getElementById('apiName').textContent = data.apiName;
+      if (data.apiVersion) document.getElementById('apiVersion').textContent = data.apiVersion;
+      if (data.releaseBranch) document.getElementById('releaseBranch').textContent = data.releaseBranch;
+      if (data.commitId) document.getElementById('commitId').textContent = data.commitId;
+      if (data.triggeredBy) document.getElementById('triggeredBy').textContent = data.triggeredBy;
+      if (data.triggerTime) document.getElementById('triggerTime').textContent = data.triggerTime;
+      if (data.releaseReason) document.getElementById('releaseReason').textContent = data.releaseReason;
+      
+      // Update timeline stages
+      if (data.stages) {
+        updateStages(data.stages);
+      }
+      
+      // Refresh icons after content update
+      lucide.createIcons();
+    }
+
+    function updateStages(stages) {
+      // Update each stage based on pipeline data
+      // stages = { ci: 'completed', dev: 'completed', sit: 'active', uat: 'pending', prod: 'pending' }
+      Object.keys(stages).forEach(stage => {
+        const stageElement = document.querySelector(`[data-stage="${stage}"]`);
+        if (stageElement) {
+          stageElement.className = `timeline-stage ${stages[stage]}`;
+        }
+      });
+      updateTimelineProgress();
+    }
+  </script>
+</body>
+</html>

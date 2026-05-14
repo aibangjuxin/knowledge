@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{header.apiName}} - Release {{header.version}}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 32px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        .header-meta {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            border: 1px solid #e2e8f0;
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #374151;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .grid {
+            display: grid;
+            gap: 24px;
+        }
+
+        .grid-2 {
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+        }
+
+        .grid-3 {
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .status-success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-danger {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status-pending {
+            background: #f1f5f9;
+            color: #475569;
+        }
+
+        .status-progress {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .timeline {
+            position: relative;
+            padding-left: 24px;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 12px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #e2e8f0;
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 24px;
+            background: white;
+            padding: 16px;
+            border-radius: 8px;
+            border-left: 4px solid #e2e8f0;
+        }
+
+        .timeline-item.completed {
+            border-left-color: #10.721;
+        }
+
+        .timeline-item.active {
+            border-left-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -28px;
+            top: 20px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #e2e8f0;
+        }
+
+        .timeline-item.completed::before {
+            background: #10.721;
+        }
+
+        .timeline-item.active::before {
+            background: #3b82f6;
+        }
+
+        .region-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            transition: all 0.2s;
+        }
+
+        .region-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .region-deployed {
+            border-color: #10.721;
+            background: #f0fdf4;
+        }
+
+        .region-not-deployed {
+            border-color: #f59e0b;
+            background: #fffbeb;
+        }
+
+        .scan-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .scan-item:last-child {
+            border-bottom: none;
+        }
+
+        .record-item {
+            padding: 12px;
+            border-radius: 6px;
+            background: #f8fafc;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .attachment-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            transition: background 0.2s;
+        }
+
+        .attachment-item:hover {
+            background: #f8fafc;
+        }
+
+        .icon {
+            width: 20px;
+            height: 20px;
+            display: inline-block;
+        }
+
+        .overview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .overview-item {
+            text-align: center;
+            padding: 16px;
+            background: #f8fafc;
+            border-radius: 8px;
+        }
+
+        .overview-label {
+            font-size: 0.875rem;
+            color: #64748b;
+            margin-bottom: 4px;
+        }
+
+        .overview-value {
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .metrics {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .metric {
+            background: #f8fafc;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.875rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 12px;
+            }
+
+            .header {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .grid-2, .grid-3 {
+                grid-template-columns: 1fr;
+            }
+
+            .header-meta {
+                flex-direction: column;
+                gap: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header Section -->
+        <div class="header">
+            <h1>{{header.apiName}}</h1>
+            <div class="header-meta">
+                <span>版本: {{header.version}}</span>
+                <span>分支: {{header.branch}}</span>
+            </div>
+        </div>
+
+        <!-- Overview Section -->
+        <div class="card">
+            <h2 class="card-title">📊 发布概览</h2>
+            <div class="overview-grid">
+                <div class="overview-item">
+                    <div class="overview-label">提交ID</div>
+                    <div class="overview-value">{{overview.commitId}}</div>
+                </div>
+                <div class="overview-item">
+                    <div class="overview-label">触发者</div>
+                    <div class="overview-value">{{overview.triggeredBy}}</div>
+                </div>
+                <div class="overview-item">
+                    <div class="overview-label">触发时间</div>
+                    <div class="overview-value">{{overview.triggerTime}}</div>
+                </div>
+                <div class="overview-item">
+                    <div class="overview-label">状态</div>
+                    <div class="overview-value">
+                        <span class="status-badge status-{{overview.status.type}}">
+                            <span class="icon">{{overview.status.icon}}</span>
+                            {{overview.status.text}}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div style="margin-top: 16px;">
+                <div class="overview-label">发布原因</div>
+                <div class="overview-value">{{overview.releaseReason}}</div>
+            </div>
+        </div>
+
+        <div class="grid grid-2">
+            <!-- Timeline Section -->
+            <div class="card">
+                <h2 class="card-title">⏱️ 部署时间线</h2>
+                <div class="timeline">
+                    {{#each timeline.stages}}
+                    <div class="timeline-item {{status}}">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong>{{name}}</strong>
+                                <div style="color: #64748b; font-size: 0.875rem;">{{statusText}}</div>
+                            </div>
+                            <div style="text-align: right; font-size: 0.875rem; color: #64748b;">
+                                {{timestamp}}
+                            </div>
+                        </div>
+                    </div>
+                    {{/each}}
+                </div>
+            </div>
+
+            <!-- Regions Section -->
+            <div class="card">
+                <h2 class="card-title">🌍 区域部署状态</h2>
+                {{#each regions}}
+                <div class="region-card {{#if deployed}}region-deployed{{else}}region-not-deployed{{/if}}">
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                        <div>
+                            <strong>{{name}}</strong>
+                            <div style="color: #64748b; font-size: 0.875rem;">{{location}}</div>
+                        </div>
+                        <span class="status-badge {{#if deployed}}status-success{{else}}status-warning{{/if}}">
+                            {{#if deployed}}✅ 已部署{{else}}⏳ 未部署{{/if}}
+                        </span>
+                    </div>
+                    <div style="font-size: 0.875rem; color: #374151;">
+                        {{status}}
+                    </div>
+                    {{#if changeRequest}}
+                    <div style="margin-top: 8px; font-size: 0.875rem;">
+                        <strong>变更请求:</strong> {{changeRequest}}
+                    </div>
+                    {{/if}}
+                    {{#if icLink}}
+                    <div style="margin-top: 8px;">
+                        <a href="{{icLink}}" style="color: #3b82f6; text-decoration: none; font-size: 0.875rem;">查看IC链接 →</a>
+                    </div>
+                    {{/if}}
+                </div>
+                {{/each}}
+            </div>
+        </div>
+
+        <!-- Scans Section -->
+        <div class="card">
+            <h2 class="card-title">🔍 扫描结果</h2>
+            {{#each scans}}
+            <div class="scan-item">
+                <div>
+                    <strong>{{name}}</strong>
+                    <div style="color: #64748b; font-size: 0.875rem;">{{description}}</div>
+                    {{#if metrics}}
+                    <div class="metrics" style="margin-top: 8px;">
+                        {{#each metrics}}
+                        <span class="metric">{{this}}</span>
+                        {{/each}}
+                    </div>
+                    {{/if}}
+                </div>
+                <div style="text-align: right;">
+                    <span class="status-badge status-{{status}}">
+                        {{#if (eq status 'passed')}}✅ 通过{{/if}}
+                        {{#if (eq status 'warning')}}⚠️ 警告{{/if}}
+                        {{#if (eq status 'failed')}}❌ 失败{{/if}}
+                        {{#if (eq status 'skipped')}}⏭️ 跳过{{/if}}
+                    </span>
+                    {{#if reportLink}}
+                    <div style="margin-top: 4px;">
+                        <a href="{{reportLink}}" style="color: #3b82f6; text-decoration: none; font-size: 0.875rem;">查看报告</a>
+                    </div>
+                    {{/if}}
+                </div>
+            </div>
+            {{/each}}
+        </div>
+
+        <div class="grid grid-2">
+            <!-- Execution Records -->
+            <div class="card">
+                <h2 class="card-title">📝 执行记录</h2>
+                {{#each executionRecords}}
+                <div class="record-item">
+                    <div>
+                        <strong>{{executor.name}}</strong>
+                        <div style="font-size: 0.875rem; color: #64748b;">
+                            {{action}} - {{environment}} ({{region}})
+                        </div>
+                        <div style="font-size: 0.875rem; color: #64748b;">
+                            {{timestamp}}
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span class="status-badge status-{{status}}">{{status}}</span>
+                        {{#if jobLink}}
+                        <div style="margin-top: 4px;">
+                            <a href="{{jobLink}}" style="color: #3b82f6; text-decoration: none; font-size: 0.875rem;">
+                                Job {{jobId}}
+                            </a>
+                        </div>
+                        {{/if}}
+                    </div>
+                </div>
+                {{/each}}
+            </div>
+
+            <!-- Attachments -->
+            <div class="card">
+                <h2 class="card-title">📎 附件</h2>
+                {{#each attachments}}
+                <div class="attachment-item">
+                    <div style="color: {{iconColor}}; font-size: 1.5rem;">{{icon}}</div>
+                    <div style="flex: 1;">
+                        <strong>{{name}}</strong>
+                        <div style="font-size: 0.875rem; color: #64748b;">
+                            {{size}} • 由 {{uploadedBy}} 上传于 {{uploadedTime}}
+                        </div>
+                    </div>
+                    <div>
+                        <button style="background: #3b82f6; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">
+                            下载
+                        </button>
+                    </div>
+                </div>
+                {{/each}}
+            </div>
+        </div>
+
+        <!-- Release Details -->
+        {{#if releaseDetails}}
+        <div class="card">
+            <h2 class="card-title">📋 发布详情</h2>
+            {{#if releaseDetails.keyFeatures}}
+            <div style="margin-bottom: 20px;">
+                <h3 style="margin-bottom: 12px; color: #374151;">关键特性</h3>
+                {{#each releaseDetails.keyFeatures}}
+                <div style="padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
+                    • {{this}}
+                </div>
+                {{/each}}
+            </div>
+            {{/if}}
+            {{#if releaseDetails.deploymentSteps}}
+            <div>
+                <h3 style="margin-bottom: 12px; color: #374151;">部署步骤</h3>
+                {{#each releaseDetails.deploymentSteps}}
+                <div style="padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
+                    {{@index}}. {{this}}
+                </div>
+                {{/each}}
+            </div>
+            {{/if}}
+        </div>
+        {{/if}}
+    </div>
+
+    <script>
+        // 模板渲染函数
+        function renderTemplate(template, data) {
+            // 简单的模板引擎实现
+            return template.replace(/\{\{#each\s+(\w+(?:\.\w+)*)\}\}([\s\S]*?)\{\{\/each\}\}/g, function(match, path, content) {
+                const items = getNestedProperty(data, path);
+                if (!Array.isArray(items)) return '';
+                
+                return items.map((item, index) => {
+                    return content
+                        .replace(/\{\{@index\}\}/g, index + 1)
+                        .replace(/\{\{(\w+(?:\.\w+)*)\}\}/g, function(m, prop) {
+                            return getNestedProperty(item, prop) || '';
+                        });
+                }).join('');
+            }).replace(/\{\{#if\s+(\w+(?:\.\w+)*)\}\}([\s\S]*?)\{\{\/if\}\}/g, function(match, path, content) {
+                const value = getNestedProperty(data, path);
+                return value ? content : '';
+            }).replace(/\{\{(\w+(?:\.\w+)*)\}\}/g, function(match, path) {
+                return getNestedProperty(data, path) || '';
+            });
+        }
+
+        function getNestedProperty(obj, path) {
+            return path.split('.').reduce((current, key) => current && current[key], obj);
+        }
+
+        // 如果有数据，渲染模板
+        if (window.releaseData) {
+            document.body.innerHTML = renderTemplate(document.body.innerHTML, window.releaseData);
+        }
+
+        // 实时更新功能
+        function updateStatus(newData) {
+            const mergedData = Object.assign({}, window.releaseData, newData);
+            window.releaseData = mergedData;
+            // 重新渲染页面的特定部分
+            location.reload(); // 简单实现，实际可以做局部更新
+        }
+
+        // 导出功能
+        function exportReport() {
+            window.print();
+        }
+
+        // 添加导出按钮
+        document.addEventListener('DOMContentLoaded', function() {
+            const header = document.querySelector('.header');
+            if (header) {
+                const exportBtn = document.createElement('button');
+                exportBtn.textContent = '导出报告';
+                exportBtn.style.cssText = 'position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); padding: 8px 16px; border-radius: 6px; cursor: pointer;';
+                exportBtn.onclick = exportReport;
+                header.style.position = 'relative';
+                header.appendChild(exportBtn);
+            }
+        });
+    </script>
+</body>
+</html>
