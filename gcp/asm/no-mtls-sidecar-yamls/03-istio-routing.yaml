@@ -1,0 +1,46 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: team-a-vs
+  namespace: team-a-runtime
+spec:
+  hosts:
+  - "*.team-a.appdev.aibang"
+  gateways:
+  - istio-ingressgateway-int/team-a-gateway
+  http:
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: team-a-service.team-a-runtime.svc.cluster.local
+        port:
+          number: 8443
+    timeout: 30s
+    retries:
+      attempts: 2
+      perTryTimeout: 10s
+      retryOn: connect-failure,refused-stream,unavailable,reset
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: team-a-service-tls
+  namespace: team-a-runtime
+spec:
+  host: team-a-service.team-a-runtime.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: SIMPLE
+      sni: team-a-service.team-a-runtime.svc.cluster.local
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 100
+        maxRequestsPerConnection: 100
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s

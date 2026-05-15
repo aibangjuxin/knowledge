@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-ingressgateway-int
+  labels:
+    istio.io/rev: asm-managed
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-a-runtime
+  labels:
+    istio-injection: disabled
