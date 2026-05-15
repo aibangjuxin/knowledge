@@ -116,6 +116,12 @@ gcp/asm/no-mtls-sidecar-yamls/
 gcp/asm/no-mtls-sidecar-yamls/05-architecture-flow.html
 ```
 
+相关深入探索文档：
+
+```text
+gcp/asm/DestinationRule.md   # DestinationRule 深度解析，TLS 模式、使用场景、与 PeerAuthentication 的区别
+```
+
 建议按这个顺序部署：
 
 ```bash
