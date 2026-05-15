@@ -110,6 +110,12 @@ Gateway Envoy -> HTTPS -> Runtime inbound sidecar -> opaque TCP -> App HTTPS 844
 gcp/asm/no-mtls-sidecar-yamls/
 ```
 
+架构流程图：
+
+```text
+gcp/asm/no-mtls-sidecar-yamls/05-architecture-flow.html
+```
+
 建议按这个顺序部署：
 
 ```bash
