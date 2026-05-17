@@ -10,13 +10,16 @@ develop/pipeline/release-dashboard/release-enhance-gemini.html
 develop/pipeline/release-dashboard/release-enhance-claude4-5.html
 develop/pipeline/release-dashboard/release-enhance.html
 develop/React/public/index.html
+gcp/asm/no-mtls-sidecar-yamls/05-architecture-flow.html
 gcp/asm/diagram/istio-ingress-source-flow.html
 gcp/asm/diagram/istio-crds-chain.html
 gcp/asm/diagram/asm_ingress_architecture_overview.html
 gcp/asm/diagram/istio-sidecar-injection.html
 gcp/asm/diagram/istio-ingress-flow.html
+gcp/asm/diagram/asm-no-sidecar-gateway.html
 gcp/asm/diagram/gke-asm-ambient-arch.html
 gcp/asm/diagram/istio-egress-flow.html
+gcp/asm/diagram/asm-nosidecar-architecture.html
 gcp/asm/diagram/istio-namespace-isolation.html
 gcp/asm/gloo/gloo-istio-architecture.html
 gcp/mtls/trust-config/add-trust-config.html
@@ -49,6 +52,7 @@ OPA-Gatekeeper/diagrams/03-onboarding-workflow.html
 OPA-Gatekeeper/diagrams/02-policy-hierarchy.html
 OPA-Gatekeeper/diagrams/05-policy-lifecycle.html
 OPA-Gatekeeper/diagrams/01-fleet-architecture.html
+gateway/no-gateway/diagram/gateway-2.0-architecture-mesostate.html
 gateway/no-gateway/diagram/gateway-2.0-tls-flow-v2.html
 gateway/no-gateway/diagram/gateway-2.0-tls-flow.html
 gateway/no-gateway/diagram/gateway-2.0-architecture.html
