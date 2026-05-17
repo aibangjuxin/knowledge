@@ -12,7 +12,6 @@ set -e
 BASE_URL="https://aibangjuxin.github.io/knowledge"
 SRC="/Users/lex/git/knowledge"
 DST="/Users/lex/git/knowledge/docs"
-LOG="/Users/lex/git/knowledge/bin/sync-html-to-docs.log"
 MANIFEST="/Users/lex/git/knowledge/bin/sync-html-to-docs-manifest.txt"
 TMP_MANIFEST=$(mktemp)
 GIT_DIR="$SRC/.git"
@@ -162,32 +161,35 @@ else
 fi
 
 # ──────────────────────────────────────────────
-# Step 4: Report
+# Step 4: Write URL manifest to README.md
 # ──────────────────────────────────────────────
+{
+    echo "# Sync URL Manifest"
+    echo ""
+    echo "Generated at: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo ""
+    echo "## All Published URLs"
+    echo ""
+    if [[ -s "$MANIFEST" ]]; then
+        while IFS= read -r relpath; do
+            echo "$BASE_URL/$relpath"
+        done < "$MANIFEST"
+    else
+        find "$DST" -type f -name "*.html" 2>/dev/null \
+            | grep -v "/index.html$" \
+            | sort \
+            | while IFS= read -r file; do
+                relpath="${file#$DST/}"
+                echo "$BASE_URL/$relpath"
+            done
+    fi
+} > "$DST/README.md"
+
 echo ""
 echo "========================================"
 echo " Sync completed at $(date '+%Y-%m-%d %H:%M:%S')"
 echo " Total found: $total | Copied: $copied"
 echo " Git status: $git_status"
 echo "========================================"
-
-if [[ $copied -gt 0 ]]; then
-    echo ""
-    echo "--- Recently synced (latest 5) ---"
-    tail -5 "$MANIFEST" | while IFS= read -r relpath; do
-        echo "$BASE_URL/$relpath"
-    done
-else
-    echo ""
-    echo "--- Random 5 examples ---"
-    find "$DST" -type f -name "*.html" 2>/dev/null \
-        | grep -v "/index.html$" \
-        | shuf -n 5 \
-        | while IFS= read -r file; do
-            relpath="${file#$DST/}"
-            echo "$BASE_URL/$relpath"
-        done
-fi
-
 echo ""
-echo "Log: $LOG"
+echo "URL manifest written to: $DST/README.md"
