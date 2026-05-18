@@ -317,12 +317,12 @@
         <h1>Istio No-Sidecar Architecture</h1>
         <p class="subtitle">GKE + Istio Minimal Profile + Gateway API | TLS Termination at Gateway + TLS Origination to Backend</p>
       </div>
-      <span class="version">v1.2</span>
+      <span class="version">v1.3</span>
     </div>
 
     <!-- Main Diagram -->
     <div class="diagram-container">
-      <svg viewBox="0 0 1200 800">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800">
         <defs>
           <!-- Arrow Markers -->
           <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -437,7 +437,7 @@
         <!-- Gateway Resource -->
         <rect x="440" y="430" width="260" height="90" rx="6" fill="rgba(16, 185, 129, 0.15)" stroke="#10b981" stroke-width="1.5"/>
         <text x="570" y="455" fill="#f8fafc" font-size="10" font-weight="600" text-anchor="middle">Gateway Resource</text>
-        <text x="570" y="475" fill="#06b6d4" font-size="9" text-anchor="middle">*.team1.appdev.hsbc</text>
+        <text x="570" y="475" fill="#06b6d4" font-size="9" text-anchor="middle">*.team1.appdev.aibang</text>
         <text x="570" y="495" fill="#94a3b8" font-size="8" text-anchor="middle">TLS Terminate + TLS Originate</text>
         <text x="570" y="513" fill="#64748b" font-size="8" text-anchor="middle">Port 443 → 8443</text>
 
@@ -456,7 +456,7 @@
         <!-- HTTPRoute app01 -->
         <rect x="60" y="615" width="160" height="60" rx="6" fill="rgba(139, 92, 246, 0.15)" stroke="#8b5cf6" stroke-width="1.5"/>
         <text x="140" y="640" fill="#f8fafc" font-size="10" font-weight="600" text-anchor="middle">HTTPRoute</text>
-        <text x="140" y="658" fill="#22c55e" font-size="9" text-anchor="middle">api1.team1.appdev.hsbc</text>
+        <text x="140" y="658" fill="#22c55e" font-size="9" text-anchor="middle">api1.team1.appdev.aibang</text>
         <text x="140" y="672" fill="#94a3b8" font-size="8" text-anchor="middle">→ app01-toolbox :8443</text>
 
         <!-- NetworkPolicy -->
@@ -491,7 +491,7 @@
         <!-- HTTPRoute app02 -->
         <rect x="770" y="615" width="160" height="60" rx="6" fill="rgba(139, 92, 246, 0.15)" stroke="#8b5cf6" stroke-width="1.5"/>
         <text x="850" y="640" fill="#f8fafc" font-size="10" font-weight="600" text-anchor="middle">HTTPRoute</text>
-        <text x="850" y="658" fill="#22c55e" font-size="9" text-anchor="middle">api2.team1.appdev.hsbc</text>
+        <text x="850" y="658" fill="#22c55e" font-size="9" text-anchor="middle">api2.team1.appdev.aibang</text>
         <text x="850" y="672" fill="#94a3b8" font-size="8" text-anchor="middle">→ app02-toolbox :8443</text>
 
         <!-- TLS Cert for app02 -->
@@ -540,7 +540,7 @@
         <text x="912" y="494" fill="#94a3b8" font-size="9">Plain Traffic Path</text>
 
         <!-- Version -->
-        <text x="1150" y="785" fill="#475569" font-size="9" text-anchor="end">Istio No-Sidecar Architecture v1.2 - GKE Gateway API</text>
+        <text x="1150" y="785" fill="#475569" font-size="9" text-anchor="end">Istio No-Sidecar Architecture v1.3 - GKE Gateway API</text>
       </svg>
     </div>
 
