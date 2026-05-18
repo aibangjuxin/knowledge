@@ -1,6 +1,6 @@
 # Sync URL Manifest
 
-Generated at: 2026-05-18 18:00:09
+Generated at: 2026-05-18 19:00:09
 
 ## All Published URLs
 
@@ -23,6 +23,7 @@ https://aibangjuxin.github.io/knowledge/gcp/asm/diagram/asm_ingress_architecture
 https://aibangjuxin.github.io/knowledge/gcp/asm/diagram/istio-sidecar-injection.html
 https://aibangjuxin.github.io/knowledge/gcp/asm/diagram/istio-ingress-flow.html
 https://aibangjuxin.github.io/knowledge/gcp/asm/diagram/asm-no-sidecar-gateway.html
+https://aibangjuxin.github.io/knowledge/gcp/asm/diagram/architecture.html
 https://aibangjuxin.github.io/knowledge/gcp/asm/diagram/gke-asm-ambient-arch.html
 https://aibangjuxin.github.io/knowledge/gcp/asm/diagram/istio-egress-flow.html
 https://aibangjuxin.github.io/knowledge/gcp/asm/diagram/asm-nosidecar-architecture.html
