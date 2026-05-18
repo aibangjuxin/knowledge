@@ -1,0 +1,38 @@
+# ============================================================
+# 04-istio-routing.yaml
+# VirtualService + DestinationRule for Istio routing
+# Routes traffic from Gateway to runtime pod with TLS
+# ============================================================
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: team-a-vs
+  namespace: teama-nosidecare-rt-ns-int
+spec:
+  hosts:
+  - "*.team-a.appdev.aibang"
+  gateways:
+  - istio-ingressgateway-int/team-a-gateway
+  http:
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: env0-region-runtimepod.teama-nosidecare-rt-ns-int.svc.cluster.local
+        port:
+          number: 8443
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: env0-region-runtimepod-tls
+  namespace: teama-nosidecare-rt-ns-int
+spec:
+  host: env0-region-runtimepod.teama-nosidecare-rt-ns-int.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: SIMPLE
+      sni: env0-region-runtimepod.teama-nosidecare-rt-ns-int.svc.cluster.local

@@ -1,0 +1,137 @@
+# ============================================================
+# 05-networkpolicy.yaml
+# NetworkPolicy for runtime namespace
+# All 8 policies as required by requirement.md
+# ============================================================
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-dns
+  namespace: teama-nosidecare-rt-ns-int
+spec:
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+        - ipBlock:
+            cidr: 100.68.0.0/18
+  policyTypes:
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-egress-int-rt
+  namespace: teama-nosidecare-rt-ns-int
+spec:
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              ingress: int
+  policyTypes:
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-egress-to-drn
+  namespace: teama-nosidecare-rt-ns-int
+spec:
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 128.0.0.0/2
+        - ipBlock:
+            cidr: 10.0.0.0/8
+  policyTypes:
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-egress-workload-identity
+  namespace: teama-nosidecare-rt-ns-int
+spec:
+  egress:
+    - ports:
+        - port: 988
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 127.0.0.1/32
+        - ipBlock:
+            cidr: 169.254.169.252/32
+  policyTypes:
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-ingress-int-rt
+  namespace: teama-nosidecare-rt-ns-int
+spec:
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              ingress: int
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-ingress-istio-int
+  namespace: teama-nosidecare-rt-ns-int
+spec:
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-ingressgateway-int
+          podSelector:
+            matchLabels:
+              app: istio-ingressgateway-int
+      ports:
+        - port: 8443
+          protocol: TCP
+  policyTypes:
+    - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-restricted-api
+  namespace: teama-nosidecare-rt-ns-int
+spec:
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 199.36.153.4/30
+  policyTypes:
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: teama-nosidecare-rt-ns-int
+spec:
+  policyTypes:
+    - Ingress
+    - Egress

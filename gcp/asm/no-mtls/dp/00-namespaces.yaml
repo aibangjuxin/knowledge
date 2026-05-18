@@ -1,0 +1,24 @@
+# ============================================================
+# 00-namespaces.yaml
+# Gateway namespace: ASM-managed, revision=asm-managed
+# Runtime namespace: sidecar injection DISABLED
+# ============================================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: istio-ingressgateway-int
+  labels:
+    istio.io/rev: asm-managed
+    kubernetes.io/metadata.name: istio-ingressgateway-int
+    ingress: int
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: teama-nosidecare-rt-ns-int
+  labels:
+    istio-injection: disabled
+    kubernetes.io/metadata.name: teama-nosidecare-rt-ns-int
+    ingress: int

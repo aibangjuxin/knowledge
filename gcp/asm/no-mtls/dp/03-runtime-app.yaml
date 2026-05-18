@@ -1,0 +1,116 @@
+# ============================================================
+# 03-runtime-app.yaml
+# TLS Secret + ConfigMap + Deployment + Service for runtime app
+# Runtime namespace: NO sidecar injection
+# Certificate: *.env0-region-runtimepod.teama-nosidecare-rt-ns-int.svc.cluster.local
+# ============================================================
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: env0-region-runtimepod-tls
+  namespace: teama-nosidecare-rt-ns-int
+type: kubernetes.io/tls
+data:
+  tls.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUVHRENDQXdDZ0F3SUJBZ0lVT0pxODZRL1BuZDZSdjcwaURLT1BBZVAxNU9Bd0RRWUpLb1pJaHZjTkFRRUwKQlFBd2ZURUxNQWtHQTFVRUJoTUNRMDR4RURBT0JnTlZCQWdNQjBKbGFXcHBibWN4RURBT0JnTlZCQWNNQjBKbAphV3BwYm1jeER6QU5CZ05WQkFvTUJrRnBZbUZ1WnpFNU1EY0dBMVVFQXd3d0tpNWxibll3TFhKbFoybHZiaTF5CmRXNTBhVzFsY0c5a0xtZGpjQzVqYkc5MVpDNXlaV2RwYjI0dVlXbGlZVzVuTUI0WERUSTJNRFV4TmpBeE5EWXkKTTFvWERUSTNNRFV4TmpBeE5EWXlNMW93ZlRFTE1Ba0dBMVVFQmhNQ1EwNHhFREFPQmdOVkJBZ01CMEpsYVdwcApibWN4RURBT0JnTlZCQWNNQjBKbGFXcHBibWN4RHpBTkJnTlZCQW9NQmtGcFltRnVaekU1TURjR0ExVUVBd3d3CktpNWxibll3TFhKbFoybHZiaTF5ZFc1MGFXMWxjRzlrTG1kamNDNWpiRzkxWkM1eVpXZHBiMjR1WVdsaVlXNW4KTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FROEFNSUlCQ2dLQ0FRRUF3bjhFNmVrb2lTdkxOY1JYSWFseApCd1RSelhXclc4NlhvL3JhUTZ4OFlRRk5oRXdKWGZ2TjE5QjR1RW1SWUlacGpITmc1bXZSUXFvRlRETzhnbkNBCnUrQm5SN2NBd3BDOUkzRHVpd0RnR1ROSlpaK3NpcXNxTitpcmE1MGFyTEl0eXJldFNqY0wreEs3WTRFV1NjU0MKVGZKVkZEcjFRN3oxaWFXYStRSUN5aHhGaWpDWC9nOFludGFORmFzV0w2RXVVSlBUdnc0Yzc1bGNEZGYwYVNmbgovT1ZwOXpjeHdGZVpNaXVvTGRoVXdSVkJobk90dHlMR2M2VmkrTEltZ3N1ci9kTXFEVTVFQ2UyN1Z3RW82NW9MCllkWEVQVkk0Zy9VbTN2d2x0clNYbUl4TkJtNVVyRkNDR3l6VnRGRU4yTHlsdVRJSXVzeGZwRGFkOVVSd1hMUEgKZndJREFRQUJvNEdQTUlHTU1Hc0dBMVVkRVFSa01HS0NNQ291Wlc1Mk1DMXlaV2RwYjI0dGNuVnVkR2x0WlhCdgpaQzVuWTNBdVkyeHZkV1F1Y21WbmFXOXVMbUZwWW1GdVo0SXVaVzUyTUMxeVpXZHBiMjR0Y25WdWRHbHRaWEJ2ClpDNW5ZM0F1WTJ4dmRXUXVjbVZuYVc5dUxtRnBZbUZ1WnpBZEJnTlZIUTRFRmdRVThpai9McU9nT2VtT25DdjMKcUlrSHUzemFXbk13RFFZSktvWklodmNOQVFFTEJRQURnZ0VCQUpGenAyVnlKREpwd21BMXZTQVFuTjYzazVmbApMQ3Bwb0hHenB5R2FOb0c0ZDlSeWswUE9Oc3ZJdksvZ2psRjlvRE5IOXhqRWNkbXU4M1BZTW15R3R1bUNNcnovCkU5VGd4Zk9leFRTUnZBSFVlSkU1Vkt3YVVXWUljQjRjV0FpS2NkRTJTdHJYTWxFTWJXYW45UWRUZFBDQzRBdWsKcVBNMTZNVXd6OHVxRi9yQWFzWmY2WTZvcmk0QXBtRkdqOHpkRm5Hclk2THd6SzZ3V0Z0OVVlVVNSdXdiNUtJdwpQWVpSbTZvc0FxOG9nbGZxWG15R1hweXRXS1o4ejROMGhmMlo5TWFidFBJOVV6Qy9renhDU1d1RjRaMWsyZVk5Cm9BTDNpbW14MkpZc25IYWxJVFB3K2NvUUVGdnNtUVo4VUFxSHpIWVJ5YUIwK251Q09tVTlUdzAxb2VzPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==
+  tls.key: LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2Z0lCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktnd2dnU2tBZ0VBQW9JQkFRRENmd1RwNlNpSks4czEKeEZjaHFYRUhCTkhOZGF0YnpwZWordHBEckh4aEFVMkVUQWxkKzgzWDBIaTRTWkZnaG1tTWMyRG1hOUZDcWdWTQpNN3lDY0lDNzRHZEh0d0RDa0wwamNPNkxBT0FaTTBsbG42eUtxeW8zNkt0cm5ScXNzaTNLdDYxS053djdFcnRqCmdSWkp4SUpOOGxVVU92VkR2UFdKcFpyNUFnTEtIRVdLTUpmK0R4aWUxbzBWcXhZdm9TNVFrOU8vRGh6dm1Wd04KMS9ScEorZjg1V24zTnpIQVY1a3lLNmd0MkZUQkZVR0djNjIzSXNaenBXTDRzaWFDeTZ2OTB5b05Ua1FKN2J0WApBU2pybWd0aDFjUTlVamlEOVNiZS9DVzJ0SmVZakUwR2JsU3NVSUliTE5XMFVRM1l2S1c1TWdpNnpGK2tOcDMxClJIQmNzOGQvQWdNQkFBRUNnZ0VBRlJEQkovMDBWNU1IaWVzYU9DVDIxSGlkcVVxcGhNMHpRd2xHNkVCL2Q0UTIKeGZHZkFXKzdPT09LblFSKzBKSmpvOWpWUnhwVFg3YzBKcStOMGNvOG1keXhZdm83cjFjU01vdFI2Q1ZGU3dWeApMdEZrcWQrUVl0NGs2WWdWQjdKWlg2cEFMeGhzM1puY1NPZmJmRXczMlcyNThFY29kd001ZHRudkZ6R0paWGxmCnRZajJwc2V5b0I0THhIRms2enlMcmVqOUdoUHBXUWtRZFdQNHFmQU5HUVl1bS9YaFVWMTVzR1h4U1pXSmFmVk4KMld3Wm83QUp2aWNDWC8zaXdpV1V5TGtZeXBEWERXWEpnWWZHMFBHRjVpZ3RzMUVPUHJUbXVVZUxLeFRzUTg5Ygp3OVZaS1kyaXFMK0dZVDBvdmR5ZnY5VnVWZjBtZnVBcUFIK3ZHbTF5TFFLQmdRRG9pSWtydHJYcDMzMUlDZE5WCnlycGRJdTJwUEl3RkYweGRJNld5S3kwS1JVbFlVN25lMTFYY1k4RklTY2d4THEvcnduQVhXM1ptSTl5dXB2RkgKQXRERjhKdW9MVFNMM1BPUzNiaHdwR3B1bnZPa1JzcGgzeWYrcEd3UWtmOXRISTJiMGdvaUs4NWttOU9IbkdXdwpNd1daRGl0aHIra1JQUVlDdUREbUFpb3BWUUtCZ1FEV0g4eDBwakE5VG40OE10UjJhQ0Y3SFlEdkVMREZVcGN0ClVKNkp0QlpTb2lKdE9teTN0Zm12MmUyQXFWeEtxVVAvMENWYXhmVmJpY0duRFp3bnUzTzlOVlVHeTZXQmNZbXEKczQ1VGVQK2FSYkpXUmFTMmVjczVZS0hyUDZVN0FBSTk4YVhYeWRTOWIwNFZna21oVGtSRnhnYlNHZzlkOVYzdQo3ZGJpNktvZGd3S0JnUUNjS3NaazgwcHREVWxvVGlEK3B5NU9TcHp1WWRsdnVkdnhXWFY0bVFLZ3VUT3UvRndDClN3QkJDVVhQdEsyY1NreWZ1Mi9vWCthK1ppdFpxSWkyTmkvY0grR0tLd0gxUktqWTQ4dHc2eHNIdS96SlFUbSsKVFU3Zzk3QVQyTm1BZ0FLaXVZZFF0N2JmWHIvTGZiL1ZmQTZ3WWhIRWc0MjFwQlFiVTNTVHBMU0lHUUtCZ1FDdApCT3pVcFNUOXBOdGtFVDZVbnZmTzM3dzdjS1VtRE9LVGZ6MWJ6K1RweUpGQTZhREhvWWVzak0vWTB3RDhZMkhLCjU0b0htMFh6UFpENVI0b1NvT21ZemV0eW5rT1NJUWc0b3ZZeWhPY2s1WVNCS2EwNnRaZDlPWlFjMzBUSU0rMmIKMkJOR0ZwU01yYy9PbVlTZGp2eWoxS3ZXUWJDQkg2OVRUV1FCM2piM3VRS0JnSExxU0JLUGVYV0M2TDY5R3o4YQpyb28rTlNpNmxmNHgrblBzRjRFWnk4WUt6MlJsTnc4T3NObytoU3RvRlNWK0RQZ1ZuSkcyVEptd01TM25pUm5QCmlPWmEvaWVsQ2ZQd3Bjai9CMVZwcis2REN4eTBlWm5qZjcyN0tJdG16cFpQT25YbTlUVmlSU2pvVm5DUDllTW0KUCt5V3dvbW1mN1RYVzM5NW9COHBPNDRPCi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-https-config
+  namespace: teama-nosidecare-rt-ns-int
+data:
+  default.conf: |
+    server {
+        listen 8443 ssl;
+        server_name _;
+
+        ssl_certificate /etc/nginx/tls/tls.crt;
+        ssl_certificate_key /etc/nginx/tls/tls.key;
+
+        location /health {
+            return 200 'OK';
+            add_header Content-Type text/plain;
+        }
+
+        location / {
+            return 200 'env0-region-runtimepod response';
+            add_header Content-Type text/plain;
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: env0-region-runtimepod
+  namespace: teama-nosidecare-rt-ns-int
+  labels:
+    app: env0-region-runtimepod
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: env0-region-runtimepod
+  template:
+    metadata:
+      labels:
+        app: env0-region-runtimepod
+      annotations:
+        sidecar.istio.io/inject: "false"
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.27-alpine
+        ports:
+        - name: https-app
+          containerPort: 8443
+          protocol: TCP
+        volumeMounts:
+        - name: app-tls
+          mountPath: /etc/nginx/tls
+          readOnly: true
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d
+          readOnly: true
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: app-tls
+        secret:
+          secretName: env0-region-runtimepod-tls
+      - name: nginx-config
+        configMap:
+          name: nginx-https-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: env0-region-runtimepod
+  namespace: teama-nosidecare-rt-ns-int
+  labels:
+    app: env0-region-runtimepod
+  annotations:
+    cloud.google.com/neg: '{"ingress":true}'
+spec:
+  type: ClusterIP
+  selector:
+    app: env0-region-runtimepod
+  ports:
+  - name: https-app
+    port: 8443
+    targetPort: 8443
+    protocol: TCP
