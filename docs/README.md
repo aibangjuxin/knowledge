@@ -1,6 +1,6 @@
 # Sync URL Manifest
 
-Generated at: 2026-05-18 14:00:12
+Generated at: 2026-05-18 15:00:10
 
 ## All Published URLs
 
@@ -26,6 +26,7 @@ https://aibangjuxin.github.io/knowledge/gcp/asm/diagram/asm-no-sidecar-gateway.h
 https://aibangjuxin.github.io/knowledge/gcp/asm/diagram/gke-asm-ambient-arch.html
 https://aibangjuxin.github.io/knowledge/gcp/asm/diagram/istio-egress-flow.html
 https://aibangjuxin.github.io/knowledge/gcp/asm/diagram/asm-nosidecar-architecture.html
+https://aibangjuxin.github.io/knowledge/gcp/asm/diagram/dual-entry.html
 https://aibangjuxin.github.io/knowledge/gcp/asm/diagram/istio-namespace-isolation.html
 https://aibangjuxin.github.io/knowledge/gcp/asm/gloo/gloo-istio-architecture.html
 https://aibangjuxin.github.io/knowledge/gcp/mtls/trust-config/add-trust-config.html
