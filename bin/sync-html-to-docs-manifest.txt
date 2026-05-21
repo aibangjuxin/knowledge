@@ -45,6 +45,7 @@ linux/dns/dns-peering/Github-hosted-intra-verify.html
 linux/dns/dns-peering/github/Github-hosted-intra-verify.html
 linux/dns/dns-peering/verify.html
 linux/dns/dns-peering/Intra-verify-domain.html
+cloud/k8s/k8s-gateway/ListenerSet.html
 cloud/k8s/hpa/hpa-cpu-and-memory-en.html
 cloud/k8s/hpa/cpu-and-memory-corrected-en.html
 cloud/k8s/networkpolicy/dns-security.html
