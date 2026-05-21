@@ -17,9 +17,12 @@ gcp/asm/diagram/asm_ingress_architecture_overview.html
 gcp/asm/diagram/istio-sidecar-injection.html
 gcp/asm/diagram/istio-ingress-flow.html
 gcp/asm/diagram/asm-no-sidecar-gateway.html
+gcp/asm/diagram/architecture.html
 gcp/asm/diagram/gke-asm-ambient-arch.html
 gcp/asm/diagram/istio-egress-flow.html
+gcp/asm/diagram/enhanced-architecture.html
 gcp/asm/diagram/asm-nosidecar-architecture.html
+gcp/asm/diagram/dual-entry.html
 gcp/asm/diagram/istio-namespace-isolation.html
 gcp/asm/gloo/gloo-istio-architecture.html
 gcp/mtls/trust-config/add-trust-config.html
