@@ -455,7 +455,10 @@ Cloud DNS 支持 wildcard record，但要注意 DNS wildcard 的匹配语义。
 |---|---|---|
 | `*.appdev.aibang.` | `api1.appdev.aibang.` | `api1.teamname1.appdev.aibang.` |
 | `*.teamname1.appdev.aibang.` | `api1.teamname1.appdev.aibang.` | `a.b.teamname1.appdev.aibang.` |
-| `*.cloud.region.aibang.` | `api.aliyun.cloud.region.aibang.` | `a.b.aliyun.cloud.region.aibang.` |
+| `*.cloud.region.aibang.` | `api.cloud.region.aibang.` | `api.aliyun.cloud.region.aibang.` |
+| `*.aliyun.cloud.region.aibang.` | `api.aliyun.cloud.region.aibang.` | `a.b.aliyun.cloud.region.aibang.` |
+
+核心规则：`*` 只匹配一个 label，不会跨多级 label 匹配。也就是说，`*.cloud.region.aibang.` 只能覆盖 `<one-label>.cloud.region.aibang.`，不能覆盖 `<one-label>.aliyun.cloud.region.aibang.`。
 
 因此，如果你的标准入口是：
 
