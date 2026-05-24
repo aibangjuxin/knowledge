@@ -3,7 +3,7 @@
 - This markdown records my workspace verification information and scripts.
 
 # Verify Scripts Search Results
-**Last Updated:** 2026-05-14
+**Last Updated:** 2026-05-24
 
 ## Shell Scripts (`.sh`)
 
@@ -659,6 +659,16 @@
 | `k8s/docs/verify-kube-dns.md` | Verify kube-dns working |
 | `k8s/networkpolicy/networkpolicy-dns.md` | Istio 网格内 DNS 解析与服务发现机制 |
 | `macos/docs/dns.md` | Dns |
+
+### GCP DNS Architecture Diagrams (HTML)
+
+| File Path | Title |
+| :------------------------------------------------------------------------ | :------------------------------------------------------------------------- |
+| `dns/docs/gcp-dns-01-three-paths.html` | GKE Pod DNS 查询路径：三种第一跳模式 |
+| `dns/docs/gcp-dns-02-resolution-order.html` | Cloud DNS Name Resolution Order — VPC 级别查询决策链 |
+| `dns/docs/gcp-dns-03-ndots-search-path.html` | ndots 与 Search Path 放大流程 — resolver 行为解析 |
+| `dns/docs/gcp-dns-04-recommended-architecture.html` | 推荐架构：GKE VPC2 → DNS Peering → VPC1 Forwarding → 企业 DNS |
+| `dns/docs/gcp-dns-05-troubleshooting-tree.html` | DNS 超时排查决策树 — Pod 超时快速定位 |
 
 ### GCP Cloud Run Documentation
 

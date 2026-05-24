@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud DNS Name Resolution Order — 架构图</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #1c1917;
+      --color-paper-2: #292524;
+      --color-ink:     #faf7f2;
+      --color-muted:   #a8a29e;
+      --color-soft:    #8e8680;
+      --color-accent:  #d6724a;
+      --color-accent-tint: rgba(214,114,74,0.10);
+      --color-link:    #60a5fa;
+      --font-sans:  'Geist', system-ui, sans-serif;
+      --font-serif: 'Instrument Serif', serif;
+      --font-mono:  'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · Cloud DNS</p>
+    <h1>Cloud DNS Name Resolution Order — VPC 级别查询决策链</h1>
+
+    <svg viewBox="0 0 1100 660" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.9" fill="rgba(250,247,242,0.08)"/>
+        </pattern>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#a8a29e"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#d6724a"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#60a5fa"/></marker>
+      </defs>
+
+      <!-- Background -->
+      <rect width="100%" height="100%" fill="#1c1917"/>
+      <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
+
+      <!-- ==================== ARROWS ==================== -->
+      <!-- Entry → Step 1 -->
+      <line x1="100" y1="100" x2="100" y2="140" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+      <!-- Step 1 → 2 -->
+      <line x1="100" y1="180" x2="100" y2="220" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+      <!-- Step 2 → 3 -->
+      <line x1="100" y1="260" x2="100" y2="300" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+      <!-- Step 3 → 4 -->
+      <line x1="100" y1="340" x2="100" y2="380" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+      <!-- Step 4 → 5 -->
+      <line x1="100" y1="420" x2="100" y2="460" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Step 5 branch: Private Zone -->
+      <line x1="120" y1="500" x2="220" y2="500" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+      <!-- Step 5 branch: Forwarding Zone -->
+      <line x1="120" y1="500" x2="220" y2="540" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+      <!-- Step 5 branch: Peering Zone -->
+      <line x1="120" y1="500" x2="220" y2="580" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Peering zone → Producer VPC re-run -->
+      <line x1="380" y1="580" x2="560" y2="580" stroke="#60a5fa" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow-link)"/>
+
+      <!-- Forwarding Zone → Enterprise DNS -->
+      <line x1="380" y1="540" x2="560" y2="540" stroke="#d6724a" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+
+      <!-- Step 5 → Step 6 (miss) -->
+      <line x1="100" y1="500" x2="100" y2="630" stroke="#a8a29e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+      <!-- Step 6 → Step 7 -->
+      <line x1="100" y1="630" x2="580" y2="630" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- ==================== NODES ==================== -->
+      <!-- Entry: GKE Node/Pod query -->
+      <rect x="20" y="50" width="160" height="52" rx="6" fill="rgba(214,114,74,0.10)" stroke="#d6724a" stroke-width="1.2"/>
+      <rect x="28" y="56" width="32" height="12" rx="2" fill="transparent" stroke="rgba(214,114,74,0.50)" stroke-width="0.8"/>
+      <text x="44" y="65" fill="#d6724a" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">INPUT</text>
+      <text x="100" y="82" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">DNS 查询进入</text>
+      <text x="100" y="97" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Cloud DNS</text>
+
+      <!-- Step 1: Cluster-scoped response policy -->
+      <rect x="20" y="140" width="160" height="40" rx="6" fill="#292524" stroke="#faf7f2" stroke-width="1"/>
+      <text x="100" y="165" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">1 · Cluster Response Policy</text>
+
+      <!-- Step 2: Cluster-scoped private / forwarding zone -->
+      <rect x="20" y="220" width="160" height="40" rx="6" fill="#292524" stroke="#faf7f2" stroke-width="1"/>
+      <text x="100" y="245" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">2 · Cluster Private Zone</text>
+
+      <!-- Step 3: VPC outbound server policy -->
+      <rect x="20" y="300" width="160" height="40" rx="6" fill="#292524" stroke="#faf7f2" stroke-width="1"/>
+      <text x="100" y="325" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">3 · VPC Outbound Server</text>
+
+      <!-- Step 4: VPC response policy -->
+      <rect x="20" y="380" width="160" height="40" rx="6" fill="#292524" stroke="#faf7f2" stroke-width="1"/>
+      <text x="100" y="405" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">4 · VPC Response Policy</text>
+
+      <!-- Step 5: VPC managed private zones (longest suffix match) — FOCAL -->
+      <rect x="20" y="460" width="160" height="80" rx="6" fill="rgba(214,114,74,0.10)" stroke="#d6724a" stroke-width="1.2"/>
+      <rect x="28" y="466" width="48" height="12" rx="2" fill="transparent" stroke="rgba(214,114,74,0.50)" stroke-width="0.8"/>
+      <text x="52" y="475" fill="#d6724a" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">FOCAL</text>
+      <text x="100" y="493" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">5 · VPC Managed</text>
+      <text x="100" y="508" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Private Zones</text>
+      <text x="100" y="528" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">longest suffix match</text>
+
+      <!-- Branch labels -->
+      <text x="165" y="502" fill="#a8a29e" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">→</text>
+      <text x="165" y="542" fill="#a8a29e" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">→</text>
+      <text x="165" y="582" fill="#a8a29e" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">→</text>
+
+      <!-- Zone type cards (right side) -->
+      <!-- Private Zone -->
+      <rect x="230" y="472" width="150" height="52" rx="6" fill="#292524" stroke="#faf7f2" stroke-width="1"/>
+      <text x="305" y="494" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Private Zone</text>
+      <text x="305" y="512" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">直接返回记录 / NXDOMAIN</text>
+
+      <!-- Forwarding Zone -->
+      <rect x="230" y="512" width="150" height="52" rx="6" fill="#292524" stroke="#d6724a" stroke-width="1.2"/>
+      <text x="305" y="534" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Forwarding Zone</text>
+      <text x="305" y="552" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">转发到 target DNS</text>
+
+      <!-- Peering Zone -->
+      <rect x="230" y="552" width="150" height="52" rx="6" fill="#292524" stroke="#faf7f2" stroke-width="1"/>
+      <text x="305" y="574" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Peering Zone</text>
+      <text x="305" y="592" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">切到 producer VPC 重新解析</text>
+
+      <!-- Enterprise DNS target -->
+      <rect x="570" y="512" width="160" height="52" rx="6" fill="rgba(214,114,74,0.10)" stroke="#d6724a" stroke-width="1.2"/>
+      <text x="650" y="534" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Enterprise DNS</text>
+      <text x="650" y="552" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">内部权威 DNS</text>
+
+      <!-- Producer VPC re-run indicator -->
+      <rect x="570" y="552" width="160" height="52" rx="6" fill="rgba(96,165,250,0.08)" stroke="rgba(96,165,250,0.40)" stroke-width="0.8" stroke-dasharray="4,3"/>
+      <text x="650" y="574" fill="#60a5fa" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Producer VPC</text>
+      <text x="650" y="592" fill="#78716c" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">重新执行解析顺序</text>
+
+      <!-- Arrow labels -->
+      <rect x="68" y="157" width="64" height="16" rx="2" fill="#1c1917"/>
+      <text x="100" y="168" fill="#8e8680" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">Cluster-scoped</text>
+
+      <rect x="68" y="237" width="64" height="16" rx="2" fill="#1c1917"/>
+      <text x="100" y="248" fill="#8e8680" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">Cluster-scoped</text>
+
+      <rect x="44" y="317" width="112" height="16" rx="2" fill="#1c1917"/>
+      <text x="100" y="328" fill="#8e8680" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">先于 managed zones</text>
+
+      <rect x="44" y="397" width="112" height="16" rx="2" fill="#1c1917"/>
+      <text x="100" y="408" fill="#8e8680" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">先于 managed zones</text>
+
+      <!-- Step 6: Compute Engine internal DNS -->
+      <rect x="580" y="600" width="160" height="44" rx="6" fill="#292524" stroke="#faf7f2" stroke-width="1"/>
+      <text x="660" y="627" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">6 · Compute Engine DNS</text>
+
+      <!-- Step 7: Public DNS -->
+      <rect x="760" y="600" width="160" height="44" rx="6" fill="#292524" stroke="#faf7f2" stroke-width="1"/>
+      <text x="840" y="627" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">7 · Public DNS Recursion</text>
+
+      <!-- VPC boundary (dashed) -->
+      <rect x="12" y="130" width="200" height="430" rx="8" fill="transparent" stroke="rgba(250,247,242,0.12)" stroke-width="0.8" stroke-dasharray="4,4"/>
+      <text x="20" y="150" fill="#78716c" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">VPC Scope</text>
+
+      <!-- ==================== LEGEND ==================== -->
+      <line x1="30" y1="660" x2="1070" y2="660" stroke="rgba(250,247,242,0.10)" stroke-width="0.8"/>
+      <text x="30" y="674" fill="#8e8680" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">LEGEND</text>
+      <!-- FOCAL -->
+      <rect x="80" y="666" width="10" height="10" rx="2" fill="rgba(214,114,74,0.10)" stroke="#d6724a" stroke-width="1"/>
+      <text x="96" y="675" fill="#a8a29e" font-size="8" font-family="'Geist Mono', monospace">Focal (关键决策点)</text>
+      <!-- BACKEND -->
+      <rect x="230" y="666" width="10" height="10" rx="2" fill="#292524" stroke="#faf7f2" stroke-width="1"/>
+      <text x="246" y="675" fill="#a8a29e" font-size="8" font-family="'Geist Mono', monospace">Backend / Service</text>
+      <!-- OPTIONAL -->
+      <rect x="340" y="666" width="10" height="10" rx="2" fill="rgba(96,165,250,0.08)" stroke="rgba(96,165,250,0.40)" stroke-width="0.8" stroke-dasharray="4,3"/>
+      <text x="356" y="675" fill="#a8a29e" font-size="8" font-family="'Geist Mono', monospace">Conditional / Async</text>
+      <!-- Arrow -->
+      <line x1="460" y1="671" x2="480" y2="671" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+      <text x="490" y="675" fill="#a8a29e" font-size="8" font-family="'Geist Mono', monospace">命中并返回</text>
+      <!-- Dashed arrow -->
+      <line x1="560" y1="671" x2="580" y2="671" stroke="#a8a29e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+      <text x="590" y="675" fill="#a8a29e" font-size="8" font-family="'Geist Mono', monospace">miss → 继续</text>
+      <!-- Link arrow -->
+      <line x1="670" y1="671" x2="690" y2="671" stroke="#60a5fa" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow-link)"/>
+      <text x="700" y="675" fill="#a8a29e" font-size="8" font-family="'Geist Mono', monospace">Peering 跳转</text>
+    </svg>
+  </div>
+</body>
+</html>
