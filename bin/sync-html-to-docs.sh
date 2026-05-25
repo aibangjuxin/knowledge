@@ -21,8 +21,41 @@ GIT_AUTHOR_EMAIL=$(cd "$SRC" && git config user.email)
 
 cd "$SRC"
 
+# Step 2
+# Step 1: Sync HTML files (only if content changed)
 # ──────────────────────────────────────────────
-# Helper: generate index.html for a given directory
+total=0
+copied=0
+
+while IFS= read -r file; do
+    relpath="${file#$SRC/}"
+    dest="$DST/$relpath"
+    mkdir -p "$(dirname "$dest")"
+
+    # Skip copy if file unchanged (compare content, not mtime)
+    if [[ -f "$dest" ]] && cmp -s "$file" "$dest"; then
+        echo "  (unchanged) $relpath"
+    else
+        if cp "$file" "$dest" 2>/dev/null; then
+            echo "  (updated) $relpath"
+            copied=$((copied + 1))
+        fi
+        echo "$relpath" >> "$TMP_MANIFEST"
+    fi
+    total=$((total + 1))
+done < <(find "$SRC" \
+  -type f -name "*.html" \
+  -not -path "*/.git/*" \
+  -not -path "*/skills/*" \
+  -not -path "*/docs/*" \
+  -not -path "*/.*" \
+  2>/dev/null)
+
+mv "$TMP_MANIFEST" "$MANIFEST"
+
+# ──────────────────────────────────────────────
+# Step 2: Regenerate index.html for ALL directories
+# Only write if content changed (avoids touching mtime unnecessarily)
 # ──────────────────────────────────────────────
 generate_index() {
   local dir="$1"
@@ -50,9 +83,11 @@ generate_index() {
   [[ -n "$items" || -n "$parent_link" ]] || return
 
   local title="Index of /knowledge${rel:+/$rel}"
-  local gen_time=$(date '+%Y-%m-%d %H:%M:%S')
 
-cat > "$dir/index.html" << INDEXEOF
+  # Generate to temp file first so we can compare before writing
+  local tmp_file
+  tmp_file=$(mktemp "$dir/.indexXXXXXX.html")
+  cat > "$tmp_file" << INDEXEOF
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -79,40 +114,19 @@ cat > "$dir/index.html" << INDEXEOF
   <ul>
 $parent_link$items
   </ul>
-  <p class="meta">Generated at $gen_time · <a href="$BASE_URL/${rel:-}">View on GitHub Pages</a></p>
+  <p class="meta"><a href="$BASE_URL/${rel:-}">View on GitHub Pages</a></p>
 </body>
 </html>
 INDEXEOF
+
+  # Only write if different (avoids unnecessary git churn)
+  if [[ ! -f "$dir/index.html" ]] || ! cmp -s "$tmp_file" "$dir/index.html"; then
+    mv "$tmp_file" "$dir/index.html"
+  else
+    rm "$tmp_file"
+  fi
 }
 
-# ──────────────────────────────────────────────
-# Step 1: Sync HTML files
-# ──────────────────────────────────────────────
-total=0
-copied=0
-
-while IFS= read -r file; do
-    relpath="${file#$SRC/}"
-    dest="$DST/$relpath"
-    mkdir -p "$(dirname "$dest")"
-    if cp "$file" "$dest" 2>/dev/null; then
-        echo "$relpath" >> "$TMP_MANIFEST"
-        copied=$((copied + 1))
-    fi
-    total=$((total + 1))
-done < <(find "$SRC" \
-  -type f -name "*.html" \
-  -not -path "*/.git/*" \
-  -not -path "*/skills/*" \
-  -not -path "*/docs/*" \
-  -not -path "*/.*" \
-  2>/dev/null)
-
-mv "$TMP_MANIFEST" "$MANIFEST"
-
-# ──────────────────────────────────────────────
-# Step 2: Regenerate index.html for ALL directories
-# ──────────────────────────────────────────────
 find "$DST" -mindepth 1 -type d 2>/dev/null | sort | while IFS= read -r dir; do
   rel="${dir#$DST/}"
   generate_index "$dir" "$rel"
