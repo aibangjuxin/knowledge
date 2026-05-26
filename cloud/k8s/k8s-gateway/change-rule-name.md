@@ -50,3 +50,96 @@
 ---
 
 *文档版本: 1.0 — 2026-05-26*
+
+
+这个问题问的是视角问题，很关键。
+
+## 规则视角分析
+
+你说的规则是**打在 Kong DP 命名空间**上的 Egress 规则，允许 Kong DP 的流量出去访问 `teamname-int`。
+
+按命名规范：
+
+```
+default-(deny|allow)-(ingress|egress)-{source or target svc}
+```
+
+- 方向：**egress**（从 Kong DP 出发）
+- target svc：**teamname**（目标是 teamname-int）
+
+所以规则应命名为：
+
+```
+default-allow-egress-teamname
+```
+
+---
+
+## 与你已有规则的对照
+
+| 规则所在 NS | 规则名称 | 方向 | 说明 |
+|------------|---------|:----:|------|
+| `kong-apw-kong-int` (Kong DP) | `default-allow-egress-teamname` | → `teamname-int` | Kong DP 的出站规则，**这是你问的这条** |
+| `teamname-int` (Tenant) | `default-allow-ingress-kdp` | ← `kdp` | Tenant NS 对应的入站白名单（已有） |
+
+> **这两条是一对**，一条写在 Kong DP 的 namespace 上（egress），一条写在 `teamname-int` 上（ingress）。NetworkPolicy 需要两端都放行流量才能真正通。
+
+如果你想把这条规则加入文档，我可以帮你补充进去。
+
+## 评估：`allow-egress-teamname` vs `default-allow-egress-teamname`
+
+你的判断**完全正确**，理由如下：
+
+| 对比维度 | `default-allow-egress-teamname` | `allow-egress-teamname` |
+|--------|--------------------------------|------------------------|
+| 适用级别 | Default（平台基线/通用基础设施） | App Specific（应用专属） |
+| 典型场景 | DNS、Health Check、Workload Identity | **Kong DP 访问特定租户** ← 这条 |
+| 是否能代表"通用"规则 | ✅ 适合放任意命名空间 | ✅ 与 Kong DP 强绑定 |
+
+> `default-*` 应留给"每个命名空间都可能需要的"基础策略；Kong DP egress 到 teamname-int 是一条面向具体应用拓扑的规则，属于 App Specific，`allow-egress-teamname` ✅ 是正确命名。
+
+---
+
+以下是对应的 NetworkPolicy YAML（打在 Kong DP 命名空间）：
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-teamname
+  namespace: kong-apw-kong-int      # Kong DP 所在命名空间
+spec:
+  podSelector: {}                    # 作用于 Kong DP NS 内所有 Pod
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: teamname-int
+      ports:
+        - port: 8080
+          protocol: TCP
+        - port: 8443
+          protocol: TCP
+  policyTypes:
+    - Egress
+```
+
+**与之配对的 Ingress 规则**（已在 `teamname-int` 中定义）：
+
+```yaml
+# 已存在于 k8s-gateway-netpol.md § 2.9
+name: default-allow-ingress-kdp
+namespace: teamname-int
+```
+
+两条规则共同构成完整的流量对：
+
+```
+kong-apw-kong-int Pod
+   │ allow-egress-teamname (Egress)
+   ▼
+teamname-int Pod (apigateway: KONG)
+   ↑ default-allow-ingress-kdp (Ingress)
+```
+
+需要我把这条规则追加到 [k8s-gateway-netpol.md](cci:7://file:///Users/lex/git/knowledge/cloud/k8s/k8s-gateway/k8s-gateway-netpol.md:0:0-0:0) 里单独开一个 Section 3（Kong DP Namespace）吗？
