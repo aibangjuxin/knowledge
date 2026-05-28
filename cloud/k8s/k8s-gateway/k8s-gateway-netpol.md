@@ -293,6 +293,19 @@ spec:
 
 ### 2.1 `default-deny-all`
 
+| 名称 | 说明 |
+|------|------|
+| `default-deny-all` | 兜底策略。一刀切拒绝该命名空间内所有 Pod 的一切入站 (Ingress) 和出站 (Egress) 流量。任何合法的通信都必须由下面的策略显式放行。 |
+| `default-allow-egress-dns` | 允许 Pod 发送 UDP/TCP 53 端口流量到 kube-system 的 kube-dns，以保障域名解析正常工作。 |
+| `default-allow-kong-gw-rt-intra-ns` | 作用于 Kong API 容器 (apigateway: KONG)。允许它接收同类容器的请求；并允许它发起出站请求，调用同类的 Kong 容器以及普通的 Container 容器 (apigateway: NONE)。 |
+| `default-allow-intra-ns-ms` | 作用于 微服务容器 (type: ms)。允许它接收来自同类 ms、KONG 以及 NONE 容器的请求；出站方向也允许访问这三类容器，实现了租户内微服务逻辑层的受控互通。 |
+| `default-allow-none-gw-rt-intra-ns` | 作用于 普通 API 容器 (apigateway: NONE)。允许它接收 Kong API 容器发来的请求；但它的出站规则被严格限制为只能访问其他普通容器，绝对物理隔离、无法反向去访问高权限的 Kong 容器。这完美阻断了潜在的横向越权攻击。 |
+| `default-allow-egress-drn` | 允许访问 Disaster Recovery Network (DRN) 或外部网络 (RFC 1918 + DRN IP 段)。 |
+| `default-allow-egress-workload-identity` | 允许访问本地和 GCP 元数据服务器的 988 端口，以支持 GCP 的 Workload Identity 原生身份认证。 |
+| `default-allow-ingress-gw` | 专门允许来自 abjx-gw-int 命名空间中 abjx-gw-int 网关 Pod 的流量，直接访问本命名空间里不需要 Kong 保护的普通容器 (apigateway: NONE)。 |
+| `default-allow-ingress-int-kdp` | 专门允许来自 Kong 数据面 (kdp: cap-int-kdp 标签的 Pod) 的流量，打入本命名空间里受 Kong 保护的 API 容器 (apigateway: KONG)。 |
+| `default-allow-egress-restricted-api` | 允许访问 Google Restricted API 的专用 IP 块 (199.36.153.4/30)。 |
+
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
