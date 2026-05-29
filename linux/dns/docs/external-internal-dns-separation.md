@@ -55,7 +55,7 @@ DNS 解析行为：
                            ↓ TLS 终止（GCLB 层）
 ┌──────────────────────────────────────────────────────────────┐
 │  L2  统一入口层（Ingress Layer）                              │
-│       dev-abjx.aliyun.cloud.region.aibang                        │
+│       dev-abjx.aliyun.cloud.region.local                        │
 │                                                              │
 │  Cloud DNS Zone: appdev.aibang                               │
 │  A 记录 → GLB 公网 IP                                        │
@@ -154,8 +154,8 @@ Kong Pod → 公网 → GLB 公网 IP → 外部网络 → GLB → Pod B
 Cloud DNS 托管区域：
 
 Zone: appdev.aibang（主 Zone，管理平台级域名）
-  - dev-abjx.aliyun.cloud.region.aibang  → GLB 公网 IP
-  - *.aliyun.cloud.region.aibang          → GLB 公网 IP（统一入口）
+  - dev-abjx.aliyun.cloud.region.local  → GLB 公网 IP
+  - *.aliyun.cloud.region.local          → GLB 公网 IP（统一入口）
 
 Zone: team.appdev.aibang（Team 路由 Zone，管理各 Team 的域名）
   - 每个 Team 一个子域
@@ -188,8 +188,7 @@ Namespace: team-b
 ### 4.3 分离管理清单
 
 | 域名类型 | 示例 | 管理方 | 存放位置 | A 记录指向 |
-|---------|------|--------|----------|-----------|
-| 平台入口域名 | `dev-abjx.aliyun.cloud.region.aibang` | Cloud DNS Zone `appdev.aibang` | Cloud DNS | GLB 公网 IP |
+| 平台入口域名 | `dev-abjx.aliyun.cloud.region.local` | Cloud DNS Zone `appdev.aibang` | Cloud DNS | GLB 公网 IP |
 | Team 路由域名 | `*.team.appdev.aibang` | Cloud DNS Zone `team.appdev.aibang` | Cloud DNS | GLB 公网 IP |
 | K8s Service 域名 | `*.svc.cluster.local` | Kubernetes CoreDNS | K8s 内置 | ClusterIP / Pod IP |
 | Pod 间 mTLS 域名 | `*.aliyun.cloud.region.local` | K8s CA / Mesh CA | SDS（内存） | 不需要 DNS A 记录 |
@@ -355,7 +354,7 @@ graph LR
 
     subgraph "域名用途"
         purpose_ext[外部 Client 入口<br/>统一在 GCLB 层终止]
-        purpose_int[Pod 间 mTLS 通信<br/>K8s CA 自动签发]
+        purpose_int[Pod 间 mTLS 通信<br/>K8s CA 自动签发<br/>*.aliyun.cloud.region.local]
     end
 
     ext_api -->|永远指向| ext_glb
@@ -487,24 +486,36 @@ options ndots:5
 |------|----|------|
 | `nameserver` | `kube-dns.kube-system.svc.cluster.local` | DNS 查询全部发往 CoreDNS |
 | `search` | `<namespace>.svc.cluster.local svc.cluster.local cluster.local` | 查询失败时自动追加后缀重试 |
-| `options ndots:5` | `5` | 如果查询的域名含 5 个以上 `.`（例如含子域），先走 search 路径；否则直接查询完整名称 |
+| `options ndots:5` | `5` | 查询名的普通分隔点数量 **少于** 5 时，先追加 search path 再查原始名；等于或多于 5 时，先查原始名再决定是否继续 search |
 
-**`ndots:5` 的实际影响**：
+**`ndots:5` 的精确行为**（基于参考文档校正）：
 
 ```
-查询 "api-svc.team-b.svc.cluster.local"（含 4 个点）
-  → ndots=5，4 < 5，不走 search
-  → 直接查询完整名称
-  → CoreDNS 直接解析 → ClusterIP
+ndots 行为规则：
+  - 普通分隔点数量 < ndots（5）：先追加 search path，全部失败再查原始名
+  - 普通分隔点数量 >= ndots（5）：先查原始名，再按 resolver 行为决定是否继续 search
+  - 查询名以尾部点结尾（.）：作为绝对 FQDN，不追加 search path（最直接的表达）
 
-查询 "api-svc.team-b.appdev.aibang"（含 5 个点）
-  → ndots=5，5 >= 5，先走 search 路径
-  → 先尝试 "api-svc.team-b.appdev.aibang.<namespace>.svc.cluster.local" → NXDOMAIN
-  → 再尝试 "api-svc.team-b.appdev.aibang.svc.cluster.local" → NXDOMAIN
-  → 最后查询完整名称 "api-svc.team-b.appdev.aibang" → 外部 DNS 解析
+点数计算示例：
+  api-svc.team-b.svc.cluster.local   → 普通分隔点：4 个（api-svc, team-b, svc, cluster, local 但 svc.cluster.local 是一个复合 label）
+                                    → 4 < 5 → 先走 search path
+
+  api-svc.team-b.appdev.aibang      → 普通分隔点：3 个（api-svc, team-b, appdev, aibang）
+                                    → 3 < 5 → 先走 search path（先追加 search suffix，再查原始名）
+                                    → 注意：不是 5 个点，3 < 5 才触发 search path
 ```
 
-**这意味着**：当代码中使用外部 Team 域名（`*.team.appdev.aibang`）时，Pod 会先尝试在 K8s DNS 侧解析，多次失败后再走外部 DNS，造成不必要的解析延迟。
+**`api-svc.team-b.appdev.aibang` 的完整查询序列**（ndots:5，4 个普通分隔点，4 < 5，所以先走 search）：
+
+```
+1. api-svc.team-b.appdev.aibang.<namespace>.svc.cluster.local  → NXDOMAIN
+2. api-svc.team-b.appdev.aibang.svc.cluster.local              → NXDOMAIN
+3. api-svc.team-b.appdev.aibang.cluster.local                   → NXDOMAIN
+4. api-svc.team-b.appdev.aibang.<project>.internal             → NXDOMAIN
+5. api-svc.team-b.appdev.aibang                                → 最终查询原始名 → 外部 DNS 解析
+```
+
+**关键纠正**：当代码中使用外部 Team 域名（`api-svc.team-b.appdev.aibang`，3 个普通分隔点）时，因为 `3 < 5`，Pod resolver 会先尝试 5 次 search path 拼接，全部失败后才查询原始名。这造成不必要的解析延迟。如果使用尾部点 FQDN（`api-svc.team-b.appdev.aibang.`），resolver 会直接按绝对名字查询，跳过 search path。
 
 ---
 
@@ -647,15 +658,16 @@ Step 1：Pod A 发起请求
   代码中：https://api-svc.team-b.svc.cluster.local/api/v1
 
 Step 2：glibc 解析（ndots 决策）
-  域名含 4 个点（api-svc.team-b.svc.cluster.local）
+  域名普通分隔点：4 个（api-svc, team-b, svc, cluster, local → 但 svc.cluster.local 是复合 label，实际为 4 个点）
   ndots=5，4 < 5
-  → 不走 search 路径，直接查询完整名称
+  → 先走 search path（先追加 search suffix，再查原始名）
+  → 实际产生 5 次 DNS 查询：4 次 search path 拼接 + 1 次原始名
 
 Step 3：DNS 查询发往 kube-dns（ClusterIP）
   /etc/resolv.conf nameserver: 10.x.x.x
 
 Step 4：CoreDNS 接收查询
-  查询: api-svc.team-b.svc.cluster.local
+  查询: api-svc.team-b.svc.cluster.local（search path 阶段）
 
 Step 5：CoreDNS Zone 匹配
   匹配 kubernetes cluster.local zone
@@ -675,7 +687,7 @@ Step 7：mTLS 握手（Istio Sidecar）
 
 完整路径图：
   Pod A → ClusterIP → kube-proxy → Pod B
-         (DNS 解析: CoreDNS → ClusterIP)
+         (DNS 解析: CoreDNS → ClusterIP，含 search path 放大)
          (mTLS: istiod SDS → *.aliyun.cloud.region.local)
 ```
 
@@ -689,13 +701,15 @@ Step 7：mTLS 握手（Istio Sidecar）
 Pod A 查询：api-svc.team-b.appdev.aibang
 
 Step 1：ndots 检查
-  域名含 5 个点（api-svc.team-b.appdev.aibang）
-  ndots=5，5 >= 5
-  → 先走 search 路径
+  域名普通分隔点：1 个（team-b 中的点）
+  ndots=5，1 < 5
+  → 先走 search 路径（先追加 search suffix，再查原始名）
 
 Step 2：search 路径尝试
-  api-svc.team-b.appdev.aibang.team-a.svc.cluster.local → NXDOMAIN
-  api-svc.team-b.appdev.aibang.svc.cluster.local → NXDOMAIN
+  api-svc.team-b.appdev.aibang.<namespace>.svc.cluster.local → NXDOMAIN
+  api-svc.team-b.appdev.aibang.svc.cluster.local              → NXDOMAIN
+  api-svc.team-b.appdev.aibang.cluster.local                   → NXDOMAIN
+  api-svc.team-b.appdev.aibang.<project>.internal             → NXDOMAIN
 
 Step 3：查询完整名称
   api-svc.team-b.appdev.aibang
@@ -704,15 +718,17 @@ Step 3：查询完整名称
 
 Step 4：GCP 内部 DNS 转发
   → Cloud DNS Internal Endpoint
-  → 返回内部视图 A 记录：GLB 公网 IP（假设为 8.8.8.8）
+  → Split-horizon 返回内部视图 A 记录：GLB 公网 IP
 
 Step 5：Kong Pod 发起连接
-  Kong Pod 认为 target: 8.8.8.8:443 是外部目标
+  Kong Pod 认为 target: <GLB 公网 IP>:443 是外部目标
   → 流量出集群：Kong Pod → 公网 → GLB
   → 这是错误的！Kong 应该连接集群内部的 Pod
 ```
 
-**这就是为什么 Kong upstream 不能用外部 Team 域名**——Split-horizon DNS 会把域名解析到外部 IP，Kong 认为 upstream 在集群外部，流量绕行公网。
+**这就是为什么 Kong upstream 不能用外部 Team 域名**——即使只有 1 个普通分隔点（team-b），因为 `1 < 5`，Pod resolver 会先走 search path（4 次 NXDOMAIN），然后才查原始名，最终通过 Split-horizon DNS 解析到 GLB 公网 IP，导致 Kong 认为 upstream 在集群外部，流量绕行公网。
+
+**推荐做法**：应用代码中使用 K8s Service 名称（`*.svc.cluster.local`），CoreDNS 直接解析到 ClusterIP，流量不绕行公网。
 
 ---
 
