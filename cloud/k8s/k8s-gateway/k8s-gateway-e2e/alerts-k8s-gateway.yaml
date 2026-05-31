@@ -1,0 +1,111 @@
+# K8s Gateway Prometheus Alerting Rules
+# Apply with: kubectl apply -f alerts-k8s-gateway.yaml -n monitoring
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: k8s-gateway-alerts
+  namespace: monitoring
+  labels:
+    app: k8s-gateway
+    prometheus: prometheus
+spec:
+  groups:
+    - name: k8s-gateway-alerts
+      rules:
+        - alert: GatewayHighTimeoutRate
+          expr: |
+            sum(rate(envoy_cluster_upstream_rq_timeout[5m]))
+            / sum(rate(envoy_cluster_upstream_rq_total[5m])) > 0.01
+          for: 5m
+          labels:
+            severity: warning
+            component: gateway
+          annotations:
+            summary: "K8s Gateway upstream timeout rate > 1%"
+            description: "Timeout rate is {{ $value | humanizePercentage }} over last 5m"
+            runbook: "https://wiki.internal/runbooks/k8s-gateway-timeout"
+
+        - alert: GatewayHighErrorRate
+          expr: |
+            sum(rate(envoy_cluster_upstream_rq_5xx[5m]))
+            / sum(rate(envoy_cluster_upstream_rq_total[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+            component: gateway
+          annotations:
+            summary: "K8s Gateway 5xx error rate > 5%"
+            description: "Error rate is {{ $value | humanizePercentage }} over last 5m"
+            runbook: "https://wiki.internal/runbooks/k8s-gateway-5xx"
+
+        - alert: GatewayListenerDown
+          expr: |
+            kube_gateway_status_condition{
+              condition="Ready",status="true"
+            } == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: gateway
+          annotations:
+            summary: "Gateway listener {{ $labels.gateway }}/{{ $labels.gateway_class }} is not Ready"
+            description: "Gateway {{ $labels.namespace }}/{{ $labels.gateway }} has Ready=false for > 2m"
+            runbook: "https://wiki.internal/runbooks/k8s-gateway-down"
+
+        - alert: ListenerSetRouteCountMismatch
+          expr: |
+            abs(
+              kube_listenerset_attached_routes
+              - on(gateway,namespace) group_left()
+              kube_gateway_attached_routes
+            ) > 10
+          for: 10m
+          labels:
+            severity: warning
+            component: gateway
+          annotations:
+            summary: "ListenerSet routes diverges from Gateway attached routes"
+            description: "Mismatch of {{ $value }} routes for Gateway {{ $labels.namespace }}/{{ $labels.gateway }}"
+
+        - alert: GatewayEnvoyPodDown
+          expr: |
+            kube_pod_status_phase{
+              namespace="abjx-gw-int",
+              pod=~"abjx-gw-int-.*",
+              phase!="Running"
+            } == 1
+          for: 1m
+          labels:
+            severity: critical
+            component: gateway
+          annotations:
+            summary: "Gateway Envoy pod is not Running"
+            description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is {{ $labels.phase }}"
+
+        - alert: KongDPHighLatency
+          expr: |
+            histogram_quantile(0.99,
+              rate(envoy_cluster_upstream_response_time_bucket{
+                cluster=~".*kong-apw-kong-int.*"
+              }[5m])
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+            component: kong
+          annotations:
+            summary: "Kong DP p99 latency > 2s"
+            description: "Kong upstream p99 latency is {{ $value }}s"
+
+        - alert: GatewayTLSCertExpiring
+          expr: |
+            envoy_certificate_expiration_date{
+              namespace="infrastructure"
+            } - time() < 604800  # 7 days
+          for: 1h
+          labels:
+            severity: warning
+            component: gateway
+          annotations:
+            summary: "Gateway TLS certificate expiring in < 7 days"
+            description: "Certificate {{ $labels.serial_number }} for {{ $labels.service_name }} expires in {{ $value | humanizeDuration }}"
