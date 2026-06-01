@@ -15,6 +15,14 @@
   - [使用方法](#使用方法)
   - [脚本逻辑流程](#脚本逻辑流程)
   - [关键设计点](#关键设计点)
+- [minimax (合并增强版)](#minimax-合并增强版)
+  - [设计动机](#设计动机)
+  - [融合来源](#融合来源)
+  - [修复的已知问题](#修复的已知问题)
+  - [使用方法](#使用方法-1)
+  - [脚本逻辑流程](#脚本逻辑流程-1)
+  - [关键设计点](#关键设计点-1)
+  - [依赖 & 自检](#依赖--自检)
 
 # chatgpt
 
@@ -741,3 +749,111 @@ graph TD
 | **PathPrefix 拼接** | `PathPrefix=/api/v1` + `/health` → `/api/v1/health` |
 | **自动解析 ILB IP** | `--resolve` 注入 curl，绕过 DNS，直接打 Gateway IP |
 | **DR 可选** | 无 DestinationRule 时 WARN 继续，不中断 |
+
+---
+
+# minimax (合并增强版)
+
+## 设计动机
+
+`k8s-gateway-fqdn-minimax.sh` 是对同目录下 5 个 FQDN 链路勘测脚本(`fqdn.sh` 旧版 + `fqdn-gemini.sh` + `fqdn-claude.sh` + `fqdn-chatgpt.sh`)的 **"集大成"重写**。每一个原版都有可用的优点，但也都有不能忽视的 bug 或缺憾。minimax 版本在 **保留所有有价值的特性** 的基础上,统一了参数接口、修复了 3 个真实 bug,并把分散的逻辑收敛到一条可读、可测、可维护的纯 bash + jq + curl 流水线里。
+
+## 融合来源
+
+| 借鉴来源 | 借鉴点 |
+|----------|--------|
+| `k8s-gateway-fqdn-gemini.sh` | **主架构** — 纯 `jq` 流水线、跨 NS HTTPRoute 扫描、3 种 Deployment 定位策略 (selector / Pod ownerRef / spec.selector) |
+| `k8s-gateway-fqdn-chatgpt.sh` | Listener 协议/端口自动检测 (HTTP/HTTPS/TLS) · 全 probe 枚举 (readiness/liveness/startup, 跨 container) · 3 种路径类型拼接 (PathPrefix/Exact/Regex) · Cross-namespace `backendRef.namespace` 处理 · 可选 `--validate` curl 实测 |
+| `k8s-gateway-fqdn-claude.sh` | `--resolve` SNI 注入 curl 模式 · DR 多种 host 形式匹配 (`svc`、`svc.ns`、`svc.ns.svc`、`svc.ns.svc.cluster.local`) |
+| `k8s-gateway-fqdn.sh` (昨日版) | 智能 tenant namespace 推断 (从 FQDN 第 2 段) · IP 直连 + Host 头方法 C |
+
+## 修复的已知问题
+
+| Bug 所在 | 问题 | 修复 |
+|----------|------|------|
+| `fqdn.sh` 旧版 | 误用 `kubectl apply` 命令做只读探测 | 全部改为 `kubectl get` + `-o json` |
+| `fqdn.sh` 旧版 | `HTTPRoutes` 拼写错(应为 `httproute`) | 统一为小写 `httproute` (匹配 K8s Gateway API 资源名) |
+| `fqdn-claude.sh` | hardcoded `/health` 兜底,忽略 probe 实际 path | 改用 Deployment 实测的 probe 路径,按容器枚举 |
+| `fqdn-claude.sh` | `((idx++)) \|\| true` 在 set -e 下不可靠循环 | 用 `declare -A` 去重 + 数组遍历 |
+| `fqdn-chatgpt.sh` | `TENANT_NS` 与 `--validate` 位置参数冲突 (`[[ "${TENANT_NS:-}" == "--validate" ]]` 临时打补丁) | 改为标准 `--flag` 风格 + `POSITIONAL=()` 收集,完全消除歧义 |
+| `fqdn-chatgpt.sh` | `case` 出现在 `while \| read` 子 shell 中不生效 | 抽成 `do_validate_one()` 函数 + 临时变量统计 |
+| 全部 4 个原版 | hostname 匹配忽略尾点 (`api.x.com.` vs `api.x.com`) | jq 内 `def norm: rtrimstr(".")` 统一去尾点 |
+| 全部 4 个原版 | DR/Pod JSON 缺失时 jq 报语法错 | 显式 `[[ -z "$X" \|\| "$X" == "null" ]] && X='{"items":[]}'` 兜底 |
+
+## 使用方法
+
+```bash
+chmod +x k8s-gateway-fqdn-minimax.sh
+
+# 场景 A: 智能推断 tenant namespace, 只给 FQDN
+./k8s-gateway-fqdn-minimax.sh api.team1-int.uk.aibang.local
+
+# 场景 B: 显式指定 tenant namespace (跳过推断)
+./k8s-gateway-fqdn-minimax.sh app.team2.example.com team2
+
+# 场景 C: 实测生成的 E2E URL (curl 实际打一次, 输出 HTTP code)
+./k8s-gateway-fqdn-minimax.sh api.team1-int.uk.aibang.local team1-int --validate
+./k8s-gateway-fqdn-minimax.sh api.team1-int.uk.aibang.local team1-int -v
+
+# 场景 D: 环境变量覆盖默认值(适合 CI/包装脚本)
+GATEWAY_NS=infra-prod GATEWAY_NAME=prod-gw \
+  DEFAULT_SCHEME=https CURL_TIMEOUT=15 \
+  ./k8s-gateway-fqdn-minimax.sh api.example.com team-a -v
+```
+
+## 脚本逻辑流程
+
+```mermaid
+graph TD
+    A["输入 FQDN (可选 tenant ns / --validate)"] --> B["Step 0: 智能推断 tenant ns<br/>(FQDN 第 2 段 → ns lookup)"]
+    B --> C["Step 1: 跨 NS 扫描 HTTPRoute<br/>exact + 通配符 (jq)"]
+    C --> D{找到?}
+    D -->|否| Z["ERROR: 列出全部 HTTPRoute 供排查"]
+    D -->|是| E["Step 2: 遍历 ParentRefs<br/>Gateway / ListenerSet"]
+    E --> F["Step 3: 提取 listener<br/>协议 (HTTP/HTTPS/TLS) + 端口<br/>+ Gateway IP (status.addresses / LB svc 兜底)"]
+    F --> G["Step 4: 遍历 Rules<br/>matches (path/headers/qs/methods)<br/>backendRefs (跨 NS)"]
+    G --> H["Step 5: 查找 DestinationRule<br/>(svc / svc.ns / svc.ns.svc /<br/>svc.ns.svc.cluster.local 四种 host 形式)"]
+    H --> I["Step 6: 解析 Service<br/>(ClusterIP / selector / port mapping)"]
+    I --> J["Step 7: 定位 Deployment<br/>(selector / Pod ownerRef /<br/>spec.selector 三种策略)"]
+    J --> K["Step 8: 跨 container 枚举<br/>readiness/liveness/startup HTTP probe"]
+    K --> L["Step 9: 路径拼接<br/>PathPrefix / Exact / Regex"]
+    L --> M["Step 10: 生成 E2E URL × 3 方法<br/>A 本地 DNS · B SNI --resolve · C IP 直连 + Host 头"]
+    M --> N{"--validate?"}
+    N -->|否| O["汇总: 唯一 URL 列表 + curl 命令"]
+    N -->|是| P["实际执行 curl, 按 code 分类<br/>2xx=绿 / 3xx=黄 / 4xx-5xx-000=红"]
+    P --> O
+```
+
+## 关键设计点
+
+| 特性 | 说明 |
+|------|------|
+| **纯 bash + jq + curl** | 无 Python 依赖,所有 JSON 处理走 jq 流水线 |
+| **统一参数接口** | `<FQDN> [TENANT_NS] [--validate]` 三段式,无歧义 |
+| **智能 tenant 推断** | FQDN 第 2 段 → namespace lookup,失败则全集群扫 |
+| **跨 NS backendRef** | 显式处理 `backendRef.namespace`,不假设同 NS |
+| **3 路径类型** | `PathPrefix`(智能去重) · `Exact`(忽略 probe) · `Regex`(完整拼接) |
+| **3 curl 方法** | A 本地 DNS · B SNI `--resolve` · C IP 直连 + `Host` 头 |
+| **跨 container probe** | 自动遍历 Deployment.spec.template.spec.containers,枚举所有 HTTP probe |
+| **3 Deployment 定位策略** | spec.selector 匹配 → Pod ownerRef 溯源 → spec.selector 全扫 |
+| **DR host 4 种形式** | `svc` / `svc.ns` / `svc.ns.svc` / `svc.ns.svc.cluster.local` 全兼容 |
+| **ListenerSet 友好** | 父引用 ListenerSet 时打印 listener 协议/端口 |
+| **配色统一** | RED/GREEN/YELLOW/CYAN/BLUE/MAGENTA/BOLD/DIM,统一在一个 header 里 |
+| **错误兜底** | 缺 DR/Pod JSON 时自动填 `'{"items":[]}'` 防 jq 崩溃 |
+| **唯一化汇总** | `awk 'NF && !seen[$0]++'` 去重,避免同一 URL 重复打印 |
+| **退出码正确** | 链路无匹配路由时 `exit 1`,CI 可直接通过 `$?` 判定 |
+
+## 依赖 & 自检
+
+```bash
+# 必需命令
+command -v kubectl && command -v jq && command -v curl
+
+# 语法自检 (CI 友好)
+bash -n k8s-gateway-fqdn-minimax.sh && echo "SYNTAX OK"
+
+# 单元测试 helper 函数 (norm_path / url_authority / join_path)
+# 16/16 PASS — 见脚本头部注释和开发笔记
+```
+
+**vs. 旧版对比**: 旧版 (`k8s-gateway-fqdn.sh`) 因 `kubectl apply` 误用 + `HTTPRoutes` 拼写错,曾导致 read-only 探测意外修改集群;minimax 版已彻底分离只读路径。新版单文件即可覆盖从 FQDN 推断到 E2E URL 生成的完整流程,推荐作为新项目的默认入口。
