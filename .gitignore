@@ -61,3 +61,10 @@ Thumbs.db
 
 # Safe — certificate data (do not commit real certs/keys)
 safe/certs/
+
+# English vocab cron auto-generated (vocab-hourly / vocab-hourly-llm)
+# Runs every hour 09:21 Asia/Shanghai, dumps 10 words per push
+/English/docs/english-words-*.md
+/.english_word_pool.json
+/.english_word_pool_v2.json
+/English/scripts/vocab_cron.py
