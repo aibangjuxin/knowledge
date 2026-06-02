@@ -8,11 +8,18 @@
 docker/
 ├── docs/                     # Markdown文档
 ├── multistage-builds/        # 多阶段构建相关内容
+├── byoc/                     # Bring Your Own Container 模式（Vertex AI / Cloud Run / SageMaker / ...）
 ├── scripts/                  # Shell脚本
 └── README.md                 # 本说明文件
 ```
 
 ## 子目录说明 (按功能分类)
+### byoc/ - BYOC 模式
+- `README.md` — 概念、适用场景、平台一览
+- `best-practices.md` — 镜像设计、体积、安全、可观测、CI/CD 集成的工程实践
+- `platforms.md` — Vertex AI / Cloud Run / SageMaker / GitHub Actions / Cloudflare Containers 的 BYOC 特例
+- `dockerfile-templates.md` — Python / Node / Go / ML / Static site 五个经过验证的模板
+
 ### docs/ - 文档
 - `Dockeffile-user-pass-violation.md`: Dockerfile用户密码违规相关
 - `Docker-annotations.md`: Docker注解相关知识
@@ -35,4 +42,5 @@ docker/
 - Docker网络: 查看 `docs/` 目录中的 `network-multitool.md`
 - Docker优化: 查看 `docs/` 目录中的 `Docker-prune.md`
 - 特殊配置: 查看 `docs/` 目录中的 `Docker-annotations.md`
+- **BYOC 模式（Vertex AI / Cloud Run / SageMaker / ...）**: 查看 `byoc/` 目录
 - 脚本: 查看 `scripts/` 目录
