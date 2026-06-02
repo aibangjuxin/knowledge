@@ -33,3 +33,4 @@
 - `sql/`: 文件: eid.md, gcp-postgresql.md, process_data.sh, sync_data.md
 - `storage/`: 文件: cloud-bak.md, cloud-storage-transfer-service.md
 - `tools/`: 文件: filter-jq.md, git.md, git.sh
+- `vertex-ai/`: 文件: README.md, byoc-training.md, byoc-prediction.md, byoc-iam-cicd.md (Vertex AI BYOC 端到端：训练/推理/IAM/CI-CD/Pipelines)
