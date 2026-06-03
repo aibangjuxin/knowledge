@@ -13,6 +13,7 @@ k8s/
 ├── docs/                       # Markdown文档
 ├── hpa/                        # 水平Pod自动扩缩容相关
 ├── images/                     # 镜像相关资源
+├── k8s-gateway/                # K8s Gateway API (HTTPRoute / ListenerSet / DestinationRule)
 ├── k8s-scale/                  # K8s扩缩容相关
 ├── labels/                     # 标签相关配置
 ├── lib/                        # K8s相关库文件
@@ -43,6 +44,16 @@ k8s/
 - `hpa.md`, `hpa-poc-cpu-memory.md`: 水平Pod自动扩缩容 (在docs/目录)
 - `vpa/`: 垂直Pod自动扩缩容相关内容
 - `pdb.md`, `pdb-core.md`: Pod中断预算 (在docs/目录)
+
+### Gateway API (K8s Gateway API / ListenerSet)
+- `k8s-gateway/`: K8s Gateway API 深度探索 + ListenerSet 多租户模式
+  - `k8s-gateway-api-report.md`: 总览/选型报告
+  - `tenant-namespace-k8s-gateway.md`: ListenerSet 多租户配置指南
+  - `tenant-namespace-newapi-team1-appdev-aibang.md`: 在 team1 部署 newapi 的完整示例 (Service+Deployment+HTTPRoute+DR)
+  - `DestinationRule.md`, `DestinationRule-insecureSkipVerify.md`: DestinationRule 详解
+  - `k8s-gateway-netpol.md` / `k8s-gateway-netpol.html`: 网关层 NetworkPolicy
+  - `k8s-gateway-timeout.md`, `explorer-k8s-gateway-timeout.md`: timeout 调优
+  - `k8s-gateway-e2e/`: E2E 验证脚本集 (minimax / gemini / chatgpt / claude)
 
 ### 网络
 - `networkpolicy.md`, `base-networkpolicy.md`: 网络策略 (在docs/目录)
