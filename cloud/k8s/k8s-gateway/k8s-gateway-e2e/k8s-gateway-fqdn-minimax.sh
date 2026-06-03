@@ -52,8 +52,8 @@ subdiv()  { echo -e "${DIM}$(printf '─%.0s' {1..88})${RESET}"; }
 # --------------------------------------------------------------------------- #
 # 默认配置(支持环境变量覆盖)
 # --------------------------------------------------------------------------- #
-GATEWAY_NS="${GATEWAY_NS:-infrastructure}"
-GATEWAY_NAME="${GATEWAY_NAME:-central-gateway}"
+GATEWAY_NS="${GATEWAY_NS:-abjx-gw-int}"
+GATEWAY_NAME="${GATEWAY_NAME:-abjx-gw-int}"
 DEFAULT_SCHEME="${DEFAULT_SCHEME:-https}"
 CURL_TIMEOUT="${CURL_TIMEOUT:-10}"
 
