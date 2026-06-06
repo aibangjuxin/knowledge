@@ -1,0 +1,36 @@
+# ListenerSet 租户 API 上线 — DestinationRule 模板
+# 必改占位符: <TEAM> <API> <TLS_MODE>
+# tls.mode 决策矩阵 (详见 architectrue/references/k8s-gateway-listener-tenant-api.md §4.6):
+#   - DISABLE:        后端明文 HTTP, 无 sidecar (新服务默认, hello-app)
+#   - SIMPLE:         后端 HTTPS, 无 sidecar (自签 cert 需加 insecureSkipVerify: true)
+#   - ISTIO_MUTUAL:   mesh 内 mTLS, 后端有 sidecar
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: <API>-dr
+  namespace: <TEAM>
+  labels:
+    app: <API>
+spec:
+  # FQDN 形式 (脚本会同时匹配 4 种 host 形式: 短名/短名.svc/短名.ns.svc/完整 FQDN)
+  host: <API>.<TEAM>.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: <TLS_MODE>
+      # 仅 SIMPLE + 自签 cert 时需要: 跳过证书校验
+      # insecureSkipVerify: true
+      # 仅 SIMPLE + 真实 CA 时需要: caCertificates 字段指向 CA cert
+      # caCertificates: ...
+    connectionPool:
+      tcp:
+        connectTimeout: 5s
+        maxConnections: 100
+      http:
+        h2UpgradePolicy: DEFAULT
+        maxRequestsPerConnection: 10
+        idleTimeout: 60s
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50

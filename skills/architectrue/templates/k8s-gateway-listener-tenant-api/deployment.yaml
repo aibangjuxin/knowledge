@@ -1,0 +1,81 @@
+# ListenerSet 租户 API 上线 — Deployment 模板
+# 必改占位符: <TEAM> <API> <IMAGE>
+# 镜像选择:
+#   - gcr.io/google-samples/hello-app:1.0      (8080, / 返回 200 "Hello, world!")
+#   - nginxinc/nginx-unprivileged:1.27-alpine  (备选, 同样 8080)
+# 完整反推模式见 architectrue/references/k8s-gateway-listener-tenant-api.md
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: <API>
+  namespace: <TEAM>
+  labels:
+    app: <API>
+    app.kubernetes.io/name: <API>
+    app.kubernetes.io/part-of: <TEAM>-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: <API>
+  template:
+    metadata:
+      labels:
+        app: <API>              # 与 Service selector 一致
+        app.kubernetes.io/name: <API>
+    spec:
+      containers:
+        - name: <API>
+          image: <IMAGE>
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          # 三个 probe 都打 /, hello-app 返回 200
+          # 真实应用请用专门的 /healthz endpoint
+          # ⭐ probe scheme 必须跟后端真实协议一致:
+          #   - 后端 HTTP:    scheme: HTTP
+          #   - 后端 HTTPS:   scheme: HTTPS
+          #   - 后端 gRPC:    用 gRPC probe (不是 httpGet)
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 12   # 允许 60s 启动
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

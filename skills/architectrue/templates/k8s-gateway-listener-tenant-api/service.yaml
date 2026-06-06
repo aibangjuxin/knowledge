@@ -1,0 +1,29 @@
+# ListenerSet 租户 API 上线 — Service 模板
+# 必改占位符: <TEAM> <API> <APP_PROTOCOL>
+# 完整反推模式见 architectrue/references/k8s-gateway-listener-tenant-api.md
+#
+# ⭐ appProtocol 选择: 跟后端真实协议对齐
+#   - http:  后端明文 HTTP (默认, hello-app, nginx 平文本)
+#   - https: 后端启用 TLS (自签 cert + DR tls.mode: SIMPLE + insecureSkipVerify)
+#   - grpc:  gRPC 后端
+apiVersion: v1
+kind: Service
+metadata:
+  name: <API>
+  namespace: <TEAM>
+  labels:
+    app: <API>
+    app.kubernetes.io/name: <API>
+    app.kubernetes.io/part-of: <TEAM>-app
+  annotations:
+    description: "Backend service for <API>.<TEAM>.<APP>.<TLD>"
+spec:
+  type: ClusterIP
+  selector:
+    app: <API>                  # 必须与 Deployment pod template labels 一致
+  ports:
+    - name: <APP_PROTOCOL>      # 通常与 appProtocol 一致 (http / https)
+      port: 80                  # HTTPRoute backendRef.port 引用此端口 (HTTP) / 443 (HTTPS)
+      targetPort: 8080          # 与 Deployment containerPort 一致
+      protocol: TCP
+      appProtocol: <APP_PROTOCOL>   # ⭐ 告诉 Gateway 后端协议, 决定 Envoy 上游集群类型

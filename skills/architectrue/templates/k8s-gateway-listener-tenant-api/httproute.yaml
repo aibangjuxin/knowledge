@@ -1,0 +1,56 @@
+# ListenerSet 租户 API 上线 — HTTPRoute 模板
+# 必改占位符: <TEAM> <API> <FQDN> <LISTENER_SECTION>
+# 假设:
+#   - ListenerSet 名: <TEAM>-listeners
+#   - Gateway: infrastructure/central-gateway (不需要你引用)
+#   - ListenerSet hostname pattern 覆盖 <FQDN> (否则会被 listener 拒绝)
+# 完整反推模式见 architectrue/references/k8s-gateway-listener-tenant-api.md
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: <API>-route
+  namespace: <TEAM>
+  labels:
+    app: <API>
+    app.kubernetes.io/part-of: <TEAM>-app
+spec:
+  # ⭐ 关键: parentRef 是 ListenerSet (不是 Gateway)
+  # Gateway 本身不直接定义 <FQDN> 模式的 listener, 由 ListenerSet 提供
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: ListenerSet
+      name: <TEAM>-listeners
+      namespace: <TEAM>
+      # sectionName 选填: 如果 ListenerSet 有多个 listener (如 https/grpc)
+      # 必须指明绑定哪一个。常见命名: https / http / grpc
+      sectionName: <LISTENER_SECTION>
+
+  # 实际对外服务的 FQDN, 必须能被 ListenerSet 的 hostname 通配符覆盖
+  hostnames:
+    - <FQDN>
+
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+          method: GET
+        - path:
+            type: PathPrefix
+            value: /
+          method: POST
+
+      backendRefs:
+        - name: <API>            # Service 名称
+          port: 80              # Service port (不是 targetPort)
+          weight: 1
+
+      # 可选: 添加租户标识 header, 方便后端审计
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            add:
+              - name: X-Tenant
+                value: <TEAM>
+              - name: X-Gateway-Source
+                value: <TEAM>-listeners
