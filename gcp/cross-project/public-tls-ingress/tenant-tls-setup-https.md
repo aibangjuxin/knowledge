@@ -858,6 +858,22 @@ NAME                         PROTOCOL  LOAD_BALANCING_SCHEME  REGION
 ajbx-public-bs               HTTPS     EXTERNAL_MANAGED       europe-west2
 ajbx-tenant-vpc-internal-bs  HTTP      INTERNAL_MANAGED       europe-west2
 
+gcloud compute backend-services list
+NAME                              BACKENDS                                                 PROTOCOL
+aea2a265392824041a3827c81a45cf12                                                           TCP
+ajbx-public-bs                    europe-west2/networkEndpointGroups/ajbx-public-neg       HTTPS
+ajbx-public-mtls-bs               europe-west2/networkEndpointGroups/ajbx-public-mtls-neg  HTTPS
+ajbx-tenant-vpc-internal-bs       europe-west2/instanceGroups/ajbx-tenant-vpc-backend-mig  HTTP
+ajbx-tenant-vpc-mtls-internal-bs  europe-west2/instanceGroups/ajbx-tenant-vpc-mtls-mig     HTTPS
+
+gcloud compute forwarding-rules list
+NAME                              REGION        IP_ADDRESS     IP_PROTOCOL  TARGET
+aea2a265392824041a3827c81a45cf12  europe-west2  192.168.64.44  TCP          europe-west2/backendServices/aea2a265392824041a3827c81a45cf12
+ajbx-public-fr                    europe-west2  34.105.229.97  TCP          europe-west2/targetHttpsProxies/ajbx-public-proxy
+ajbx-public-mtls-fr               europe-west2  34.13.61.175   TCP          europe-west2/targetHttpsProxies/ajbx-public-mtls-proxy
+ajbx-tenant-vpc-internal-fr       europe-west2  10.0.1.4       TCP          europe-west2/targetHttpsProxies/ajbx-tenant-vpc-internal-https-proxy
+ajbx-tenant-vpc-mtls-internal-fr  europe-west2  10.0.1.11      TCP          europe-west2/targetHttpsProxies/ajbx-tenant-vpc-mtls-internal-https-proxy
+
 ```bash
 
 gcloud compute forwarding-rules describe ajbx-public-mtls-fr --region europe-west2
