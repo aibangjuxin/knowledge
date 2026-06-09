@@ -45,7 +45,7 @@ def _ollama_embed_batch(self, texts: list[str]) -> list[list[float]]:
 - 测试 `batch_size ∈ {16, 24, 32, 40, 48}`
 - 捕获:**hang 次数、错误数、wall 时长、p50/p95/p99/max 延迟、drift** (前 1/3 vs 后 1/3 延迟变化,检测 GPU 调度退化)
 
-**脚本**: `/tmp/long_batch_probe.py`(可复用,改 URL/MODEL 即可用于其他模型测试)
+**脚本**: `~/git/rag/scripts/probe_embedder_batch.py`(已合入 rag 仓库,支持 `--stress` 长 batch 模式 + argparse 配置 URL/MODEL/sizes/chunks/trials)
 
 ## 4. 实测结果
 
@@ -125,7 +125,7 @@ embedder:
   base_url: http://127.0.0.1:11434
   model: embeddinggemma:300m
   dim: 768
-  batch_size: 40        # was: 32 — tuned via /tmp/long_batch_probe.py on 2026-06-10
+  batch_size: 40        # was: 32 — tuned via scripts/probe_embedder_batch.py on 2026-06-10
   timeout_s: 30
 ```
 
@@ -145,7 +145,7 @@ embedder:
 ### 6.3 不推荐继续上调的边界
 
 - **64**: `auto_tune_loop.py:79` 列入候选,但我们没测。如果将来实测:
-  - 用 `/tmp/long_batch_probe.py` 把 `sizes = [16, 24, 32, 40, 48]` 改成 `[40, 48, 64, 96, 128]` 重跑
+  - 用 `scripts/probe_embedder_batch.py --sizes 40 48 64 96 128` 重跑
   - 关注 p99 是否突破 2s、drift 是否变负(说明 GPU 调度开始退化)
 - **128**: 单批 128 chunks 在 M4 Metal 上大概率会触发不同的 GPU kernel,行为不可预测,**不推荐**。
 
@@ -162,15 +162,21 @@ embedder:
 
 ```bash
 # 1. 短 batch (240 chunks, ~30s)
-cd ~/git/rag && ./.venv/bin/python3 -u /tmp/batch_size_probe.py
+cd ~/git/rag && uv run python scripts/probe_embedder_batch.py
 
-# 2. 长 batch (1000 chunks, ~2 min)
-cd ~/git/rag && ./.venv/bin/python3 -u /tmp/long_batch_probe.py
+# 2. 长 batch stress (1000 chunks, back-to-back, ~2 min)
+cd ~/git/rag && uv run python scripts/probe_embedder_batch.py --stress --chunks 1000
 
-# 输出会写到 /tmp/long_batch.log
+# 3. 自定义 batch_sizes 和 trials
+cd ~/git/rag && uv run python scripts/probe_embedder_batch.py \
+    --sizes 32 40 48 --trials 5 --chunks 500
+
+# 4. 测试其他 embedding 模型
+cd ~/git/rag && uv run python scripts/probe_embedder_batch.py \
+    --model nomic-embed-text --sizes 16 32 64
 ```
 
-**前置条件**: Ollama 在 127.0.0.1:11434 运行,模型 `embeddinggemma:300m` 已 pull。
+**前置条件**: Ollama 在 127.0.0.1:11434 运行,模型已 pull。脚本会 stdout line-buffered,可用 `tee /path/to/log` 留存原始数据。
 
 ---
 
