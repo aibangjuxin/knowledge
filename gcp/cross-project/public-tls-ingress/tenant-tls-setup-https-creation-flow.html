@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resource Creation Flow — tenant-tls-setup-https</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px;
+      background: #fbbf24;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+    .subtitle { color: #94a3b8; font-size: 0.85rem; margin-left: 1.75rem; }
+    .meta { color: #64748b; font-size: 0.75rem; margin-left: 1.75rem; margin-top: 0.25rem; }
+
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1100px; display: block; }
+
+    .legend-row {
+      display: flex;
+      gap: 1.5rem;
+      margin-top: 1.25rem;
+      flex-wrap: wrap;
+      font-size: 0.72rem;
+      color: #94a3b8;
+    }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+    .legend-sw {
+      width: 14px; height: 10px; border-radius: 2px;
+      display: inline-block;
+    }
+    .legend-line { width: 18px; height: 2px; display: inline-block; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.85rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.72rem; }
+    .card li { margin-bottom: 0.35rem; line-height: 1.5; }
+    .card li b { color: #cbd5e1; font-weight: 500; }
+    .card code {
+      background: rgba(30, 41, 59, 0.6);
+      padding: 0.05rem 0.35rem;
+      border-radius: 3px;
+      font-size: 0.7rem;
+      color: #e2e8f0;
+    }
+
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.7rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Resource Creation Flow — Producer + Consumer 顺序</h1>
+      </div>
+      <p class="subtitle">从 cert 出发 → 5 个 Producer 资源 → PSC 桥接 → 4 个 Consumer 关联操作 → e2e 验证</p>
+      <p class="meta">同 swim-lane: Producer 在上, Consumer 在下;  跨 VPC 唯一桥梁 = Service Attachment (Producer) → PSC NEG (Consumer)</p>
+    </div>
+
+    <!-- Main Diagram -->
+    <div class="diagram-container">
+      <svg viewBox="0 0 1320 700">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+          </marker>
+          <marker id="arrowhead-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+          </marker>
+          <marker id="arrowhead-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+          </marker>
+          <marker id="arrowhead-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/>
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- =========================================================
+             TRACK LABELS (left side, vertical)
+             ========================================================= -->
+        <rect x="10" y="110" width="22" height="170" rx="4" fill="rgba(120, 53, 15, 0.4)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="21" y="195" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle" transform="rotate(-90 21 195)">PRODUCER</text>
+
+        <rect x="10" y="320" width="22" height="220" rx="4" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="21" y="430" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle" transform="rotate(-90 21 430)">CONSUMER</text>
+
+        <!-- =========================================================
+             PRODUCER TRACK (y=100-290)
+             ========================================================= -->
+
+        <!-- Step 1: SSL cert -->
+        <rect x="50" y="100" width="180" height="80" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="60" y="120" fill="#22d3ee" font-size="9" font-weight="700">① SSL Certificate</text>
+        <text x="60" y="138" fill="white" font-size="10" font-weight="600">ajbx-tenant-vpc</text>
+        <text x="60" y="150" fill="white" font-size="10" font-weight="600">-internal-cert</text>
+        <text x="60" y="170" fill="#94a3b8" font-size="7">ssl-certificates create</text>
+
+        <!-- Step 2: HTTPS Health Check -->
+        <rect x="260" y="100" width="180" height="80" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="270" y="120" fill="#34d399" font-size="9" font-weight="700">② HTTPS Health Check</text>
+        <text x="270" y="138" fill="white" font-size="10" font-weight="600">ajbx-tenant-vpc</text>
+        <text x="270" y="150" fill="white" font-size="10" font-weight="600">-internal-https-hc</text>
+        <text x="270" y="170" fill="#94a3b8" font-size="7">health-checks create https :443</text>
+
+        <!-- Step 3: Target HTTPS Proxy -->
+        <rect x="470" y="100" width="180" height="80" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="480" y="120" fill="#22d3ee" font-size="9" font-weight="700">③ Target HTTPS Proxy</text>
+        <text x="480" y="138" fill="white" font-size="10" font-weight="600">ajbx-tenant-vpc</text>
+        <text x="480" y="150" fill="white" font-size="10" font-weight="600">-internal-https-proxy</text>
+        <text x="480" y="170" fill="#94a3b8" font-size="7">target-https-proxies create</text>
+
+        <!-- Step 4: Forwarding Rule (port 443, import YAML) -->
+        <rect x="680" y="100" width="180" height="80" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="690" y="120" fill="#22d3ee" font-size="9" font-weight="700">④ Forwarding Rule</text>
+        <text x="690" y="138" fill="white" font-size="10" font-weight="600">ajbx-tenant-vpc</text>
+        <text x="690" y="150" fill="white" font-size="10" font-weight="600">-internal-fr :443</text>
+        <text x="690" y="170" fill="#fb7185" font-size="7">forwarding-rules import (YAML, §6.2 bug)</text>
+
+        <!-- Step 5: Service Attachment -->
+        <rect x="890" y="100" width="180" height="80" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="900" y="120" fill="#34d399" font-size="9" font-weight="700">⑤ Service Attachment</text>
+        <text x="900" y="138" fill="white" font-size="10" font-weight="600">ajbx-tenant-vpc</text>
+        <text x="900" y="150" fill="white" font-size="10" font-weight="600">-internal-sa</text>
+        <text x="900" y="170" fill="#94a3b8" font-size="7">service-attachments create</text>
+
+        <!-- Producer Step 5 (SA) special marker — bridge endpoint -->
+        <circle cx="1070" cy="100" r="6" fill="#fbbf24" stroke="#fbbf24" stroke-width="2"/>
+        <text x="1070" y="92" fill="#fbbf24" font-size="7" font-weight="700" text-anchor="middle">★</text>
+
+        <!-- =========================================================
+             Arrows in Producer track (horizontal, sequential)
+             ========================================================= -->
+        <line x1="230" y1="140" x2="256" y2="140" stroke="#34d399" stroke-width="2" marker-end="url(#arrowhead-emerald)"/>
+        <line x1="440" y1="140" x2="466" y2="140" stroke="#34d399" stroke-width="2" marker-end="url(#arrowhead-emerald)"/>
+        <line x1="650" y1="140" x2="676" y2="140" stroke="#34d399" stroke-width="2" marker-end="url(#arrowhead-emerald)"/>
+        <line x1="860" y1="140" x2="886" y2="140" stroke="#34d399" stroke-width="2" marker-end="url(#arrowhead-emerald)"/>
+
+        <!-- =========================================================
+             Cross-VPC bridge: Producer SA (step 5) → Consumer PSC NEG (step 2)
+             Curved arrow with PSC tunnel annotation
+             ========================================================= -->
+        <path d="M 1070 180 Q 1070 260 770 260 Q 580 260 580 360"
+              fill="none" stroke="#fbbf24" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#arrowhead-amber)"/>
+        <rect x="700" y="246" width="160" height="28" rx="4" fill="rgba(15, 23, 42, 0.95)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="780" y="260" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">PSC Tunnel (cross-VPC)</text>
+        <text x="780" y="270" fill="#94a3b8" font-size="7" text-anchor="middle">--psc-target-service 指向 SA</text>
+
+        <!-- =========================================================
+             CONSUMER TRACK (y=350-540)
+             ========================================================= -->
+
+        <!-- Step 1: Backend Service (import YAML) -->
+        <rect x="50" y="350" width="180" height="80" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="60" y="370" fill="#34d399" font-size="9" font-weight="700">① Backend Service (HTTPS)</text>
+        <text x="60" y="388" fill="white" font-size="10" font-weight="600">ajbx-public-bs</text>
+        <text x="60" y="400" fill="white" font-size="10" font-weight="600">(protocol=HTTPS)</text>
+        <text x="60" y="420" fill="#fb7185" font-size="7">backend-services import (YAML, §6.2 bug)</text>
+
+        <!-- Step 2: PSC NEG -->
+        <rect x="490" y="350" width="180" height="80" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="500" y="370" fill="#34d399" font-size="9" font-weight="700">② PSC NEG</text>
+        <text x="500" y="388" fill="white" font-size="10" font-weight="600">ajbx-public-neg</text>
+        <text x="500" y="400" fill="white" font-size="10" font-weight="600">(PRIVATE_SERVICE_CONNECT)</text>
+        <text x="500" y="420" fill="#94a3b8" font-size="7">network-endpoint-groups create</text>
+
+        <!-- Step 3: add-backend -->
+        <rect x="700" y="350" width="180" height="80" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="710" y="370" fill="#a78bfa" font-size="9" font-weight="700">③ Add NEG → BS</text>
+        <text x="710" y="388" fill="white" font-size="10" font-weight="600">ajbx-public-bs ←</text>
+        <text x="710" y="400" fill="white" font-size="10" font-weight="600">ajbx-public-neg</text>
+        <text x="710" y="420" fill="#94a3b8" font-size="7">backend-services add-backend</text>
+
+        <!-- Step 4: attach Cloud Armor -->
+        <rect x="910" y="350" width="180" height="80" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="920" y="370" fill="#fb7185" font-size="9" font-weight="700">④ Attach Cloud Armor</text>
+        <text x="920" y="388" fill="white" font-size="10" font-weight="600">ajbx-public-bs</text>
+        <text x="920" y="400" fill="white" font-size="10" font-weight="600">+ ajbx-public-armor</text>
+        <text x="920" y="420" fill="#94a3b8" font-size="7">backend-services update --security-policy</text>
+
+        <!-- Consumer Step 2 (NEG) bridge endpoint marker -->
+        <circle cx="490" cy="430" r="6" fill="#fbbf24" stroke="#fbbf24" stroke-width="2"/>
+        <text x="490" y="448" fill="#fbbf24" font-size="7" font-weight="700" text-anchor="middle">★</text>
+
+        <!-- =========================================================
+             Arrows in Consumer track
+             ========================================================= -->
+        <!-- 1 → 2: BS created first (no dependency on producer step 1 directly, but consumer step 2 needs SA from producer step 5) -->
+        <line x1="230" y1="390" x2="486" y2="390" stroke="#34d399" stroke-width="2" stroke-dasharray="3,2" marker-end="url(#arrowhead-emerald)"/>
+        <text x="358" y="384" fill="#94a3b8" font-size="7" text-anchor="middle">(BS 本身不依赖, 但 NEG 步骤要等 SA)</text>
+
+        <!-- 2 → 3: add-backend (NEG → BS) -->
+        <line x1="670" y1="390" x2="696" y2="390" stroke="#34d399" stroke-width="2" marker-end="url(#arrowhead-emerald)"/>
+        <text x="683" y="382" fill="#94a3b8" font-size="7" text-anchor="middle">add</text>
+
+        <!-- 3 → 4: attach armor (BS now has backend) -->
+        <line x1="880" y1="390" x2="906" y2="390" stroke="#34d399" stroke-width="2" marker-end="url(#arrowhead-emerald)"/>
+
+        <!-- =========================================================
+             Consumer track: dependency on Producer BS update (§3.3)
+             Shown as small footnote between Producer Step 3 and Consumer
+             ========================================================= -->
+        <rect x="260" y="220" width="180" height="40" rx="4" fill="rgba(15, 23, 42, 0.6)" stroke="#1e293b" stroke-width="1" stroke-dasharray="2,2"/>
+        <text x="350" y="236" fill="#94a3b8" font-size="8" text-anchor="middle">┌ Producer 旁注 ─┐</text>
+        <text x="350" y="252" fill="#cbd5e1" font-size="8" text-anchor="middle">Backend Service update HC</text>
+
+        <line x1="350" y1="260" x2="350" y2="290" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="2,2" marker-end="url(#arrowhead)"/>
+        <rect x="260" y="290" width="180" height="34" rx="4" fill="rgba(76, 29, 149, 0.2)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="2,2"/>
+        <text x="350" y="304" fill="#a78bfa" font-size="8" text-anchor="middle">↓ ajbx-tenant-vpc-internal-bs</text>
+        <text x="350" y="318" fill="#a78bfa" font-size="8" text-anchor="middle">--health-checks = https-hc (§3.3)</text>
+
+        <!-- =========================================================
+             VERIFICATION BAR (bottom, y=580-670)
+             ========================================================= -->
+        <rect x="50" y="580" width="1220" height="100" rx="8" fill="rgba(15, 23, 42, 0.6)" stroke="#34d399" stroke-width="1.5" stroke-dasharray="6,3"/>
+        <text x="70" y="603" fill="#34d399" font-size="11" font-weight="700">⑤ VERIFICATION  ·  e2e HTTPS 验证</text>
+
+        <!-- 3 check items in a row (y=615-672, lines spaced 12px) -->
+        <rect x="70" y="615" width="380" height="58" rx="4" fill="rgba(6, 78, 59, 0.2)" stroke="#34d399" stroke-width="0.5"/>
+        <text x="80" y="632" fill="#34d399" font-size="9" font-weight="600">1. SA connected endpoints == 1</text>
+        <text x="80" y="650" fill="#94a3b8" font-size="8">gcloud compute service-attachments describe</text>
+        <text x="80" y="664" fill="#94a3b8" font-size="8">... | jq '.connectedEndpoints | length'</text>
+
+        <rect x="470" y="615" width="380" height="58" rx="4" fill="rgba(6, 78, 59, 0.2)" stroke="#34d399" stroke-width="0.5"/>
+        <text x="480" y="632" fill="#34d399" font-size="9" font-weight="600">2. Producer BS backend HEALTHY</text>
+        <text x="480" y="650" fill="#94a3b8" font-size="8">gcloud compute backend-services get-health</text>
+        <text x="480" y="664" fill="#94a3b8" font-size="8">ajbx-tenant-vpc-internal-bs --region=$REGION</text>
+
+        <rect x="870" y="615" width="380" height="58" rx="4" fill="rgba(251, 113, 133, 0.2)" stroke="#fb7185" stroke-width="0.5"/>
+        <text x="880" y="632" fill="#fb7185" font-size="9" font-weight="600">3. e2e curl HTTPS 200</text>
+        <text x="880" y="650" fill="#94a3b8" font-size="8">curl --resolve tenant.taobao.caep.uk:443:$GLB_IP</text>
+        <text x="880" y="664" fill="#94a3b8" font-size="8">https://tenant.taobao.caep.uk/  →  HTTP/2 200</text>
+
+        <!-- Arrow from Consumer step 4 down to verification -->
+        <line x1="1000" y1="430" x2="660" y2="575" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrowhead-emerald)"/>
+        <text x="850" y="510" fill="#34d399" font-size="8" font-style="italic">全部创建完 → 跑 verify</text>
+
+        <!-- =========================================================
+             Footer note: critical path
+             ========================================================= -->
+        <text x="50" y="50" fill="#fbbf24" font-size="9" font-weight="600">关键路径: ① cert → ② HC → ③ Proxy → ④ FR → ⑤ SA ⟶ (PSC) ⟶ Consumer ② NEG → ③ add → ④ armor</text>
+        <text x="50" y="64" fill="#94a3b8" font-size="8">★ = PSC 桥接端点;  Consumer ① BS 是 import YAML 重建, 不依赖 Producer 任何步骤 (但 ② NEG 必须等 ⑤ SA)</text>
+      </svg>
+
+      <!-- Legend -->
+      <div class="legend-row">
+        <div class="legend-item">
+          <span class="legend-sw" style="background:rgba(8,51,68,0.4);border:1px solid #22d3ee"></span>
+          SSL / Proxy / FR (cyan)
+        </div>
+        <div class="legend-item">
+          <span class="legend-sw" style="background:rgba(6,78,59,0.4);border:1px solid #34d399"></span>
+          HC / SA / BS / NEG (emerald)
+        </div>
+        <div class="legend-item">
+          <span class="legend-sw" style="background:rgba(76,29,149,0.4);border:1px solid #a78bfa"></span>
+          add-backend (violet)
+        </div>
+        <div class="legend-item">
+          <span class="legend-sw" style="background:rgba(136,19,55,0.4);border:1px solid #fb7185"></span>
+          Cloud Armor (rose)
+        </div>
+        <div class="legend-item">
+          <span class="legend-line" style="background:#34d399"></span>
+          顺序依赖 (emerald solid)
+        </div>
+        <div class="legend-item">
+          <span class="legend-line" style="background:#fbbf24"></span>
+          PSC 跨 VPC (amber dashed)
+        </div>
+        <div class="legend-item">
+          <span class="legend-line" style="background:#fb7185"></span>
+          gcloud bug 走 import (rose)
+        </div>
+      </div>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>Producer 5 步 (顺序强依赖)</h3>
+        </div>
+        <ul>
+          <li>• <b>① cert</b> → 没有任何依赖 (可与 ② 并行)</li>
+          <li>• <b>② HC</b> → 不依赖 (但 update BS 引用它, 见 §3.3)</li>
+          <li>• <b>③ Proxy</b> → 依赖 ① cert + 已有 UM</li>
+          <li>• <b>④ FR</b> → 依赖 ③ Proxy + 已有 IP (<code>10.0.1.4</code>)</li>
+          <li>• <b>⑤ SA</b> → 依赖 ④ FR + PSC NAT subnet</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>Consumer 4 步 (含 2 个 update)</h3>
+        </div>
+        <ul>
+          <li>• <b>① BS (import)</b> → 重建为 HTTPS, 不依赖 Producer</li>
+          <li>• <b>② NEG</b> → 依赖 Producer ⑤ SA (<code>--psc-target-service</code>)</li>
+          <li>• <b>③ add-backend</b> → 把 NEG 挂到 BS</li>
+          <li>• <b>④ attach armor</b> → 把现成 Cloud Armor 挂回新 BS</li>
+          <li>• 2 & 3 步骤之间需要等 ~60s 让 SA auto-accept</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>踩坑提醒 (gcloud CLI)</h3>
+        </div>
+        <ul>
+          <li>• <b>④ FR</b> 和 <b>① BS</b> 必须用 <code>import</code> + YAML，<code>create</code> 报错因 multi-word 值 (<code>INTERNAL MANAGED</code> / <code>EXTERNAL MANAGED</code>) 解析 bug (见 §6.2)</li>
+          <li>• <b>② NEG</b> 必须在 BS 改完 protocol 之后重建 (老 NEG connection state 失效, 见 §6.4)</li>
+          <li>• <b>① cert</b> 文件名有下划线: <code>tenant.taobao.caep.uk_bundle.crt</code> (见 §6.1)</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      tenant-tls-setup-https.md  ·  Resource Creation Flow  ·  v2 (全 HTTPS)
+    </p>
+  </div>
+</body>
+</html>
