@@ -294,6 +294,52 @@ requests = ceil(56 / 32) = 2
 
 **100 KB 中文 ≈ 200 KB 英文的工作量**(对照 §5.7 总表)。如果你的 corpus 中文占比高,`files_total` 看上去不大,但实际 embedding 计算量翻倍。这就是为什么凌晨 02:00 launchd 任务有时长波动。
 
+### 5.9 并发压力曲线 — `requests_per_file` 才是真衡量
+
+**用户洞察**:在生产配置 `cs=1024 / ov=128 / bs=32` 冻结的情况下,**`requests_per_file` 才是 Ollama 真实压力的唯一指标**。
+
+为什么?
+
+```
+chunks_per_file  = ceil(file_tokens / (cs - ov))       ← 文件决定
+requests_per_file = ceil(chunks_per_file / bs)          ← batch 决定
+per_req_chunks    = BS (大部分 request 满载) + tail     ← 每 request GPU 负载固定
+```
+
+- `bs` 和 `cs` 都冻结 → 每 request 内部 GPU 工作量 **几乎恒定**
+- 唯一变量是 **文件大小** → 唯一变化的是 **requests 数** → 唯一变化的是 **sequential request 的累积压力**
+
+**压力曲线表**(生产配置不变,仅文件大小变化):
+
+| 文件大小 | EN reqs | ZH reqs | Ollama 并发压力 | hang 风险 (issue #10831) |
+|---|---|---|---|---|
+| **10 KB** | 1 | 1 | 🟢 0 压力,单 request 即时完成 | ~0% |
+| **50 KB** | 1 | 1 | 🟢 0 压力 | ~0% |
+| **100 KB** | 1 | 2 | 🟢 低 | ~0% |
+| **200 KB** | 2 | 4 | 🟢 低,GPU 轻松 | ~1-2% |
+| **300 KB** | 3 | 6 | 🟢 低 | ~2-5% |
+| **500 KB** | 5 | **9** | 🟡 **中**(需 warmup+retry 兜底)| ~10-15% |
+| **700 KB** | 7 | 13 | 🟠 高 | ~15-25% |
+| **1 MB** | 10 | **19** | 🟠 高 | ~20-35% |
+| **1.5 MB** | 14 | 27 | 🔴 危险,需拆文件 | ~50%+ |
+| **2 MB** | 19 | **37** | 🔴🔴 walker 拒绝,理论值 | ~60%+ |
+
+**关键拐点**:
+
+| 拐点 | EN reqs | ZH reqs | 含义 |
+|---|---|---|---|
+| **🟢 → 🟡** | 5 reqs | 9 reqs | warmup+retry 开始起作用,3 层防御值得 |
+| **🟡 → 🟠** | 7 reqs | 13 reqs | hang 概率显著上升,bs=40 缓解 20% |
+| **🟠 → 🔴** | 14 reqs | 27 reqs | 业务层拆文件,否则 fail 概率高 |
+| **🔴 → 🔴🔴** | 19 reqs | 37 reqs | walker 硬上限兜底,文件根本不进 |
+
+**生产建议**:
+- **凌晨 02:00 launchd 任务**: 跑 `probe_chunk_tokens.py` + 这个曲线判断,英文 corpus <500KB / 中文 corpus <300KB 时**完全无压力**
+- **如果 corpus 出现 500KB+ 文件**(业务上合并了大文档),**第一反应不是调 cs/bs,而是业务层拆分** — 调参只缓解 hang,不解决根因
+- **中文 corpus 的临界点比英文低一档**(因为 token 数翻倍),监控时按中文压力看
+
+**注意**: 表里 hang 概率是基于 issue #10831 的社区报告(长 batch 概率 hang)+ 本地 5 次实测(launchd 02:00 1 次失败,手动 4 次跑 ~25% 失败)综合估算,**不是严格统计数据**。实际 hang 概率受 Ollama 版本、GPU 温度、Mac 唤醒时序影响,可能 ±50% 浮动。
+
 ## 6. 边界条件 — 何时会出问题?
 
 ### 6.1 什么情况下 chunk 会真的超过 1900?
