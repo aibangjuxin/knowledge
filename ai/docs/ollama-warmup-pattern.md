@@ -82,6 +82,29 @@ tail -100 ~/.ollama/logs/server.log | grep -E "loaded model|ran|error"
 
 ## 4. Warmup Pattern 详解
 
+### 4.0 前置约束 — embeddinggemma 的 2K token context
+
+> **Embeddinggemma 300m 的 `context_length = 2048` tokens**。这个数字是**整批 input 的总预算**,不是"每个 chunk 可以塞 2048 token"。
+>
+> 实际安全上限 ≈ **1900 tokens/chunk**(预留 ~150 tokens 给 BOS/EOS/特殊 token)。
+
+**这条约束会级联影响以下配置**:
+
+| 你的配置 | 当前值 | 与 2K context 的关系 | 风险 |
+|---|---|---|---|
+| `chunker.chunk_size` (rag.yaml:73) | `1024` | ✅ 安全 (~1024 token/chunk) | 1024 < 1900,余量充足 |
+| `chunker.chunk_overlap` (rag.yaml:74) | `128` | ✅ 安全 (1024+128=1152) | 仍 < 1900 |
+| `embedder.batch_size` (rag.yaml:31) | `32` (推荐 `40`) | ⚠️ **横向放大** | 40 × ~1152 token ≈ 46K token/request,在 2K 限制**内**(限制是 per-chunk,不是 per-batch) |
+| `auto_tune_loop.py:129` 候选 chunk_size | `[256,512,1024,2048]` | 🔴 **`2048` 会撞墙** | 候选表里有 2048,实际应剔除 |
+| `header_levels` (rag.yaml:76) | `[1, 2]` | ⚠️ **隐式放大** | markdown_header 策略可能让单 chunk 跨多个段落,实际 token 数 ≠ chunk_size |
+
+**2K context 触发的 3 种失败模式**:
+1. **静默截断**: Ollama 截断 input 末尾 token,embedding 维度退化但 HTTP 200,难发现
+2. **维度不一致**: 截断后向量与正常向量 cosine 距离异常,reranker 排序崩坏
+3. **hang bug 放大**: issue #10831 在临界 batch_size 下与超长 chunk 叠加,hang 概率上升
+
+> 📌 **本 warmup pattern 不解决 2K token 超限问题**。Warmup 只解决"冷启动 GPU 加载",不解决"input 超过模型 context 窗口"。**chunk 长度控制是 chunker 的职责,不在本文档范围内**。
+
 ### 4.1 核心:3 行 curl
 
 ```bash
@@ -327,7 +350,8 @@ tail -50 ~/.ollama/logs/server.log | grep -E "loaded model|ran|error|warn"
 | **手动跑 20:00** (Mac 一直醒) | ⚠️ 建议加 | 防御性,即使不 hang 也只多 50ms |
 | **CI / 容器化跑** (无 sleep-wake) | ❌ 不需要 | 没有 sleep,模型不会被 unload |
 | **7×24 服务器** (永不 sleep) | ❌ 不需要 | GPU VRAM 永远占用,无 cold-start |
-| **短 batch (< 8 chunks)** | ❌ 不需要 | hang bug 临界是 >= 8-30 chunks |
+| 短 batch (< 8 chunks) | ❌ 不需要 | hang bug 临界是 >= 8-30 chunks |
+| 单 chunk > 1900 token | ⚠️ **warmup 救不了** | chunk 超 2K context → 即使 warmup 通过,真实请求也会静默截断或 hang。**chunking 层要先 fix** |
 
 ## 11. 决策树
 
@@ -361,3 +385,5 @@ tail -50 ~/.ollama/logs/server.log | grep -E "loaded model|ran|error|warn"
 ## 13. 一句话总结
 
 > **凌晨 launchd 跑 RAG ingest 之前,先 curl 1 个 token 的 `/v1/embeddings`** —— 这 50ms-1.2s 的小动作,把"60s hang + 1 个文件失败"变成"warmup + 0 失败"。
+>
+> ⚠️ **前提**: 每个 chunk ≤ ~1900 token。超了 warmup 也救不了,那是 chunker 的职责 (`chunker.chunk_size` + `header_levels`)。

@@ -8,6 +8,16 @@
 
 ## 2. 背景与动机
 
+### 2.0 前置约束 — embeddinggemma 的 2K token context window
+
+> **Embeddinggemma 300m 的 `context_length = 2048` tokens**。这个约束对 batch_size **没有直接影响**(限制是 per-chunk,不是 per-batch),但会**改变 batch_size 的有效取值空间**:
+>
+> - 限制 = `max(chunk_token_count)` ≤ **~1900 token**(留 ~150 token 给 BOS/EOS)
+> - batch_size 只决定**多少个 chunk 一次送**,不决定**单 chunk 多长**
+> - 但 batch_size 越大,**越容易**在某个 chunk 上踩到 1900 上限(因为统计上总有长 chunk)
+
+**结论**: 本实验里的 `batch_size ∈ {16, 24, 32, 40, 48}` 全部位于 **per-chunk 2K 约束的安全区**。但 `auto_tune_loop.py:129` 候选里的 `chunk_size=2048` **会撞 context_length 上限**,需剔除。
+
 ### 2.1 `batch_size` 是什么
 
 `~/git/rag/config/rag.yaml` 里的 `embedder.batch_size` 定义**每次 HTTP 请求送多少个 chunks 给 Ollama 的 `/v1/embeddings`**。代码路径见 `src/rag/embedder/client.py:32-78`:
@@ -148,6 +158,22 @@ embedder:
   - 用 `scripts/probe_embedder_batch.py --sizes 40 48 64 96 128` 重跑
   - 关注 p99 是否突破 2s、drift 是否变负(说明 GPU 调度开始退化)
 - **128**: 单批 128 chunks 在 M4 Metal 上大概率会触发不同的 GPU kernel,行为不可预测,**不推荐**。
+
+### 6.4 batch_size 与 2K context 的解耦关系
+
+**关键澄清**: batch_size 调整**不会触发** 2K context 限制,触发它的是 `chunk_size` + `header_levels` 这两个 chunker 配置。
+
+| 调整项 | 触发 2K context 限制? | 原因 |
+|---|---|---|
+| `embedder.batch_size` (32 → 40) | ❌ 否 | 限制是 per-chunk,40 × 1152 token = 46K 是 OK 的 |
+| `chunker.chunk_size` (1024 → 2048) | ✅ **是** | chunk 直接超 1900 token |
+| `chunker.header_levels` ([1,2] → [1,2,3]) | ⚠️ 间接 | 拆得更细,但单 section 仍可能很长 |
+| `chunker.chunk_overlap` (128 → 256) | ✅ **是**(组合) | 1024 + 256 = 1280,接近上限 |
+| `auto_tune_loop` 把 chunk_size 调到 2048 | ✅ **是** | 直接撞 context_length |
+
+**实测一致性**: 本 Probe 用的合成 chunks (`probe_embedder_batch.py:51-55`) 单 chunk ≈ **1024 chars ≈ ~256 tokens**(chars/token ≈ 4:1),**完全在 1900 token 安全线内**。
+
+> ⚠️ **生产风险**: 真实 corpus 的 `chunk_size=1024`(rag.yaml:73)是 chars 单位,**如果真实 token 数远超 chars/4**(代码块、URL、长中文 term 等),单 chunk 可能接近 1900 token。**chunking 层目前没有 token-length guard**,只是按字符切,是个潜在静默风险。
 
 ## 7. 相关文档
 
