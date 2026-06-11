@@ -1180,54 +1180,74 @@ data:
 
 ---
 
-## **要求 2：健康检查统一使用 TCP（无需用户提供 HTTP 健康接口）**
+## **要求 2：健康检查双层探针（TCP 兜底 + 业务级 httpGet）**
 
-由于用户 HTTP 健康接口完全不统一，因此平台使用最小化、兼容度最高的方法：
+> **📌 2026-06 更新**：context-path 注入后，K8s `httpGet` probe 的 path **必须**显式带上 `/${apiName}/v${minorVersion}` 前缀（kubelet 不走应用 context-path 改写）。TCP 探针保留作为兜底，但不再单独使用。详见 `cloud/k8s/docs/context-path.md`。
 
-### **readinessProbe:**
+### **A. TCP 兜底（兼容用户未提供 HTTP 健康端点的场景）**
 
-```
+```yaml
 readinessProbe:
-  tcpSocket:
+  tcpSocket: { port: 8443 }
+  periodSeconds: 10
+  failureThreshold: 3
+  timeoutSeconds: 3
+
+livenessProbe:
+  tcpSocket: { port: 8443 }
+  periodSeconds: 20
+  failureThreshold: 3
+  timeoutSeconds: 3
+
+startupProbe:
+  tcpSocket: { port: 8443 }
+  periodSeconds: 10
+  failureThreshold: 30
+```
+
+### **B. 业务级探针（必填 — 与 context-path 注入对齐）**
+
+```yaml
+startupProbe:                       # 启动期宽容窗口
+  httpGet:
+    scheme: HTTPS
+    path: /${apiName}/v${minorVersion}/actuator/health
+    port: 8443
+  periodSeconds: 10
+  failureThreshold: 30              # ≈ 5 分钟启动窗口
+  timeoutSeconds: 3
+
+readinessProbe:                     # 失败时从 Service endpoints 摘除
+  httpGet:
+    scheme: HTTPS
+    path: /${apiName}/v${minorVersion}/actuator/health
     port: 8443
   periodSeconds: 10
   failureThreshold: 3
   timeoutSeconds: 3
-```
 
-### **livenessProbe:**
-
-```
-livenessProbe:
-  tcpSocket:
+livenessProbe:                      # 失败时 kill 容器（保持轻量，不查 DB）
+  httpGet:
+    scheme: HTTPS
+    path: /${apiName}/v${minorVersion}/actuator/health
     port: 8443
   periodSeconds: 20
   failureThreshold: 3
   timeoutSeconds: 3
 ```
 
-### **startupProbe:**
-
-```
-startupProbe:
-  tcpSocket:
-    port: 8443
-  periodSeconds: 10
-  failureThreshold: 30
-```
-
 ---
 
-### **为什么 TCP 探针是最佳“最小化改动模型”？**
+### **为什么 TCP 探针是“最小化改动模型”的兜底，但不是全部？**
 
-| **探针方式**  | **缺点**                             |
-| ------------- | ------------------------------------ |
-| HTTP /healthz | 用户各不相同，且部分没有             |
-| gRPC 探针     | 并非所有用户是 gRPC                  |
-| Exec 探针     | 与镜像结构绑定，不通用               |
-| TCP 探针      | **只要服务端口可监听，即可判断可用** |
+| **探针方式**  | **缺点**                             | **说明** |
+| ------------- | ------------------------------------ | -------- |
+| HTTP /healthz | 用户各不相同，且部分没有             | ✅ 解决：业务级 probe 由平台计算完整 path |
+| gRPC 探针     | 并非所有用户是 gRPC                  | — |
+| Exec 探针     | 与镜像结构绑定，不通用               | — |
+| TCP 探针      | **TCP 通过 ≠ Spring 就绪 ≠ 业务健康** | ✅ 仅作兜底 |
 
-TCP 是跨语言、跨框架、跨架构的最通用方案。
+> **TCP 是跨语言、跨框架、跨架构的最通用方案**，但它**只看端口监听**。context-path 注入生效后，必须叠加业务级 `httpGet` probe，才能判断"框架就绪 + context-path 生效"。**双层缺一不可**。
 
 ---
 
