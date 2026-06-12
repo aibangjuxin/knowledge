@@ -18,6 +18,16 @@
 - [**二、请求过程中的 Host header**](#二请求过程中的-host-header)
 - [**三、TLS 证书使用哪个**](#三tls-证书使用哪个)
 - [**四、Nginx 应该监听什么 Host**](#四nginx-应该监听什么-host)
+- [**一、DNS CNAME 只发生在解析阶段**](#一dns-cname-只发生在解析阶段)
+- [**二、TLS SNI 使用的是原始域名**](#二tls-sni-使用的是原始域名)
+- [**三、HTTP Host Header 也是原始域名**](#三http-host-header-也是原始域名)
+- [**四、Nginx 实际看到的请求**](#四nginx-实际看到的请求)
+- [**五、什么时候才需要监听 CNAME 目标**](#五什么时候才需要监听-cname-目标)
+- [**六、GLB + Nginx + CNAME 的真实企业架构**](#六glb--nginx--cname-的真实企业架构)
+- [**七、证书应该绑定在哪里（重要）**](#七证书应该绑定在哪里重要)
+- [**八、很多人会误解的一点**](#八很多人会误解的一点)
+- [**九、一个真实生产例子（CDN）**](#九一个真实生产例子cdn)
+- [**十、在你这个 GKE + Kong + GLB 架构里的建议**](#十在你这个-gke--kong--glb-架构里的建议)
 - [**五、为什么不能监听 CDN 域名**](#五为什么不能监听-cdn-域名)
 - [**六、CDN 可选配置（Origin Host Header）**](#六cdn-可选配置origin-host-header)
 - [**七、证书部署的两种常见模式**](#七证书部署的两种常见模式)
@@ -26,15 +36,24 @@
 - [**八、Google Cloud + CDN 常见配置**](#八google-cloud--cdn-常见配置)
 - [**九、企业最佳实践总结**](#九企业最佳实践总结)
 - [**十、一个很多人会忽略的坑（非常重要）**](#十一个很多人会忽略的坑非常重要)
-
 - [**十一、问题总结：CNAME 别名上的证书 / 监听是否要配？**](#十一问题总结cname-别名上的证书--监听是否要配)
   - [**1. 问题本质（先回答你最后那个问题）**](#1-问题本质先回答你最后那个问题)
-  - [**2. 你的 aibang / team1.caep.uk 场景的精确答案**](#2-你的-aibang--team1caepuk-场景的精确答案)
+  - [**2. 你的 caep / team1.caep.uk 场景的精确答案**](#2-你的-caep--team1caepuk-场景的精确答案)
   - [**3. 决策表：什么时候才需要给 CNAME 别名配证书 / 监听**](#3-决策表什么时候才需要给-cname-别名配证书--监听)
   - [**4. 实操验证：用 `dig +trace` 和 `openssl s_client` 把这件事钉死**](#4-实操验证用-dig-trace-和-openssl-s_client-把这件事钉死)
+    - [4.1 DNS 层 — 看到 CNAME 链（`dig +trace`）](#41-dns-层--看到-cname-链dig-trace)
+    - [4.2 TLS 层 — 证明 SNI 是原始域名（`openssl s_client`）](#42-tls-层--证明-sni-是原始域名openssl-s_client)
+    - [4.3 HTTP 层 — 证明 Host header 是原始域名（`curl -v`）](#43-http-层--证明-host-header-是原始域名curl--v)
   - [**5. 这恰好是 CNAME 存在的典型意义之一**](#5-这恰好是-cname-存在的典型意义之一)
 
 # CNAME
+
+caep.uk 现在拿这个举例子。这个是企业分配给我们的平台的一个短域名。我们平台会接入对应的team Levels用户。
+比如*.team1.caep.uk  *.team2.caep.uk
+用户请求自己Team level对应的这个API的时候。比如api1.team1.caep.uk api2.team1.caep.uk 
+这个请求首先配置一个对应的CNAME记录 你可以随意给我一个对应的模拟，然后这个CNAME再需要一个对应的A记录解析到Tennat project ILB的IP地址上。这样的话我们用户的请求就可以访问到Tennat project ILB上面 然后我们就可以通过我们的cross project的方案，然后让它跨project访问到我另外一个工程。
+
+
 
 企业 DNS 中大量使用 **CNAME（Canonical Name）** 是非常常见的设计，它的核心目的不是增加解析层级，而是 **解耦域名与真实服务地址，提升可维护性和灵活性**。下面从 DNS 工作原理和企业架构实践两个角度解释。
 
@@ -53,16 +72,16 @@ DNS 记录类型中：
 例如：
 
 ```
-api.team1.aibang     CNAME   gateway.platform.aibang
-gateway.platform.aibang   A       34.120.10.5
+api.team1.caep     CNAME   gateway.platform.caep
+gateway.platform.caep   A       34.120.10.5
 ```
 
 解析流程：
 
 ```
 graph TD
-    A["Client DNS Query api.team1.aibang"] --> B["DNS 返回 CNAME gateway.platform.aibang"]
-    B --> C["Client 再查询 gateway.platform.aibang"]
+    A["Client DNS Query api.team1.caep"] --> B["DNS 返回 CNAME gateway.platform.caep"]
+    B --> C["Client 再查询 gateway.platform.caep"]
     C --> D["DNS 返回 A 记录 34.120.10.5"]
     D --> E["Client 连接目标 IP"]
 ```
@@ -82,9 +101,9 @@ graph TD
 ### **没有 CNAME**
 
 ```
-service1.api.aibang   A  34.120.10.5
-service2.api.aibang   A  34.120.10.5
-service3.api.aibang   A  34.120.10.5
+service1.caep.uk   A  34.120.10.5
+service2.caep.uk   A  34.120.10.5
+service3.caep.uk   A  34.120.10.5
 ```
 
 如果负载均衡 IP 改变：
@@ -96,11 +115,11 @@ service3.api.aibang   A  34.120.10.5
 ### **使用 CNAME**
 
 ```
-service1.api.aibang   CNAME   gateway.api.aibang
-service2.api.aibang   CNAME   gateway.api.aibang
-service3.api.aibang   CNAME   gateway.api.aibang
+service1.caep.uk   CNAME   gateway.caep.uk
+service2.caep.uk   CNAME   gateway.caep.uk
+service3.caep.uk   CNAME   gateway.caep.uk
 
-gateway.api.aibang    A       34.120.10.5
+gateway.caep.uk    A       34.120.10.5
 ```
 
 如果 IP 变化：
@@ -108,7 +127,7 @@ gateway.api.aibang    A       34.120.10.5
 只修改
 
 ```
-gateway.api.aibang
+gateway.caep.uk
 ```
 
 即可。
@@ -122,8 +141,8 @@ gateway.api.aibang
 例如：
 
 ```
-order.team1.api.aibang    CNAME    api-gateway.company.net
-user.team2.api.aibang     CNAME    api-gateway.company.net
+order.team1.caep.uk    CNAME    api-gateway.company.net
+user.team2.caep.uk     CNAME    api-gateway.company.net
 ```
 
 真实入口：
@@ -136,7 +155,7 @@ api-gateway.company.net   A    GLB_IP
 
 ```
 graph TD
-    A["order.team1.api.aibang"] --> B["CNAME api-gateway.company.net"]
+    A["order.team1.caep.uk"] --> B["CNAME api-gateway.company.net"]
     B --> C["Google Cloud Load Balancer"]
     C --> D["Kong Gateway"]
     D --> E["Backend Service"]
@@ -253,8 +272,8 @@ graph TD
 ### **API 域名统一入口**
 
 ```
-order.team1.api.aibang    CNAME   api-gateway.company.com
-payment.team1.api.aibang  CNAME   api-gateway.company.com
+order.team1.caep.uk    CNAME   api-gateway.company.com
+payment.team1.caep.uk  CNAME   api-gateway.company.com
 ```
 
 真实入口：
@@ -523,7 +542,7 @@ server {
 假设 DNS：
 
 ```
-api.team1.aibang     CNAME    glb-entry.company.net
+api.team1.caep     CNAME    glb-entry.company.net
 glb-entry.company.net    A    34.120.10.5
 ```
 
@@ -531,7 +550,7 @@ DNS 解析流程：
 
 ```
 graph TD
-    A["Client Query api.team1.aibang"] --> B["DNS 返回 CNAME glb-entry.company.net"]
+    A["Client Query api.team1.caep"] --> B["DNS 返回 CNAME glb-entry.company.net"]
     B --> C["Client 再查询 glb-entry.company.net"]
     C --> D["DNS 返回 IP 34.120.10.5"]
     D --> E["Client 连接 34.120.10.5"]
@@ -548,7 +567,7 @@ graph TD
 客户端仍然认为自己访问的是：
 
 ```
-api.team1.aibang
+api.team1.caep
 ```
 
 ---
@@ -560,7 +579,7 @@ api.team1.aibang
 客户端建立 TLS 时会发送 **SNI(Server Name Indication)**：
 
 ```
-SNI: api.team1.aibang
+SNI: api.team1.caep
 ```
 
 Load Balancer / Nginx 根据这个选择证书。
@@ -572,8 +591,8 @@ Load Balancer / Nginx 根据这个选择证书。
 |**项目**|**值**|
 |---|---|
 |DNS CNAME|glb-entry.company.net|
-|TLS SNI|api.team1.aibang|
-|证书 CN|api.team1.aibang 或 *.team1.api.aibang|
+|TLS SNI|api.team1.caep|
+|证书 CN|api.team1.caep 或 *.team1.caep.uk|
 
 ---
 
@@ -585,7 +604,7 @@ HTTP 请求：
 
 ```
 GET /order HTTP/1.1
-Host: api.team1.aibang
+Host: api.team1.caep
 ```
 
 不会变成：
@@ -610,7 +629,7 @@ Nginx 收到的请求：
 
 ```
 GET / HTTP/1.1
-Host: api.team1.aibang
+Host: api.team1.caep
 ```
 
 因此 Nginx server block 应该是：
@@ -619,7 +638,7 @@ Host: api.team1.aibang
 server {
     listen 443 ssl;
 
-    server_name api.team1.aibang;
+    server_name api.team1.caep;
 
     ssl_certificate /certs/team1.pem;
 }
@@ -666,29 +685,29 @@ Nginx 才需要监听它。
 典型结构：
 
 ```
-order.team1.api.aibang
-payment.team1.api.aibang
+order.team1.caep.uk
+payment.team1.caep.uk
 ```
 
 DNS：
 
 ```
-order.team1.api.aibang    CNAME    api-gateway.company.net
-payment.team1.api.aibang  CNAME    api-gateway.company.net
+order.team1.caep.uk    CNAME    api-gateway.company.net
+payment.team1.caep.uk  CNAME    api-gateway.company.net
 ```
 
 GLB：
 
 ```
 certificate:
-*.team1.api.aibang
+*.team1.caep.uk
 ```
 
 流量：
 
 ```
 graph TD
-    A["Client order.team1.api.aibang"] --> B["DNS CNAME api-gateway.company.net"]
+    A["Client order.team1.caep.uk"] --> B["DNS CNAME api-gateway.company.net"]
     B --> C["Google Cloud Load Balancer"]
     C --> D["Nginx / Kong"]
     D --> E["Backend Service"]
@@ -698,7 +717,7 @@ Nginx：
 
 ```
 server {
-    server_name *.team1.api.aibang;
+    server_name *.team1.caep.uk;
 }
 ```
 
@@ -715,7 +734,7 @@ server {
 证书在 GLB：
 
 ```
-*.team1.api.aibang
+*.team1.caep.uk
 ```
 
 Nginx：
@@ -731,7 +750,7 @@ HTTP (内部)
 证书在 Nginx：
 
 ```
-*.team1.api.aibang
+*.team1.caep.uk
 ```
 
 ---
@@ -743,7 +762,7 @@ HTTP (内部)
 很多人认为：
 
 ```
-api.team1.aibang CNAME glb-entry.company.net
+api.team1.caep CNAME glb-entry.company.net
 ```
 
 请求会变成：
@@ -827,8 +846,8 @@ RT Service
 例如：
 
 ```
-*.team1.api.aibang
-*.team2.api.aibang
+*.team1.caep.uk
+*.team2.caep.uk
 ```
 
 Nginx/Kong 只根据：
@@ -1068,7 +1087,7 @@ CNAME 的工作**严格限制在 DNS 解析阶段**，TCP 连接建立后，CNAM
 
 所以你问"CNAME 的别名证书要不要配监听"——**对正常用户访问流，不要配；配了反而是噪音**。你只关心**原始域名**的证书和监听。
 
-## **2. 你的 aibang / team1.caep.uk 场景的精确答案**
+## **2. 你的 caep / team1.caep.uk 场景的精确答案**
 
 把你的场景抽象成 4 条规则：
 
@@ -1076,25 +1095,25 @@ CNAME 的工作**严格限制在 DNS 解析阶段**，TCP 连接建立后，CNAM
 *.team1.caep.uk                                  ; tenant 自有泛解析证书，覆盖 tenant 的所有子域
 *.team2.caep.uk                                  ; 另一个 tenant 的泛解析证书
 
-api1.team1.caep.uk     CNAME  xxx.<master>.aibang     ; alias → master project 的统一入口
-api2.team1.caep.uk     CNAME  xxx.<master>.aibang
-api1.team2.caep.uk     CNAME  xxx.<master>.aibang
-api2.team2.caep.uk     CNAME  xxx.<master>.aibang
+api1.team1.caep.uk     CNAME  xxx.<master>.caep     ; alias → master project 的统一入口
+api2.team1.caep.uk     CNAME  xxx.<master>.caep
+api1.team2.caep.uk     CNAME  xxx.<master>.caep
+api2.team2.caep.uk     CNAME  xxx.<master>.caep
 
-xxx.<master>.aibang   A      10.0.0.7                 ; master project ILB / GLB 的 VIP
+xxx.<master>.caep   A      10.0.0.7                 ; master project ILB / GLB 的 VIP
 ```
 
 | 资源 | 配什么 | 为什么 |
 | --- | --- | --- |
 | **Tenant 子域的 `*.teamN.caep.uk` 证书** | 装在 **Master Project 的 LB（GLB/ILB）** | SNI 永远是 `apiX.teamN.caep.uk`，LB 用 SNI 选证书 |
 | **Master Project 的 LB server_name / 监听** | 写 `*.team1.caep.uk`、`*.team2.caep.uk` …（**不是** CNAME 别名） | client 来的时候 Host 头和 SNI 都是原始 tenant 域名 |
-| **`xxx.<master>.aibang` 这个 CNAME 目标** | **不配监听、不配证书** | 没有任何 client 会直接访问这个别名（除非你主动让人访问，那才需要） |
+| **`xxx.<master>.caep` 这个 CNAME 目标** | **不配监听、不配证书** | 没有任何 client 会直接访问这个别名（除非你主动让人访问，那才需要） |
 | **Master → Tenant 流量 / 路由** | 靠 **SNI**（GLB 多证书）或 **Host header**（Nginx/Kong）做分发 | 不依赖 CNAME 别名本身 |
 
-**为什么"`xxx.<master>.aibang` 不配证书"是正确的？** 因为：
+**为什么"`xxx.<master>.caep` 不配证书"是正确的？** 因为：
 
 1. 没有任何用户输入这个域名发请求（用户用的是 `api1.team1.caep.uk`）。
-2. 即使内部系统用 `xxx.<master>.aibang` 做"内部跳转"，它们走的是 **HTTP/TCP**，不重新做 TLS 握手，不重新传 SNI。
+2. 即使内部系统用 `xxx.<master>.caep` 做"内部跳转"，它们走的是 **HTTP/TCP**，不重新做 TLS 握手，不重新传 SNI。
 3. LB 上的多证书选择是**按 SNI 字典序/最长匹配**，CNAME 目标域名在 SNI 里根本不存在。
 
 ## **3. 决策表：什么时候才需要给 CNAME 别名配证书 / 监听**
@@ -1104,7 +1123,7 @@ xxx.<master>.aibang   A      10.0.0.7                 ; master project ILB / GLB
 | 用户访问原始域名 `api1.team1.caep.uk`（CNAME 到 master） | **不需要**。配原始域名的证书/监听即可 |
 | 用户访问原始域名，最终 TLS 在 GLB 终止 | **不需要**。证书装在 GLB |
 | 用户访问原始域名，TLS pass-through 到 Nginx | **不需要**。证书装在 Nginx，但 server_name 仍是原始域名 |
-| 内部服务**直接**调用 `xxx.<master>.aibang`（不是原始 tenant 域名） | **需要**。这是直接访问 alias 目标，等同于"直连 LB" |
+| 内部服务**直接**调用 `xxx.<master>.caep`（不是原始 tenant 域名） | **需要**。这是直接访问 alias 目标，等同于"直连 LB" |
 | 用 alias 目标做 HTTP health check | **需要 server_name 匹配**（但 health check 通常用 IP，不带 Host） |
 | 客户端**不**做 DNS 解析，直接拼 IP + 拼 Host header | 看 Host header 写的是谁 — 写原始域名就不需要 alias 证书 |
 
@@ -1119,16 +1138,16 @@ xxx.<master>.aibang   A      10.0.0.7                 ; master project ILB / GLB
 ```bash
 # 假设 tenant 子域 api1.team1.caep.uk CNAME 到 master 的统一入口
 dig +short api1.team1.caep.uk CNAME
-# 期望: xxx.<master>.aibang.
+# 期望: xxx.<master>.caep.
 
-dig +short xxx.<master>.aibang A
+dig +short xxx.<master>.caep A
 # 期望: 10.0.0.7
 
 # 完整 trace（权威 DNS 视角看 CNAME 链）
 dig +trace api1.team1.caep.uk
 # 输出里你会看到在 ANSWER SECTION 之前出现
-#   api1.team1.caep.uk.  CNAME  xxx.<master>.aibang.
-#   xxx.<master>.aibang. A      10.0.0.7
+#   api1.team1.caep.uk.  CNAME  xxx.<master>.caep.
+#   xxx.<master>.caep. A      10.0.0.7
 # 这就是 CNAME 的全部"工作范围" — 解析完就退场
 ```
 
@@ -1140,10 +1159,10 @@ openssl s_client -connect 10.0.0.7:443 -servername api1.team1.caep.uk < /dev/nul
   | openssl x509 -noout -subject -issuer
 # 期望: subject=... CN=*.team1.caep.uk  （或 SAN 包含 api1.team1.caep.uk）
 # 这证明 LB 用 api1.team1.caep.uk 选出了 tenant 证书，
-# 跟 CNAME 目标 xxx.<master>.aibang 一点关系没有
+# 跟 CNAME 目标 xxx.<master>.caep 一点关系没有
 
 # 反过来，把 servername 换成 CNAME 别名试试看会怎样
-openssl s_client -connect 10.0.0.7:443 -servername xxx.<master>.aibang < /dev/null 2>/dev/null \
+openssl s_client -connect 10.0.0.7:443 -servername xxx.<master>.caep < /dev/null 2>/dev/null \
   | openssl x509 -noout -subject
 # 期望: 报错或返回默认证书（master 的兜底证书）— 证明 alias 目标根本不在 GLB 证书池里
 ```
