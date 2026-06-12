@@ -15,6 +15,7 @@
 | [ollama/ollama#16049](https://github.com/ollama/ollama/issues/16049) | 2026-05-08 | `/v1/embeddings` 第一次请求 hang,后续请求正常 | Open |
 | [ollama/ollama#10831](https://github.com/ollama/ollama/issues/10831) | 2025-05-23 | 长 batch (>= 30 chunks) 概率 hang 60s+ | Open |
 | [ollama/ollama#16570](https://github.com/ollama/ollama/issues/16570) | 2026-06-06 | sleep-wake 后 `/v1/embeddings` 必然 hang | Open |
+| (2026-06-11 note) | — | 切换到 `qwen3-embedding:0.6b` 后 warmup ok (0s) 但首次实际 batch 仍可能撞 30s timeout → 触发 layer 2 retry | 持续观察 |
 
 **核心症状**:
 - `/api/embed` 端点不 hang,只 hang `/v1/embeddings` (OpenAI 兼容)
@@ -82,7 +83,12 @@ tail -100 ~/.ollama/logs/server.log | grep -E "loaded model|ran|error"
 
 ## 4. Warmup Pattern 详解
 
-### 4.0 前置约束 — embeddinggemma 的 2K token context
+### 4.0 前置约束 — embedder context_length
+
+> **2026-06-11 更新**: 已从 `embeddinggemma:300m` (2K context) 切换到 `qwen3-embedding:0.6b` (32K context)。
+> 之前的 2K token 严格约束(每 chunk ≤ ~1900 token)在 32K context 下**自动失效**,但仍建议保留 chunk_size ≤ 1900 token 作为防御性约束,避免 Ollama 0.30.x issue #10831 在长 batch 上 hang。
+
+#### 历史记录 — embeddinggemma:300m 的 2K token context(2026-06-11 前)
 
 > **Embeddinggemma 300m 的 `context_length = 2048` tokens**。这个数字是**整批 input 的总预算**,不是"每个 chunk 可以塞 2048 token"。
 >
@@ -108,9 +114,12 @@ tail -100 ~/.ollama/logs/server.log | grep -E "loaded model|ran|error"
 ### 4.1 核心:3 行 curl
 
 ```bash
+# 2026-06-11: switched to qwen3-embedding:0.6b (1024-dim, 32K context).
+# Warmup model name should match the active embedder — see rag.yaml → embedder.model.
+# Default in scripts/run_ingest.sh is now qwen3-embedding:0.6b.
 curl -sfS -m 30 -X POST http://127.0.0.1:11434/v1/embeddings \
   -H "Content-Type: application/json" \
-  -d '{"model":"embeddinggemma:300m","input":["warmup probe"]}' \
+  -d '{"model":"qwen3-embedding:0.6b","input":["warmup probe"]}' \
   >/dev/null
 ```
 
@@ -136,7 +145,11 @@ set -euo pipefail
 #
 # If warmup fails, abort: better to fail loud now than hang silently
 # 60s into the ingest.
-WARMUP_MODEL="${WARMUP_MODEL:-embeddinggemma:300m}"
+# 2026-06-11: switched default from embeddinggemma:300m (768-dim, 2K ctx) to
+# qwen3-embedding:0.6b (1024-dim, 32K ctx). Warmup target MUST match the
+# active embedder.model in rag.yaml, otherwise the first real batch still
+# hits cold-start hang because Ollama hasn't loaded that model into VRAM yet.
+WARMUP_MODEL="${WARMUP_MODEL:-qwen3-embedding:0.6b}"
 WARMUP_URL="${WARMUP_URL:-http://127.0.0.1:11434/v1/embeddings}"
 WARMUP_TIMEOUT="${WARMUP_TIMEOUT:-30}"
 
@@ -197,13 +210,14 @@ Warmup 不是"唯一"防御,真要稳需要**3 层组合**:
 
 ### 6.1 4 次跑对比
 
-| # | 触发方式 | Warmup | Retry | Timeout | 耗时 | files_failed | 备注 |
-|---|---|---|---|---|---|---|---|
-| 1 | launchd 02:00 真 | ❌ | ❌ | 60s | 70.52s | 1 | 60s × 3 retry 后跳过,exit=0 |
-| 2 | bash 手动 20:08 | ❌ | ❌ | 60s | 187s | 1 | retry 后跳过,exit=0 |
-| 3 | bash 手动 20:51 | ❌ | ❌ | 30s | 182s | 0 | 0 失败 (Ollama 状态正好) |
-| 4 | bash 手动 20:55 | ✅ | ✅ | 30s | 184s | 0 | 0 失败,warmup 1248ms |
-| 5 | **launchctl kickstart** 20:58 (模拟 launchd 真) | ✅ | ✅ | 30s | 188s | 0 | **0 失败**,warmup 1248ms |
+| # | 触发方式 | Warmup | Retry | Timeout | 模型 | 耗时 | files_failed | 备注 |
+|---|---|---|---|---|---|---|---|---|
+| 1 | launchd 02:00 真 | ❌ | ❌ | 60s | embeddinggemma:300m (768-dim) | 70.52s | 1 | 60s × 3 retry 后跳过,exit=0 |
+| 2 | bash 手动 20:08 | ❌ | ❌ | 60s | embeddinggemma:300m (768-dim) | 187s | 1 | retry 后跳过,exit=0 |
+| 3 | bash 手动 20:51 | ❌ | ❌ | 30s | embeddinggemma:300m (768-dim) | 182s | 0 | 0 失败 (Ollama 状态正好) |
+| 4 | bash 手动 20:55 | ✅ | ✅ | 30s | embeddinggemma:300m (768-dim) | 184s | 0 | 0 失败,warmup 1248ms |
+| 5 | **launchctl kickstart** 20:58 (模拟 launchd 真) | ✅ | ✅ | 30s | embeddinggemma:300m (768-dim) | 188s | 0 | **0 失败**,warmup 1248ms |
+| 6 | bash 手动 21:00 (2026-06-11) | ✅ | ✅ | 30s | **qwen3-embedding:0.6b** (1024-dim) | running | TBD | 切换 embedding 后第一次手动 ingest; dim mismatch auto-handler 触发 drop + recreate; partial result 见 `/tmp/rag-ingest-now.log` |
 
 ### 6.2 关键观察
 
@@ -236,6 +250,9 @@ chunks: 883 (按 chunk_size=1024, overlap=128 切)
 ### 7.1 Tensor 数不兼容
 
 ```bash
+# 2026-06-11: with qwen3-embedding:0.6b, this tensor-count error may
+# not reproduce (different model architecture). Kept for historical
+# reference from the embeddinggemma:300m era.
 $ /opt/homebrew/bin/llama-server --model embeddinggemma-300m.gguf
 llama_model_load: error loading model: 
   done_getting_tensors: wrong number of tensors; expected 316, got 314
@@ -278,11 +295,17 @@ echo "[run_ingest.sh] start  $(date -Iseconds)"        | tee -a "$LOG_FILE"
 echo "=================================================" | tee -a "$LOG_FILE"
 
 # === Warmup probe (Layer 1 defense) ===
-# Forces Ollama to load embeddinggemma:300m into GPU VRAM
-# before the real ingest begins. Without this, the first batch
-# after macOS sleep-wake hangs for the full client timeout
-# (Ollama 0.30.x bug, see ai/docs/ollama-warmup-pattern.md).
-WARMUP_MODEL="${WARMUP_MODEL:-embeddinggemma:300m}"
+# Forces Ollama to load the configured embedder into GPU VRAM before the
+# real ingest begins. Without this, the first batch after macOS
+# sleep-wake hangs for the full client timeout (Ollama 0.30.x bug,
+# see ~/git/knowledge/ai/docs/ollama-warmup-pattern.md, issues
+# ollama/ollama#16049 / #10831 / #16570).
+#
+# If warmup fails, abort: better to fail loud now than hang silently
+# 60s into the ingest.
+# 2026-06-11: switched default model from embeddinggemma:300m to
+# qwen3-embedding:0.6b (see how-to-change-emb-model.md).
+WARMUP_MODEL="${WARMUP_MODEL:-qwen3-embedding:0.6b}"
 WARMUP_URL="${WARMUP_URL:-http://127.0.0.1:11434/v1/embeddings}"
 t0=$(date +%s)
 if ! curl -sfS -m 30 -X POST "$WARMUP_URL" \
