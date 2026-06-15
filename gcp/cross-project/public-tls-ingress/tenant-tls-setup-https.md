@@ -706,7 +706,7 @@ echo | openssl s_client -connect tenant.taobao.caep.uk:443 \
 
 ---
 
-## 6. 踩过的 4 个新坑(都记到 doc)
+## 6. 踩过的 5 个新坑(都记到 doc)
 
 ### 6.1 实际文件名有下划线 — `tenant.taobao.caep.uk_bundle.crt`
 
@@ -761,6 +761,26 @@ gcloud compute forwarding-rules import <name> --project=$PROJECT --region=$REGIO
 3. `create NEG`(同样配置)
 4. `add-backend`(回到 BS)
 5. 等 30-60s,SA 自动接受新 connection
+
+### 6.5 Global External HTTPS LB 需要 Org Policy allowlist(A 类型前置审批)
+
+整个 Public TLS 链路要落地,External 这一跳用的是 **A 类型**,即 `--load-balancing-scheme=GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS` 的 Global External HTTPS Load Balancer。这条 LB 链默认被组织级 Org Policy 限制:`compute.loadBalancing.allowedLoadBalancingScheme` 只放行 `INTERNAL`,`EXTERNAL` 全系被拒。
+
+**直接表现**: 任何带 `--load-balancing-scheme=EXTERNAL_MANAGED` 的 `gcloud` 命令(forwarding-rule / backend-service / url-map)都会失败,报错形如
+```
+[TODO: 粘贴你当时 gcloud 报的具体错误,例如
+ "Constraint constraints/compute.loadBalancing.allowedLoadBalancingScheme violated ..."]
+```
+
+**修法**: 这条不能绕,必须先走 GCP Support 提 Org Policy Restriction 例外审批。
+1. 在 GCP Console → Support → Create case,选 **Resource: Organization / Project** + **Category: Organization policy**
+2. 申请把 `compute.loadBalancing.allowedLoadBalancingScheme` 在 `aibang-12345678-ajbx-dev` 项目下扩展到 `INTERNAL` + `EXTERNAL`(或显式列出 `GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS`)
+3. 提交后等待审批(TODO: 填实际审批耗时,如 3 个工作日)
+4. 审批通过后再跑全套 v1/v2 命令,Public TLS e2e 才能从 34.105.229.97 这个 GLB IP 真正返回 `HTTP/2 200`
+
+**当前状态**: 已提交申请,审批已通过(参考 TODO: 填 GCS case 号,如 `#1234567`)。Public TLS 链路已用 A 类型在 Cross Project 场景跑通 e2e,curl 结果见 §4。
+
+> **Lesson learned**: 任何"External / Global External Managed"类 LB,在 aibang-12345678-ajbx-dev 项目下动手前,先 `gcloud org-policies describe compute.loadBalancing.allowedLoadBalancingScheme --project=$PROJECT` 看一眼,别假设默认就放行。
 
 ---
 
