@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IDMZ Parallel GLB Chain — tenant-tls-setup-idmz-https</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1440px; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px;
+      background: #34d399;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+    .subtitle { color: #94a3b8; font-size: 0.85rem; margin-left: 1.75rem; }
+    .meta { color: #64748b; font-size: 0.75rem; margin-left: 1.75rem; margin-top: 0.25rem; }
+
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1180px; display: block; }
+
+    .legend-row {
+      display: flex;
+      gap: 1.5rem;
+      margin-top: 1.25rem;
+      flex-wrap: wrap;
+      font-size: 0.72rem;
+      color: #94a3b8;
+      overflow: visible;
+    }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+    .legend-sw {
+      width: 14px; height: 10px; border-radius: 2px;
+      display: inline-block;
+    }
+    .legend-line {
+      width: 18px; height: 2px; display: inline-block;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.rose { background: #fb7185; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.orange { background: #fb923c; }
+    .card h3 { font-size: 0.85rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.72rem; }
+    .card li { margin-bottom: 0.35rem; line-height: 1.5; }
+    .card li b { color: #cbd5e1; font-weight: 500; }
+    .card code {
+      background: rgba(30, 41, 59, 0.6);
+      padding: 0.05rem 0.35rem;
+      border-radius: 3px;
+      font-size: 0.7rem;
+      color: #e2e8f0;
+    }
+
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.7rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>IDMZ Parallel GLB Chain — Org Policy Workaround (2 consumer VPCs)</h1>
+      </div>
+      <p class="subtitle">两条 consumer 链路并存: 老 <code style="color:#fbbf24">cinternal-vpc1</code> + 新 <code style="color:#34d399">aibang-beta-cidmz</code> (IDMZ),共享同一 Producer SA  ·  域名 <code style="color:#22d3ee">tenant.taobao.caep.uk</code></p>
+      <p class="meta">Project <code style="color:#94a3b8">aibang-12345678-ajbx-dev</code>  ·  Region <code style="color:#94a3b8">europe-west2</code>  ·  Source <code style="color:#94a3b8">tenant-tls-setup-idmz-https.md</code></p>
+    </div>
+
+    <!-- Main Diagram -->
+    <div class="diagram-container">
+      <svg viewBox="0 0 1380 680">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+          </marker>
+          <marker id="arrowhead-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/>
+          </marker>
+          <marker id="arrowhead-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+          </marker>
+          <marker id="arrowhead-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <!-- Background Grid -->
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- =========================================================
+             REGION europe-west2 (outer amber dashed)
+             ========================================================= -->
+        <rect x="20" y="20" width="1340" height="540" rx="14" fill="rgba(120, 53, 15, 0.04)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="32" y="38" fill="#fbbf24" font-size="10" font-weight="600">REGION  europe-west2  ·  Project aibang-12345678-ajbx-dev</text>
+
+        <!-- =========================================================
+             IDMZ VPC (NEW - emerald boundary, the key new artifact)
+             ========================================================= -->
+        <rect x="40" y="80" width="430" height="430" rx="10" fill="rgba(6, 78, 59, 0.06)" stroke="#34d399" stroke-width="1.4" stroke-dasharray="6,3"/>
+        <text x="52" y="98" fill="#34d399" font-size="11" font-weight="600">Consumer VPC  ·  aibang-beta-cidmz  (IDMZ  ·  NEW)</text>
+        <text x="52" y="112" fill="#64748b" font-size="8">custom subnet mode  ·  regional routing  ·  Org Policy compliant</text>
+
+        <!-- IDMZ Subnet: Core (PSC NEG endpoint IP allocation) -->
+        <rect x="60" y="420" width="180" height="32" rx="5" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="150" y="434" fill="#fbbf24" font-size="8" font-weight="600" text-anchor="middle">IDMZ Core Subnet</text>
+        <text x="150" y="446" fill="#94a3b8" font-size="7" text-anchor="middle">aibang-beta-cidmz-europe-west2  ·  192.168.250.0/23</text>
+
+        <!-- IDMZ Subnet: Proxy-only -->
+        <rect x="260" y="420" width="190" height="32" rx="5" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="355" y="434" fill="#fbbf24" font-size="8" font-weight="600" text-anchor="middle">IDMZ Proxy-Only Subnet</text>
+        <text x="355" y="446" fill="#94a3b8" font-size="7" text-anchor="middle">aibang-beta-cidmz-...-abjx-proxy  ·  192.168.252.0/24</text>
+
+        <!-- IDMZ Firewall -->
+        <rect x="60" y="465" width="390" height="30" rx="5" fill="rgba(136, 19, 55, 0.3)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="255" y="478" fill="#fb7185" font-size="8" font-weight="600" text-anchor="middle">Firewall: aibang-beta-cidmz-allow-lb-hc</text>
+        <text x="255" y="490" fill="#94a3b8" font-size="7" text-anchor="middle">INGRESS tcp:80,443  ·  sources 35.191.0.0/16 + 130.211.0.0/22  ·  zero-trust default</text>
+
+        <!-- =========================================================
+             CINTERNAL VPC (existing - amber boundary)
+             ========================================================= -->
+        <rect x="490" y="80" width="420" height="430" rx="10" fill="rgba(120, 53, 15, 0.05)" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="6,3"/>
+        <text x="502" y="98" fill="#fbbf24" font-size="11" font-weight="600">Consumer VPC  ·  aibang-...-cinternal-vpc1  (LEGACY)</text>
+        <text x="502" y="112" fill="#64748b" font-size="8">Hosts GKE cluster + bastion  ·  ORG POLICY VIOLATION if external backend attached</text>
+
+        <!-- Cinternal Subnet: Core -->
+        <rect x="510" y="420" width="190" height="32" rx="5" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="605" y="434" fill="#fbbf24" font-size="8" font-weight="600" text-anchor="middle">Cinternal Core Subnet</text>
+        <text x="605" y="446" fill="#94a3b8" font-size="7" text-anchor="middle">cinternal-vpc1-...-abjx-core  ·  192.168.0.0/18</text>
+
+        <!-- Cinternal Subnet: GKE -->
+        <rect x="710" y="420" width="190" height="32" rx="5" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="805" y="434" fill="#fbbf24" font-size="8" font-weight="600" text-anchor="middle">Cinternal GKE Subnet</text>
+        <text x="805" y="446" fill="#94a3b8" font-size="7" text-anchor="middle">cinternal-vpc1-...-abjx-gke-core-01  ·  192.168.64.0/20</text>
+
+        <!-- Cinternal Subnet: Proxy-only (for old GLB) -->
+        <rect x="510" y="465" width="190" height="32" rx="5" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="605" y="479" fill="#fbbf24" font-size="8" font-weight="600" text-anchor="middle">Cinternal Proxy-Only</text>
+        <text x="605" y="491" fill="#94a3b8" font-size="7" text-anchor="middle">cinternal-vpc1-...-abjx-proxy  ·  192.168.96.0/24</text>
+
+        <!-- Cinternal Bastion -->
+        <rect x="710" y="465" width="190" height="32" rx="5" fill="rgba(136, 19, 55, 0.3)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="805" y="479" fill="#fb7185" font-size="8" font-weight="600" text-anchor="middle">dev-lon-bastion-public (IAP)</text>
+        <text x="805" y="491" fill="#94a3b8" font-size="7" text-anchor="middle">SSH entrypoint  ·  used by gcloud from local</text>
+
+        <!-- =========================================================
+             PRODUCER VPC (right side - violet boundary)
+             ========================================================= -->
+        <rect x="930" y="80" width="420" height="430" rx="10" fill="rgba(76, 29, 149, 0.06)" stroke="#a78bfa" stroke-width="1.2" stroke-dasharray="6,3"/>
+        <text x="942" y="98" fill="#a78bfa" font-size="11" font-weight="600">Producer VPC  ·  ajbx-tenant-vpc</text>
+        <text x="942" y="112" fill="#64748b" font-size="8">Same project, isolated network  ·  ZERO CHANGE in this task</text>
+
+        <!-- Producer Subnets (right column) -->
+        <rect x="950" y="135" width="180" height="28" rx="4" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="1040" y="148" fill="#fbbf24" font-size="7" font-weight="600" text-anchor="middle">Core: ajbx-tenant-vpc-...-abjx-core</text>
+        <text x="1040" y="158" fill="#94a3b8" font-size="6" text-anchor="middle">10.0.1.0/24  ·  MIG + ILB frontend</text>
+
+        <rect x="1140" y="135" width="180" height="28" rx="4" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="1230" y="148" fill="#fbbf24" font-size="7" font-weight="600" text-anchor="middle">Proxy-Only: -abjx-proxy</text>
+        <text x="1230" y="158" fill="#94a3b8" font-size="6" text-anchor="middle">10.0.2.0/24  ·  INTERNAL_MANAGED</text>
+
+        <rect x="950" y="170" width="180" height="28" rx="4" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="1040" y="183" fill="#fbbf24" font-size="7" font-weight="600" text-anchor="middle">PSC NAT: -abjx-psc-nat</text>
+        <text x="1040" y="193" fill="#94a3b8" font-size="6" text-anchor="middle">10.0.3.0/24  ·  SA SNAT pool</text>
+
+        <rect x="1140" y="170" width="180" height="28" rx="4" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="1230" y="183" fill="#fbbf24" font-size="7" font-weight="600" text-anchor="middle">PSC NAT-MTLS: -abjx-psc-nat-mtls</text>
+        <text x="1230" y="193" fill="#94a3b8" font-size="6" text-anchor="middle">10.0.4.0/24  ·  for mTLS chain (other chain)</text>
+
+        <!-- =========================================================
+             Internet / DNS layer (top)
+             ========================================================= -->
+        <rect x="30" y="500" width="380" height="50" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="220" y="518" fill="white" font-size="10" font-weight="600" text-anchor="middle">Internet Client</text>
+        <text x="220" y="532" fill="#94a3b8" font-size="8" text-anchor="middle">browser / curl  ·  DNS resolves tenant.taobao.caep.uk</text>
+        <text x="220" y="544" fill="#fb7185" font-size="7" text-anchor="middle">SNI=tenant.taobao.caep.uk</text>
+
+        <!-- =========================================================
+             Opaque backplates to mask arrows behind translucent boxes
+             (positioned over the component track y=210-360)
+             ========================================================= -->
+        <!-- IDMZ track components (x=50 to x=460) -->
+        <rect x="55" y="218" width="80" height="58" rx="6" fill="#0f172a"/>
+        <rect x="145" y="218" width="100" height="58" rx="6" fill="#0f172a"/>
+        <rect x="255" y="218" width="80" height="58" rx="6" fill="#0f172a"/>
+        <rect x="345" y="218" width="115" height="58" rx="6" fill="#0f172a"/>
+        <!-- Cinternal track components (x=500 to x=900) -->
+        <rect x="505" y="218" width="100" height="58" rx="6" fill="#0f172a"/>
+        <rect x="615" y="218" width="80" height="58" rx="6" fill="#0f172a"/>
+        <rect x="705" y="218" width="80" height="58" rx="6" fill="#0f172a"/>
+        <rect x="795" y="218" width="115" height="58" rx="6" fill="#0f172a"/>
+        <!-- Producer shared SA + ILB + MIG (x=940 to x=1340) -->
+        <rect x="945" y="218" width="115" height="58" rx="6" fill="#0f172a"/>
+        <rect x="1075" y="218" width="125" height="58" rx="6" fill="#0f172a"/>
+        <rect x="1215" y="218" width="135" height="58" rx="6" fill="#0f172a"/>
+
+        <!-- =========================================================
+             COMPONENTS — IDMZ track (NEW)
+             ========================================================= -->
+
+        <!-- IDMZ-1: External Static IP (NEW) -->
+        <rect x="55" y="218" width="80" height="58" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="95" y="237" fill="#94a3b8" font-size="7" text-anchor="middle">IDMZ GLB IP</text>
+        <text x="95" y="253" fill="white" font-size="10" font-weight="600" text-anchor="middle">34.89.85.92</text>
+        <text x="95" y="266" fill="#94a3b8" font-size="7" text-anchor="middle">PREMIUM</text>
+
+        <!-- IDMZ-2: External GLB (NEW) -->
+        <rect x="145" y="218" width="100" height="58" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="195" y="237" fill="white" font-size="10" font-weight="600" text-anchor="middle">IDMZ GLB</text>
+        <text x="195" y="251" fill="#94a3b8" font-size="7" text-anchor="middle">abjx-public-idmz-fr</text>
+        <text x="195" y="263" fill="#22d3ee" font-size="7" text-anchor="middle">TLS terminate #1 (IDMZ)</text>
+        <text x="195" y="273" fill="#34d399" font-size="6" text-anchor="middle">network=aibang-beta-cidmz</text>
+
+        <!-- IDMZ-3: Backend Service (NEW) -->
+        <rect x="255" y="218" width="80" height="58" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="295" y="237" fill="white" font-size="10" font-weight="600" text-anchor="middle">BS (HTTPS)</text>
+        <text x="295" y="251" fill="#94a3b8" font-size="7" text-anchor="middle">-idmz-bs</text>
+        <text x="295" y="263" fill="#34d399" font-size="7" text-anchor="middle">+ Cloud Armor</text>
+
+        <!-- IDMZ-4: PSC NEG (NEW, in IDMZ subnet) -->
+        <rect x="345" y="218" width="115" height="58" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="402" y="237" fill="white" font-size="10" font-weight="600" text-anchor="middle">PSC NEG (IDMZ)</text>
+        <text x="402" y="251" fill="#94a3b8" font-size="7" text-anchor="middle">abjx-public-idmz-neg</text>
+        <text x="402" y="263" fill="#34a3b8" font-size="6" text-anchor="middle">network=aibang-beta-cidmz</text>
+        <text x="402" y="273" fill="#fbbf24" font-size="6" text-anchor="middle">pscConn 62363241902832130</text>
+
+        <!-- =========================================================
+             COMPONENTS — Cinternal track (LEGACY)
+             ========================================================= -->
+
+        <!-- Cinternal-1: External Static IP (LEGACY) -->
+        <rect x="505" y="218" width="100" height="58" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="555" y="237" fill="#94a3b8" font-size="7" text-anchor="middle">Legacy GLB IP (DNS)</text>
+        <text x="555" y="253" fill="white" font-size="10" font-weight="600" text-anchor="middle">34.105.229.97</text>
+        <text x="555" y="266" fill="#94a3b8" font-size="7" text-anchor="middle">PREMIUM  ·  default A record</text>
+
+        <!-- Cinternal-2: External GLB (LEGACY) -->
+        <rect x="615" y="218" width="80" height="58" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="655" y="237" fill="white" font-size="10" font-weight="600" text-anchor="middle">Legacy GLB</text>
+        <text x="655" y="251" fill="#94a3b8" font-size="7" text-anchor="middle">ajbx-public-fr</text>
+        <text x="655" y="263" fill="#22d3ee" font-size="7" text-anchor="middle">TLS #1 (cinternal)</text>
+
+        <!-- Cinternal-3: Backend Service (LEGACY) -->
+        <rect x="705" y="218" width="80" height="58" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="745" y="237" fill="white" font-size="10" font-weight="600" text-anchor="middle">BS (HTTPS)</text>
+        <text x="745" y="251" fill="#94a3b8" font-size="7" text-anchor="middle">ajbx-public-bs</text>
+        <text x="745" y="263" fill="#34d399" font-size="7" text-anchor="middle">+ Cloud Armor</text>
+
+        <!-- Cinternal-4: PSC NEG (LEGACY) -->
+        <rect x="795" y="218" width="115" height="58" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="852" y="237" fill="white" font-size="10" font-weight="600" text-anchor="middle">PSC NEG (cinternal)</text>
+        <text x="852" y="251" fill="#94a3b8" font-size="7" text-anchor="middle">ajbx-public-neg</text>
+        <text x="852" y="263" fill="#94a3b8" font-size="6" text-anchor="middle">network=cinternal-vpc1</text>
+        <text x="852" y="273" fill="#fbbf24" font-size="6" text-anchor="middle">pscConn 158673064562262033</text>
+
+        <!-- =========================================================
+             COMPONENTS — Producer (shared, UNCHANGED)
+             ========================================================= -->
+
+        <!-- Shared Service Attachment -->
+        <rect x="945" y="218" width="115" height="58" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.8"/>
+        <text x="1002" y="237" fill="white" font-size="10" font-weight="600" text-anchor="middle">Service Attachment</text>
+        <text x="1002" y="251" fill="#94a3b8" font-size="7" text-anchor="middle">ajbx-tenant-vpc-...</text>
+        <text x="1002" y="261" fill="#94a3b8" font-size="6" text-anchor="middle">-internal-sa</text>
+        <text x="1002" y="271" fill="#fbbf24" font-size="7" text-anchor="middle">★ connectedEndpoints: 2</text>
+
+        <!-- L7 HTTPS ILB (unchanged) -->
+        <rect x="1075" y="218" width="125" height="58" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="1137" y="237" fill="white" font-size="10" font-weight="600" text-anchor="middle">L7 HTTPS ILB</text>
+        <text x="1137" y="251" fill="#94a3b8" font-size="7" text-anchor="middle">ajbx-tenant-vpc-...</text>
+        <text x="1137" y="261" fill="#94a3b8" font-size="6" text-anchor="middle">-internal-fr  ·  10.0.1.4</text>
+        <text x="1137" y="271" fill="#22d3ee" font-size="7" text-anchor="middle">TLS terminate #2</text>
+
+        <!-- MIG Backend (unchanged) -->
+        <rect x="1215" y="218" width="135" height="58" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1282" y="237" fill="white" font-size="10" font-weight="600" text-anchor="middle">MIG Backend</text>
+        <text x="1282" y="251" fill="#94a3b8" font-size="7" text-anchor="middle">ajbx-tenant-vpc-...</text>
+        <text x="1282" y="261" fill="#94a3b8" font-size="6" text-anchor="middle">-backend-mig  ·  10.0.1.2/3</text>
+        <text x="1282" y="271" fill="#a78bfa" font-size="7" text-anchor="middle">HTTPS :443</text>
+
+        <!-- =========================================================
+             ARROWS
+             ========================================================= -->
+
+        <!-- ===== Internet → 2 GLB IPs (DNS split) ===== -->
+        <line x1="220" y1="500" x2="115" y2="278" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="3,2" marker-end="url(#arrowhead-rose)"/>
+        <text x="155" y="395" fill="#fb7185" font-size="8" font-weight="600">DNS → 34.89.85.92</text>
+        <text x="155" y="408" fill="#94a3b8" font-size="7">(when A record updated)</text>
+
+        <line x1="220" y1="500" x2="555" y2="278" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="3,2" marker-end="url(#arrowhead-rose)"/>
+        <text x="380" y="395" fill="#fb7185" font-size="8" font-weight="600">DNS → 34.105.229.97 (default)</text>
+        <text x="380" y="408" fill="#94a3b8" font-size="7">(--resolve overrides this)</text>
+
+        <!-- ===== IDMZ chain: GLB IP → GLB → BS → NEG ===== -->
+        <line x1="135" y1="247" x2="141" y2="247" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="245" y1="247" x2="251" y2="247" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="335" y1="247" x2="341" y2="247" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- ===== Cinternal chain: GLB IP → GLB → BS → NEG ===== -->
+        <line x1="605" y1="247" x2="611" y2="247" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="695" y1="247" x2="701" y2="247" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="785" y1="247" x2="791" y2="247" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- ===== IDMZ NEG → SA (PSC tunnel, amber dashed, cross-VPC) ===== -->
+        <line x1="460" y1="247" x2="941" y2="247" stroke="#fbbf24" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#arrowhead-amber)"/>
+        <text x="700" y="195" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">PSC Tunnel #1 (IDMZ NEG → SA)</text>
+        <text x="700" y="207" fill="#94a3b8" font-size="7" text-anchor="middle">cross-VPC  ·  GCP-managed  ·  IDMZ subnet → producer psc-nat subnet</text>
+
+        <!-- ===== Cinternal NEG → SA (PSC tunnel, amber dashed, cross-VPC) ===== -->
+        <line x1="910" y1="247" x2="941" y2="247" stroke="#fbbf24" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#arrowhead-amber)"/>
+        <text x="925" y="295" fill="#fbbf24" font-size="7" text-anchor="middle">PSC #2</text>
+
+        <!-- ===== SA → ILB → MIG (shared, TLS rose, internal hop) ===== -->
+        <line x1="1060" y1="247" x2="1071" y2="247" stroke="#fb7185" stroke-width="2" marker-end="url(#arrowhead-rose)"/>
+        <text x="1065" y="207" fill="#fb7185" font-size="7" text-anchor="middle">TLS 2</text>
+
+        <line x1="1200" y1="247" x2="1211" y2="247" stroke="#fb7185" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrowhead-rose)"/>
+        <text x="1205" y="207" fill="#fb7185" font-size="7" text-anchor="middle">TLS 3</text>
+
+        <!-- =========================================================
+             TLS hop indicator on each GLB (TLS 1 labels, above boxes)
+             ========================================================= -->
+        <text x="195" y="207" fill="#22d3ee" font-size="9" font-weight="600" text-anchor="middle">TLS 1 (IDMZ)</text>
+        <text x="655" y="207" fill="#22d3ee" font-size="9" font-weight="600" text-anchor="middle">TLS 1 (cinternal)</text>
+
+        <!-- =========================================================
+             Cert labels (above NEG boxes)
+             ========================================================= -->
+        <text x="402" y="307" fill="#34d399" font-size="7" text-anchor="middle">TrustAsia DV (idmz-cert-real)</text>
+        <text x="852" y="307" fill="#34d399" font-size="7" text-anchor="middle">TrustAsia DV (ajbx-public-cert)</text>
+
+        <!-- =========================================================
+             Track labels (left side)
+             ========================================================= -->
+        <text x="50" y="195" fill="#34d399" font-size="9" font-weight="600">NEW (IDMZ)</text>
+        <text x="500" y="195" fill="#fbbf24" font-size="9" font-weight="600">LEGACY (cinternal)</text>
+        <text x="935" y="195" fill="#a78bfa" font-size="9" font-weight="600">SHARED (producer, unchanged)</text>
+
+        <!-- =========================================================
+             ENCRYPTION / NETWORK SUMMARY BAR (bottom)
+             ========================================================= -->
+        <rect x="30" y="565" width="1320" height="95" rx="6" fill="rgba(15, 23, 42, 0.6)" stroke="#1e293b" stroke-width="1"/>
+        <text x="50" y="585" fill="#22d3ee" font-size="10" font-weight="600">NETWORK & ENCRYPTION SUMMARY</text>
+
+        <!-- Visual chips row 1 -->
+        <rect x="50" y="597" width="100" height="16" rx="3" fill="rgba(34, 197, 94, 0.2)" stroke="#34d399" stroke-width="0.5"/>
+        <text x="100" y="608" fill="#34d399" font-size="8" text-anchor="middle">IDMZ VPC (NEW)</text>
+
+        <rect x="160" y="597" width="100" height="16" rx="3" fill="rgba(120, 53, 15, 0.2)" stroke="#fbbf24" stroke-width="0.5"/>
+        <text x="210" y="608" fill="#fbbf24" font-size="8" text-anchor="middle">cinternal VPC (old)</text>
+
+        <rect x="270" y="597" width="100" height="16" rx="3" fill="rgba(76, 29, 149, 0.2)" stroke="#a78bfa" stroke-width="0.5"/>
+        <text x="320" y="608" fill="#a78bfa" font-size="8" text-anchor="middle">producer VPC (shared)</text>
+
+        <rect x="380" y="597" width="100" height="16" rx="3" fill="rgba(251, 113, 133, 0.2)" stroke="#fb7185" stroke-width="0.5"/>
+        <text x="430" y="608" fill="#fb7185" font-size="8" text-anchor="middle">3× TLS hops (rose)</text>
+
+        <rect x="490" y="597" width="120" height="16" rx="3" fill="rgba(251, 191, 36, 0.2)" stroke="#fbbf24" stroke-width="0.5"/>
+        <text x="550" y="608" fill="#fbbf24" font-size="8" text-anchor="middle">2× PSC tunnel (amber)</text>
+
+        <text x="620" y="608" fill="#94a3b8" font-size="8">·  both chains terminate at the same producer SA → zero producer change</text>
+
+        <!-- Italic notes on separate lines (y=625, y=645) -->
+        <text x="50" y="630" fill="#64748b" font-size="8" font-style="italic">Network boundaries: 3 VPCs (IDMZ emerald + cinternal amber + producer violet), all inside 1 region (europe-west2 amber outer). 5 subnets shown: IDMZ core+proxy, cinternal core+GKE+proxy, producer core+proxy+psc-nat.</text>
+        <text x="50" y="650" fill="#64748b" font-size="8" font-style="italic">Cert chain (post-fix): both GLBs serve TrustAsia DV (SAN: tenant.taobao.caep.uk), intermediates → DigiCert Global Root G2. Producer SA accepts 2 ACCEPTED endpoints from both VPCs.</text>
+      </svg>
+
+      <!-- Legend -->
+      <div class="legend-row">
+        <div class="legend-item">
+          <span class="legend-sw" style="background:rgba(6,78,59,0.4);border:1px solid #34d399"></span>
+          IDMZ VPC (NEW · emerald boundary)
+        </div>
+        <div class="legend-item">
+          <span class="legend-sw" style="background:rgba(120,53,15,0.05);border:1px solid #fbbf24"></span>
+          cinternal VPC (LEGACY · amber boundary)
+        </div>
+        <div class="legend-item">
+          <span class="legend-sw" style="background:rgba(76,29,149,0.06);border:1px solid #a78bfa"></span>
+          producer VPC (SHARED · violet boundary)
+        </div>
+        <div class="legend-item">
+          <span class="legend-sw" style="background:rgba(120,53,15,0.3);border:1px dashed #fbbf24"></span>
+          subnet (dashed amber)
+        </div>
+        <div class="legend-item">
+          <span class="legend-line" style="background:#fb7185"></span>
+          TLS (rose)
+        </div>
+        <div class="legend-item">
+          <span class="legend-line" style="background:#fbbf24;border-top:2px dashed #fbbf24"></span>
+          PSC tunnel (amber dashed)
+        </div>
+      </div>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>IDMZ 链路 (NEW · 12 个新资源)</h3>
+        </div>
+        <ul>
+          <li>• <b>VPC</b>: <code>aibang-beta-cidmz</code> (custom mode, regional routing)</li>
+          <li>• <b>Subnet core</b>: <code>aibang-beta-cidmz-europe-west2</code> <code>192.168.250.0/23</code> (PSC NEG endpoint IP)</li>
+          <li>• <b>Subnet proxy-only</b>: <code>aibang-beta-cidmz-...-abjx-proxy</code> <code>192.168.252.0/24</code></li>
+          <li>• <b>Firewall</b>: <code>aibang-beta-cidmz-allow-lb-hc</code> (LB HC allow, zero-trust default)</li>
+          <li>• <b>GLB</b>: <code>34.89.85.92</code> + <code>abjx-public-idmz-fr</code> (EXTERNAL_MANAGED, network=IDMZ)</li>
+          <li>• <b>Cert</b>: <code>abjx-public-idmz-cert-real</code> (TrustAsia DV, expire 2026-09-02)</li>
+          <li>• <b>BS + NEG</b>: <code>...-idmz-bs</code> ← <code>...-idmz-neg</code> (pscConn 62363241902832130)</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>Cinternal 链路 (LEGACY · 0 改动)</h3>
+        </div>
+        <ul>
+          <li>• <b>VPC</b>: <code>aibang-...-cinternal-vpc1</code> (历史命名, 触发 Org Policy violation)</li>
+          <li>• <b>Subnets</b>: <code>abjx-core</code> <code>192.168.0.0/18</code>, <code>abjx-gke-core-01</code> <code>192.168.64.0/20</code>, <code>abjx-proxy</code> <code>192.168.96.0/24</code></li>
+          <li>• <b>GLB</b>: <code>34.105.229.97</code> + <code>ajbx-public-fr</code> (DNS 默认解析到这)</li>
+          <li>• <b>Cert</b>: <code>ajbx-public-cert</code> (TrustAsia DV, 同源)</li>
+          <li>• <b>BS + NEG</b>: <code>ajbx-public-bs</code> ← <code>ajbx-public-neg</code> (pscConn 158673064562262033)</li>
+          <li>• <b>Bastion</b>: <code>dev-lon-bastion-public</code> (IAP SSH 入口)</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>Producer 端 (SHARED · 0 改动)</h3>
+        </div>
+        <ul>
+          <li>• <b>VPC</b>: <code>ajbx-tenant-vpc</code></li>
+          <li>• <b>Subnets</b>: core <code>10.0.1.0/24</code>, proxy <code>10.0.2.0/24</code>, psc-nat <code>10.0.3.0/24</code></li>
+          <li>• <b>SA</b>: <code>ajbx-tenant-vpc-internal-sa</code> (ACCEPT_AUTOMATIC)</li>
+          <li>• <b>connectedEndpoints: 2</b> (IDMZ + cinternal 都 ACCEPTED)</li>
+          <li>• <b>ILB</b>: <code>...-internal-fr</code> (10.0.1.4, INTERNAL_MANAGED :443, TLS #2)</li>
+          <li>• <b>MIG</b>: <code>...-backend-mig</code> (10.0.1.2/3, HTTPS :443, TLS #3)</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      tenant-tls-setup-idmz-https.md  ·  IDMZ parallel GLB chain  ·  3 VPCs / 5 subnets / 2 PSC tunnels sharing 1 SA  ·  europe-west2
+    </p>
+  </div>
+</body>
+</html>
