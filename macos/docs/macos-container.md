@@ -54,3 +54,6 @@ homeassistant  ghcr.io/home-assistant/home-assistant:stable  linux  arm64  runni
 
 # 看端口映射（OrbStack 通常会直接暴露）
 container ls --format "{{.Names}} {{.Ports}}"
+
+
+http://192.168.64.2:8123/onboarding.html
