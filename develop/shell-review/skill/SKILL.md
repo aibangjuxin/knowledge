@@ -163,6 +163,11 @@ PS4='+ ${LINENO}: ' bash -x script.sh --dry-run 2>&1 | head -100
 **Skip L4 entirely** if the script has no `--dry-run` flag AND no safe trace path
 (e.g. it requires real credentials / network).
 
+> **For the full smoke-testing framework** (5 levels: `--help` → `bash -n` → `bash -x` →
+> `--dry-run` → sandbox container, plus copy-paste recipes and 5 common pitfalls),
+> see `../smoke-testing.md` in the parent directory. That document is the detail
+> layer for everything in this L4 section.
+
 ### Step 6 — Output the structured report
 
 Use this **exact format** so the report is parseable / diff-friendly across reviews:
