@@ -76,6 +76,17 @@ Host *
   SendEnv none
 ```
 
+### ubuntu setup 
+```bash
+sudo apt update
+
+sudo apt install locales
+
+sudo locale-gen zh_CN.UTF-8
+
+sudo update-locale
+```
+
 ---
 
 ## Bastion→Cluster Operations Pattern
