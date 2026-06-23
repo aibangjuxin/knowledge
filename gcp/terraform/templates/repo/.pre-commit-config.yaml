@@ -1,0 +1,27 @@
+# .pre-commit-config.yaml - commit 时跑 fmt + validate + tflint + tfsec
+# 安装: pip install pre-commit && pre-commit install
+# 手动跑: pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.92.1
+    hooks:
+      # 格式
+      - id: terraform_fmt
+      # 单 module 验证
+      - id: terraform_validate
+      # GCP-specific lint
+      - id: terraform_tflint
+      # 安全扫描
+      - id: terraform_tfsec
+      # 自动生成 module README
+      - id: terraform_docs
+        args:
+          - "--args=--config=.terraform-docs.yml"
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-merge-conflict
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
