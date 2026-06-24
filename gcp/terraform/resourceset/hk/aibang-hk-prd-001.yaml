@@ -1,0 +1,43 @@
+# ResourceSet: aibang-hk-prd-001
+# 所在 region: hk (asia-east2)
+# 用途: HK 生产环境, 与 uk 镜像但参数差异 (机型号/规模/CIDR)
+
+project:
+  id: aibang-hk-prd-001
+  name: "aibang-hk-prd"
+  billing_account: "012345-6789AB-CDEF01"
+  folder_id: "folders/9876543210"
+  services:
+    - compute.googleapis.com
+    - container.googleapis.com
+    - servicenetworking.googleapis.com
+
+network:
+  vpc_name: aibang-hk-prd-vpc
+  vpc_cidr: "10.30.0.0/16"
+  subnets:
+    - name: gke-nodes
+      cidr: "10.30.0.0/20"
+      region: asia-east2
+      purpose: GKE
+      private_google_access: true
+    - name: proxy-only
+      cidr: "10.30.32.0/28"
+      region: asia-east2
+      purpose: PSC_PROXY
+
+gke:
+  cluster_name: aibang-hk-prd-gke
+  region: asia-east2
+  machine_type: n2-standard-4
+  min_nodes: 2
+  max_nodes: 10
+  enable_private_nodes: true
+  enable_private_endpoint: true
+  master_ipv4_cidr: "172.17.0.0/28"
+  pod_ipv4_cidr: "10.40.0.0/14"
+  service_ipv4_cidr: "10.44.0.0/20"
+
+backend:
+  bucket: terraform-state-hk-prd-001
+  prefix: gke/asia-east2
