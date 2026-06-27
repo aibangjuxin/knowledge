@@ -79,7 +79,78 @@ FROM gcr.io/distroless/static-debian13:nonroot
 
 ---
 
-## 3. Image Size Comparison
+## 3. Support Timeline & EOL
+
+> Source: [`SUPPORT_POLICY.md`](https://github.com/GoogleContainerTools/distroless/blob/main/SUPPORT_POLICY.md). Distroless tracks upstream Debian on its [standard support timeline](https://wiki.debian.org/DebianReleases#Production_Releases). Numbers below are **as of 2026-06** — re-check the upstream file before any capacity-planning decision.
+
+### 3.1 EOL by image family
+
+Every `gcr.io/distroless/<image>-debian<version>:(latest|nonroot|debug|debug-nonroot)` follows this rule:
+
+| Image family | Debian 12 EOL | Debian 13 EOL |
+|--------------|---------------|---------------|
+| `static` | **Sept 2026** | Debian 14 release day + 1 year |
+| `base` | **Sept 2026** | Debian 14 release day + 1 year |
+| `base-nossl` | **Sept 2026** | Debian 14 release day + 1 year |
+| `cc` | **Sept 2026** | Debian 14 release day + 1 year |
+| `java*` | **Jan 2026** ⚠️ | Debian 14 release day + 3 months |
+| `node*` | **Jan 2026** ⚠️ | Debian 14 release day + 3 months |
+| `python*` | **April 2026** ⚠️ | Debian 14 release day + 3 months |
+
+**Translation for someone reading this in mid-2026:**
+
+- If you shipped `*debian12:nonroot` for any flavor: you have **3–9 months** to migrate to `-debian13` (or pin to `-debian12` and accept the bus-factor).
+- `static`/`base`/`cc` Debian 12 users have until **September 2026** — the longest runway.
+- Language-runtime users (java/node/python) on Debian 12 have **already missed EOL** (Jan/April 2026) — they're running on grace-period images or already on Debian 13.
+
+### 3.2 Language-runtime version policy
+
+Distroless doesn't ship every Java/Node/Python version — only what upstream Debian itself ships. Concretely:
+
+| Runtime | What you get | Source of truth |
+|---------|--------------|-----------------|
+| **Java** | Current Debian LTS only | [wiki.debian.org/Java](https://wiki.debian.org/Java) |
+| **Node.js** | Even-numbered releases (22, 24, 26, …) that are current / active / in LTS maintenance | [nodejs.org release schedule](https://nodejs.org/en/about/previous-releases#release-schedule) |
+| **Python** | TBD by upstream (Debian's choice) | [`SUPPORT_POLICY.md`](https://github.com/GoogleContainerTools/distroless/blob/main/SUPPORT_POLICY.md) |
+
+**Practical impact:** if your team standardizes on Java 21 but Debian 13 only ships Java 17, you can't use `java21-debian13` directly — you'd need to either downgrade your Java target, vendor your own JRE, or use `rules_distroless` to layer a non-Debian JRE on top.
+
+### 3.3 What "deprecated" actually means
+
+The distroless README has a one-liner worth taking literally: *"Any other tags are considered deprecated and are no longer updated."*
+
+When a tag goes deprecated, you don't get:
+- CVE backports (Debian publishes security updates → distroless rebuilds → image rebuilt with new tag, **but the old tag is frozen forever**)
+- glibc fixes
+- OpenSSL updates
+
+You can still pull the image. It will run. It just **silently becomes more vulnerable over time**. The only signal you'll see is the README moving the tag off the "currently published" table.
+
+### 3.4 Migration playbook
+
+When your pinned `-debian12` image approaches its EOL:
+
+```bash
+# 1. Find every Dockerfile in your org that references the old tag
+grep -rn "distroless/.*-debian12" --include="Dockerfile*" .
+
+# 2. Check the new tag exists & verify cosign signature
+docker pull gcr.io/distroless/static-debian13:nonroot
+cosign verify gcr.io/distroless/static-debian13:nonroot \
+  --certificate-oidc-issuer https://accounts.google.com \
+  --certificate-identity keyless@distroless.iam.gserviceaccount.com
+
+# 3. Update Dockerfile: -debian12 → -debian13, rebuild, push to staging, smoke-test
+
+# 4. Scan for new CVEs in the new image before promoting to prod
+trivy image gcr.io/distroless/static-debian13:nonroot
+```
+
+**Common breakage during migration:** see §6.5 — if your build stage is on `debian:bookworm` (glibc 2.36) and you switch runtime to `*-debian13` (glibc 2.38), the dynamic binary fails to start. Move the build stage to `debian:13-slim` at the same time.
+
+---
+
+## 4. Image Size Comparison
 
 | Image | Size | Ratio vs Debian |
 |-------|-----:|----------------:|
@@ -95,7 +166,7 @@ FROM gcr.io/distroless/static-debian13:nonroot
 
 ---
 
-## 4. Multistage Build Patterns
+## 5. Multistage Build Patterns
 
 > See `multi-stage.md` for the general multistage pattern; this section is distroless-specific.
 
@@ -204,11 +275,11 @@ CMD ["node", "dist/server.js"]
 
 ---
 
-## 5. Critical Gotchas
+## 6. Critical Gotchas
 
 These are the foot-guns that bite every team the first time:
 
-### 5.1 ❌ Shell-style ENTRYPOINT silently fails
+### 6.1 ❌ Shell-style ENTRYPOINT silently fails
 
 ```dockerfile
 # WRONG — docker/containerd prefix with /bin/sh, which doesn't exist
@@ -220,7 +291,7 @@ ENTRYPOINT ["myapp"]
 
 If you write `ENTRYPOINT myapp` and `myapp` needs args, you'll get an obscure exit code 127 with no error message because there's no shell to interpret anything.
 
-### 5.2 ❌ No shell → `RUN` / shell tricks don't work
+### 6.2 ❌ No shell → `RUN` / shell tricks don't work
 
 You obviously can't `RUN apt install` — the image has no apt. You also can't do `RUN echo "hello" > /file` (no echo, no `>`, no `/bin/sh`). Workarounds:
 
@@ -234,7 +305,7 @@ RUN ["/bin/sh", "-c", "echo hello > /tmp/x"]   # only works if base has /bin/sh
 
 If you find yourself wanting `RUN echo` or `RUN curl | sh`, **you're using the wrong base image**. Step back to a build stage, do it there, copy the artifact across.
 
-### 5.3 ❌ `kubectl exec` will not give you a shell
+### 6.3 ❌ `kubectl exec` will not give you a shell
 
 ```
 $ kubectl exec -it my-pod -- /bin/sh
@@ -249,7 +320,7 @@ error: Internal error occurred: error executing command in container: failed to 
    kubectl debug -it my-pod --image=nicolaka/netshoot --target=mycontainer
    ```
 
-### 5.4 ❌ `ldd` doesn't exist either
+### 6.4 ❌ `ldd` doesn't exist either
 
 `ldd` is itself a shell script (`#!/bin/sh`) — it's not in distroless. If you need it for debugging missing `.so` files:
 
@@ -261,7 +332,7 @@ docker run --rm -it --entrypoint=/bin/sh gcr.io/distroless/cc-debian13:debug -c 
 
 Or use `readelf -d myapp | grep NEEDED` to see what shared libs it wants.
 
-### 5.5 ❌ glibc version mismatch between build and runtime
+### 6.5 ❌ glibc version mismatch between build and runtime
 
 If you build on `debian:bookworm` (glibc 2.36) and run on `static-debian13` (glibc 2.38 → Debian 13/trixie), your dynamic binary **will not run** even though both have "glibc". The distroless image's glibc must be ≥ your build host's glibc. Pin your build stage to the same Debian major version as the distroless image:
 
@@ -271,7 +342,7 @@ FROM debian:13-slim AS build       # glibc 2.38
 FROM gcr.io/distroless/cc-debian13:nonroot AS runtime
 ```
 
-### 5.6 ✅ Verification: cosign-signed
+### 6.6 ✅ Verification: cosign-signed
 
 All distroless images are signed keylessly with [cosign](https://github.com/sigstore/cosign). Verify before deploying:
 
@@ -298,13 +369,13 @@ cosign verify gcr.io/distroless/static-debian13:nonroot \
   || { echo "DISTROLESS IMAGE NOT SIGNED — REFUSING TO BUILD"; exit 1; }
 ```
 
-### 5.7 ✅ Auto-tracking Debian CVEs
+### 6.7 ✅ Auto-tracking Debian CVEs
 
 Distroless auto-rebuilds when Debian ships a security update via a [GitHub Actions workflow](https://github.com/GoogleContainerTools/distroless/blob/main/.github/workflows/update-deb-package-snapshots.yml). You don't need to track upstream — just `docker pull` periodically or use `:latest`.
 
 ---
 
-## 6. FAQ
+## 7. FAQ
 
 **Q: Why does it still use `gcr.io` instead of `pkg.dev`?**
 A: The serving infrastructure has moved to Artifact Registry under the hood; the `gcr.io` hostname is kept for backward compatibility. No action needed.
@@ -331,7 +402,7 @@ A: That's the **JRE**, not the OS. JRE 21 is ~150 MiB on its own. Distroless sav
 
 ---
 
-## 7. Decision Tree
+## 8. Decision Tree
 
 ```
 Need a container image for a service
@@ -354,7 +425,7 @@ Need a container image for a service
 
 ---
 
-## 8. See Also
+## 9. See Also
 
 - `multi-stage.md` — multistage build pattern (the "build in fat, run in thin" idiom)
 - `Dockerfile.md` — deeper Dockerfile patterns & layer-cache optimization
