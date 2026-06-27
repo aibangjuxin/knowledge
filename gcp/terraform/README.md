@@ -243,6 +243,10 @@ bash scripts/introspect-project.sh aibang-uk-prd-001 europe-west2
 # → OK:   resourceset/europe-west2/aibang-uk-prd-001.yaml
 ```
 
+(introspect 脚本会在最后自动跑 `scripts/validate-resourceset.py` 校验输出。**任何时候你手改
+resourceset YAML 后,都该手动跑一次**:
+`python3 scripts/validate-resourceset.py resourceset/<region>/<project>.yaml`。)
+
 **为什么用 `gcloud` 而不是 terraformer?** terraformer 已于 **2026-03-16 archived**(`README`: "This project is no longer maintained and is deprecated")。CDKTF 也已于 2025-12-10 sunset。本仓库的 introspect 脚本是**纯 gcloud + Python**,零外部依赖,长期可维护。
 
 ### 8.2 正向:从 YAML 渲染 env + apply
