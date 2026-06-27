@@ -1,0 +1,85 @@
+# ResourceSet Template — copy and edit
+# Filename: resourceset/<region>/<project_id>.yaml
+# See SCHEMA.md for field documentation.
+
+metadata:
+  schema_version: "1.0"
+  project_id: "CHANGEME-project-id"        # e.g. "aibang-de-prd-001"
+  region: "CHANGEME-region"                # e.g. "europe-west3"
+  source: "manual"                          # introspect | manual | merge
+  generated_at: "2026-01-01T00:00:00Z"      # ISO-8601 UTC
+  generated_by: "manual"                   # who/what wrote this
+  notes: "New project — base this on an existing resourceset YAML (e.g. uk/aibang-uk-prd-001.yaml)"
+
+project:
+  id: "CHANGEME-project-id"                # must match metadata.project_id
+  name: "CHANGEME-display-name"             # ≤30 chars
+  billing_account: "012345-6789AB-CDEF01"
+  folder_id: "folders/9876543210"
+  parent: "folders/9876543210"              # folder or organization
+  services:
+    - compute.googleapis.com
+    - container.googleapis.com
+    - servicenetworking.googleapis.com
+  labels:                                   # optional
+    env: "prd"
+    region: "CHANGEME-region"
+
+network:
+  vpc_name: "CHANGEME-vpc-name"
+  vpc_cidr: "10.50.0.0/16"                  # RFC-1918
+  routing_mode: "REGIONAL"                  # REGIONAL | GLOBAL
+  subnets:
+    - name: "gke-nodes"
+      cidr: "10.50.0.0/20"
+      region: "CHANGEME-region"
+      purpose: "GKE"
+      private_google_access: true
+      secondary_ranges:
+        pods: "10.60.0.0/14"
+        services: "10.64.0.0/20"
+    - name: "proxy-only"
+      cidr: "10.50.32.0/28"
+      region: "CHANGEME-region"
+      purpose: "PSC_PROXY"
+  cloud_nat: true
+  cloud_router: "CHANGEME-router-name"
+  private_google_access: true
+
+gke:                                        # omit this whole block if no GKE
+  cluster_name: "CHANGEME-cluster-name"
+  region: "CHANGEME-region"
+  machine_type: "n2-standard-8"
+  min_nodes: 3
+  max_nodes: 10
+  enable_private_nodes: true
+  enable_private_endpoint: false
+  master_ipv4_cidr: "172.18.0.0/28"         # /28 outside subnets
+  pod_ipv4_cidr: "10.60.0.0/14"
+  service_ipv4_cidr: "10.64.0.0/20"
+  release_channel: "REGULAR"                # STABLE | REGULAR | RAPID
+  enable_workload_identity: true
+  maintenance_start_time: "2026-01-01T03:00:00Z"
+  labels:
+    env: "prd"
+
+services:                                   # omit if no in-cluster workloads
+  - name: "nginx-gateway"
+    type: "nginx"
+    namespace: "nginx"
+    replicas: 3
+    config:
+      upstream: "http://squid.squid.svc.cluster.local:3128"
+      image: "nginx:1.27"
+
+backend:
+  bucket: "terraform-state-CHANGEME-region-CHANGEME-env"
+  prefix: "gke/CHANGEME-region"
+
+addons:                                     # all optional
+  cert_manager:
+    domains:
+      - "example.com"
+  monitoring:
+    notification_channels:
+      - "projects/CHANGEME-project-id/notificationChannels/dev-team"

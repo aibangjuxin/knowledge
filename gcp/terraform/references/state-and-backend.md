@@ -10,9 +10,10 @@
 
 | 主题 | 硬规则 |
 |---|---|
-| Backend 块 | **只**在 `envs/<env>/<project>/backend.tf` 写,其他任何 .tf 都不许 |
+| Backend 块 | **只**在 `envs/<region>/<project>/backend.tf` 写,其他任何 .tf 都不许 |
 | State 文件 | **永远不**手编辑 / `terraform state pull/push` / 复制粘贴 |
 | Secret | **绝对不**进 git / `*.tfvars` / 注释 / 文档(就算 base64 也不行) |
+| State 加密 | **CMEK + 90 天轮换**(2025 GCP 推荐做法,见 §2.1) |
 
 违反任何一条 → 灾难。下面解释为什么 + 怎么做。
 
@@ -26,6 +27,22 @@
 # scripts/init-backend.sh
 PROJECT_TF_STATE="aibang-tfstate"   # 专门存 state 的 project(跟业务 project 分开)
 REGION="us-central1"
+KEYRING="tfstate-keyring"
+KEY="tfstate-key"
+
+# 1. 建 KMS keyring + key (CMEK for state bucket)
+gcloud kms keyrings create "$KEYRING" \
+    --project="$PROJECT_TF_STATE" --location="$REGION"
+gcloud kms keys create "$KEY" \
+    --project="$PROJECT_TF_STATE" --location="$REGION" \
+    --keyring="$KEYRING" --purpose=encryption \
+    --rotation-period=7776000s   # 90 天(terraform-example-foundation 默认)
+gcloud kms keys add-iam-policy-binding "$KEY" \
+    --project="$PROJECT_TF_STATE" --location="$REGION" \
+    --keyring="$KEYRING" \
+    --member="serviceAccount:service-${PROJECT_NUMBER}@gs-project-accounts.iam.gserviceaccount.com" \
+    --role="roles/cloudkms.cryptoKeyEncrypterDecrypter"
+
 BUCKETS=(
   "tfstate-dev-project-a"
   "tfstate-dev-project-b"
@@ -44,6 +61,10 @@ for BUCKET in "${BUCKETS[@]}"; do
   gsutil retention set default 30d "gs://${BUCKET}"
   # 强制 uniform bucket-level access(防止 accidental ACL)
   gsutil uniformbucketlevelaccess set on "gs://${BUCKET}"
+  # ★ CMEK 加密 — terraform-example-foundation 默认做法
+  gsutil kms encryption -k \
+      "projects/${PROJECT_TF_STATE}/locations/${REGION}/keyRings/${KEYRING}/cryptoKeys/${KEY}" \
+      "gs://${BUCKET}"
 done
 
 # 给 Terraform CI SA 写权限
@@ -57,16 +78,17 @@ done
 - **State bucket 单独 project** — 跟业务 project 分开,业务 project 删了 state 还在
 - **Versioning 必开** — state 损坏了能回滚
 - **Uniform bucket-level access** — 防止 IAM 错配
+- **CMEK + 90 天轮换** — 2025 GCP 推荐做法(`terraform-example-foundation` v6.x 默认)
 - **CI SA 授权** — 不能给"allUsers" / "allAuthenticatedUsers" 任何权限
 
 ### 2.2 在 env 里使用
 
 ```hcl
-# envs/dev/project-a/backend.tf
+# envs/<region>/<project>/backend.tf
 terraform {
   backend "gcs" {
-    bucket = "tfstate-dev-project-a"   # 跟 init-backend.sh 一致
-    prefix = "envs/dev/project-a"      # bucket 内的子路径
+    bucket = "tfstate-${var.env}-${var.project_id_short}-uscentral1"
+    prefix = "envs/${var.region}/${var.project_id_short}"
   }
 }
 ```
