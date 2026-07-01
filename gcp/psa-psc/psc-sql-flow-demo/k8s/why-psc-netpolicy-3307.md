@@ -276,4 +276,298 @@ kubectl get netpol -n <ns>
 
 - **3307 不是数据库端口，是 Auth Proxy 端口**。MySQL/PostgreSQL 的 Auth Proxy 都用 3307。
 - 所谓的"目的端改了工作模式"是个误判——**Cloud SQL 这一侧从来没有改过它的入站端口列表**，变的始终是 Consumer 端把连接方式从直连切换到了 Auth Proxy。
-- NetworkPolicy 在 Cloud SQL PSC 场景下的**最小公分母**就是 `5432/3306 + 6432（PG Managed Pooling） + 3307`。生产推荐直接照抄"全放"，省事且不会踩新应用迁移的坑。
+- **NetworkPolicy 在 Cloud SQL PSC 场景下的**最小公分母**就是 `5432/3306 + 6432（PG Managed Pooling） + 3307`。生产推荐直接照抄"全放"，省事且不会踩新应用迁移的坑。
+
+---
+
+## Java 代码层到底改了啥（IAM 直连 → Auth Proxy）
+
+上面是从"基础设施视角"看的（端口 / NetworkPolicy）。这一节从 **Java 应用代码**视角回答一个更落地的问题：**老应用（IAM Base 直连）和新应用（Auth Proxy）在 Java 里到底改了哪几行代码？**
+
+### 一句话总结
+
+> 老应用是 **JDBC 走 IAM 直连 Cloud SQL**（5432/3306），新应用是 **JDBC 走 localhost:5432 → Auth Proxy → PSC → Cloud SQL:3307**。**业务代码几乎不变，变的全是连接字符串、Credential Provider 和 Pod 部署形态。**
+
+### PostgreSQL JDBC 对照（最小代码差异）
+
+#### 老用户：IAM Base 直连（`5432`）
+
+```java
+// 老应用：IAM Base 直连 PSC 端点
+String jdbcUrl = "jdbc:postgresql://10.1.1.50:5432/mydb"
+    + "?sslmode=require"
+    + "&cloudSqlInstance=my-project:asia-east1:my-pg"
+    + "&enableIamAuth=true"
+    + "&socketTimeout=30";
+
+Properties props = new Properties();
+props.setProperty("user", "iam-user@app.iam.gserviceaccount.com");
+// 注意：没有 password 字段 — IAM Base 走 ADC（Application Default Credentials）
+
+try (Connection conn = DriverManager.getConnection(jdbcUrl, props)) {
+    // 业务代码不变
+    try (PreparedStatement ps = conn.prepareStatement("select 1")) {
+        ps.executeQuery();
+    }
+}
+```
+
+依赖（`pom.xml`）：
+
+```xml
+<!-- 老应用：标准 PostgreSQL JDBC -->
+<dependency>
+    <groupId>org.postgresql</groupId>
+    <artifactId>postgresql</artifactId>
+    <version>42.7.3</version>
+</dependency>
+```
+
+#### 新用户：Auth Proxy Sidecar（`localhost:5432`，但出站走 `3307`）
+
+```java
+// 新应用：连本地 Auth Proxy，DB_HOST 永远是 127.0.0.1
+String jdbcUrl = "jdbc:postgresql://127.0.0.1:5432/mydb"
+    + "?sslmode=disable";   // 注：到 Proxy 这段是明文，不需要 SSL
+
+Properties props = new Properties();
+props.setProperty("user", "my-app-user");     // 业务库用户，不再是 IAM principal
+props.setProperty("password", System.getenv("DB_PASSWORD"));  // 由 Secret 注入
+// 或者用 IAM principal（Auth Proxy 也支持传 instance-unix-socket 或 token，但更常见是直接用 DB 用户密码）
+
+try (Connection conn = DriverManager.getConnection(jdbcUrl, props)) {
+    // 业务代码完全不变 — 这就是关键卖点
+    try (PreparedStatement ps = conn.prepareStatement("select 1")) {
+        ps.executeQuery();
+    }
+}
+```
+
+依赖（`pom.xml`）**不变**：
+
+```xml
+<!-- 新应用：还是标准 PostgreSQL JDBC，没换驱动 -->
+<dependency>
+    <groupId>org.postgresql</groupId>
+    <artifactId>postgresql</artifactId>
+    <version>42.7.3</version>
+</dependency>
+```
+
+### 关键差异表（Java 视角）
+
+| 维度                | 老应用：IAM Base 直连                                  | 新应用：Auth Proxy Sidecar                          |
+| ------------------- | ------------------------------------------------------ | --------------------------------------------------- |
+| **JDBC URL**        | `jdbc:postgresql://<PSC-IP>:5432/...`                  | `jdbc:postgresql://127.0.0.1:5432/...`              |
+| **端口（应用视角）** | 5432                                                   | 5432（localhost）                                    |
+| **端口（Pod 出站）** | 5432                                                   | **3307**（Auth Proxy → PSC）                         |
+| **用户**            | `iam-user@app.iam.gserviceaccount.com`（IAM principal） | 真实 DB 用户，如 `my-app-user`                      |
+| **认证凭据**        | ADC / Workload Identity 自动注入                       | Secret 注入的密码，或由 Auth Proxy 用 IAM 自动续期  |
+| **SSL**             | `sslmode=require`（直接到 Cloud SQL）                  | `sslmode=disable`（到 Proxy 是内网明文，Proxy→DB 才加密）|
+| **驱动**            | 标准 `org.postgresql:postgresql`                       | 标准 `org.postgresql:postgresql`（**没换**）         |
+| **业务代码**        | —                                                     | **完全不变**                                        |
+| **Pod 多了一个 container** | ❌ 无                                                | ✅ `cloud-sql-auth-proxy` sidecar                  |
+| **Workload Identity** | 必须绑在应用 Pod 上                                  | 绑在 Auth Proxy sidecar 上（应用本身不需要）        |
+| **NetworkPolicy 出站** | 5432                                                 | **3307**                                            |
+
+### 真正改动的代码量
+
+从 Java 代码角度看，**真正改了 3 行 + 1 个 env 变量**：
+
+```diff
+- String host = "10.1.1.50";                  // 老：PSC IP
+- String port = "5432";                       // 老：直连端口
+- String user = "iam-user@app.iam.gserviceaccount.com";
+- String password = null;                     // 老：IAM Base，没密码
++ String host = "127.0.0.1";                  // 新：连本地 Proxy
++ String port = "5432";                       // 新：本地端口（业务看不变）
++ String user = "my-app-user";                // 新：业务库用户
++ String password = System.getenv("DB_PASSWORD");  // 新：从 Secret 注入
+
+// JDBC URL 拼接差异
+- String url = "jdbc:postgresql://" + host + ":" + port + "/mydb?sslmode=require&cloudSqlInstance=...&enableIamAuth=true";
++ String url = "jdbc:postgresql://" + host + ":" + port + "/mydb?sslmode=disable";
+```
+
+**其他改动都是部署形态，不在 Java 源码里：**
+
+- `Deployment.yaml` 多了一个 `cloud-sql-auth-proxy` sidecar container
+- `ServiceAccount.yaml` 多了一段 `iam.gke.io/gcp-service-account: proxy-sa@...iam.gserviceaccount.com` 注解（绑在 Auth Proxy 上）
+- `Secret` 里多了 `DB_PASSWORD`
+
+### MySQL 的情况（JPA / HikariCP 视角）
+
+如果你的栈是 Spring Boot + JPA + HikariCP，改动本质上一样，只是配置文件变了：
+
+```yaml
+# 老应用 application.yml — IAM Base 直连 MySQL PSC
+spring:
+  datasource:
+    url: jdbc:mysql://10.1.1.60:3306/mydb?sslMode=REQUIRED&cloudSqlInstance=my-project:asia-east1:my-mysql&enableIamAuth=true
+    username: iam-user@app.iam.gserviceaccount.com
+    password:           # 留空
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+
+# 新应用 application.yml — 走 Auth Proxy
+spring:
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/mydb?sslMode=DISABLED
+    username: my-app-user
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+```
+
+JPA Entity / Repository / Service / Controller **一行都不动**。
+
+### 为什么要这么改？——业务驱动力
+
+| 驱动力                              | 直连模式够用吗 | 走 Auth Proxy 收益                                 |
+| ----------------------------------- | -------------- | -------------------------------------------------- |
+| 一个集群几百个应用都要连同一个 Cloud SQL | 每个应用都要 Workload Identity + IAM 用户 | Auth Proxy **集中管连接池**，应用只需普通 DB 用户 |
+| 短连接 / 突发流量                   | HikariCP 反复 TLS 握手、IAM token 刷新 | Proxy **复用后端长连接**                           |
+| 需要在 Cloud Run / Cloud Build / 本地也连同一个 DB | IAM ADC 在 Cloud Run 上要费劲 | Proxy 统一 `INSTANCE_CONNECTION_NAME`，跨环境无差别 |
+| 安全合规要求"DB 密码统一轮换"       | IAM 没有密码，绕开需求 | Secret Manager → Proxy → DB，可以做**轮换生效**     |
+| 想开 Managed Connection Pooling     | 跟直连冲突   | Proxy 可以跟 PgBouncer 协同                          |
+
+如果你的新用户是被推动切到 Auth Proxy，**大概率是其中一个或多个原因**——而不是基础设施的强制要求。
+
+---
+
+## 验证脚本：到底连的是哪条路径？
+
+下面这段 shell 脚本可以挂在故障 Pod 上运行（或在本地用 `kubectl exec` 远程跑），用于**一次性确认应用当前走的是 IAM 直连还是 Auth Proxy**：
+
+```bash
+#!/usr/bin/env bash
+# verify-3307-iam-vs-proxy.sh
+# 在故障 Pod 所在的节点 / Pod 内运行
+# 用法: ./verify-3307-iam-vs-proxy.sh <namespace> <pod-name>
+
+set -euo pipefail
+
+NS="${1:-default}"
+POD="${2:?usage: $0 <namespace> <pod-name>}"
+
+echo "===================================================="
+echo "  3307 Connection Mode Diagnostic"
+echo "  Namespace: ${NS}"
+echo "  Pod:       ${POD}"
+echo "===================================================="
+
+echo ""
+echo "[1/5] Pod containers:"
+kubectl get pod "${POD}" -n "${NS}" \
+  -o jsonpath='{range .spec.containers[*]}{"  - "}{.name}{" (image="}{.image}{")\n"}{end}'
+
+echo ""
+echo "[2/5] Database-related env vars:"
+kubectl exec -n "${NS}" "${POD}" -- sh -c \
+  'env 2>/dev/null | grep -E "^(DB_|PG|MYSQL|INSTANCE_CONNECTION_NAME|GOOGLE_APPLICATION_CREDENTIALS|KSA_|GKE_METADATA_)" \
+    | sort' \
+  || echo "  (unable to read env — try with auth-proxy sidecar namespace)"
+
+echo ""
+echo "[3/5] Active TCP connections from the Pod (PostgreSQL/MySQL):"
+kubectl exec -n "${NS}" "${POD}" -- sh -c \
+  '(ss -tnp 2>/dev/null || netstat -tnp 2>/dev/null) \
+    | grep -E ":(3306|3307|5432|6432)" \
+    | head -20' \
+  || echo "  (ss/netstat not available in this image)"
+
+echo ""
+echo "[4/5] Detecting Auth Proxy presence:"
+HAS_PROXY=$(kubectl get pod "${POD}" -n "${NS}" \
+  -o jsonpath='{.spec.containers[*].name}' 2>/dev/null \
+  | grep -E "(cloud-sql-auth-proxy|cloudsql-proxy|auth-proxy)" || true)
+
+if [[ -n "${HAS_PROXY}" ]]; then
+  echo "  ✅ Auth Proxy sidecar detected: ${HAS_PROXY}"
+  echo "     → Connection path is: app → 127.0.0.1:5432 → proxy → PSC:3307 → Cloud SQL"
+  echo "     → NetworkPolicy MUST allow egress TCP/3307"
+else
+  echo "  ❌ No Auth Proxy sidecar in this Pod."
+  echo "     → If DB_HOST is PSC IP, connection is IAM Base direct (5432/3306)."
+  echo "     → If DB_HOST is 127.0.0.1, you are missing the sidecar — connection will fail."
+fi
+
+echo ""
+echo "[5/5] NetworkPolicy in this namespace:"
+kubectl get netpol -n "${NS}" \
+  -o custom-columns='NAME:.metadata.name,POD-SELECTOR:.spec.podSelector,EGRESS-PORTS:.spec.egress[*].to[*].ports[*].port' \
+  2>/dev/null || echo "  (no NetworkPolicy in namespace, or rbac denied)"
+
+echo ""
+echo "===================================================="
+echo "  Decision:"
+if [[ -n "${HAS_PROXY}" ]]; then
+  echo "    ✅ NetworkPolicy egress MUST include TCP/3307"
+else
+  echo "    ℹ️  NetworkPolicy egress only needs TCP/5432 (PG) or TCP/3306 (MySQL)"
+  echo "        unless other Pods in this namespace use Auth Proxy."
+fi
+echo "===================================================="
+```
+
+### 一行速查版（贴在故障排查群里）
+
+```bash
+# 一眼看出 Pod 走的什么模式
+POD=mypod; NS=myns
+echo "Containers: $(kubectl get pod $POD -n $NS -o jsonpath='{.spec.containers[*].name}')"
+echo "DB_HOST:    $(kubectl exec -n $NS $POD -- sh -c 'echo ${DB_HOST:-${PGHOST:-${MYSQL_HOST:-unset}}}')"
+echo "DB_PORT:    $(kubectl exec -n $NS $POD -- sh -c 'echo ${DB_PORT:-${PGPORT:-${MYSQL_PORT:-unset}}}')"
+echo "→ 如果 Containers 含 cloud-sql-auth-proxy + DB_HOST=127.0.0.1：走 Proxy，必须放 3307"
+echo "→ 如果 Containers 没有 proxy + DB_HOST=PSC IP：直连，只需放 5432/3306"
+```
+
+### Java 验证代码：跑一次就懂
+
+下面这段 Java 程序可以在 IDE / 容器里直接跑（前提是 `psql` / `mysql` client 装好），用来**直观看到 5432 vs 3307 出站端口的实际行为差异**：
+
+```java
+// VerifyPort3307.java
+// 编译: javac VerifyPort3307.java && java VerifyPort3307
+// 作用: 用 Socket 直连两种模式的 endpoint，把"出站用的是哪个端口"打印出来
+
+import java.io.*;
+import java.net.*;
+
+public class VerifyPort3307 {
+    public static void main(String[] args) throws Exception {
+        // 模拟两种场景
+        String[][] cases = {
+            // {label, host, port}
+            {"IAM 直连 PG (老)", System.getenv().getOrDefault("PSC_IP_PG", "10.1.1.50"), "5432"},
+            {"Auth Proxy PG (新)", "127.0.0.1", "5432"},     // 应用视角是 5432
+            // 真实出站的 3307 由 Auth Proxy 进程完成（不在 Java JVM 里）
+        };
+
+        for (String[] c : cases) {
+            String label = c[0], host = c[1], port = c[2];
+            System.out.println("\n=== " + label + " ===");
+            System.out.println("  target: " + host + ":" + port);
+            try (Socket s = new Socket()) {
+                s.connect(new InetSocketAddress(host, Integer.parseInt(port)), 3000);
+                System.out.println("  ✅ TCP connect OK — JVM 出站端口 = " + s.getLocalPort());
+                System.out.println("     → 这一步 IAM Base 直连就结束了 (5432)");
+                System.out.println("     → Auth Proxy 模式下 JVM 是到这里 (5432)");
+                System.out.println("     → 真正的 3307 出站发生在 Auth Proxy 进程，JVM 看不到");
+            } catch (Exception e) {
+                System.out.println("  ❌ " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            }
+        }
+
+        System.out.println("\n=== 关键结论 ===");
+        System.out.println("Java JVM 出站永远是 5432/3306（应用配置的端口）。");
+        System.out.println("Auth Proxy 进程才是出 3307 的那一跳。");
+        System.out.println("NetworkPolicy 看不到 JVM 内的连接，它看的是 Pod 内所有进程的出站——");
+        System.out.println("只要 Pod 内跑了 Auth Proxy，就必须在 Pod 级别放 3307。");
+    }
+}
+```
+
+> 真正能"证明 3307 出站"的方式不是 Java，而是 **Pod 内的 Auth Proxy 进程 + `ss -tnp`**。Java 只负责连 `127.0.0.1:5432`，它自己永远不出 3307。
