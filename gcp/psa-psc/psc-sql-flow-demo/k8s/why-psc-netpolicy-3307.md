@@ -128,9 +128,10 @@ egress:
 | 问题               | 答案                                                                                                              |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------- |
 | 为什么需要 3306？  | 直接连接和 Managed Connection Pooling 使用                                                                        |
-| 为什么需要 3307？  | Cloud SQL Auth Proxy 使用                                                                                         |
+| 为什么需要 3307？  | Cloud SQL Auth Proxy 使用（MySQL 和 PostgreSQL 通用，3307 是 Auth Proxy 专用端口，与底层 DB 类型无关）              |
 | 必须两个都允许吗？ | 取决于你的连接方式。如果只用 Auth Proxy，只需 3307；如果只用直接连接，只需 3306。但同时允许两者可以应对所有场景。 |
 | 禁止 3307 会怎样？ | 如果应用使用 Auth Proxy，连接会被 NetworkPolicy 拒绝                                                              |
+| 老用户能连、新用户不能连？ | 不是目的端（Cloud SQL）改了模式，是 Consumer 端从 IAM 直连（5432/3306）切换到了 Auth Proxy Sidecar（3307）。详见下文。 |
 
 ## PostgreSQL PSC 端口说明
 
@@ -200,3 +201,79 @@ egress:
 - [Cloud SQL Auth Proxy - PostgreSQL](https://cloud.google.com/sql/docs/postgres/sql-proxy)
 - [Managed Connection Pooling - MySQL](https://cloud.google.com/sql/docs/mysql/managed-connection-pooling)
 - [Managed Connection Pooling - PostgreSQL](https://cloud.google.com/sql/docs/postgres/managed-connection-pooling)
+
+---
+
+## 现象补遗：老用户能连、新用户必须开 3307
+
+> 这一节是文档已发布后，根据生产环境的真实踩坑补充的"现象解释"，对应一个非常常见的认知误区：**以为是目的端（Cloud SQL）改了配置或模式，其实是 Consumer 端的连接客户端模式发生了变化。**
+
+### 现象描述
+
+同一套 GKE 集群、同一套 NetworkPolicy、同一组 PSC Forwarding Rule，运维反馈：
+
+- **老用户/老应用**（以前一直能连）：从未放开过 3307，照样可以连接 PostgreSQL。
+- **新用户/新应用**（同样未放开 3307）：连接 PostgreSQL 失败，必须把 NetworkPolicy 的出站规则加上 3307 端口才能恢复。
+- **本地 GKE Pod 用 IAM Base 直连 PostgreSQL**（PostgreSQL PSC 直连方式）：以前没问题，现在不开 3307 也不行了。
+
+### 根因：不是目的端改了，是 Consumer 端连接模式变了
+
+Cloud SQL 这一侧（PSC Service Attachment 端）长期只接受三个端口的入站：PostgreSQL 是 `5432 / 6432 / 3307`。它不会"偷偷把入站端口改成 3307"。
+
+变化的来源在 **Consumer（Pod/客户端）一侧的连接方式**：
+
+| 维度              | 老用户 / 以前的工作模式                                              | 新用户 / 现在的故障模式                                          |
+| ----------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 连接客户端        | **Cloud SQL Connector（go-sql-driver/mysql、pgx 等原生驱动直连）**    | **Cloud SQL Auth Proxy**（Sidecar 或独立 Deployment）            |
+| 鉴权方式          | IAM Database Authentication（IAM Base）                              | IAM / OAuth Token（Auth Proxy 自己持有/refresh token）           |
+| Pod → PSC 出站端口 | **5432 / 3306**（原生协议）                                          | **3307**（Auth Proxy 固定使用 3307，不管底层是 MySQL 还是 PG）   |
+| NetworkPolicy 要求 | 允许 5432/3306                                                      | 必须允许 3307                                                    |
+| 连接链路示例       | `Pod → PSC EP(:5432) → SA → Cloud SQL`                              | `Pod → Auth Proxy(:5432 localhost) → PSC EP(:3307) → SA → Cloud SQL` |
+
+**所以本质上：老用户能连，是因为他们走的是直连路径，出站是 5432/3306；新用户不能连，是因为他们切到了 Auth Proxy，Auth Proxy 固定从 Pod 出 3307。NetworkPolicy 把 3307 拦了，于是新用户的 Pod 内的 Auth Proxy 就连不上 PSC 端点了。**
+
+### 为什么 IAM Base 直连（5432）现在也开始要求 3307？
+
+如果你的"老应用"以前确实是 IAM Base 直连 PostgreSQL（5432）并且一直可用，但现在它所在的命名空间把 NetworkPolicy 加严了，**并且这个命名空间里同时还有走 Auth Proxy 的新应用**：
+
+- 平台/安全策略往往会做"**最大覆盖原则**"：为了避免漏放，把同一个命名空间里所有已知 Cloud SQL 相关端口（5432 / 6432 / 3307）一起允许。
+- 反过来，如果你为了**收紧**而把 NetworkPolicy 改成"只放 5432，移除 3307"，那么这个命名空间里跑 Auth Proxy 的应用就会立即断。
+- 如果是**新建命名空间**并且沿用了旧模板（只放 5432），那么所有走 Auth Proxy 的新应用都会断。
+
+因此：
+- **直连 IAM Base 的应用，单独看仍然只需要 5432/3306**。
+- **但如果所在命名空间里有任何应用走 Auth Proxy，命名空间级别的 egress 必须放 3307**。
+- 现象上看到的"本地 GKE Pod IAM Base 直连以前可以、现在不开 3307 不行"，**往往是 NetworkPolicy 的范围（namespace/podSelector）已经覆盖了 Auth Proxy Pod**，而不是 IAM Base 直连本身需要 3307。
+
+### 排查方法（如何快速判断到底是哪条路径）
+
+在故障 Pod 上执行：
+
+```bash
+# 1. 看 Pod 里有没有 cloud-sql-auth-proxy 这个 container
+kubectl get pod <pod> -n <ns> -o jsonpath='{.spec.containers[*].name}'
+# 期望输出含 cloud-sql-auth-proxy 或类似的 Auth Proxy 容器名
+
+# 2. 看应用配置是连 localhost 还是直连 PSC IP
+kubectl exec <pod> -n <ns> -- env | grep -E '^(DB_|PG|MYSQL|INSTANCE_CONNECTION_NAME)'
+
+# 3. 看连接是走哪个端口
+kubectl exec <pod> -n <ns> -- sh -c "cat /etc/config/* 2>/dev/null; printenv | grep -i port"
+
+# 4. 看 Pod 当前的 NetworkPolicy 是否生效（谁拦了 3307）
+kubectl get netpol -n <ns>
+```
+
+判定矩阵：
+
+| 看到的现象                                                | 实际连接模式                          | 需要放行的端口                |
+| --------------------------------------------------------- | ------------------------------------- | ----------------------------- |
+| Pod 没有 Auth Proxy sidecar，DB_HOST 是 PSC IP            | IAM Base 直连                         | 5432（PostgreSQL）/ 3306（MySQL） |
+| Pod 里有 Auth Proxy sidecar，DB_HOST 是 localhost/127.0.0.1 | 走 Auth Proxy，再由 Proxy 出 3307    | **必须 3307**                 |
+| 命名空间里两种应用混部                                    | 两种模式共存                          | 5432 / 3306 / 3307 都放       |
+
+### 结论
+
+- **3307 不是数据库端口，是 Auth Proxy 端口**。MySQL/PostgreSQL 的 Auth Proxy 都用 3307。
+- 所谓的"目的端改了工作模式"是个误判——**Cloud SQL 这一侧从来没有改过它的入站端口列表**，变的始终是 Consumer 端把连接方式从直连切换到了 Auth Proxy。
+- NetworkPolicy 在 Cloud SQL PSC 场景下的**最小公分母**就是 `5432/3306 + 6432（PG Managed Pooling） + 3307`。生产推荐直接照抄"全放"，省事且不会踩新应用迁移的坑。
