@@ -571,3 +571,652 @@ public class VerifyPort3307 {
 ```
 
 > 真正能"证明 3307 出站"的方式不是 Java，而是 **Pod 内的 Auth Proxy 进程 + `ss -tnp`**。Java 只负责连 `127.0.0.1:5432`，它自己永远不出 3307。
+
+---
+
+## Sidecar 配置安全校验清单（cloud-sql-proxy 2.11.4）
+
+这一节针对一个非常常见的**生产反模式**——也是我们实际提供给老用户的模板里**真实存在**的问题：
+
+```yaml
+# 我们的旧模板（有缺陷）
+cloudSqlProxy:
+  image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.11.4
+  args:
+    - "--psc"
+    - "--structured-logs"
+    - "--auto-iam-authn"
+    - "--address=0.0.0.0"                       # ⚠️ 隐患 1：监听所有接口
+    - "--port=[DB_PORT1]"                       # ⚠️ 隐患 2：模板里 --port 写了两次
+    - "[INSTANCE_PROJECT:REGION:SQL_INSTANCE_NAME]"
+    - "--port=[DB_PORT2]"                       # （cloud-sql-proxy 不支持这种语法）
+    - "[INSTANCE_PROJECT:REGION:SQL_INSTANCE_NAME]"
+```
+
+老用户替换占位符后的**实际配置**：
+
+```yaml
+cloudSqlProxy:
+  image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.11.4
+  args:
+    - "--psc"
+    - "--structured-logs"
+    - "--auto-iam-authn"
+    - "--address=0.0.0.0"
+    - "--port=5432"                             # PostgreSQL 原生端口
+    - "my-project:asia-east1:my-pg"
+    - "--port=5433"                             # 第二个端口
+    - "my-project:asia-east1:my-pg2"
+```
+
+**这一节会逐项校验每个 flag，给出反推出来的"为什么老用户能连、新用户不能连"根因，并给出统一走 3307 的新模板。**
+
+### 1. 模板的 4 个具体隐患
+
+#### 隐患 1：`--port` 出现两次是非法用法
+
+根据 [cloud-sql-proxy 官方 README](https://github.com/GoogleCloudPlatform/cloud-sql-proxy#configuring-port)：
+
+> *"When specifying multiple instances, the **port will increment from the flag value**."*
+
+也就是说 cloud-sql-proxy **只承认第一个 `--port`**，多 instance 时后续 instance 端口 = `--port + 1`、`--port + 2`...
+
+```bash
+# 官方示例：--port 5432 + 2 个 instance → 5432 / 5433
+cloud-sql-proxy --port 5432 instance-a instance-b
+# 等价于
+cloud-sql-proxy instance-a?port=5432 instance-b?port=5433
+```
+
+**所以你那个模板里写两次 `--port` 的行为是未定义的**——取决于 cloud-sql-proxy 版本，可能（a）只认第一个，5433 完全无效；（b）启动报错；（c）以不可预测方式工作。无论哪种，**模板本身就不该这么写**。
+
+正确写法是 **`?port=` query param**（每 instance 独立配置端口）：
+
+```yaml
+args:
+  - "--psc"
+  - "--structured-logs"
+  - "--auto-iam-authn"
+  - "--address=127.0.0.1"
+  - "my-project:asia-east1:my-pg?port=5432"      # ✅ 用 ?port= 指定
+  - "my-project:asia-east1:my-pg2?port=5433"     # ✅ 而不是 --port 写两次
+```
+
+#### 隐患 2：`--address=0.0.0.0` 在 Sidecar 模式下不必要且不安全
+
+详见上文（"同 Pod 多容器扩展性"那一段）。Sidecar 模式下应用只需 `127.0.0.1`，`0.0.0.0` 等于把 DB 入口暴露给 Pod 内所有进程。
+
+#### 隐患 3（隐藏的最严重一条）：模板让 proxy 监听在**数据库原生端口**，绕过了 3307 约定
+
+这是**老用户能连、新用户不能连的真正根因**。
+
+老用户的 proxy 配置：`--port=5432` + `--port=5433`，**监听的是 PostgreSQL 原生端口**。这意味着：
+
+```
+老用户：
+  app (java) → 127.0.0.1:5432 → proxy (Pod 内 5432) → Cloud SQL PG 原生协议
+  
+新用户（官方推荐）：
+  app (java) → 127.0.0.1:3307 → proxy (Pod 内 3307) → Cloud SQL
+```
+
+**对 NetworkPolicy 来说：**
+- 老应用的 Pod 出站端口 = **5432**（app → proxy）→ NetworkPolicy 只需放 5432
+- 新应用的 Pod 出站端口 = **3307**（app → proxy）→ NetworkPolicy 必须放 3307
+
+如果同一 NS 里两种模式混部，运维按"老规则"只放 5432，新应用就立刻断。
+
+**这就是你说的"老用户能连、新用户不能连"——不是 Cloud SQL 改了模式，不是 NetworkPolicy 改严了，而是老模板让 proxy 模拟了"原生数据库端口"，绕过了行业统一的 3307 约定。** 模板的不一致是表象，**端口选择的不一致**才是根因。
+
+#### 隐患 4：`--auto-iam-authn` 配 `--port=5432` 在语义上是错位
+
+`--auto-iam-authn` 的设计目的是让 proxy **代表应用去换取 IAM token**，替代用户密码。这一行为**与监听端口无关**，但**和"对外暴露的协议"强相关**：
+
+- proxy 监听在 `3307` → 这是 Cloud SQL Auth Proxy 标准端口，对外是 **Cloud SQL Auth Proxy 协议**（本质是 PostgreSQL 原生协议 + TLS 包装 + IAM 鉴权握手）。
+- proxy 监听在 `5432` → 对外是 **PostgreSQL 原生协议**，客户端用 `psql` / `pgx` 直连，proxy 在背后"假装成 PostgreSQL 服务器"，把 IAM token 注入到 startup packet 里。
+
+**这两种模式都能工作**，但：
+1. 3307 模式是 Cloud SQL 团队**官方推荐**路径，文档、SLA、故障排查路径都围绕它设计。
+2. 5432 模式让应用代码"看起来跟直连一模一样"——但底层其实是 proxy 在做 IAM 注入，对**应用透明**。
+
+你的老模板选择了"5432 透明模式"，**短期内业务代码改动最少**；但**长期让团队失去了"通过端口判断连接模式"这一诊断信号**——NS 里所有 Pod 出站都是 5432，运维永远不知道 proxy 在不在 Pod 里，直到出故障。
+
+### 2. 反推：老用户能连、新用户不能连的完整因果链
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 老用户 (旧模板生成的 Pod)                                        │
+│  app --(5432)--> proxy(127.0.0.1:5432) --(3307)--> PSC --(5432)--> Cloud SQL PG│
+│                                       ▲                                  │
+│                                       │                                  │
+│                              Pod 内端口 (5432)                           │
+│                              Pod 出站 (5432)                            │
+│                              → NetworkPolicy 放 5432 ✅                  │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ 新用户 (官方推荐 3307 模式 Pod)                                  │
+│  app --(3307)--> proxy(127.0.0.1:3307) --(3307)--> PSC --(5432)--> Cloud SQL PG│
+│                                       ▲                                  │
+│                              Pod 内端口 (3307)                           │
+│                              Pod 出站 (3307)                            │
+│                              → NetworkPolicy 必须放 3307 ❌ 如果只放 5432 则断 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+| 维度              | 老用户 (旧模板 5432)         | 新用户 (官方 3307)            |
+| ----------------- | ---------------------------- | ----------------------------- |
+| Pod 内 app→proxy  | 5432                         | 3307                          |
+| Pod 出站 (NetworkPolicy 看的) | 5432                | **3307**                      |
+| proxy→PSC         | 3307                         | 3307                          |
+| 业务代码差异       | JDBC URL = 5432              | JDBC URL = 3307              |
+| 监听地址           | `0.0.0.0:5432` (旧模板)      | `127.0.0.1:3307` (新模板)    |
+| 多 instance 端口配置 | `--port` 写两次 (非法)     | `?port=` query param (合法)  |
+
+**现象总结**：
+1. 旧模板让所有老应用**统一走 5432** → NetworkPolicy 永远只需 5432 → 团队形成"Cloud SQL = 5432"的肌肉记忆。
+2. 新应用按官方走 3307 → 出站端口变成 3307 → 老 NetworkPolicy 模板漏掉 → 新应用断。
+3. 运维的第一反应是"NetworkPolicy 是不是改严了 / Cloud SQL 是不是改了模式"——**真正的根因是模板让老应用绕过了 3307 约定**。
+
+### 3. 你的 4 个具体问题的回答
+
+#### Q1：模板这样写是不是就不对？
+
+**是的，三层都不对：**
+
+| 层级 | 问题 |
+|------|------|
+| 语法 | `--port` 写两次是 cloud-sql-proxy 不支持的语法，应改用 `?port=` query param |
+| 监听 | `--address=0.0.0.0` 在 Sidecar 模式下不必要且不安全 |
+| 架构 | **让 proxy 监听在 5432 这种"原生端口"上，绕过了 3307 这个统一约定**，导致团队无法用端口判断连接模式 |
+
+#### Q2：如果要使用 3307 端口，模板应该怎么定义？
+
+新模板：
+
+```yaml
+cloudSqlProxy:
+  image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.11.4
+  args:
+    - "--psc"
+    - "--structured-logs"
+    - "--auto-iam-authn"
+    - "--address=127.0.0.1"            # ✅ Sidecar 模式必备
+    - "--port=3307"                     # ✅ 唯一端口（多 instance 自动 +1，不推荐生产用多 instance）
+    - "my-project:asia-east1:my-pg"     # ✅ 只连一个 instance
+    # 如果确实需要多 instance：
+    # - "my-project:asia-east1:my-pg?port=3307"
+    # - "my-project:asia-east1:my-pg2?port=3308"   # 第二个端口 = 3307+1
+```
+
+**单一 instance 优先**——一个 sidecar 只连一个 Cloud SQL 实例。如果要连多个，**应该用多个 sidecar 容器**而不是一个 sidecar 监听多个端口。
+
+#### Q3：用户代码/部署模式应该怎么改才能走 3307？
+
+**Java 业务代码侧**（最小改动）：
+
+```yaml
+# 老：5432 直连老 proxy
+env:
+  - name: DB_HOST
+    value: "127.0.0.1"
+  - name: DB_PORT
+    value: "5432"
+```
+
+```yaml
+# 新：3307 走 Auth Proxy
+env:
+  - name: DB_HOST
+    value: "127.0.0.1"
+  - name: DB_PORT
+    value: "3307"           # ← 改这一行
+  # 其他 (DB_USER / DB_PASSWORD / SSL 模式) 跟之前一样
+```
+
+**NetworkPolicy 侧**（统一放行规则）：
+
+```yaml
+egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 3307            # 必须放：Auth Proxy → PSC
+      # 如果还有非 proxy 直连的旧应用，再加 5432
+      # - protocol: TCP
+      #   port: 5432
+```
+
+**强烈建议**：**所有应用统一走 3307**，老应用也把 DB_PORT 改成 3307。这样 NetworkPolicy 只需要一套规则，不再有"5432 vs 3307"的混乱。
+
+#### Q4：3307 + 127.0.0.1 是否更安全 + 解决了问题？
+
+**是的，三个层面的安全收益：**
+
+| 收益维度          | 5432 + 0.0.0.0 (旧)        | 3307 + 127.0.0.1 (新)       |
+| ----------------- | -------------------------- | --------------------------- |
+| **Pod 内暴露面**  | Pod 内任意进程可访问 5432  | 仅 loopback，业务容器独占   |
+| **多容器隔离**    | 同 Pod 其他 sidecar 可访问 | 同 Pod 其他 sidecar 不可访问 |
+| **运维可观测性**  | 端口看不出有 proxy 在运行 | 端口 = "我用的是 Auth Proxy" |
+| **NetworkPolicy 统一性** | 每个 NS 配置可能不同 | 全公司统一一条 egress 3307 |
+| **故障排查信号**  | 5432 是 PostgreSQL 还是 proxy？傻傻分不清 | 3307 = 一眼判断是 Auth Proxy |
+
+**结论：是的，把 proxy 监听在 `127.0.0.1:3307` 一次性解决了三个问题：**
+
+1. **Pod 内 DB 入口最小暴露**（loopback only）
+2. **统一 NetworkPolicy 规则**（所有 NS 一条 egress 3307）
+3. **运维诊断信号统一**（3307 = 一定有 Auth Proxy）
+
+### 4. 推荐行动清单（按优先级）
+
+1. **【紧急】** 新模板立即改成 `127.0.0.1:3307`，禁止使用 `--port` 写两次的语法
+2. **【高优】** NetworkPolicy 模板统一加 `egress TCP/3307`（无论 NS 里是否有 Auth Proxy，统一放行）
+3. **【中优】** 老应用灰度把 `DB_PORT` 从 5432/5433 改成 3307，让所有走 proxy 的应用统一端口
+4. **【中优】** 启用 `?port=` query param 替代 `--port`，让多 instance 配置显式且可读
+5. **【低优】** 补齐 Security Context + Resource Limit + Liveness/Readiness Probe（见下文模板）
+
+### 5. 完整生产模板（修正版：3307 + 127.0.0.1 + 单 instance）
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  namespace: app-ns
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      serviceAccountName: app-sa
+      containers:
+        - name: app
+          image: my-app:1.2.3
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_HOST
+              value: "127.0.0.1"
+            - name: DB_PORT
+              value: "3307"                          # ✅ 统一 Auth Proxy 端口
+            - name: DB_USER
+              value: "my-app-user@app.iam.gserviceaccount.com"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits:   {cpu: 1000m, memory: 1Gi}
+
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.11.4
+          args:
+            - "--psc"
+            - "--structured-logs"
+            - "--auto-iam-authn"
+            - "--address=127.0.0.1"                  # ✅ Sidecar 模式：loopback only
+            - "--port=3307"                          # ✅ 统一 Auth Proxy 端口
+            - "my-project:asia-east1:my-pg"          # ✅ 单 instance
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1337
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits:   {cpu: 200m, memory: 256Mi}
+          livenessProbe:
+            tcpSocket: {port: 3307}
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            tcpSocket: {port: 3307}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-sa
+  namespace: app-ns
+  annotations:
+    iam.gke.io/gcp-service-account: app-gsa@my-project.iam.gserviceaccount.com
+```
+
+### 6. 旧模板 vs 新模板 对照速查表
+
+| 项目                  | 旧模板（淘汰）                          | 新模板（推荐）                        |
+| --------------------- | --------------------------------------- | ------------------------------------- |
+| `--address`           | `0.0.0.0`                               | **`127.0.0.1`**                       |
+| `--port`              | 写两次（非法）                          | **写一次** + 多 instance 用 `?port=`  |
+| 监听端口              | 5432 / 5433（PostgreSQL 原生）           | **3307**（Auth Proxy）                |
+| 多 instance           | 不支持                                  | `instance?port=N` 显式                |
+| app JDBC URL          | `5432`                                  | **`3307`**                            |
+| 业务代码改动          | —                                       | 改 `DB_PORT=3307`                     |
+| NetworkPolicy 统一性  | 每 NS 不同                              | **全公司统一 egress 3307**            |
+| Pod 内安全            | 任意进程可访问 5432                     | **loopback only**                     |
+| 运维诊断信号          | "5432 是不是有 proxy？" 模糊            | **"3307 = 一定有 proxy" 明确**        |
+| 老用户能连、新用户不能连？ | ✅ 旧模板下都能连                  | ✅ 新模板下都能连（且端口一致）        |
+
+### 7. 一句话结论
+
+> 旧模板的真正问题不是"配置不优雅"，而是**让 proxy 监听在 PostgreSQL 原生端口 (5432/5433) 上**，**绕过了 Cloud SQL Auth Proxy 的统一端口约定 3307**。这导致：
+>
+> 1. 老应用的 Pod 出站端口 = 5432，NetworkPolicy 只需要放 5432
+> 2. 新应用按官方走 3307，Pod 出站端口 = 3307，NetworkPolicy 必须放 3307
+> 3. 同一 NS 混部时，**两种端口规则互相打架**，新应用断连
+>
+> **解决方式不是"放行更多端口"，而是"统一端口"**：所有应用 + 所有模板都改用 `127.0.0.1:3307`，NetworkPolicy 全公司只放一条 egress 3307，问题一次性消失。
+
+---
+
+## 附：原 Sidecar 配置校验清单（保留作历史对照）
+
+> 上一节完整重写后，下面这一段是**第一次追加时的初版校验清单**，保留作为历史对照，方便你 diff 看迭代轨迹。如果不需要可以删掉。
+
+### 1. 逐项 Flag 评估（初版）
+
+```yaml
+cloudSqlProxy:
+  image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.11.4
+  args:
+    - "--psc"                      # PSC 模式（不是 Service Attachment / Private IP）
+    - "--structured-logs"
+    - "--auto-iam-authn"           # 用 IAM token 鉴权
+    - "--address=0.0.0.0"          # ⚠️ 监听所有接口
+    - "--port=3307"
+    - "my-project:asia-east1:my-pg"
+```
+
+**这一节会逐项校验每个 flag，并给出一个生产可用的"安全模板"。**
+
+### 1. 逐项 Flag 评估
+
+| Flag | 你的值 | 评估 | 说明 |
+|------|--------|------|------|
+| `--psc` | ✅ 启用 | **正确** | PSC 模式下，proxy 必须通过 Service Attachment / Endpoint IP 连 Cloud SQL，不能用 Private IP。这跟本文档主场景一致。 |
+| `--structured-logs` | ✅ 启用 | **推荐** | 输出 JSON 结构化日志，方便 Cloud Logging / Loki 解析。生产必开。 |
+| `--auto-iam-authn` | ✅ 启用 | **正确**（前提条件见下） | 让 proxy 自动用 ADC token 鉴权 DB 用户。但**生效前提**：GKE Pod 必须有 Workload Identity，KSA 绑了 `roles/cloudsql.client` 的 GSA。 |
+| `--address=0.0.0.0` | ⚠️ **不建议** | **风险** | 监听 Pod 内所有网络接口。Sidecar 模式下，**改成 `127.0.0.1`（默认）更安全**。`0.0.0.0` 会让 Pod 内其他非应用进程也能访问 DB 代理端口，违反最小权限。 |
+| `--port=3307` | ✅ 启用 | **正确** | Auth Proxy 端口 3307。**注意**：这跟 `--address` 是配套的，监听在 `0.0.0.0:3307` 还是 `127.0.0.1:3307`，本质不同。 |
+| instance 连接名 | ✅ 正确 | **正确** | `project:region:instance` 三段式。 |
+| `--private-ip` | ❌ 没加 | **正确（不要加）** | 你走的是 PSC，加 `--private-ip` 会让 proxy 尝试走 Private IP 路径，跟 PSC 冲突。 |
+
+### 2. ⚠️ 关键风险：`--address=0.0.0.0` 在 Sidecar 模式下
+
+这是这一节**最重要的一行**，值得单独展开：
+
+**Sidecar 模式下，`--address=0.0.0.0` 是不安全的默认。**
+
+为什么？
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ Pod                                                       │
+│                                                            │
+│   ┌────────────────┐         ┌──────────────────────┐    │
+│   │  app (java)    │         │ cloud-sql-proxy      │    │
+│   │  connects to   │────────▶│ listens on:          │    │
+│   │  127.0.0.1:3307│         │  ❌ 0.0.0.0:3307     │    │
+│   └────────────────┘         └──────────────────────┘    │
+│                                          ▲                 │
+│                                          │                 │
+│                              ┌───────────┴──────────┐     │
+│                              │ 任意同 Pod 进程     │     │
+│                              │ (调试 sidecar、     │     │
+│                              │  exec 进去的 shell) │     │
+│                              │ 都能访问 3307        │     │
+│                              └──────────────────────┘     │
+└──────────────────────────────────────────────────────────┘
+```
+
+具体风险：
+
+1. **Pod 内横向移动**：如果攻击者通过 RCE、SSRF、`kubectl exec` 权限失陷等手段进入 Pod 内任意一个进程（包括 sidecar、init container、未来加入的调试容器），都能直接访问 DB 代理端口，绕过应用层认证。
+2. **同 Pod 多容器扩展性问题**：今天你"每个 Deployment 自带 sidecar"，未来如果有运维 Pod（debugger / network-tooling）跟应用 Pod 同 Pod，`0.0.0.0` 会暴露 DB 入口给这些非业务容器。
+3. **违背最小权限原则**：Sidecar 模式的整个设计假设就是"应用 ↔ 本地 proxy"，地址应严格限制在 loopback。
+
+**正确做法**：
+
+```yaml
+- "--address=127.0.0.1"   # ✅ Sidecar 模式下：只允许 loopback 访问
+```
+
+> **什么时候 `0.0.0.0` 是合理的？**
+> 当 proxy 跑在**独立 Deployment / DaemonSet** 里，被同 NS 内多个 Pod **共享**时（"共享 proxy"模式）。这种情况下同 NS 的 Pod 通过 ClusterIP / DNS 访问 proxy 服务，必须监听非 loopback 地址。
+>
+> 但你已经确认"每个 Deployment 自带 sidecar"——所以这条不适用于你。**`127.0.0.1` 才是正确选择。**
+
+### 3. 其他安全检查项
+
+#### 3.1 Workload Identity 是否真的配了？
+
+`--auto-iam-authn` 不会自己工作，必须满足：
+
+```yaml
+# ServiceAccount 上必须有这个 annotation
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-sa
+  annotations:
+    iam.gke.io/gcp-service-account: app-gsa@my-project.iam.gserviceaccount.com
+---
+# GSA 必须有 Cloud SQL Client 角色
+# gcloud projects add-iam-policy-binding my-project \
+#   --member="serviceAccount:app-gsa@my-project.iam.gserviceaccount.com" \
+#   --role="roles/cloudsql.client"
+```
+
+> 既然走的是 `--auto-iam-authn`，DB 用户应该是 IAM 用户（不是密码用户）。验证方法：`gcloud sql users list --instance=my-pg`，应该能看到一个 IAM 类型的服务账号用户。
+
+#### 3.2 Pod 安全上下文（Security Context）
+
+sidecar 容器本身需要最小权限运行：
+
+```yaml
+securityContext:
+  runAsNonRoot: true              # 必须：cloud-sql-proxy 默认 UID 1337
+  runAsUser: 1337                 # 镜像内置非 root 用户
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true    # proxy 是 stateless，可开启
+  capabilities:
+    drop: ["ALL"]
+  seccompProfile:
+    type: RuntimeDefault
+```
+
+**缺失这一段，Pod 可能被 trivially 提权**——这跟 proxy 监听地址无关，但属于同一份"sidecar 配置审计"。
+
+#### 3.3 Resource Limit
+
+cloud-sql-proxy 自身很轻量，但**必须设 limit**，否则在节点压力下会被 OOM kill 而不会重启：
+
+```yaml
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+  cpu: 200m
+  memory: 256Mi
+```
+
+#### 3.4 Liveness / Readiness Probe
+
+proxy 是 stateless 的，可以加：
+
+```yaml
+livenessProbe:
+  tcpSocket:
+    port: 3307
+  initialDelaySeconds: 10
+  periodSeconds: 30
+readinessProbe:
+  tcpSocket:
+    port: 3307
+  initialDelaySeconds: 5
+  periodSeconds: 10
+```
+
+否则 proxy 进程挂了不会自动重启（除非 `restartPolicy: Always` 配合 K8s 自动重启整个 Pod，但 TCP probe 更精准）。
+
+### 4. 完整生产模板（可直接复用）
+
+把上面所有检查点合并，给一份"开箱即用"模板：
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+  namespace: app-ns
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      serviceAccountName: app-sa                    # ← 必须有 WI 注解
+      containers:
+        # ─── 应用容器 ───
+        - name: app
+          image: my-app:1.2.3
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_HOST
+              value: "127.0.0.1"                   # ← 永远连本地 proxy
+            - name: DB_PORT
+              value: "3307"
+            - name: DB_USER
+              value: "my-app-user@app.iam.gserviceaccount.com"  # IAM 用户
+            # 注意：没有 DB_PASSWORD，--auto-iam-authn 自动注入 token
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+
+        # ─── cloud-sql-proxy sidecar ───
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.11.4
+          args:
+            - "--psc"                                # PSC 模式
+            - "--structured-logs"                    # JSON 日志
+            - "--auto-iam-authn"                     # IAM 鉴权
+            - "--address=127.0.0.1"                  # ✅ 只监听 loopback
+            - "--port=3307"                          # Auth Proxy 端口
+            - "--max-sessions=200"                   # 可选：限并发
+            - "--max-conn-age=30m"                   # 可选：定期重连
+            - "my-project:asia-east1:my-pg"          # instance 连接名
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1337                          # proxy 镜像内置 UID
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          livenessProbe:
+            tcpSocket:
+              port: 3307
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            tcpSocket:
+              port: 3307
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-sa
+  namespace: app-ns
+  annotations:
+    iam.gke.io/gcp-service-account: app-gsa@my-project.iam.gserviceaccount.com
+```
+
+### 5. 同 NS 内 Pod 间互访的风险评估
+
+你提到了 **"API 之间同一个 NS 下面的 Pod 侦听方式"**——这其实是你提的另一个独立问题：**当 Proxy 监听在 `0.0.0.0` 时，同 NS 内其他 Pod 能不能访问这个 Proxy？**
+
+简短答案：**默认不能**，但有边界条件：
+
+```
+Pod A (app + proxy @ 0.0.0.0:3307)  ← 同 NS 的 Pod B 能否访问？
+                                       │
+                                       ▼
+                            Pod B → Pod A IP:3307
+                                       │
+                                       ▼
+                              通常 ❌ 被 NetworkPolicy 拦
+```
+
+默认情况下：
+- **同一 Pod 内容器共享 network namespace**（loopback 可达，Pod IP 也可达）。所以 `0.0.0.0` 让**同 Pod 的其他容器**也能访问。
+- **同 NS 但不同 Pod**：通过 Pod IP 访问，需要 NetworkPolicy 允许 + 没有 NetworkPolicy 时默认允许。
+- **不同 NS**：需要 NetworkPolicy + NetworkPolicy 默认拒绝才拦得住。
+
+**因此**：
+
+| 部署形态                                | `0.0.0.0` 是否安全 | 理由 |
+| --------------------------------------- | ------------------- | ---- |
+| Sidecar（每 Pod 一个 proxy），默认       | ❌ 不安全           | 同 Pod 其他容器 + 调试进程可访问 |
+| 独立 Deployment proxy，被多个应用共享   | ✅ 可以             | 这就是设计意图 |
+| DaemonSet proxy，节点级共享             | ⚠️ 需配合 NetworkPolicy 严格限制 | 监听 `0.0.0.0` 是必要的，但要靠 NP 控制谁可以访问 |
+
+**对你的场景（每个 Deployment 自带 sidecar）**：必须用 `127.0.0.1`，别用 `0.0.0.0`。
+
+### 6. 速查决策表
+
+| 配置项 | Sidecar 模式（你） | 共享 Proxy 模式 | DaemonSet 模式 |
+|--------|--------------------|----------------|----------------|
+| `--address` | **`127.0.0.1`** ✅ | `0.0.0.0` | `0.0.0.0` |
+| `--port` | `3307` | `3307` 或自定义 | `3307` |
+| NetworkPolicy egress | 必须放 3307 | 必须放 3307 | 必须放 3307 |
+| NetworkPolicy ingress | 通常不需要 | 必须限制来源 Pod | 必须限制来源 Pod |
+| Workload Identity | 必备 | 必备 | 必备 |
+| Security Context | 必须有 | 必须有 | 必须有 |
+| Resource Limit | 必须有 | 必须有 | 必须有 |
+
+### 7. 一句话结论
+
+> 你贴的配置里 `--psc / --structured-logs / --auto-iam-authn / --port=3307` 这四项**都是正确的**，**唯一需要修改的就是 `--address=0.0.0.0` 改成 `--address=127.0.0.1`**，因为你的部署形态是 Sidecar（每个 Deployment 自带 proxy），不是共享 Proxy。
+>
+> 另外强烈建议补齐 **Security Context + Resource Limit + Liveness/Readiness Probe** 三件套——否则即使监听地址对了，Pod 仍可能在被入侵时缺乏纵深防御。
