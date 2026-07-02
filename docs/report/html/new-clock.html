@@ -1,0 +1,2028 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>团队时区时钟</title>
+    <link rel="icon" href="https://vectorcraftr.com/library/blink/Young%20woman%20with%20headphones.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+      /* ============================================================
+         Design tokens — modern minimal, Notion/Linear/Vercel adjacent
+         Light is the default; .dark-mode toggles the alternate set.
+         ============================================================ */
+      :root {
+        --bg: #fafafa;
+        --bg-elevated: #ffffff;
+        --bg-subtle: #f4f4f5;
+        --bg-overlay: rgba(255, 255, 255, 0.8);
+        --border: #e4e4e7;
+        --border-strong: #d4d4d8;
+
+        --text-primary: #18181b;
+        --text-secondary: #52525b;
+        --text-muted: #a1a1aa;
+        --text-inverse: #fafafa;
+
+        --accent: #18181b;
+        --accent-hover: #27272a;
+        --accent-text: #fafafa;
+        --focus-ring: rgba(24, 24, 27, 0.12);
+
+        --status-working: #16a34a;
+        --status-working-bg: #dcfce7;
+        --status-off: #dc2626;
+        --status-off-bg: #fee2e2;
+        --status-current: #ea580c;
+        --status-current-bg: #ffedd5;
+
+        --radius-sm: 6px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+        --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+        --shadow-lg: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+
+        --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        --font-mono: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+
+        --transition: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      .dark-mode {
+        --bg: #0a0a0a;
+        --bg-elevated: #111113;
+        --bg-subtle: #18181b;
+        --bg-overlay: rgba(17, 17, 19, 0.85);
+        --border: #27272a;
+        --border-strong: #3f3f46;
+
+        --text-primary: #fafafa;
+        --text-secondary: #a1a1aa;
+        --text-muted: #71717a;
+        --text-inverse: #0a0a0a;
+
+        --accent: #fafafa;
+        --accent-hover: #e4e4e7;
+        --accent-text: #0a0a0a;
+        --focus-ring: rgba(250, 250, 250, 0.18);
+
+        --status-working: #4ade80;
+        --status-working-bg: rgba(74, 222, 128, 0.12);
+        --status-off: #f87171;
+        --status-off-bg: rgba(248, 113, 113, 0.12);
+        --status-current: #fb923c;
+        --status-current-bg: rgba(251, 146, 60, 0.12);
+
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+        --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+        --shadow-lg: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      html { font-size: 16px; }
+
+      body {
+        font-family: var(--font-sans);
+        background: var(--bg);
+        color: var(--text-primary);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 32px 24px 96px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        transition: background-color var(--transition), color var(--transition);
+      }
+
+      /* Skip-link for keyboard users */
+      .skip-link {
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        background: var(--accent);
+        color: var(--accent-text);
+        padding: 8px 12px;
+        border-radius: var(--radius-sm);
+        z-index: 100;
+      }
+      .skip-link:focus { left: 16px; top: 16px; }
+
+      /* ============================================================
+         Layout shell
+         ============================================================ */
+      .page {
+        width: 100%;
+        max-width: 1280px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
+      /* ============================================================
+         Header
+         ============================================================ */
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        flex-wrap: wrap;
+      }
+      .header-titles h1 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--text-primary);
+        margin-bottom: 4px;
+      }
+      .header-titles p {
+        font-size: 0.9375rem;
+        color: var(--text-secondary);
+      }
+
+      /* ============================================================
+         Theme toggle — top right pill
+         ============================================================ */
+      .theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        background: var(--bg-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        font-family: inherit;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all var(--transition);
+        box-shadow: var(--shadow-sm);
+      }
+      .theme-toggle:hover {
+        background: var(--bg-subtle);
+        border-color: var(--border-strong);
+      }
+      .theme-toggle:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .theme-toggle i { font-size: 0.875rem; }
+
+      /* ============================================================
+         Search
+         ============================================================ */
+      .search-container {
+        position: relative;
+        width: 100%;
+      }
+      .search-box {
+        width: 100%;
+        padding: 12px 16px 12px 44px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-family: inherit;
+        font-size: 0.9375rem;
+        transition: all var(--transition);
+        box-shadow: var(--shadow-sm);
+      }
+      .search-box::placeholder { color: var(--text-muted); }
+      .search-box:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 4px var(--focus-ring);
+      }
+      .search-container > i {
+        position: absolute;
+        left: 16px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        font-size: 0.875rem;
+        pointer-events: none;
+      }
+
+      /* ============================================================
+         Stats bar
+         ============================================================ */
+      .stats-bar {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        background: var(--border);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+      }
+      .stat-item {
+        background: var(--bg-elevated);
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        transition: background-color var(--transition);
+      }
+      .stat-item:hover { background: var(--bg-subtle); }
+      .stat-number {
+        font-family: var(--font-mono);
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        letter-spacing: -0.02em;
+      }
+      .stat-label {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      /* ============================================================
+         Two-column main
+         ============================================================ */
+      .main-content {
+        display: grid;
+        grid-template-columns: minmax(320px, 1fr) minmax(0, 2fr);
+        gap: 24px;
+      }
+      .left-column, .right-column {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        min-width: 0;
+      }
+
+      /* ============================================================
+         Card — shared shell for calendar / sidebar / clock card
+         ============================================================ */
+      .card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        box-shadow: var(--shadow-sm);
+        transition: border-color var(--transition), box-shadow var(--transition);
+      }
+      .card:hover {
+        border-color: var(--border-strong);
+        box-shadow: var(--shadow-md);
+      }
+      .card-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 20px;
+        letter-spacing: -0.01em;
+      }
+      .card-title i {
+        color: var(--text-muted);
+        font-size: 0.875rem;
+      }
+
+      /* ============================================================
+         Calendar
+         ============================================================ */
+      .calendar-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+      .calendar-title-block h3 {
+        font-size: 1.0625rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        letter-spacing: -0.01em;
+      }
+      .calendar-title-block p {
+        font-size: 0.8125rem;
+        color: var(--text-muted);
+        margin-top: 2px;
+      }
+      .nav-btn {
+        width: 32px;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all var(--transition);
+      }
+      .nav-btn:hover {
+        background: var(--bg-subtle);
+        color: var(--text-primary);
+        border-color: var(--border-strong);
+      }
+      .nav-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .nav-btn i { font-size: 0.75rem; }
+
+      .weekdays {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+        margin-bottom: 8px;
+      }
+      .weekday {
+        text-align: center;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 8px 0;
+      }
+      .days-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+      }
+      .day {
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--text-primary);
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: all var(--transition);
+      }
+      .day:hover {
+        background: var(--bg-subtle);
+        border-color: var(--border);
+      }
+      .day:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+      }
+      .day.other-month { color: var(--text-muted); opacity: 0.45; }
+      .day.today {
+        background: var(--accent);
+        color: var(--accent-text);
+        font-weight: 600;
+      }
+      .day.today:hover { background: var(--accent-hover); }
+      .day.selected {
+        background: var(--bg-subtle);
+        border-color: var(--accent);
+        font-weight: 600;
+      }
+
+      .calendar-footer {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .today-label {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-weight: 500;
+      }
+      .today-date {
+        font-size: 0.8125rem;
+        color: var(--text-primary);
+        font-weight: 500;
+      }
+
+      /* ============================================================
+         Timezone converter
+         ============================================================ */
+      .converter-form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .converter-input,
+      .form-input,
+      .form-select {
+        width: 100%;
+        padding: 10px 12px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-family: inherit;
+        font-size: 0.875rem;
+        transition: all var(--transition);
+      }
+      .form-select[multiple] { min-height: 120px; }
+      .converter-input:focus,
+      .form-input:focus,
+      .form-select:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 4px var(--focus-ring);
+      }
+      .submit-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 16px;
+        background: var(--accent);
+        color: var(--accent-text);
+        border: 1px solid var(--accent);
+        border-radius: var(--radius-md);
+        font-family: inherit;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all var(--transition);
+      }
+      .submit-btn:hover {
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
+      }
+      .submit-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .submit-btn i { font-size: 0.8125rem; }
+
+      .converter-result {
+        margin-top: 4px;
+        padding: 14px 16px;
+        background: var(--bg-subtle);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        line-height: 1.5;
+      }
+      .converter-result strong {
+        display: block;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 6px;
+      }
+      .converter-result .converted-time {
+        font-family: var(--font-mono);
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+      }
+      .converter-result .converted-route {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+      }
+
+      /* ============================================================
+         Clock cards
+         ============================================================ */
+      .clock-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+      }
+      .clock-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 20px;
+        box-shadow: var(--shadow-sm);
+        transition: all var(--transition);
+        position: relative;
+        cursor: default;
+      }
+      .clock-card:hover {
+        border-color: var(--border-strong);
+        box-shadow: var(--shadow-md);
+        transform: translateY(-1px);
+      }
+
+      .card-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+      .country-flag {
+        font-size: 1.75rem;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .country-info { flex: 1; min-width: 0; }
+      .country-name {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 2px;
+        letter-spacing: -0.01em;
+      }
+      .timezone-info {
+        font-family: var(--font-mono);
+        font-size: 0.6875rem;
+        color: var(--text-muted);
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .delete-btn {
+        opacity: 0;
+        width: 24px;
+        height: 24px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all var(--transition);
+        font-size: 0.75rem;
+        flex-shrink: 0;
+      }
+      .clock-card:hover .delete-btn { opacity: 1; }
+      .delete-btn:hover {
+        background: var(--status-off-bg);
+        color: var(--status-off);
+      }
+      .delete-btn:focus-visible {
+        opacity: 1;
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .time-section {
+        padding: 16px 0;
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 12px;
+      }
+      .time-display {
+        font-family: var(--font-mono);
+        font-size: 2rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        letter-spacing: -0.04em;
+        line-height: 1.1;
+        margin-bottom: 6px;
+        font-variant-numeric: tabular-nums;
+      }
+      .date-display {
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        font-weight: 500;
+      }
+
+      .status-section {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .status-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        transition: all var(--transition);
+      }
+      .status-indicator::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        flex-shrink: 0;
+      }
+      .working-hours {
+        background: var(--status-working-bg);
+        color: var(--status-working);
+      }
+      .off-hours {
+        background: var(--status-off-bg);
+        color: var(--status-off);
+      }
+      .current-timezone {
+        background: var(--status-current-bg);
+        color: var(--status-current);
+      }
+      .time-diff {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        font-weight: 500;
+      }
+
+      /* ============================================================
+         Footer
+         ============================================================ */
+      .footer {
+        text-align: center;
+        padding: 20px 0;
+        font-size: 0.8125rem;
+        color: var(--text-muted);
+      }
+
+      /* ============================================================
+         Floating control buttons (fullscreen / refresh / add tz)
+         ============================================================ */
+      .controls {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        z-index: 50;
+      }
+      .control-btn {
+        width: 40px;
+        height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        color: var(--text-secondary);
+        cursor: pointer;
+        box-shadow: var(--shadow-sm);
+        transition: all var(--transition);
+        font-size: 0.875rem;
+      }
+      .control-btn:hover {
+        background: var(--bg-subtle);
+        color: var(--text-primary);
+        border-color: var(--border-strong);
+        box-shadow: var(--shadow-md);
+      }
+      .control-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .control-btn:active { transform: scale(0.96); }
+
+      /* ============================================================
+         Notification
+         ============================================================ */
+      .notification {
+        position: fixed;
+        top: 24px;
+        right: 24px;
+        padding: 12px 16px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--accent);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-size: 0.875rem;
+        font-weight: 500;
+        box-shadow: var(--shadow-lg);
+        z-index: 100;
+        transform: translateX(120%);
+        transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+        max-width: 360px;
+      }
+      .notification.show { transform: translateX(0); }
+      .notification.error { border-left-color: var(--status-off); }
+      .notification.success { border-left-color: var(--status-working); }
+
+      /* ============================================================
+         Scrollbar
+         ============================================================ */
+      ::-webkit-scrollbar { width: 10px; height: 10px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border-strong);
+        border-radius: 999px;
+        border: 2px solid var(--bg);
+      }
+      ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+      /* ============================================================
+         Selection
+         ============================================================ */
+      ::selection { background: var(--focus-ring); color: var(--text-primary); }
+
+      /* ============================================================
+         Responsive
+         ============================================================ */
+      @media (max-width: 1024px) {
+        .main-content { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 640px) {
+        body { padding: 20px 16px 80px; }
+        .header h1 { font-size: 1.375rem; }
+        .stats-bar { grid-template-columns: repeat(2, 1fr); }
+        .stat-number { font-size: 1.25rem; }
+        .time-display { font-size: 1.75rem; }
+        .clock-card, .card { padding: 18px; }
+        .theme-toggle span { display: none; }
+      }
+
+      /* ============================================================
+         WorldTimeBuddy-style 24h strip + team coverage + best-time
+         — appended below the original layout, shares all design tokens.
+         ============================================================ */
+      .wtb-section {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+      .wtb-section-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 1.0625rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        letter-spacing: -0.01em;
+      }
+      .wtb-section-title i { color: var(--text-muted); font-size: 0.9375rem; }
+      .wtb-section-sub {
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        margin-top: -12px;
+        margin-bottom: 4px;
+        line-height: 1.55;
+      }
+
+      /* ---- 24h horizontal bar (one row per timezone) ---- */
+      .wtb-grid {
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        gap: 12px;
+        align-items: stretch;
+      }
+      .wtb-grid-header-row {
+        display: contents;
+      }
+      .wtb-row {
+        display: contents;
+      }
+      .wtb-label {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 0;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--text-primary);
+      }
+      .wtb-label-flag {
+        font-size: 1.125rem;
+        line-height: 1;
+      }
+      .wtb-label-name { flex: 1; min-width: 0; }
+      .wtb-label-offset {
+        font-family: var(--font-mono);
+        font-size: 0.6875rem;
+        color: var(--text-muted);
+        font-weight: 500;
+      }
+
+      .wtb-track {
+        position: relative;
+        height: 36px;
+        background: var(--bg-subtle);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+      }
+      .wtb-hour-ticks {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        grid-template-columns: repeat(24, 1fr);
+        pointer-events: none;
+      }
+      .wtb-hour-tick {
+        border-right: 1px solid var(--border);
+        opacity: 0.5;
+      }
+      .wtb-hour-tick:last-child { border-right: none; }
+
+      /* Working-hours segment */
+      .wtb-segment {
+        position: absolute;
+        top: 6px;
+        bottom: 6px;
+        background: var(--status-working-bg);
+        border-top: 1px solid var(--status-working);
+        border-bottom: 1px solid var(--status-working);
+        border-radius: 3px;
+      }
+      .wtb-segment::after {
+        content: '';
+        position: absolute;
+        left: 0; right: 0;
+        top: -1px; bottom: -1px;
+        background: repeating-linear-gradient(
+          45deg,
+          transparent 0,
+          transparent 4px,
+          rgba(22, 163, 74, 0.08) 4px,
+          rgba(22, 163, 74, 0.08) 8px
+        );
+        border-radius: 3px;
+        pointer-events: none;
+      }
+
+      /* Off-hours crosshatch overlay */
+      .wtb-off {
+        position: absolute;
+        top: 6px;
+        bottom: 6px;
+        background: repeating-linear-gradient(
+          45deg,
+          var(--bg-elevated) 0,
+          var(--bg-elevated) 4px,
+          var(--bg-subtle) 4px,
+          var(--bg-subtle) 8px
+        );
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        border-radius: 3px;
+        opacity: 0.85;
+      }
+
+      /* "Now" cursor on the track */
+      .wtb-now-cursor {
+        position: absolute;
+        top: -3px;
+        bottom: -3px;
+        width: 2px;
+        background: var(--accent);
+        z-index: 3;
+        pointer-events: none;
+      }
+      .wtb-now-cursor::before {
+        content: '';
+        position: absolute;
+        top: -2px;
+        left: -4px;
+        width: 10px;
+        height: 6px;
+        background: var(--accent);
+        border-radius: 2px;
+      }
+      .wtb-now-cursor-label {
+        position: absolute;
+        top: -22px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-family: var(--font-mono);
+        font-size: 0.6875rem;
+        font-weight: 600;
+        color: var(--accent-text);
+        background: var(--accent);
+        padding: 2px 6px;
+        border-radius: 4px;
+        white-space: nowrap;
+      }
+
+      /* Hour scale below the tracks */
+      .wtb-axis {
+        grid-column: 2 / 3;
+        display: grid;
+        grid-template-columns: repeat(24, 1fr);
+        margin-top: 6px;
+        padding: 0 2px;
+      }
+      .wtb-axis-tick {
+        font-family: var(--font-mono);
+        font-size: 0.6875rem;
+        color: var(--text-muted);
+        font-weight: 500;
+        text-align: center;
+      }
+      .wtb-axis-tick.major { font-weight: 600; color: var(--text-secondary); }
+
+      /* ---- Team coverage (overlap) row ---- */
+      .wtb-coverage {
+        position: relative;
+        height: 44px;
+        background: var(--bg-subtle);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        margin-top: 4px;
+      }
+      .wtb-coverage-bar {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        background: var(--status-working-bg);
+        border-top: 2px solid var(--status-working);
+        border-bottom: 2px solid var(--status-working);
+      }
+      .wtb-coverage-bar.partial {
+        background: var(--status-current-bg);
+        border-top-color: var(--status-current);
+        border-bottom-color: var(--status-current);
+      }
+      .wtb-coverage-count {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        font-family: var(--font-mono);
+        font-size: 0.6875rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        padding: 0 6px;
+      }
+      .wtb-coverage-legend {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+      }
+      .wtb-coverage-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .wtb-coverage-swatch {
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+        border: 1px solid transparent;
+      }
+      .wtb-coverage-swatch.full {
+        background: var(--status-working-bg);
+        border-color: var(--status-working);
+      }
+      .wtb-coverage-swatch.partial {
+        background: var(--status-current-bg);
+        border-color: var(--status-current);
+      }
+
+      /* ---- Best meeting times ---- */
+      .wtb-meetings {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+      }
+      .wtb-meeting-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 14px 16px;
+        transition: all var(--transition);
+        position: relative;
+      }
+      .wtb-meeting-card:hover {
+        border-color: var(--border-strong);
+        box-shadow: var(--shadow-md);
+        transform: translateY(-1px);
+      }
+      .wtb-meeting-quality {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 3px 8px;
+        border-radius: 999px;
+        margin-bottom: 10px;
+      }
+      .wtb-meeting-quality.excellent {
+        background: var(--status-working-bg);
+        color: var(--status-working);
+      }
+      .wtb-meeting-quality.good {
+        background: var(--status-current-bg);
+        color: var(--status-current);
+      }
+      .wtb-meeting-quality.weak {
+        background: var(--bg-subtle);
+        color: var(--text-muted);
+      }
+      .wtb-meeting-quality::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      .wtb-meeting-time {
+        font-family: var(--font-mono);
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        letter-spacing: -0.02em;
+        margin-bottom: 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .wtb-meeting-zones {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .wtb-meeting-zone-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-family: var(--font-mono);
+        font-size: 0.6875rem;
+        font-weight: 500;
+        padding: 3px 8px;
+        background: var(--bg-subtle);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        color: var(--text-secondary);
+      }
+
+      /* ---- Responsive adjustments for WTB section ---- */
+      @media (max-width: 1024px) {
+        .wtb-grid { grid-template-columns: 130px 1fr; }
+        .wtb-axis-tick { font-size: 0.5625rem; }
+      }
+      @media (max-width: 640px) {
+        .wtb-grid {
+          grid-template-columns: 1fr;
+          gap: 4px;
+        }
+        .wtb-label {
+          padding: 6px 0 2px;
+        }
+        .wtb-axis { display: none; }
+        .wtb-meetings { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+
+    <div class="page">
+      <header class="header">
+        <div class="header-titles">
+          <h1>团队时区时钟</h1>
+          <p>全球团队实时同步 · 协作更高效</p>
+        </div>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="切换主题">
+          <i class="fas fa-moon"></i>
+          <span>深色模式</span>
+        </button>
+      </header>
+
+      <div class="search-container" role="search">
+        <i class="fas fa-search" aria-hidden="true"></i>
+        <input
+          type="text"
+          class="search-box"
+          id="searchBox"
+          placeholder="搜索时区或国家…"
+          onkeyup="filterClocks()"
+          aria-label="搜索时区或国家"
+        >
+      </div>
+
+      <div class="stats-bar" id="statsBar" aria-live="polite">
+        <!-- 统计信息由 JS 动态生成 -->
+      </div>
+
+      <main class="main-content" id="main">
+        <section class="left-column" aria-label="辅助工具">
+          <!-- 日历 -->
+          <div class="card calendar-container">
+            <div class="calendar-header">
+              <button class="nav-btn" onclick="previousMonth()" aria-label="上个月">
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              <div class="calendar-title-block">
+                <h3 id="calendarMonth"></h3>
+                <p id="calendarYear"></p>
+              </div>
+              <button class="nav-btn" onclick="nextMonth()" aria-label="下个月">
+                <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+            <div class="calendar-grid">
+              <div class="weekdays" aria-hidden="true">
+                <div class="weekday">日</div>
+                <div class="weekday">一</div>
+                <div class="weekday">二</div>
+                <div class="weekday">三</div>
+                <div class="weekday">四</div>
+                <div class="weekday">五</div>
+                <div class="weekday">六</div>
+              </div>
+              <div class="days-grid" id="daysGrid">
+                <!-- 日期由 JS 动态生成 -->
+              </div>
+            </div>
+            <div class="calendar-footer">
+              <span class="today-label">今天</span>
+              <span class="today-date" id="todayDate"></span>
+            </div>
+          </div>
+
+          <!-- 时区转换器 -->
+          <div class="card">
+            <div class="card-title">
+              <i class="fas fa-exchange-alt" aria-hidden="true"></i>
+              <span>时区转换器</span>
+            </div>
+            <div class="converter-form">
+              <input
+                type="datetime-local"
+                class="converter-input"
+                id="converterTime"
+                aria-label="选择时间"
+              >
+              <select class="converter-input" id="converterFrom" aria-label="从时区">
+                <!-- 选项由 JS 动态生成 -->
+              </select>
+              <select class="converter-input" id="converterTo" aria-label="到时区">
+                <!-- 选项由 JS 动态生成 -->
+              </select>
+              <button class="submit-btn" onclick="convertTime()">
+                <i class="fas fa-sync-alt" aria-hidden="true"></i>
+                转换时间
+              </button>
+              <div class="converter-result" id="converterResult" aria-live="polite">
+                请选择时间和时区进行转换
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="right-column" aria-label="团队时区">
+          <div class="clock-container" id="clockContainer">
+            <!-- 时钟卡片由 JS 动态生成 -->
+          </div>
+        </section>
+      </main>
+
+      <!-- =======================================================
+           WorldTimeBuddy-style team-availability planner
+           (appended below the original two-column layout;
+           reuses every design token — same dark/light theme)
+           ======================================================= -->
+      <section class="wtb-section" aria-label="团队协调时间条">
+        <div>
+          <h2 class="wtb-section-title">
+            <i class="fas fa-clock" aria-hidden="true"></i>
+            团队时间条
+          </h2>
+          <p class="wtb-section-sub">
+            横向 24 小时条可一眼看出每个时区的工作 / 休息分布。
+            每分钟自动更新;绿色 = 工作时间,斜纹 = 非工作时间,黑线 = 当前时刻。
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="wtb-grid" id="wtbGrid">
+            <!-- 24h tracks rendered by JS -->
+          </div>
+          <div class="wtb-axis" id="wtbAxis" aria-hidden="true"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <i class="fas fa-users" aria-hidden="true"></i>
+            <span>团队覆盖热力</span>
+          </div>
+          <p class="wtb-section-sub" style="margin: -10px 0 12px;">
+            同一个小时内有多少团队成员同时在线?
+            深绿 = 所有人都在,橙色 = 仅部分成员在线。
+          </p>
+          <div class="wtb-coverage" id="wtbCoverage" aria-label="团队覆盖热力图"></div>
+          <div class="wtb-coverage-legend">
+            <span class="wtb-coverage-legend-item">
+              <span class="wtb-coverage-swatch full"></span>
+              全员在线
+            </span>
+            <span class="wtb-coverage-legend-item">
+              <span class="wtb-coverage-swatch partial"></span>
+              部分在线
+            </span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">
+            <i class="fas fa-handshake" aria-hidden="true"></i>
+            <span>推荐开会时间</span>
+          </div>
+          <p class="wtb-section-sub" style="margin: -10px 0 12px;">
+            基于工作时间重叠自动推荐,按覆盖人数排序,
+            显示 UTC 时间 + 每个时区的本地时间。
+          </p>
+          <div class="wtb-meetings" id="wtbMeetings"></div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <p>每秒自动更新 · 实时同步全球时间</p>
+      </footer>
+    </div>
+
+    <div class="controls" role="toolbar" aria-label="快捷操作">
+      <button class="control-btn" onclick="toggleFullscreen()" title="全屏模式 (F)" aria-label="全屏模式">
+        <i class="fas fa-expand" aria-hidden="true"></i>
+      </button>
+      <button class="control-btn" onclick="updateAllClocks()" title="手动刷新 (R)" aria-label="手动刷新">
+        <i class="fas fa-sync-alt" aria-hidden="true"></i>
+      </button>
+      <button class="control-btn" onclick="addCustomTimezone()" title="添加时区 (+)" aria-label="添加时区">
+        <i class="fas fa-plus" aria-hidden="true"></i>
+      </button>
+    </div>
+
+    <script>
+      // ============================================================
+      // Timezone data — single source of truth
+      // ============================================================
+      const timezones = [
+        { name: "中国",        flag: "🇨🇳", timezone: "Asia/Shanghai",      workingHours: [9, 18] },
+        { name: "印度",        flag: "🇮🇳", timezone: "Asia/Kolkata",       workingHours: [9, 18] },
+        { name: "英国",        flag: "🇬🇧", timezone: "Europe/London",      workingHours: [9, 17] },
+        { name: "UTC",        flag: "🌐",  timezone: "UTC",                workingHours: [9, 18] },
+        { name: "美国西海岸",  flag: "🇺🇸", timezone: "America/Los_Angeles", workingHours: [9, 18] },
+        { name: "当前位置",    flag: "📍",  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, workingHours: [9, 18], isCurrent: true },
+      ];
+
+      let currentCalendarDate = new Date();
+      let selectedDate = null;
+
+      const monthNames = [
+        "一月", "二月", "三月", "四月", "五月", "六月",
+        "七月", "八月", "九月", "十月", "十一月", "十二月",
+      ];
+
+      // ============================================================
+      // Status helpers
+      // ============================================================
+      function getWorkingStatus(hour, workingHours, isCurrent = false) {
+        if (isCurrent) return "current-timezone";
+        return hour >= workingHours[0] && hour < workingHours[1] ? "working-hours" : "off-hours";
+      }
+
+      function getStatusText(hour, workingHours, isCurrent = false) {
+        if (isCurrent) return "当前时区";
+        return hour >= workingHours[0] && hour < workingHours[1] ? "工作时间" : "非工作时间";
+      }
+
+      function formatTime(date) {
+        return date.toLocaleTimeString("zh-CN", {
+          hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit",
+        });
+      }
+
+      function formatDate(date) {
+        return date.toLocaleDateString("zh-CN", {
+          year: "numeric", month: "long", day: "numeric", weekday: "long",
+        });
+      }
+
+      // ============================================================
+      // Clock cards
+      // ============================================================
+      function createClockCard(timezone) {
+        const now = new Date();
+        const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone.timezone }));
+        const hour = localTime.getHours();
+
+        const timeDiff = Math.round((localTime.getTime() - now.getTime()) / (1000 * 60 * 60));
+        const timeDiffText = timeDiff === 0
+          ? '本地时间'
+          : timeDiff > 0
+            ? `+${timeDiff} 小时`
+            : `${timeDiff} 小时`;
+
+        const statusClass = getWorkingStatus(hour, timezone.workingHours, timezone.isCurrent);
+        const statusText = getStatusText(hour, timezone.workingHours, timezone.isCurrent);
+
+        return `
+          <article class="clock-card" data-timezone-name="${timezone.name.toLowerCase()}">
+            <div class="card-header">
+              <span class="country-flag" aria-hidden="true">${timezone.flag}</span>
+              <div class="country-info">
+                <div class="country-name">
+                  ${timezone.name}
+                  ${!timezone.isCurrent
+                    ? `<button class="delete-btn" onclick="removeTimezone('${timezone.timezone}')" title="删除时区" aria-label="删除时区 ${timezone.name}"><i class="fas fa-trash-alt" aria-hidden="true"></i></button>`
+                    : ''}
+                </div>
+                <div class="timezone-info">${timezone.timezone}</div>
+              </div>
+            </div>
+
+            <div class="time-section">
+              <div class="time-display" data-timezone="${timezone.timezone}">${formatTime(localTime)}</div>
+              <div class="date-display" data-timezone="${timezone.timezone}">${formatDate(localTime)}</div>
+            </div>
+
+            <div class="status-section">
+              <span class="status-indicator ${statusClass}">${statusText}</span>
+              <span class="time-diff">${timeDiffText}</span>
+            </div>
+          </article>
+        `;
+      }
+
+      function createStatsBar() {
+        const now = new Date();
+        let workingCount = 0;
+        let offCount = 0;
+
+        timezones.forEach(tz => {
+          if (tz.isCurrent) return;
+          const localTime = new Date(now.toLocaleString("en-US", { timeZone: tz.timezone }));
+          const hour = localTime.getHours();
+          if (hour >= tz.workingHours[0] && hour < tz.workingHours[1]) workingCount++;
+          else offCount++;
+        });
+
+        return `
+          <div class="stat-item">
+            <span class="stat-number">${timezones.length}</span>
+            <span class="stat-label">时区总数</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">${workingCount}</span>
+            <span class="stat-label">工作时间</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">${offCount}</span>
+            <span class="stat-label">非工作时间</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">${formatTime(now)}</span>
+            <span class="stat-label">本地时间</span>
+          </div>
+        `;
+      }
+
+      function updateAllClocks() {
+        document.getElementById("clockContainer").innerHTML = timezones.map(createClockCard).join("");
+        document.getElementById("statsBar").innerHTML = createStatsBar();
+        updateTimezoneOptions();
+      }
+
+      function updateTimes() {
+        timezones.forEach((timezone) => {
+          const now = new Date();
+          const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone.timezone }));
+          const hour = localTime.getHours();
+
+          const timeElements = document.querySelectorAll(`[data-timezone="${timezone.timezone}"]`);
+          timeElements.forEach((element) => {
+            if (element.classList.contains("time-display")) {
+              element.textContent = formatTime(localTime);
+            } else if (element.classList.contains("date-display")) {
+              element.textContent = formatDate(localTime);
+            }
+          });
+
+          const card = timeElements[0]?.closest(".clock-card");
+          if (card) {
+            const statusElement = card.querySelector(".status-indicator");
+            statusElement.className = `status-indicator ${getWorkingStatus(hour, timezone.workingHours, timezone.isCurrent)}`;
+            statusElement.textContent = getStatusText(hour, timezone.workingHours, timezone.isCurrent);
+          }
+        });
+
+        document.getElementById("statsBar").innerHTML = createStatsBar();
+      }
+
+      // ============================================================
+      // Theme
+      // ============================================================
+      function toggleTheme() {
+        const body = document.body;
+        const themeBtn = document.querySelector('.theme-toggle');
+        const icon = themeBtn.querySelector('i');
+        const text = themeBtn.querySelector('span');
+
+        body.classList.toggle('dark-mode');
+
+        if (body.classList.contains('dark-mode')) {
+          icon.className = 'fas fa-sun';
+          text.textContent = '浅色模式';
+        } else {
+          icon.className = 'fas fa-moon';
+          text.textContent = '深色模式';
+        }
+
+        localStorage.setItem('theme', body.classList.contains('dark-mode') ? 'dark' : 'light');
+      }
+
+      // ============================================================
+      // Calendar
+      // ============================================================
+      function generateCalendar(date) {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const today = new Date();
+
+        document.getElementById('calendarMonth').textContent = monthNames[month];
+        document.getElementById('calendarYear').textContent = year + ' 年';
+
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const firstDayWeek = firstDay.getDay();
+        const daysInMonth = lastDay.getDate();
+        const prevMonth = new Date(year, month, 0);
+        const daysInPrevMonth = prevMonth.getDate();
+
+        const daysGrid = document.getElementById('daysGrid');
+        daysGrid.innerHTML = '';
+
+        for (let i = firstDayWeek - 1; i >= 0; i--) {
+          daysGrid.appendChild(createDayElement(daysInPrevMonth - i, true));
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dayElement = createDayElement(day, false);
+          const currentDate = new Date(year, month, day);
+          if (currentDate.toDateString() === today.toDateString()) dayElement.classList.add('today');
+          if (selectedDate && currentDate.toDateString() === selectedDate.toDateString()) dayElement.classList.add('selected');
+          daysGrid.appendChild(dayElement);
+        }
+
+        const totalCells = daysGrid.children.length;
+        const remainingCells = 42 - totalCells;
+        for (let day = 1; day <= remainingCells; day++) {
+          daysGrid.appendChild(createDayElement(day, true));
+        }
+
+        updateTodayInfo();
+      }
+
+      function createDayElement(day, isOtherMonth) {
+        const dayElement = document.createElement('div');
+        dayElement.className = 'day';
+        dayElement.textContent = day;
+        dayElement.setAttribute('role', 'button');
+        dayElement.setAttribute('tabindex', '0');
+
+        if (isOtherMonth) dayElement.classList.add('other-month');
+
+        dayElement.addEventListener('click', function () {
+          if (!isOtherMonth) {
+            document.querySelectorAll('.day.selected').forEach(el => el.classList.remove('selected'));
+            dayElement.classList.add('selected');
+            selectedDate = new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth(), day);
+            updateTodayInfo();
+          }
+        });
+
+        dayElement.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            dayElement.click();
+          }
+        });
+
+        return dayElement;
+      }
+
+      function updateTodayInfo() {
+        const today = new Date();
+        const displayDate = selectedDate || today;
+        const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+        document.getElementById('todayDate').textContent = displayDate.toLocaleDateString('zh-CN', options);
+      }
+
+      function previousMonth() {
+        currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
+        generateCalendar(currentCalendarDate);
+      }
+
+      function nextMonth() {
+        currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
+        generateCalendar(currentCalendarDate);
+      }
+
+      // ============================================================
+      // Search
+      // ============================================================
+      function filterClocks() {
+        const searchTerm = document.getElementById('searchBox').value.toLowerCase();
+        const cards = document.querySelectorAll('.clock-card');
+
+        cards.forEach(card => {
+          const name = card.getAttribute('data-timezone-name');
+          card.style.display = name.includes(searchTerm) ? '' : 'none';
+        });
+      }
+
+      // ============================================================
+      // Add / remove timezones
+      // ============================================================
+      function addCustomTimezone() {
+        const timezone = prompt("请输入时区标识符 (例如 Asia/Tokyo):");
+        if (!timezone) return;
+
+        try {
+          Intl.DateTimeFormat(undefined, { timeZone: timezone });
+          const name = prompt("请输入时区名称:", timezone.split("/").pop());
+          if (!name) return;
+
+          timezones.push({ name, flag: "🌍", timezone, workingHours: [9, 18] });
+          updateAllClocks();
+          showNotification(`已添加时区: ${name}`, 'success');
+        } catch (e) {
+          showNotification("无效的时区标识符，请重试", 'error');
+        }
+      }
+
+      function removeTimezone(timezoneId) {
+        const index = timezones.findIndex(tz => tz.timezone === timezoneId);
+        if (index === -1 || timezones[index].isCurrent) {
+          showNotification("无法删除当前位置时区", 'error');
+          return;
+        }
+        if (!confirm(`确定要删除 ${timezones[index].name} 吗?`)) return;
+
+        const removedName = timezones[index].name;
+        timezones.splice(index, 1);
+        updateAllClocks();
+        showNotification(`已删除时区: ${removedName}`, 'success');
+      }
+
+      // ============================================================
+      // Converter
+      // ============================================================
+      function updateTimezoneOptions() {
+        const fromSelect = document.getElementById('converterFrom');
+        const toSelect = document.getElementById('converterTo');
+
+        fromSelect.innerHTML = '';
+        toSelect.innerHTML = '';
+
+        timezones.forEach(tz => {
+          const o1 = document.createElement('option');
+          o1.value = tz.timezone;
+          o1.textContent = `${tz.flag} ${tz.name} (${tz.timezone})`;
+          fromSelect.appendChild(o1);
+
+          const o2 = o1.cloneNode(true);
+          toSelect.appendChild(o2);
+        });
+
+        if (timezones.length > 0) {
+          fromSelect.value = timezones[0].timezone;
+          toSelect.value = timezones[timezones.length - 1].timezone;
+        }
+      }
+
+      function convertTime() {
+        const timeInput = document.getElementById('converterTime').value;
+        const fromTimezone = document.getElementById('converterFrom').value;
+        const toTimezone = document.getElementById('converterTo').value;
+        const resultElement = document.getElementById('converterResult');
+
+        if (!timeInput) {
+          resultElement.textContent = "请选择时间";
+          return;
+        }
+
+        try {
+          const date = new Date(timeInput);
+          const formatter = new Intl.DateTimeFormat('zh-CN', {
+            timeZone: toTimezone,
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+          });
+          const convertedTime = formatter.format(date);
+          const fromTz = timezones.find(tz => tz.timezone === fromTimezone);
+          const toTz = timezones.find(tz => tz.timezone === toTimezone);
+
+          resultElement.innerHTML = `
+            <strong>转换结果</strong>
+            <div class="converted-time">${convertedTime}</div>
+            <div class="converted-route">${fromTz ? fromTz.flag + ' ' + fromTz.name : fromTimezone} → ${toTz ? toTz.flag + ' ' + toTz.name : toTimezone}</div>
+          `;
+        } catch (e) {
+          resultElement.textContent = "转换失败，请检查输入";
+        }
+      }
+
+      // ============================================================
+      // Fullscreen
+      // ============================================================
+      function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(err => console.log(`Fullscreen error: ${err.message}`));
+        } else {
+          document.exitFullscreen();
+        }
+      }
+
+      // ============================================================
+      // Notification (right-side slide-in, minimal)
+      // ============================================================
+      function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+
+        // Slide in
+        requestAnimationFrame(() => notification.classList.add('show'));
+
+        setTimeout(() => {
+          notification.classList.remove('show');
+          setTimeout(() => notification.remove(), 250);
+        }, 2800);
+      }
+
+      // ============================================================
+      // Keyboard shortcuts
+      // ============================================================
+      document.addEventListener('keydown', function (e) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+
+        switch (e.key.toLowerCase()) {
+          case 'f': e.preventDefault(); toggleFullscreen(); break;
+          case 't': e.preventDefault(); toggleTheme(); break;
+          case 'r': e.preventDefault(); updateAllClocks(); break;
+          case 'arrowleft': e.preventDefault(); previousMonth(); break;
+          case 'arrowright': e.preventDefault(); nextMonth(); break;
+          case '+':
+          case '=': e.preventDefault(); addCustomTimezone(); break;
+        }
+      });
+
+      // ============================================================
+      // Init + tickers
+      // ============================================================
+      document.addEventListener('DOMContentLoaded', function () {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme !== 'light') {
+          document.body.classList.add('dark-mode');
+          const themeBtn = document.querySelector('.theme-toggle');
+          themeBtn.querySelector('i').className = 'fas fa-sun';
+          themeBtn.querySelector('span').textContent = '浅色模式';
+        }
+
+        updateAllClocks();
+        generateCalendar(currentCalendarDate);
+        updateTimezoneOptions();
+
+        const now = new Date();
+        const formattedNow = now.toISOString().slice(0, 16);
+        document.getElementById('converterTime').value = formattedNow;
+
+        setTimeout(() => showNotification("欢迎使用团队时区时钟", 'success'), 800);
+      });
+
+      setInterval(updateTimes, 1000);
+
+      setInterval(() => {
+        // Refresh clock cards once a minute (less DOM churn than every second
+        // for stats / labels), and rebuild full layout on visibility change
+        // and on focus.
+        const now = new Date();
+        document.getElementById('statsBar').innerHTML = createStatsBar();
+      }, 60000);
+
+      setInterval(() => {
+        if (new Date().getHours() === 0 && new Date().getMinutes() === 0) {
+          generateCalendar(currentCalendarDate);
+        }
+      }, 60000);
+
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) updateAllClocks(); });
+      window.addEventListener('focus', updateAllClocks);
+    </script>
+
+    <!-- ============================================================
+         WorldTimeBuddy-style team availability module
+         (reads the same `timezones` array defined above)
+         ============================================================ -->
+    <script>
+      (function () {
+        'use strict';
+
+        if (typeof timezones === 'undefined') {
+          console.warn('wtb module: `timezones` array not found, aborting');
+          return;
+        }
+
+        const gridEl = document.getElementById('wtbGrid');
+        const axisEl = document.getElementById('wtbAxis');
+        const coverageEl = document.getElementById('wtbCoverage');
+        const meetingsEl = document.getElementById('wtbMeetings');
+        if (!gridEl || !coverageEl || !meetingsEl) return;
+
+        // ---------- Helpers ----------
+        function getHourInZone(hourUtc, tzName) {
+          const probe = new Date(Date.UTC(2000, 0, 1, hourUtc, 0, 0));
+          return parseInt(
+            new Intl.DateTimeFormat('en-US', {
+              hour: '2-digit', hour12: false, timeZone: tzName,
+            }).format(probe),
+            10
+          ) % 24;
+        }
+
+        // Format a UTC hour as a "HH:00" string in the given zone
+        function formatHourInZone(utcHour, tzName) {
+          const probe = new Date(Date.UTC(2000, 0, 1, utcHour, 0, 0));
+          return new Intl.DateTimeFormat('en-GB', {
+            hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tzName,
+          }).format(probe);
+        }
+
+        function utcOffsetLabel(tzName) {
+          const probe = new Date(Date.UTC(2000, 0, 1, 0, 0, 0));
+          const fmt = new Intl.DateTimeFormat('en-US', {
+            timeZone: tzName, timeZoneName: 'shortOffset', hour: '2-digit',
+          });
+          const parts = fmt.formatToParts(probe);
+          const off = parts.find(p => p.type === 'timeZoneName');
+          return off ? off.value : '';
+        }
+
+        // Get the timezone offset in hours (e.g. +5.5 for Kolkata, -8 for LA).
+        // Uses longOffset to parse "+hh:mm" precisely so half-hour zones work.
+        function getZoneOffsetHours(tzName) {
+          const probe = new Date(Date.UTC(2000, 0, 1, 0, 0, 0));
+          const fmt = new Intl.DateTimeFormat('en-US', {
+            timeZone: tzName, timeZoneName: 'longOffset', hour: '2-digit',
+          });
+          const parts = fmt.formatToParts(probe);
+          const off = parts.find(p => p.type === 'timeZoneName');
+          if (!off) return 0;
+          // Matches "GMT+05:30", "GMT+8", "GMT-08:00", "UTC" etc.
+          const m = off.value.match(/([+\-])(\d{1,2})(?::(\d{2}))?/);
+          if (!m) return 0;
+          const sign = m[1] === '+' ? 1 : -1;
+          const h = parseInt(m[2], 10);
+          const min = parseInt(m[3] || '0', 10);
+          return sign * (h + min / 60);
+        }
+
+        // Convert a local [wStart, wEnd] working-hours window into UTC
+        // coordinate segments. Returns 0..2 segments because working hours
+        // can straddle midnight in UTC (e.g. US west coast 9-18 local =
+        // 17-24 + 0-2 UTC). Each segment is {start, end} in [0, 24] UTC.
+        function workingHoursToUtcSegments(wStart, wEnd, offsetHours) {
+          // utc = local - offset (because if local is UTC+8 and it's noon
+          // local, UTC is 04:00)
+          let utcStart = wStart - offsetHours;
+          let utcEnd = wEnd - offsetHours;
+          const segs = [];
+          if (utcStart >= 0 && utcEnd <= 24) {
+            segs.push({ start: utcStart, end: utcEnd });
+          } else if (utcStart < 0 && utcEnd <= 24) {
+            // wraps backward across midnight
+            segs.push({ start: utcStart + 24, end: 24 });
+            if (utcEnd > 0) segs.push({ start: 0, end: utcEnd });
+          } else if (utcStart >= 0 && utcEnd > 24) {
+            // wraps forward across midnight
+            segs.push({ start: utcStart, end: 24 });
+            segs.push({ start: 0, end: utcEnd - 24 });
+          } else {
+            // both negative — try shifting by 24 in either direction
+            // (only happens for extreme offsets like UTC-14)
+            const s = ((utcStart % 24) + 24) % 24;
+            const e = ((utcEnd % 24) + 24) % 24;
+            if (s < e) segs.push({ start: s, end: e });
+          }
+          return segs.filter(s => s.end > s.start);
+        }
+
+        // ---------- Render the 24h strips ----------
+        function renderGrid() {
+          const html = timezones.map(tz => {
+            const wStart = tz.workingHours[0];
+            const wEnd = tz.workingHours[1];
+            const offset = getZoneOffsetHours(tz.timezone);
+            const offsetLabel = utcOffsetLabel(tz.timezone);
+            // Convert local working hours into UTC segments on the strip
+            const segs = workingHoursToUtcSegments(wStart, wEnd, offset);
+
+            // Drop the crosshatch off-hours overlay in places covered by
+            // a working segment so the segments stay visually clean.
+            // Build a list of UTC ranges where the off overlay should be
+            // hidden — i.e. union of segment ranges.
+            const hideRanges = segs.map(s => ({
+              leftPct: (s.start / 24) * 100,
+              widthPct: ((s.end - s.start) / 24) * 100,
+            }));
+
+            const segmentsHtml = segs.map(s => {
+              const leftPct = (s.start / 24) * 100;
+              const widthPct = ((s.end - s.start) / 24) * 100;
+              return `<div class="wtb-segment" style="left:${leftPct}%; width:${widthPct}%;"></div>`;
+            }).join('');
+
+            // Build off overlay as multiple strips excluding the working segments
+            // — simpler approach: a single off overlay across 0..24 but with
+            // cutouts where segments are. We'll use two layers: an off overlay
+            // behind, plus the segments on top (the segments have border + fill
+            // so they cover the off hatch in their region).
+            return `
+              <div class="wtb-label">
+                <span class="wtb-label-flag">${tz.flag}</span>
+                <span class="wtb-label-name">${tz.name}</span>
+                <span class="wtb-label-offset" title="UTC ${offset >= 0 ? '+' : ''}${offset}">${offsetLabel}</span>
+              </div>
+              <div class="wtb-track" data-tz="${tz.timezone}" data-wstart="${wStart}" data-wend="${wEnd}" data-offset="${offset}">
+                <div class="wtb-hour-ticks">
+                  ${Array.from({ length: 24 }, () => '<div class="wtb-hour-tick"></div>').join('')}
+                </div>
+                <div class="wtb-off" style="left:0; right:0;"></div>
+                ${segmentsHtml}
+              </div>
+            `;
+          }).join('');
+          gridEl.innerHTML = html;
+
+          axisEl.innerHTML = Array.from({ length: 24 }, (_, i) => {
+            const isMajor = i % 6 === 0;
+            return `<span class="wtb-axis-tick${isMajor ? ' major' : ''}">${String(i).padStart(2, '0')}</span>`;
+          }).join('');
+        }
+
+        // ---------- Now cursor ----------
+        function renderNowCursor() {
+          const now = new Date();
+          const utcHourFrac = now.getUTCHours() + now.getUTCMinutes() / 60;
+          document.querySelectorAll('.wtb-track').forEach(track => {
+            track.querySelector('.wtb-now-cursor')?.remove();
+            const cursor = document.createElement('div');
+            cursor.className = 'wtb-now-cursor';
+            const leftPct = (utcHourFrac / 24) * 100;
+            cursor.style.left = `calc(${leftPct}% - 1px)`;
+            const label = document.createElement('div');
+            label.className = 'wtb-now-cursor-label';
+            label.textContent = 'NOW';
+            cursor.appendChild(label);
+            track.appendChild(cursor);
+          });
+        }
+
+        // ---------- Team coverage ----------
+        function renderCoverage() {
+          const coverage = new Array(24).fill(0);
+          const total = timezones.length;
+          timezones.forEach(tz => {
+            const wStart = tz.workingHours[0];
+            const wEnd = tz.workingHours[1];
+            for (let utcH = 0; utcH < 24; utcH++) {
+              const localH = getHourInZone(utcH, tz.timezone);
+              const inWork = wStart < wEnd
+                ? (localH >= wStart && localH < wEnd)
+                : (localH >= wStart || localH < wEnd); // wrap-around (e.g. night shift)
+              if (inWork) coverage[utcH]++;
+            }
+          });
+
+          // Merge contiguous runs at the same coverage level
+          let bars = [];
+          let runStart = 0;
+          let runLevel = coverage[0];
+          for (let h = 1; h < 24; h++) {
+            if (coverage[h] === runLevel) continue;
+            bars.push({ start: runStart, end: h, count: runLevel });
+            runStart = h;
+            runLevel = coverage[h];
+          }
+          bars.push({ start: runStart, end: 24, count: runLevel });
+
+          coverageEl.innerHTML = bars.map(b => {
+            const left = (b.start / 24) * 100;
+            const width = ((b.end - b.start) / 24) * 100;
+            const isPartial = b.count > 0 && b.count < total;
+            const cssClass = isPartial ? ' partial' : '';
+            const color = isPartial ? 'var(--text-primary)' : 'var(--status-working)';
+            return `
+              <div class="wtb-coverage-bar${cssClass}" style="left:${left}%; width:${width}%"></div>
+              <span class="wtb-coverage-count" style="left:calc(${left}% + 6px); color:${color};">${b.count}/${total}</span>
+            `;
+          }).join('');
+        }
+
+        // ---------- Best meeting times ----------
+        function renderMeetings() {
+          const slots = [];
+          for (let utcH = 0; utcH < 24; utcH++) {
+            const richZones = [];
+            timezones.forEach(tz => {
+              const wStart = tz.workingHours[0];
+              const wEnd = tz.workingHours[1];
+              const localH = getHourInZone(utcH, tz.timezone);
+              const inWork = wStart < wEnd
+                ? (localH >= wStart && localH < wEnd)
+                : (localH >= wStart || localH < wEnd);
+              if (inWork) {
+                richZones.push({ tz, localTime: formatHourInZone(utcH, tz.timezone) });
+              }
+            });
+            if (richZones.length > 0) {
+              slots.push({ utcHour: utcH, count: richZones.length, zones: richZones });
+            }
+          }
+
+          const total = timezones.length;
+          let best = slots.filter(s => s.count === total);
+          if (best.length === 0) best = slots.sort((a, b) => b.count - a.count).slice(0, 6);
+          else best = best.slice(0, 6);
+
+          const qualityOf = (count) => {
+            const ratio = count / total;
+            if (ratio === 1) return 'excellent';
+            if (ratio >= 0.66) return 'good';
+            return 'weak';
+          };
+          const labelOf = (count) => {
+            const ratio = count / total;
+            if (ratio === 1) return '全员同步';
+            return `${count}/${total} 在线`;
+          };
+
+          meetingsEl.innerHTML = best.map(slot => {
+            const utcLabel = `${String(slot.utcHour).padStart(2, '0')}:00`;
+            const quality = qualityOf(slot.count);
+            const chips = slot.zones.map(z =>
+              `<span class="wtb-meeting-zone-chip">${z.tz.flag} ${z.localTime}</span>`
+            ).join('');
+            return `
+              <div class="wtb-meeting-card">
+                <span class="wtb-meeting-quality ${quality}">${labelOf(slot.count)}</span>
+                <div class="wtb-meeting-time">${utcLabel} UTC</div>
+                <div class="wtb-meeting-zones">${chips}</div>
+              </div>
+            `;
+          }).join('');
+        }
+
+        // ---------- Init + tickers ----------
+        function renderAll() {
+          renderGrid();
+          renderNowCursor();
+          renderCoverage();
+          renderMeetings();
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', renderAll);
+        } else {
+          renderAll();
+        }
+
+        // Refresh now cursor every 30s; tracks / coverage / meetings every minute.
+        setInterval(renderNowCursor, 30 * 1000);
+        setInterval(() => {
+          renderCoverage();
+          renderMeetings();
+        }, 60 * 1000);
+
+        // Hook into add/remove timezone — replay original + repaint WTB
+        const origUpdate = window.updateAllClocks;
+        window.updateAllClocks = function () {
+          if (typeof origUpdate === 'function') origUpdate.apply(this, arguments);
+          renderAll();
+        };
+      })();
+    </script>
+  </body>
+</html>
