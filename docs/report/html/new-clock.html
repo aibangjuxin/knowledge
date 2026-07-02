@@ -1453,16 +1453,21 @@
            reuses every design token — same dark/light theme)
            ======================================================= -->
       <section class="wtb-section" aria-label="Team coordination strips">
-        <div>
-          <h2 class="wtb-section-title">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+          <h2 class="wtb-section-title" style="margin-bottom: 0;">
             <i class="fas fa-clock" aria-hidden="true"></i>
             Team time strips
           </h2>
-          <p class="wtb-section-sub">
-            The horizontal 24-hour bars instantly show each zone's work / rest pattern.
-            Updates every minute; green = working, hatch = off-hours, dark line = current time.
-          </p>
+          <button class="hex-btn primary" id="wtbNowBtn" title="Snap cursor back to the current moment">
+            <i class="fas fa-circle" style="font-size:0.5rem;"></i>
+            Now
+          </button>
         </div>
+        <p class="wtb-section-sub">
+          The horizontal 24-hour bars instantly show each zone's work / rest pattern.
+          Drag the dark line on any track to explore a different moment; each label
+          shows that zone's local time (24h). Green = working, hatch = off-hours.
+        </p>
 
         <div class="card">
           <div class="wtb-grid" id="wtbGrid">
@@ -2186,42 +2191,138 @@
           }).join('');
         }
 
-        // ---------- Now cursor ----------
+        // ---------- Now cursor (draggable probe) ----------
         // The horizontal axis 0..24 of the WTB strip represents the
         // *anchor timezone's* hour-of-day (anchor = Asia/Shanghai, CST).
-        // Each track's "now" label shows the **current local time of that
-        // specific zone** in 24-hour HH:MM, so the user can read the
-        // moment directly without having to interpret the "NOW" word.
-        function renderNowCursor() {
+        // All 6 tracks share a single cursor position stored in
+        // `wtbCursorCstFrac` (CST hour-of-day as decimal). The user can
+        // drag any of the 6 cursors to explore a different moment; every
+        // cursor (and its HH:MM label, showing the per-zone local time at
+        // that moment) updates in sync.
+        const ANCHOR_TZ_CURSOR = 'Asia/Shanghai';
+        const ANCHOR_OFFSET_HOURS_CURSOR = 8;
+
+        // Read the current CST hour-of-day as a decimal (e.g. 22.5 = 22:30)
+        function currentCstFrac() {
           const now = new Date();
-          const cst = new Intl.DateTimeFormat('en-GB', {
-            timeZone: 'Asia/Shanghai',
+          const fmt = new Intl.DateTimeFormat('en-GB', {
+            timeZone: ANCHOR_TZ_CURSOR,
             hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
           });
-          const cp = cst.formatToParts(now);
-          const ch = parseInt(cp.find(p => p.type === 'hour').value, 10) % 24;
-          const cm = parseInt(cp.find(p => p.type === 'minute').value, 10);
-          const cs = parseInt(cp.find(p => p.type === 'second').value, 10);
-          const cstFrac = ch + cm / 60 + cs / 3600;
+          const p = fmt.formatToParts(now);
+          const hh = parseInt(p.find(x => x.type === 'hour').value, 10) % 24;
+          const mm = parseInt(p.find(x => x.type === 'minute').value, 10);
+          const ss = parseInt(p.find(x => x.type === 'second').value, 10);
+          return hh + mm / 60 + ss / 3600;
+        }
+
+        // State: position of all 6 cursors on the 0..24 CST axis. Defaults
+        // to "now" (current CST wall-clock). When the user drags, this is
+        // updated to the dragged X position.
+        let wtbCursorCstFrac = currentCstFrac();
+        // True once the user has manually moved the cursor away from "now",
+        // so we don't snap it back to real time on the next refresh tick.
+        let wtbCursorUserMoved = false;
+
+        // Translate `wtbCursorCstFrac` to a per-zone HH:MM (24h) label.
+        // UTC instant equivalent to "today at CST hh:mm" = CST - 8h.
+        function cstFracToZoneLabel(cstFrac, tzName) {
+          const utcFrac = ((cstFrac - ANCHOR_OFFSET_HOURS_CURSOR) % 24 + 24) % 24;
+          const probe = new Date(Date.UTC(2000, 0, 1, 0, 0, 0) + utcFrac * 3600 * 1000);
+          return new Intl.DateTimeFormat('en-GB', {
+            timeZone: tzName,
+            hour: '2-digit', minute: '2-digit', hour12: false,
+          }).format(probe);
+        }
+
+        function renderNowCursor() {
+          // If the user hasn't manually moved the cursor, follow real time
+          // so the labels always show the current moment until they engage.
+          if (!wtbCursorUserMoved) {
+            wtbCursorCstFrac = currentCstFrac();
+          }
+          const leftPct = (wtbCursorCstFrac / 24) * 100;
           document.querySelectorAll('.wtb-track').forEach(track => {
             track.querySelector('.wtb-now-cursor')?.remove();
             const cursor = document.createElement('div');
             cursor.className = 'wtb-now-cursor';
-            const leftPct = (cstFrac / 24) * 100;
             cursor.style.left = `calc(${leftPct}% - 1px)`;
-            // Per-zone local time as HH:MM (24h), e.g. "07:24" for LA,
-            // "22:24" for Shanghai, etc. — so the label tells you the
-            // current wall-clock time in that zone, anchored to the cursor.
+            // Per-zone local time as HH:MM (24h) at the cursor position
             const tz = track.getAttribute('data-tz');
-            const zFmt = new Intl.DateTimeFormat('en-GB', {
-              timeZone: tz,
-              hour: '2-digit', minute: '2-digit', hour12: false,
-            });
             const label = document.createElement('div');
             label.className = 'wtb-now-cursor-label';
-            label.textContent = zFmt.format(now);
+            label.textContent = cstFracToZoneLabel(wtbCursorCstFrac, tz);
             cursor.appendChild(label);
             track.appendChild(cursor);
+          });
+        }
+
+        // ---------- Drag interaction (mirrors Hour Explorer's behavior) ----------
+        // Event delegation: we listen on the grid container so that drag
+        // listeners survive every re-render of the track elements. The
+        // closest .wtb-track at the event target is the drag source.
+        let wtbDragging = false;
+        let wtbDragSource = null; // the .wtb-track where mousedown happened
+
+        function setWtbCursorFromEvent(e) {
+          if (!wtbDragSource) return;
+          const rect = wtbDragSource.getBoundingClientRect();
+          const x = Math.max(0, Math.min(rect.width,
+            (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left));
+          // Snap to nearest minute
+          const totalMinutes = Math.round((x / rect.width) * 24 * 60);
+          wtbCursorCstFrac = totalMinutes / 60;
+          wtbCursorUserMoved = true;
+          renderNowCursor();
+        }
+
+        function findWtbTrack(target) {
+          return target && target.closest && target.closest('.wtb-track');
+        }
+
+        // Mouse drag — bind once on the grid container
+        if (gridEl) {
+          gridEl.addEventListener('mousedown', (e) => {
+            const track = findWtbTrack(e.target);
+            if (!track) return;
+            wtbDragging = true;
+            wtbDragSource = track;
+            setWtbCursorFromEvent(e);
+          });
+          gridEl.addEventListener('touchstart', (e) => {
+            const track = findWtbTrack(e.target);
+            if (!track) return;
+            wtbDragging = true;
+            wtbDragSource = track;
+            setWtbCursorFromEvent(e);
+          }, { passive: true });
+          // Visual hint that the rows are draggable
+          gridEl.style.cursor = 'ew-resize';
+        }
+        document.addEventListener('mousemove', (e) => {
+          if (!wtbDragging) return;
+          setWtbCursorFromEvent(e);
+        });
+        document.addEventListener('mouseup', () => {
+          wtbDragging = false;
+          wtbDragSource = null;
+        });
+        document.addEventListener('touchmove', (e) => {
+          if (!wtbDragging) return;
+          setWtbCursorFromEvent(e);
+        }, { passive: true });
+        document.addEventListener('touchend', () => {
+          wtbDragging = false;
+          wtbDragSource = null;
+        });
+
+        // "Now" button — re-anchor the cursor to the current real time
+        const wtbNowBtn = document.getElementById('wtbNowBtn');
+        if (wtbNowBtn) {
+          wtbNowBtn.addEventListener('click', () => {
+            wtbCursorUserMoved = false;
+            wtbCursorCstFrac = currentCstFrac();
+            renderNowCursor();
           });
         }
 
