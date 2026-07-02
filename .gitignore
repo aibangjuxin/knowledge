@@ -28,6 +28,11 @@ env/
 .idea/
 .vscode/
 *.swp
+
+# Git worktrees (local-only checkouts, never commit)
+.worktrees/
+.claude/worktrees/
+.git/worktrees/
 *.swo
 *~
 .DS_Store
