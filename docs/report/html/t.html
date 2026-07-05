@@ -4,30 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Team Time Zone Clock</title>
-    <link
-      rel="icon"
-      href="https://vectorcraftr.com/library/blink/Young%20woman%20with%20headphones.svg"
-      type="image/svg+xml"
-    />
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-    />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
-      rel="stylesheet"
-    />
+    <!-- 品牌橙色极简 Favicon -->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ea580c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpolyline points='12 6 12 12 16 14'/%3E%3C/svg%3E" type="image/svg+xml" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
       /* ============================================================
          Design tokens 
          ============================================================ */
       :root {
-        --bg: #fafafa;
+        --bg: #f9f9fb;
         --bg-elevated: #ffffff;
-        --bg-subtle: #f4f4f5;
-        --bg-overlay: rgba(255, 255, 255, 0.8);
+        --bg-subtle: #f4f4f7;
+        --bg-overlay: rgba(255, 255, 255, 0.85);
         --border: #e4e4e7;
         --border-strong: #d4d4d8;
 
@@ -39,7 +30,7 @@
         --accent: #18181b;
         --accent-hover: #27272a;
         --accent-text: #fafafa;
-        --focus-ring: rgba(24, 24, 27, 0.12);
+        --focus-ring: rgba(24, 24, 27, 0.08);
 
         --status-working: #16a34a;
         --status-working-bg: #dcfce7;
@@ -49,1056 +40,293 @@
         --status-current-bg: #ffedd5;
 
         --radius-sm: 6px;
-        --radius-md: 8px;
-        --radius-lg: 12px;
+        --radius-md: 10px;
+        --radius-lg: 16px;
 
-        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-        --shadow-md:
-          0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-        --shadow-lg:
-          0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.03);
+        --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
+        --shadow-lg: 0 12px 24px -4px rgba(0, 0, 0, 0.06), 0 4px 12px -2px rgba(0, 0, 0, 0.04);
 
-        --font-sans:
-          "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          sans-serif;
-        --font-mono:
-          "JetBrains Mono", "SF Mono", "Monaco", "Inconsolata", "Roboto Mono",
-          monospace;
+        --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        --font-mono: 'JetBrains Mono', 'SF Mono', 'Monaco', monospace;
 
-        --transition: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+        --transition: 200ms cubic-bezier(0.16, 1, 0.3, 1);
       }
 
       .dark-mode {
-        --bg: #0a0a0a;
-        --bg-elevated: #111113;
-        --bg-subtle: #18181b;
-        --bg-overlay: rgba(17, 17, 19, 0.85);
-        --border: #27272a;
+        --bg: #09090b;
+        --bg-elevated: #121215;
+        --bg-subtle: #18181c;
+        --bg-overlay: rgba(18, 18, 21, 0.85);
+        --border: #242427;
         --border-strong: #3f3f46;
 
-        --text-primary: #fafafa;
+        --text-primary: #f4f4f5;
         --text-secondary: #a1a1aa;
         --text-muted: #71717a;
-        --text-inverse: #0a0a0a;
+        --text-inverse: #09090b;
 
         --accent: #fafafa;
         --accent-hover: #e4e4e7;
-        --accent-text: #0a0a0a;
-        --focus-ring: rgba(250, 250, 250, 0.18);
+        --accent-text: #09090b;
+        --focus-ring: rgba(250, 250, 250, 0.12);
 
         --status-working: #4ade80;
-        --status-working-bg: rgba(74, 222, 128, 0.12);
+        --status-working-bg: rgba(74, 222, 128, 0.08);
         --status-off: #f87171;
-        --status-off-bg: rgba(248, 113, 113, 0.12);
+        --status-off-bg: rgba(248, 113, 113, 0.08);
         --status-current: #fb923c;
-        --status-current-bg: rgba(251, 146, 60, 0.12);
+        --status-current-bg: rgba(251, 146, 60, 0.08);
 
-        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-        --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
-        --shadow-lg:
-          0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+        --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.3), 0 2px 6px -1px rgba(0, 0, 0, 0.2);
+        --shadow-lg: 0 12px 24px -4px rgba(0, 0, 0, 0.4), 0 4px 12px -2px rgba(0, 0, 0, 0.3);
       }
 
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      html {
-        font-size: 16px;
-      }
-
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html { font-size: 16px; }
       body {
-        font-family: var(--font-sans);
-        background: var(--bg);
-        color: var(--text-primary);
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 32px 24px 96px;
-        line-height: 1.5;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-        transition:
-          background-color var(--transition),
-          color var(--transition);
+        font-family: var(--font-sans); background: var(--bg); color: var(--text-primary);
+        min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+        padding: 32px 24px 96px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+        transition: background-color var(--transition), color var(--transition);
       }
 
-      .skip-link {
-        position: absolute;
-        left: -9999px;
-        top: 0;
-        background: var(--accent);
-        color: var(--accent-text);
-        padding: 8px 12px;
-        border-radius: var(--radius-sm);
-        z-index: 100;
-      }
-      .skip-link:focus {
-        left: 16px;
-        top: 16px;
-      }
+      .skip-link { position: absolute; left: -9999px; top: 0; background: var(--accent); color: var(--accent-text); padding: 8px 12px; border-radius: var(--radius-sm); z-index: 100; }
+      .skip-link:focus { left: 16px; top: 16px; }
+      .page { width: 100%; max-width: 1280px; display: flex; flex-direction: column; gap: 24px; }
 
-      .page {
-        width: 100%;
-        max-width: 1280px;
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
-      }
-
-      /* ============================================================
-         General UI Elements
-         ============================================================ */
-      .header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 24px;
-        flex-wrap: wrap;
-      }
-      .header-titles h1 {
-        font-size: 1.75rem;
-        font-weight: 700;
-        letter-spacing: -0.02em;
-        margin-bottom: 4px;
-      }
-      .header-titles p {
-        font-size: 0.9375rem;
-        color: var(--text-secondary);
-      }
+      /* General Layout Header */
+      .header { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+      .header-titles h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; }
+      .header-titles p { font-size: 0.9375rem; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .anchor-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; background: var(--status-current-bg); color: var(--status-current); border-radius: 999px; font-size: 0.8125rem; font-weight: 600; }
 
       .theme-toggle {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 14px;
-        background: var(--bg-elevated);
-        color: var(--text-primary);
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        font-size: 0.8125rem;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all var(--transition);
-        box-shadow: var(--shadow-sm);
+        display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px;
+        background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border);
+        border-radius: 999px; font-size: 0.8125rem; font-weight: 500; cursor: pointer;
+        transition: all var(--transition); box-shadow: var(--shadow-sm);
       }
-      .theme-toggle:hover {
-        background: var(--bg-subtle);
-        border-color: var(--border-strong);
-      }
+      .theme-toggle:hover { background: var(--bg-subtle); border-color: var(--border-strong); }
 
-      .search-container {
-        position: relative;
-        width: 100%;
-      }
-      .search-box {
-        width: 100%;
-        padding: 12px 16px 12px 44px;
-        background: var(--bg-elevated);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        color: var(--text-primary);
-        font-size: 0.9375rem;
-        transition: all var(--transition);
-      }
-      .search-box:focus {
-        outline: none;
-        border-color: var(--accent);
-        box-shadow: 0 0 0 4px var(--focus-ring);
-      }
-      .search-container > i {
-        position: absolute;
-        left: 16px;
-        top: 50%;
-        transform: translateY(-50%);
-        color: var(--text-muted);
-      }
+      .search-container { position: relative; width: 100%; }
+      .search-box { width: 100%; padding: 12px 16px 12px 44px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-primary); font-size: 0.9375rem; transition: all var(--transition); box-shadow: var(--shadow-sm); }
+      .search-box:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--focus-ring); }
+      .search-container > i { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
 
-      .stats-bar {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 1px;
-        background: var(--border);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-lg);
-        overflow: hidden;
-      }
-      .stat-item {
-        background: var(--bg-elevated);
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-      .stat-number {
-        font-family: var(--font-mono);
-        font-size: 1.5rem;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-      }
-      .stat-label {
-        font-size: 0.75rem;
-        font-weight: 500;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-      }
+      .quick-status { display: flex; flex-wrap: wrap; gap: 8px; }
+      .quick-status-chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px 6px 10px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 999px; font-size: 0.8125rem; font-weight: 500; box-shadow: var(--shadow-sm); transition: all var(--transition); }
+      .quick-status-chip .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+      .quick-status-chip.working { border-color: var(--status-working); }
+      .quick-status-chip.working .dot { background: var(--status-working); box-shadow: 0 0 0 3px var(--status-working-bg); }
+      .quick-status-chip.off .dot { background: var(--status-off); }
+      .quick-status-chip.current { border-color: var(--status-current); background: var(--status-current-bg); }
+      .quick-status-chip.current .dot { background: var(--status-current); }
 
-      .main-content {
-        display: grid;
-        grid-template-columns: minmax(320px, 1fr) minmax(0, 2fr);
-        gap: 24px;
-      }
-      .left-column,
-      .right-column {
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
-        min-width: 0;
-      }
+      .stats-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-sm); }
+      .stat-item { background: var(--bg-elevated); padding: 20px; display: flex; flex-direction: column; gap: 6px; }
+      .stat-number { font-family: var(--font-mono); font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; }
+      .stat-label { font-size: 0.75rem; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
 
-      .card {
-        background: var(--bg-elevated);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-lg);
-        padding: 24px;
-        box-shadow: var(--shadow-sm);
-      }
-      .card-title {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        font-size: 0.9375rem;
-        font-weight: 600;
-        margin-bottom: 20px;
-      }
-      .card-title i {
-        color: var(--text-muted);
-      }
+      .main-content { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(0, 2fr); gap: 24px; }
+      .left-column, .right-column { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+      .card { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-sm); transition: border-color var(--transition), box-shadow var(--transition); }
+      .card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); }
+      .card-title { display: flex; align-items: center; gap: 10px; font-size: 0.9375rem; font-weight: 600; margin-bottom: 20px; }
+      .card-title i { color: var(--text-muted); }
 
       /* ============================================================
-         Clock cards & Calendar (Skipped full styling here to keep clean, retaining core CSS)
+         Aesthetics Analog Clock Card
          ============================================================ */
-      .clock-container {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 16px;
+      .analog-clock-container { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 0; }
+      .analog-clock {
+        position: relative; width: 180px; height: 180px; border-radius: 50%;
+        background: var(--bg-elevated); border: 4px solid var(--bg-subtle);
+        box-shadow: inset 0 2px 8px rgba(0,0,0,0.02), var(--shadow-sm);
       }
-      .clock-card {
-        background: var(--bg-elevated);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-lg);
-        padding: 20px;
-        transition: all var(--transition);
-        position: relative;
-        cursor: default;
-      }
-      .clock-card:hover {
-        border-color: var(--border-strong);
-        box-shadow: var(--shadow-md);
-        transform: translateY(-1px);
-      }
-      .card-header {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 16px;
-      }
-      .country-flag {
-        font-size: 1.75rem;
-        line-height: 1;
-        flex-shrink: 0;
-      }
-      .country-info {
-        flex: 1;
-        min-width: 0;
-      }
-      .country-name {
-        font-size: 0.9375rem;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 2px;
-      }
-      .timezone-info {
-        font-family: var(--font-mono);
-        font-size: 0.6875rem;
-        color: var(--text-muted);
-        font-weight: 500;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .delete-btn {
-        opacity: 0;
-        width: 24px;
-        height: 24px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        background: transparent;
-        border: 1px solid transparent;
-        border-radius: var(--radius-sm);
-        color: var(--text-muted);
-        cursor: pointer;
-        transition: all var(--transition);
-        font-size: 0.75rem;
-      }
-      .clock-card:hover .delete-btn {
-        opacity: 1;
-      }
-      .delete-btn:hover {
-        background: var(--status-off-bg);
-        color: var(--status-off);
-      }
-      .time-section {
-        padding: 16px 0;
-        border-top: 1px solid var(--border);
-        border-bottom: 1px solid var(--border);
-        margin-bottom: 12px;
-      }
-      .time-display {
-        font-family: var(--font-mono);
-        font-size: 2rem;
-        font-weight: 600;
-        letter-spacing: -0.04em;
-        margin-bottom: 6px;
-      }
-      .date-display {
-        font-size: 0.8125rem;
-        color: var(--text-secondary);
-        font-weight: 500;
-      }
-      .status-section {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-      }
-      .status-indicator {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px 10px;
-        font-size: 0.75rem;
-        font-weight: 500;
-        border-radius: 999px;
-      }
-      .status-indicator::before {
-        content: "";
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: currentColor;
-      }
-      .working-hours {
-        background: var(--status-working-bg);
-        color: var(--status-working);
-      }
-      .off-hours {
-        background: var(--status-off-bg);
-        color: var(--status-off);
-      }
-      .current-timezone {
-        background: var(--status-current-bg);
-        color: var(--status-current);
-      }
-      .time-diff {
-        font-family: var(--font-mono);
-        font-size: 0.75rem;
-        color: var(--text-muted);
-        font-weight: 500;
-      }
+      .clock-tick-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+      .clock-tick { position: absolute; top: 6px; left: 50%; width: 1.5px; height: 6px; margin-left: -0.75px; background: var(--border-strong); border-radius: 1px; }
+      .clock-tick.major { width: 3px; height: 10px; margin-left: -1.5px; background: var(--text-muted); }
+      .clock-center { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; background: var(--text-primary); border: 2px solid var(--bg-elevated); border-radius: 50%; transform: translate(-50%, -50%); z-index: 10; }
+      
+      .clock-hand { position: absolute; bottom: 50%; left: 50%; transform-origin: bottom center; border-radius: 999px; z-index: 5; will-change: transform; }
+      .hand-hour { width: 5px; height: 26%; margin-left: -2.5px; background: var(--text-primary); }
+      .hand-min { width: 3px; height: 38%; margin-left: -1.5px; background: var(--text-secondary); }
+      .hand-sec { width: 1.5px; height: 42%; margin-left: -0.75px; background: var(--status-current); }
+      .hand-sec::after { content: ''; position: absolute; top: 100%; left: 50%; width: 4px; height: 12px; background: var(--status-current); transform: translateX(-50%); border-radius: 999px; }
+      
+      .analog-readout { margin-top: 20px; text-align: center; }
+      .analog-digital-time { font-family: var(--font-mono); font-size: 1.375rem; font-weight: 600; color: var(--text-primary); letter-spacing: -0.02em; }
+      .analog-digital-date { font-size: 0.8125rem; color: var(--text-secondary); font-weight: 500; margin-top: 4px; }
 
-      /* calendar & converter simplified for brevity */
-      .calendar-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 16px;
-      }
-      .calendar-title-block h3 {
-        font-size: 1.0625rem;
-        font-weight: 600;
-      }
-      .calendar-title-block p {
-        font-size: 0.8125rem;
-        color: var(--text-muted);
-      }
-      .nav-btn {
-        width: 32px;
-        height: 32px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--bg-elevated);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-sm);
-        cursor: pointer;
-        transition: all var(--transition);
-      }
-      .nav-btn:hover {
-        background: var(--bg-subtle);
-        border-color: var(--border-strong);
-      }
-      .weekdays {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-        gap: 4px;
-        margin-bottom: 8px;
-      }
-      .weekday {
-        text-align: center;
-        font-size: 0.6875rem;
-        font-weight: 600;
-        color: var(--text-muted);
-        text-transform: uppercase;
-      }
-      .days-grid {
-        display: grid;
-        grid-template-columns: repeat(7, 1fr);
-        gap: 4px;
-      }
-      .day {
-        aspect-ratio: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.8125rem;
-        font-weight: 500;
-        border-radius: var(--radius-sm);
-        cursor: pointer;
-        transition: all var(--transition);
-      }
-      .day:hover {
-        background: var(--bg-subtle);
-      }
-      .day.other-month {
-        color: var(--text-muted);
-        opacity: 0.45;
-      }
-      .day.today {
-        background: var(--accent);
-        color: var(--accent-text);
-        font-weight: 600;
-      }
-      .day.selected {
-        background: var(--bg-subtle);
-        border: 1px solid var(--accent);
-        font-weight: 600;
-      }
-      .calendar-footer {
-        margin-top: 16px;
-        padding-top: 16px;
-        border-top: 1px solid var(--border);
-        display: flex;
-        justify-content: space-between;
-      }
-      .today-label {
-        font-size: 0.75rem;
-        color: var(--text-muted);
-        font-weight: 500;
-        text-transform: uppercase;
-      }
-      .today-date {
-        font-size: 0.8125rem;
-        font-weight: 500;
-      }
-      .converter-form {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-      .converter-input {
-        width: 100%;
-        padding: 10px 12px;
-        background: var(--bg-elevated);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        color: var(--text-primary);
-        font-family: inherit;
-        font-size: 0.875rem;
-        transition: all var(--transition);
-      }
-      .converter-input:focus {
-        border-color: var(--accent);
-        outline: none;
-      }
-      .submit-btn {
-        padding: 10px 16px;
-        background: var(--accent);
-        color: var(--accent-text);
-        border: 1px solid var(--accent);
-        border-radius: var(--radius-md);
-        font-weight: 500;
-        cursor: pointer;
-        transition: all var(--transition);
-      }
-      .submit-btn:hover {
-        background: var(--accent-hover);
-      }
-      .converter-result {
-        margin-top: 4px;
-        padding: 14px 16px;
-        background: var(--bg-subtle);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-      }
+      /* Clock cards & Calendar */
+      .clock-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+      .clock-card { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; transition: all var(--transition); position: relative; cursor: default; box-shadow: var(--shadow-sm); }
+      .clock-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+      .card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+      .country-flag { font-size: 1.75rem; line-height: 1; flex-shrink: 0; }
+      .country-info { flex: 1; min-width: 0; }
+      .country-name { font-size: 0.9375rem; font-weight: 600; display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+      .timezone-info { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--text-muted); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      
+      .delete-btn { opacity: 0; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--text-muted); cursor: pointer; transition: all var(--transition); font-size: 0.75rem; }
+      .clock-card:hover .delete-btn { opacity: 1; }
+      .delete-btn:hover { background: var(--status-off-bg); color: var(--status-off); }
 
-      /* Controls */
-      .controls {
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        z-index: 50;
-      }
-      .control-btn {
-        width: 40px;
-        height: 40px;
-        background: var(--bg-elevated);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        color: var(--text-secondary);
-        cursor: pointer;
-        transition: all var(--transition);
-        box-shadow: var(--shadow-sm);
-      }
-      .control-btn:hover {
-        background: var(--bg-subtle);
-        color: var(--text-primary);
-        border-color: var(--border-strong);
-        box-shadow: var(--shadow-md);
-      }
+      .edit-btn { opacity: 0; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--text-muted); cursor: pointer; transition: all var(--transition); font-size: 0.6875rem; }
+      .clock-card:hover .edit-btn { opacity: 1; }
+      .edit-btn:hover { background: var(--status-current-bg); color: var(--status-current); }
+      
+      .time-section { padding: 16px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+      .time-display { font-family: var(--font-mono); font-size: 2rem; font-weight: 600; letter-spacing: -0.04em; margin-bottom: 4px; }
+      .date-display { font-size: 0.8125rem; color: var(--text-secondary); font-weight: 500; }
+      .status-section { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .status-indicator { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: 0.75rem; font-weight: 500; border-radius: 999px; }
+      .status-indicator::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+      .working-hours { background: var(--status-working-bg); color: var(--status-working); }
+      .off-hours { background: var(--status-off-bg); color: var(--status-off); }
+      .current-timezone { background: var(--status-current-bg); color: var(--status-current); }
+      .time-diff { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); font-weight: 500; }
 
-      /* Notifications */
-      .notification {
-        position: fixed;
-        top: 24px;
-        right: 24px;
-        padding: 12px 16px;
-        background: var(--bg-elevated);
-        border: 1px solid var(--border);
-        border-left: 3px solid var(--accent);
-        border-radius: var(--radius-md);
-        box-shadow: var(--shadow-lg);
-        z-index: 100;
-        transform: translateX(120%);
-        transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
-      }
-      .notification.show {
-        transform: translateX(0);
-      }
-      .notification.error {
-        border-left-color: var(--status-off);
-      }
-      .notification.success {
-        border-left-color: var(--status-working);
-      }
+      .calendar-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+      .calendar-title-block h3 { font-size: 1.0625rem; font-weight: 600; }
+      .calendar-title-block p { font-size: 0.8125rem; color: var(--text-muted); }
+      .nav-btn { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; transition: all var(--transition); }
+      .nav-btn:hover { background: var(--bg-subtle); border-color: var(--border-strong); }
+      .weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 8px; }
+      .weekday { text-align: center; font-size: 0.6875rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
+      .days-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+      .day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 0.8125rem; font-weight: 500; border-radius: var(--radius-sm); cursor: pointer; transition: all var(--transition); }
+      .day:hover { background: var(--bg-subtle); }
+      .day.other-month { color: var(--text-muted); opacity: 0.45; }
+      .day.today { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+      .day.selected { background: var(--bg-subtle); border: 1px solid var(--accent); font-weight: 600; }
+      .calendar-footer { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; }
+      .today-label { font-size: 0.75rem; color: var(--text-muted); font-weight: 500; text-transform: uppercase; }
+      .today-date { font-size: 0.8125rem; font-weight: 500; }
 
-      ::-webkit-scrollbar {
-        width: 10px;
-        height: 10px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: var(--border-strong);
-        border-radius: 999px;
-        border: 2px solid var(--bg);
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: var(--text-muted);
-      }
+      /* Controls & Notifications */
+      .controls { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+      .control-btn { width: 40px; height: 40px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-secondary); cursor: pointer; transition: all var(--transition); box-shadow: var(--shadow-sm); display: inline-flex; align-items: center; justify-content: center; }
+      .control-btn:hover { background: var(--bg-subtle); color: var(--text-primary); border-color: var(--border-strong); box-shadow: var(--shadow-md); }
+      
+      .notification { position: fixed; top: 24px; right: 24px; padding: 12px 16px; background: var(--bg-elevated); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); z-index: 100; transform: translateX(120%); transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+      .notification.show { transform: translateX(0); }
+      .notification.error { border-left-color: var(--status-off); }
+      .notification.success { border-left-color: var(--status-working); }
 
       /* ============================================================
-         MERGED WTB + Hour Explorer (Team Time Strips)
+         Unified: WTB + Hour Explorer (Team Time Strips)
          ============================================================ */
-      .wtb-section {
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
-      }
-      .wtb-section-title {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        font-size: 1.0625rem;
-        font-weight: 600;
-      }
-      .wtb-section-title i {
-        color: var(--text-muted);
-      }
-      .wtb-section-sub {
-        font-size: 0.8125rem;
-        color: var(--text-secondary);
-        margin-top: -12px;
-        line-height: 1.55;
-      }
+      .wtb-section { display: flex; flex-direction: column; gap: 24px; }
+      .wtb-section-title { display: flex; align-items: center; gap: 10px; font-size: 1.0625rem; font-weight: 600; }
+      .wtb-section-title i { color: var(--text-muted); }
+      .wtb-section-sub { font-size: 0.8125rem; color: var(--text-secondary); margin-top: -12px; line-height: 1.55; }
+      
+      .hex-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-primary); font-family: inherit; font-size: 0.75rem; font-weight: 500; cursor: pointer; transition: all var(--transition); }
+      .hex-btn:hover { background: var(--bg-subtle); border-color: var(--border-strong); }
+      .hex-btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+      .hex-btn.primary:hover { background: var(--accent-hover); }
+      .hex-meta-buttons { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 
-      .hex-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 6px 12px;
-        background: var(--bg-elevated);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        color: var(--text-primary);
-        font-family: inherit;
-        font-size: 0.75rem;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all var(--transition);
-      }
-      .hex-btn:hover {
-        background: var(--bg-subtle);
-        border-color: var(--border-strong);
-      }
-      .hex-btn.primary {
-        background: var(--accent);
-        color: var(--accent-text);
-        border-color: var(--accent);
-      }
-      .hex-btn.primary:hover {
-        background: var(--accent-hover);
-      }
-      .hex-meta-buttons {
-        display: inline-flex;
-        gap: 6px;
-      }
+      /* Structure Grid */
+      .wtb-grid-container { position: relative; }
+      .wtb-grid { display: flex; flex-direction: column; gap: 16px; position: relative; }
+      .wtb-header-row, .wtb-row { display: grid; grid-template-columns: 160px 130px 1fr; gap: 16px; align-items: center; position: relative; z-index: 3; }
+      .wtb-header-row { align-items: flex-end; margin-bottom: 8px; }
+      .wtb-meta-col { grid-column: 1 / 3; }
+      .wtb-axis-col { grid-column: 3 / 4; }
 
-      /* The Grid Layout */
-      .wtb-grid {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-      .wtb-header-row,
-      .wtb-row {
-        display: grid;
-        grid-template-columns: 160px 130px 1fr;
-        gap: 16px;
-        align-items: center;
-      }
-      .wtb-header-row {
-        align-items: flex-end;
-        margin-bottom: 8px;
-      }
-      .wtb-meta-col {
-        grid-column: 1 / 3;
-      }
-      .wtb-axis-col {
-        grid-column: 3 / 4;
-      }
+      /* Guideline aesthetic */
+      .wtb-global-guide { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1.5px dashed var(--accent); opacity: 0.25; z-index: 1; pointer-events: none; display: none; }
 
-      /* Col 1: Label */
-      .wtb-label-col {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-      .wtb-label-flag {
-        font-size: 1.25rem;
-        line-height: 1;
-      }
-      .wtb-label-info {
-        flex: 1;
-        min-width: 0;
-      }
-      .wtb-label-name {
-        font-size: 0.875rem;
-        font-weight: 500;
-        color: var(--text-primary);
-      }
-      .wtb-label-offset {
-        font-family: var(--font-mono);
-        font-size: 0.6875rem;
-        color: var(--text-muted);
-        font-weight: 500;
-      }
+      /* Column styling */
+      .wtb-label-col { display: flex; align-items: center; gap: 10px; }
+      .wtb-label-flag { font-size: 1.25rem; line-height: 1; }
+      .wtb-label-info { flex: 1; min-width: 0; }
+      .wtb-label-name { font-size: 0.875rem; font-weight: 500; color: var(--text-primary); }
+      .wtb-label-offset { font-family: var(--font-mono); font-size: 0.6875rem; color: var(--text-muted); font-weight: 500; }
 
-      /* Col 2: Live Time Box */
-      .wtb-time-col {
-        display: flex;
-      }
-      .wtb-live-time {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        padding: 8px 12px;
-        background: var(--bg-elevated);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        transition: all var(--transition);
-      }
-      .wtb-live-time.active-status {
-        background: var(--bg-subtle);
-        border-color: var(--border-strong);
-      }
-      .wtb-row-clock {
-        font-family: var(--font-mono);
-        font-size: 1.125rem;
-        font-weight: 600;
-        color: var(--text-primary);
-        line-height: 1.1;
-        font-variant-numeric: tabular-nums;
-        margin-bottom: 4px;
-      }
-      .wtb-row-date {
-        font-size: 0.6875rem;
-        color: var(--text-secondary);
-        font-weight: 500;
-      }
-      .wtb-row-status {
-        font-size: 0.625rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        padding: 2px 6px;
-        border-radius: var(--radius-sm);
-        background: var(--bg-subtle);
-        color: var(--text-muted);
-      }
-      .wtb-row-status.working {
-        background: var(--status-working-bg);
-        color: var(--status-working);
-      }
-      .wtb-row-status.off {
-        background: var(--status-off-bg);
-        color: var(--status-off);
-      }
-      .wtb-row-status.current {
-        background: var(--status-current-bg);
-        color: var(--status-current);
-      }
+      .wtb-time-col { display: flex; }
+      .wtb-live-time { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 8px 12px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md); transition: all var(--transition); }
+      .wtb-live-time.active-status { background: var(--bg-subtle); border-color: var(--border-strong); }
+      
+      .wtb-clock-wrapper { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; }
+      .wtb-row-clock { font-family: var(--font-mono); font-size: 1.125rem; font-weight: 600; color: var(--text-primary); line-height: 1.1; font-variant-numeric: tabular-nums; }
+      
+      /* Day Badge tomorrow / yesterday indicator */
+      .wtb-day-badge { font-family: var(--font-mono); font-size: 0.6rem; font-weight: 700; padding: 1px 4px; border-radius: 4px; display: none; }
+      .wtb-day-badge.tomorrow { display: inline-block; background: var(--status-current-bg); color: var(--status-current); }
+      .wtb-day-badge.yesterday { display: inline-block; background: var(--bg-subtle); color: var(--text-muted); border: 1px solid var(--border); }
 
-      /* Col 3: Tracks & Axis */
-      .wtb-track-col {
-        position: relative;
-      }
-      .wtb-track {
-        position: relative;
-        height: 36px;
-        background: var(--bg-subtle);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        overflow: visible;
-        cursor: crosshair;
-      }
+      .wtb-row-date { font-size: 0.6875rem; color: var(--text-secondary); font-weight: 500; }
+      .wtb-row-status { font-size: 0.625rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 6px; border-radius: var(--radius-sm); background: var(--bg-subtle); color: var(--text-muted); }
+      .wtb-row-status.working { background: var(--status-working-bg); color: var(--status-working); }
+      .wtb-row-status.off { background: var(--status-off-bg); color: var(--status-off); }
+      .wtb-row-status.current { background: var(--status-current-bg); color: var(--status-current); }
 
-      .wtb-segment {
-        position: absolute;
-        top: 6px;
-        bottom: 6px;
-        background: var(--status-working-bg);
-        border-top: 1px solid var(--status-working);
-        border-bottom: 1px solid var(--status-working);
-        border-radius: 3px;
-      }
-      .wtb-segment::after {
-        content: "";
-        position: absolute;
-        left: 0;
-        right: 0;
-        top: -1px;
-        bottom: -1px;
-        background: repeating-linear-gradient(
-          45deg,
-          transparent 0,
-          transparent 4px,
-          rgba(22, 163, 74, 0.08) 4px,
-          rgba(22, 163, 74, 0.08) 8px
-        );
-        border-radius: 3px;
-        pointer-events: none;
-      }
-      .wtb-off {
-        position: absolute;
-        top: 6px;
-        bottom: 6px;
-        background: repeating-linear-gradient(
-          45deg,
-          var(--bg-elevated) 0,
-          var(--bg-elevated) 4px,
-          var(--bg-subtle) 4px,
-          var(--bg-subtle) 8px
-        );
-        border-top: 1px solid var(--border);
-        border-bottom: 1px solid var(--border);
-        border-radius: 3px;
-        opacity: 0.85;
-      }
+      .wtb-track-col { position: relative; height: 100%; display: flex; align-items: center; }
+      .wtb-track { position: relative; width: 100%; height: 36px; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: visible; cursor: crosshair; }
+      
+      .wtb-segment { position: absolute; top: 6px; bottom: 6px; background: var(--status-working-bg); border-top: 1px solid var(--status-working); border-bottom: 1px solid var(--status-working); border-radius: 3px; }
+      .wtb-segment::after { content: ''; position: absolute; left: 0; right: 0; top: -1px; bottom: -1px; background: repeating-linear-gradient(45deg, transparent 0, transparent 4px, rgba(22, 163, 74, 0.08) 4px, rgba(22, 163, 74, 0.08) 8px); border-radius: 3px; pointer-events: none; }
+      .wtb-off { position: absolute; top: 6px; bottom: 6px; background: repeating-linear-gradient(45deg, var(--bg-elevated) 0, var(--bg-elevated) 4px, var(--bg-subtle) 4px, var(--bg-subtle) 8px); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 3px; opacity: 0.85; }
 
-      .wtb-hour-ticks,
-      .hex-strip-ticks {
-        position: absolute;
-        inset: 0;
-        display: grid;
-        grid-template-columns: repeat(24, 1fr);
-        pointer-events: none;
-      }
-      .wtb-hour-tick,
-      .hex-strip-tick {
-        border-right: 1px solid var(--border);
-        opacity: 0.5;
-      }
-      .wtb-hour-tick:last-child,
-      .hex-strip-tick:last-child {
-        border-right: none;
-      }
-      .hex-strip-tick.major {
-        opacity: 0.85;
-        border-right-color: var(--border-strong);
-      }
+      .wtb-hour-ticks, .hex-strip-ticks { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(24, 1fr); pointer-events: none; }
+      .wtb-hour-tick, .hex-strip-tick { border-right: 1px solid var(--border); opacity: 0.5; }
+      .wtb-hour-tick:last-child, .hex-strip-tick:last-child { border-right: none; }
+      .hex-strip-tick.major { opacity: 0.85; border-right-color: var(--border-strong); }
+      
+      .hex-strip-wrap { position: relative; user-select: none; cursor: crosshair; }
+      .hex-strip { position: relative; height: 36px; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-md); }
+      .hex-strip-axis { margin-top: 4px; position: relative; height: 14px; }
+      .hex-strip-axis-tick { position: absolute; top: 0; font-family: var(--font-mono); font-size: 0.6875rem; color: var(--text-muted); font-weight: 500; transform: translateX(-50%); white-space: nowrap; line-height: 1; }
+      .hex-strip-axis-tick.major { font-weight: 600; color: var(--text-secondary); }
 
-      .hex-strip-wrap {
-        position: relative;
-        user-select: none;
-        cursor: crosshair;
-      }
-      .hex-strip {
-        position: relative;
-        height: 36px;
-        background: var(--bg-subtle);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-      }
-      .hex-strip-axis {
-        margin-top: 4px;
-        position: relative;
-        height: 14px;
-      }
-      .hex-strip-axis-tick {
-        position: absolute;
-        top: 0;
-        font-family: var(--font-mono);
-        font-size: 0.6875rem;
-        color: var(--text-muted);
-        font-weight: 500;
-        transform: translateX(-50%);
-        white-space: nowrap;
-        line-height: 1;
-      }
-      .hex-strip-axis-tick.major {
-        font-weight: 600;
-        color: var(--text-secondary);
-      }
+      /* Indicators/Cursors */
+      .hex-cursor { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; pointer-events: none; z-index: 10; background: var(--accent); }
+      .hex-cursor-label { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 600; color: var(--accent-text); background: var(--accent); padding: 2px 8px; border-radius: 4px; white-space: nowrap; letter-spacing: 0.04em; }
+      .wtb-now-cursor { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--accent); z-index: 4; pointer-events: none; }
 
-      /* Cursors */
-      .hex-cursor {
-        position: absolute;
-        top: -4px;
-        bottom: -4px;
-        width: 2px;
-        margin-left: -1px;
-        pointer-events: none;
-        z-index: 10;
-        background: var(--accent);
-      }
-      .hex-cursor-label {
-        position: absolute;
-        top: -22px;
-        left: 50%;
-        transform: translateX(-50%);
-        font-family: var(--font-mono);
-        font-size: 0.6875rem;
-        font-weight: 600;
-        color: var(--accent-text);
-        background: var(--accent);
-        padding: 2px 8px;
-        border-radius: 4px;
-        white-space: nowrap;
-        letter-spacing: 0.04em;
-      }
-      .wtb-now-cursor {
-        position: absolute;
-        top: -2px;
-        bottom: -2px;
-        width: 2px;
-        margin-left: -1px;
-        background: var(--accent);
-        z-index: 3;
-        pointer-events: none;
-      }
+      /* Heatmaps */
+      .wtb-coverage { position: relative; height: 44px; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; margin-top: 4px; }
+      .wtb-coverage-bar { position: absolute; top: 0; bottom: 0; background: var(--status-working-bg); border-top: 2px solid var(--status-working); border-bottom: 2px solid var(--status-working); }
+      .wtb-coverage-bar.partial { background: var(--status-current-bg); border-top-color: var(--status-current); border-bottom-color: var(--status-current); }
+      .wtb-coverage-count { position: absolute; top: 50%; transform: translateY(-50%); font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 700; padding: 0 6px; }
+      .wtb-coverage-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; font-size: 0.75rem; color: var(--text-secondary); }
+      .wtb-coverage-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid transparent; display:inline-block; }
+      .wtb-coverage-swatch.full { background: var(--status-working-bg); border-color: var(--status-working); }
+      .wtb-coverage-swatch.partial { background: var(--status-current-bg); border-color: var(--status-current); }
 
-      /* Meeting / Coverage cards from original CSS */
-      .wtb-coverage {
-        position: relative;
-        height: 44px;
-        background: var(--bg-subtle);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        overflow: hidden;
-        margin-top: 4px;
-      }
-      .wtb-coverage-bar {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        background: var(--status-working-bg);
-        border-top: 2px solid var(--status-working);
-        border-bottom: 2px solid var(--status-working);
-      }
-      .wtb-coverage-bar.partial {
-        background: var(--status-current-bg);
-        border-top-color: var(--status-current);
-        border-bottom-color: var(--status-current);
-      }
-      .wtb-coverage-count {
-        position: absolute;
-        top: 50%;
-        transform: translateY(-50%);
-        font-family: var(--font-mono);
-        font-size: 0.6875rem;
-        font-weight: 700;
-        padding: 0 6px;
-      }
-      .wtb-coverage-legend {
-        display: flex;
-        gap: 16px;
-        flex-wrap: wrap;
-        margin-top: 8px;
-        font-size: 0.75rem;
-        color: var(--text-secondary);
-      }
-      .wtb-coverage-swatch {
-        width: 12px;
-        height: 12px;
-        border-radius: 3px;
-        border: 1px solid transparent;
-        display: inline-block;
-      }
-      .wtb-coverage-swatch.full {
-        background: var(--status-working-bg);
-        border-color: var(--status-working);
-      }
-      .wtb-coverage-swatch.partial {
-        background: var(--status-current-bg);
-        border-color: var(--status-current);
-      }
+      .wtb-meetings { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+      .wtb-meeting-card { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px; transition: all var(--transition); }
+      .wtb-meeting-quality { display: inline-flex; align-items: center; gap: 6px; font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; margin-bottom: 10px; }
+      .wtb-meeting-quality.excellent { background: var(--status-working-bg); color: var(--status-working); }
+      .wtb-meeting-quality.good { background: var(--status-current-bg); color: var(--status-current); }
+      .wtb-meeting-quality.weak { background: var(--bg-subtle); color: var(--text-muted); }
+      .wtb-meeting-quality::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+      .wtb-meeting-time { font-family: var(--font-mono); font-size: 1.25rem; font-weight: 600; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+      .wtb-meeting-zones { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+      .wtb-meeting-zone-chip { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 500; padding: 3px 8px; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 999px; color: var(--text-secondary); }
 
-      .wtb-meetings {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 12px;
-      }
-      .wtb-meeting-card {
-        background: var(--bg-elevated);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        padding: 14px 16px;
-        transition: all var(--transition);
-      }
-      .wtb-meeting-quality {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 0.6875rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        padding: 3px 8px;
-        border-radius: 999px;
-        margin-bottom: 10px;
-      }
-      .wtb-meeting-quality.excellent {
-        background: var(--status-working-bg);
-        color: var(--status-working);
-      }
-      .wtb-meeting-quality.good {
-        background: var(--status-current-bg);
-        color: var(--status-current);
-      }
-      .wtb-meeting-quality.weak {
-        background: var(--bg-subtle);
-        color: var(--text-muted);
-      }
-      .wtb-meeting-quality::before {
-        content: "";
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: currentColor;
-      }
-      .wtb-meeting-time {
-        font-family: var(--font-mono);
-        font-size: 1.25rem;
-        font-weight: 600;
-        margin-bottom: 4px;
-        font-variant-numeric: tabular-nums;
-      }
-      .wtb-meeting-zones {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-top: 8px;
-      }
-      .wtb-meeting-zone-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        font-family: var(--font-mono);
-        font-size: 0.6875rem;
-        font-weight: 500;
-        padding: 3px 8px;
-        background: var(--bg-subtle);
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        color: var(--text-secondary);
-      }
+      .footer { text-align: center; padding: 24px 0; font-size: 0.8125rem; color: var(--text-muted); }
 
-      /* Responsive logic */
-      @media (max-width: 1024px) {
-        .main-content {
-          grid-template-columns: 1fr;
-        }
-      }
+      /* Responsive logic updates */
+      @media (max-width: 1024px) { .main-content { grid-template-columns: 1fr; } }
       @media (max-width: 860px) {
-        .wtb-header-row,
-        .wtb-row {
-          grid-template-columns: 140px 110px 1fr;
-          gap: 12px;
-        }
-        .wtb-row-clock {
-          font-size: 1rem;
-        }
+        .wtb-header-row, .wtb-row { grid-template-columns: 140px 110px 1fr; gap: 12px; }
+        .wtb-row-clock { font-size: 1rem; }
       }
       @media (max-width: 640px) {
-        body {
-          padding: 20px 16px 80px;
-        }
-        .stats-bar {
-          grid-template-columns: repeat(2, 1fr);
-        }
-        .wtb-header-row,
-        .wtb-row {
-          grid-template-columns: 1fr auto;
-          gap: 12px 8px;
-        }
-        .wtb-meta-col {
-          grid-column: 1 / -1;
-          margin-bottom: 4px;
-        }
-        .wtb-axis-col,
-        .wtb-track-col {
-          grid-column: 1 / -1;
-        }
-        .wtb-live-time {
-          padding: 6px 10px;
-        }
-        .theme-toggle span {
-          display: none;
-        }
+        body { padding: 20px 16px 80px; }
+        .stats-bar { grid-template-columns: repeat(2, 1fr); }
+        .wtb-header-row, .wtb-row { grid-template-columns: 1fr auto; gap: 12px 8px; }
+        .wtb-meta-col { grid-column: 1 / -1; margin-bottom: 4px; }
+        .wtb-axis-col, .wtb-track-col { grid-column: 1 / -1; }
+        .wtb-live-time { padding: 6px 10px; }
+        .theme-toggle span { display: none; }
+        .wtb-global-guide { display: none !important; }
       }
     </style>
   </head>
@@ -1109,13 +337,9 @@
       <header class="header">
         <div class="header-titles">
           <h1>Team Time Zone Clock</h1>
-          <p>Real-time global team sync · collaborate more efficiently</p>
+          <p>Real-time global team sync · anchored to <span class="anchor-chip"><i class="fas fa-map-pin" aria-hidden="true"></i> China Standard Time (UTC+8)</span></p>
         </div>
-        <button
-          class="theme-toggle"
-          onclick="toggleTheme()"
-          aria-label="Toggle theme"
-        >
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
           <i class="fas fa-moon"></i>
           <span>Dark mode</span>
         </button>
@@ -1123,43 +347,56 @@
 
       <div class="search-container" role="search">
         <i class="fas fa-search" aria-hidden="true"></i>
-        <input
-          type="text"
-          class="search-box"
-          id="searchBox"
-          placeholder="Search timezone or country…"
-          onkeyup="filterClocks()"
-          aria-label="Search timezone or country"
-        />
+        <input type="text" class="search-box" id="searchBox" placeholder="Search timezone or country…" onkeyup="filterClocks()" aria-label="Search timezone or country">
       </div>
 
+      <div class="quick-status" id="quickStatus" aria-live="polite" aria-label="Team status at a glance"></div>
+
       <div class="stats-bar" id="statsBar" aria-live="polite"></div>
+
+      <!-- Integrated Coordination timeline -->
+      <section class="wtb-section" aria-label="Team coordination strips">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+          <h2 class="wtb-section-title" style="margin-bottom: 0;">
+            <i class="fas fa-sliders-h" aria-hidden="true"></i>
+            Team Time Strips & Explorer
+          </h2>
+          <div class="hex-meta-buttons">
+            <button class="hex-btn" id="wtbShiftMinus" title="Back 1 hour"><i class="fas fa-chevron-left"></i> -1h</button>
+            <button class="hex-btn primary" id="wtbNowBtn" title="Snap cursor back to the current moment"><i class="fas fa-circle" style="font-size:0.5rem;"></i> Now</button>
+            <button class="hex-btn" id="wtbShiftPlus" title="Forward 1 hour">+1h <i class="fas fa-chevron-right"></i></button>
+            <button class="hex-btn" id="wtbCopyBtn" title="Copy selected time across all zones" style="margin-left: 8px; border-color: var(--accent); color: var(--accent);"><i class="fas fa-copy"></i> Copy</button>
+          </div>
+        </div>
+        <p class="wtb-section-sub">
+          Drag the timeline to explore moments. A <span style="font-weight:600;">+1d/-1d</span> badge will appear if the local time falls into tomorrow or yesterday relative to the reference time.
+        </p>
+
+        <div class="card" style="padding: 24px 20px;">
+          <div class="wtb-grid-container">
+            <div class="wtb-grid" id="wtbGrid">
+              <!-- Grid components populated by JS -->
+            </div>
+          </div>
+        </div>
+      </section>
 
       <main class="main-content" id="main">
         <section class="left-column" aria-label="Sidebar tools">
           <!-- Calendar -->
           <div class="card calendar-container">
             <div class="calendar-header">
-              <button class="nav-btn" onclick="previousMonth()">
-                <i class="fas fa-chevron-left"></i>
-              </button>
+              <button class="nav-btn" onclick="previousMonth()"><i class="fas fa-chevron-left"></i></button>
               <div class="calendar-title-block">
                 <h3 id="calendarMonth"></h3>
                 <p id="calendarYear"></p>
               </div>
-              <button class="nav-btn" onclick="nextMonth()">
-                <i class="fas fa-chevron-right"></i>
-              </button>
+              <button class="nav-btn" onclick="nextMonth()"><i class="fas fa-chevron-right"></i></button>
             </div>
             <div class="calendar-grid">
               <div class="weekdays" aria-hidden="true">
-                <div class="weekday">Sun</div>
-                <div class="weekday">Mon</div>
-                <div class="weekday">Tue</div>
-                <div class="weekday">Wed</div>
-                <div class="weekday">Thu</div>
-                <div class="weekday">Fri</div>
-                <div class="weekday">Sat</div>
+                <div class="weekday">Sun</div><div class="weekday">Mon</div><div class="weekday">Tue</div>
+                <div class="weekday">Wed</div><div class="weekday">Thu</div><div class="weekday">Fri</div><div class="weekday">Sat</div>
               </div>
               <div class="days-grid" id="daysGrid"></div>
             </div>
@@ -1169,25 +406,20 @@
             </div>
           </div>
 
-          <!-- Time zone converter -->
+          <!-- Dynamic Analog Clock Face -->
           <div class="card">
-            <div class="card-title">
-              <i class="fas fa-exchange-alt"></i
-              ><span>Time zone converter</span>
-            </div>
-            <div class="converter-form">
-              <input
-                type="datetime-local"
-                class="converter-input"
-                id="converterTime"
-              />
-              <select class="converter-input" id="converterFrom"></select>
-              <select class="converter-input" id="converterTo"></select>
-              <button class="submit-btn" onclick="convertTime()">
-                <i class="fas fa-sync-alt"></i> Convert time
-              </button>
-              <div class="converter-result" id="converterResult">
-                Select a time and timezone to convert
+            <div class="card-title"><i class="fas fa-clock"></i><span>Local Time</span></div>
+            <div class="analog-clock-container">
+              <div class="analog-clock" id="analogClockFace">
+                <!-- Programmatically generated markers -->
+                <div class="clock-hand hand-hour" id="ahHour"></div>
+                <div class="clock-hand hand-min" id="ahMin"></div>
+                <div class="clock-hand hand-sec" id="ahSec"></div>
+                <div class="clock-center"></div>
+              </div>
+              <div class="analog-readout">
+                <div class="analog-digital-time" id="adTime">--:--:--</div>
+                <div class="analog-digital-date" id="adDate">---</div>
               </div>
             </div>
           </div>
@@ -1198,221 +430,86 @@
         </section>
       </main>
 
-      <!-- =======================================================
-           Merged: Team Time Strips & Hour Explorer
-           ======================================================= -->
-      <section class="wtb-section" aria-label="Team coordination strips">
-        <div
-          style="
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            flex-wrap: wrap;
-          "
-        >
-          <h2 class="wtb-section-title" style="margin-bottom: 0">
-            <i class="fas fa-clock" aria-hidden="true"></i>
-            Team Time Strips & Explorer
-          </h2>
-          <div class="hex-meta-buttons">
-            <button class="hex-btn" id="wtbShiftMinus" title="Back 1 hour">
-              <i class="fas fa-chevron-left"></i> -1h
-            </button>
-            <button
-              class="hex-btn primary"
-              id="wtbNowBtn"
-              title="Snap cursor back to the current moment"
-            >
-              <i class="fas fa-circle" style="font-size: 0.5rem"></i> Now
-            </button>
-            <button class="hex-btn" id="wtbShiftPlus" title="Forward 1 hour">
-              +1h <i class="fas fa-chevron-right"></i>
-            </button>
-          </div>
-        </div>
-        <p class="wtb-section-sub">
-          Drag the timeline or any track to explore a different moment. The
-          24-hour horizontal strips visually show each zone's work / rest
-          pattern based on China Time (CST), while the time boxes instantly
-          display the corresponding local time.
-        </p>
-
-        <div class="card" style="padding: 24px 20px">
-          <div class="wtb-grid" id="wtbGrid">
-            <!-- Grid rendered by JS -->
-          </div>
-        </div>
-
+      <section class="wtb-section" aria-label="Team insights">
         <div class="card">
-          <div class="card-title">
-            <i class="fas fa-users" aria-hidden="true"></i
-            ><span>Team coverage heatmap</span>
-          </div>
-          <p class="wtb-section-sub" style="margin: -10px 0 12px">
-            How many team members are online in the same hour?
-          </p>
+          <div class="card-title"><i class="fas fa-users" aria-hidden="true"></i><span>Team coverage heatmap</span></div>
+          <p class="wtb-section-sub" style="margin: -10px 0 12px;">How many team members are online in the same hour?</p>
           <div class="wtb-coverage" id="wtbCoverage"></div>
           <div class="wtb-coverage-legend">
-            <span style="display: inline-flex; align-items: center; gap: 6px"
-              ><span class="wtb-coverage-swatch full"></span> Everyone
-              online</span
-            >
-            <span style="display: inline-flex; align-items: center; gap: 6px"
-              ><span class="wtb-coverage-swatch partial"></span> Partial</span
-            >
+            <span style="display:inline-flex; align-items:center; gap:6px;"><span class="wtb-coverage-swatch full"></span> Everyone online</span>
+            <span style="display:inline-flex; align-items:center; gap:6px;"><span class="wtb-coverage-swatch partial"></span> Partial</span>
           </div>
         </div>
 
         <div class="card">
-          <div class="card-title">
-            <i class="fas fa-handshake" aria-hidden="true"></i
-            ><span>Recommended meeting times</span>
-          </div>
-          <p class="wtb-section-sub" style="margin: -10px 0 12px">
-            Based on working-hour overlap.
-          </p>
+          <div class="card-title"><i class="fas fa-handshake" aria-hidden="true"></i><span>Recommended meeting times</span></div>
+          <p class="wtb-section-sub" style="margin: -10px 0 12px;">Based on working-hour overlap.</p>
           <div class="wtb-meetings" id="wtbMeetings"></div>
         </div>
       </section>
 
-      <footer class="footer">
-        <p>Auto-refresh every second · real-time global sync</p>
-      </footer>
+      <footer class="footer"><p>Auto-refresh every second · real-time global sync</p></footer>
     </div>
 
     <div class="controls" role="toolbar" aria-label="Quick actions">
-      <button
-        class="control-btn"
-        onclick="toggleFullscreen()"
-        title="Fullscreen (F)"
-      >
-        <i class="fas fa-expand"></i>
-      </button>
-      <button
-        class="control-btn"
-        onclick="updateAllClocks()"
-        title="Manual refresh (R)"
-      >
-        <i class="fas fa-sync-alt"></i>
-      </button>
-      <button
-        class="control-btn"
-        onclick="addCustomTimezone()"
-        title="Add timezone (+)"
-      >
-        <i class="fas fa-plus"></i>
-      </button>
+      <button class="control-btn" onclick="toggleFullscreen()" title="Fullscreen (F)"><i class="fas fa-expand"></i></button>
+      <button class="control-btn" onclick="updateAllClocks()" title="Manual refresh (R)"><i class="fas fa-sync-alt"></i></button>
+      <button class="control-btn" onclick="addCustomTimezone()" title="Add timezone (+)"><i class="fas fa-plus"></i></button>
     </div>
 
-    <!-- Original Core Clock JS (No structural logic changes here) -->
+    <!-- Core App Logic -->
     <script>
-      const timezones = [
-        {
-          name: "China",
-          flag: "🇨🇳",
-          timezone: "Asia/Shanghai",
-          workingHours: [9, 18],
-        },
-        {
-          name: "India",
-          flag: "🇮🇳",
-          timezone: "Asia/Kolkata",
-          workingHours: [9, 18],
-        },
-        {
-          name: "UK",
-          flag: "🇬🇧",
-          timezone: "Europe/London",
-          workingHours: [9, 17],
-        },
-        { name: "UTC", flag: "🌐", timezone: "UTC", workingHours: [9, 18] },
-        {
-          name: "US West Coast",
-          flag: "🇺🇸",
-          timezone: "America/Los_Angeles",
-          workingHours: [9, 18],
-        },
-        {
-          name: "Current loc.",
-          flag: "📍",
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          workingHours: [9, 18],
-          isCurrent: true,
-        },
+      // Persistent states
+      const defaultTimezones = [
+        { name: "China",        flag: "🇨🇳", timezone: "Asia/Shanghai",      workingHours: [9, 18] },
+        { name: "India",        flag: "🇮🇳", timezone: "Asia/Kolkata",       workingHours: [9, 18] },
+        { name: "UK",           flag: "🇬🇧", timezone: "Europe/London",      workingHours: [9, 17] },
+        { name: "US West Coast",flag: "🇺🇸", timezone: "America/Los_Angeles", workingHours: [9, 18] },
+        { name: "Current loc.", flag: "📍", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, workingHours: [9, 18], isCurrent: true },
       ];
+
+      let timezones = [];
+      const savedZones = localStorage.getItem('team_timezones');
+      if (savedZones) {
+        try { 
+          timezones = JSON.parse(savedZones); 
+          const currentTz = timezones.find(tz => tz.isCurrent);
+          if (currentTz) currentTz.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        } catch(e) { timezones = [...defaultTimezones]; }
+      } else {
+        timezones = [...defaultTimezones];
+      }
+
+      function saveTimezones() { localStorage.setItem('team_timezones', JSON.stringify(timezones)); }
 
       let currentCalendarDate = new Date();
       let selectedDate = null;
-      const monthNames = [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-      ];
+      const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+      function isWithinWorkingHours(hour, workingHours) {
+        const [s, e] = workingHours;
+        // Supports overnight ranges too (e.g. 22 -> 6)
+        return s < e ? (hour >= s && hour < e) : (hour >= s || hour < e);
+      }
       function getWorkingStatus(hour, workingHours, isCurrent = false) {
         if (isCurrent) return "current-timezone";
-        return hour >= workingHours[0] && hour < workingHours[1]
-          ? "working-hours"
-          : "off-hours";
+        return isWithinWorkingHours(hour, workingHours) ? "working-hours" : "off-hours";
       }
       function getStatusText(hour, workingHours, isCurrent = false) {
         if (isCurrent) return "Current zone";
-        return hour >= workingHours[0] && hour < workingHours[1]
-          ? "Working hours"
-          : "Off hours";
+        return isWithinWorkingHours(hour, workingHours) ? "Working hours" : "Off hours";
       }
-      function formatTime(date) {
-        return date.toLocaleTimeString("en-GB", {
-          hour12: false,
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        });
-      }
-      function formatDate(date) {
-        return date.toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-          weekday: "long",
-        });
-      }
+      function formatTime(date) { return date.toLocaleTimeString("en-GB", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
+      function formatDate(date) { return date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", weekday: "long" }); }
 
       function createClockCard(timezone) {
         const now = new Date();
-        const localTime = new Date(
-          now.toLocaleString("en-US", { timeZone: timezone.timezone }),
-        );
+        const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone.timezone }));
         const hour = localTime.getHours();
-        const timeDiff = Math.round(
-          (localTime.getTime() - now.getTime()) / (1000 * 60 * 60),
-        );
-        const timeDiffText =
-          timeDiff === 0
-            ? "Local time"
-            : timeDiff > 0
-              ? `+${timeDiff} h`
-              : `${timeDiff} h`;
-        const statusClass = getWorkingStatus(
-          hour,
-          timezone.workingHours,
-          timezone.isCurrent,
-        );
-        const statusText = getStatusText(
-          hour,
-          timezone.workingHours,
-          timezone.isCurrent,
-        );
+        const timeDiff = Math.round((localTime.getTime() - now.getTime()) / (1000 * 60 * 60));
+        const timeDiffText = timeDiff === 0 ? 'Local time' : timeDiff > 0 ? `+${timeDiff} h` : `${timeDiff} h`;
+        const statusClass = getWorkingStatus(hour, timezone.workingHours, timezone.isCurrent);
+        const statusText = getStatusText(hour, timezone.workingHours, timezone.isCurrent);
 
         return `
           <article class="clock-card" data-timezone-name="${timezone.name.toLowerCase()}">
@@ -1420,9 +517,10 @@
               <span class="country-flag" aria-hidden="true">${timezone.flag}</span>
               <div class="country-info">
                 <div class="country-name">${timezone.name}
-                  ${!timezone.isCurrent ? `<button class="delete-btn" onclick="removeTimezone('${timezone.timezone}')"><i class="fas fa-trash-alt"></i></button>` : ""}
+                  <button class="edit-btn" onclick="editWorkingHours('${timezone.timezone}')" title="Edit working hours"><i class="fas fa-pen"></i></button>
+                  ${!timezone.isCurrent ? `<button class="delete-btn" onclick="removeTimezone('${timezone.timezone}')" title="Remove timezone"><i class="fas fa-trash-alt"></i></button>` : ''}
                 </div>
-                <div class="timezone-info">${timezone.timezone}</div>
+                <div class="timezone-info">${timezone.timezone} · ${String(timezone.workingHours[0]).padStart(2,'0')}:00–${String(timezone.workingHours[1]).padStart(2,'0')}:00</div>
               </div>
             </div>
             <div class="time-section">
@@ -1439,15 +537,11 @@
 
       function createStatsBar() {
         const now = new Date();
-        let workingCount = 0,
-          offCount = 0;
-        timezones.forEach((tz) => {
+        let workingCount = 0, offCount = 0;
+        timezones.forEach(tz => {
           if (tz.isCurrent) return;
-          const h = new Date(
-            now.toLocaleString("en-US", { timeZone: tz.timezone }),
-          ).getHours();
-          if (h >= tz.workingHours[0] && h < tz.workingHours[1]) workingCount++;
-          else offCount++;
+          const h = new Date(now.toLocaleString("en-US", { timeZone: tz.timezone })).getHours();
+          if (isWithinWorkingHours(h, tz.workingHours)) workingCount++; else offCount++;
         });
         return `
           <div class="stat-item"><span class="stat-number">${timezones.length}</span><span class="stat-label">Total zones</span></div>
@@ -1457,423 +551,290 @@
         `;
       }
 
+      function renderQuickStatus() {
+        const el = document.getElementById("quickStatus");
+        if (!el) return;
+        const now = new Date();
+        el.innerHTML = timezones.map(tz => {
+          const h = new Date(now.toLocaleString("en-US", { timeZone: tz.timezone })).getHours();
+          const cls = tz.isCurrent ? "current" : (isWithinWorkingHours(h, tz.workingHours) ? "working" : "off");
+          return `<span class="quick-status-chip ${cls}"><span class="dot"></span>${tz.flag} ${tz.name}</span>`;
+        }).join("");
+      }
+
       function updateAllClocks() {
-        document.getElementById("clockContainer").innerHTML = timezones
-          .map(createClockCard)
-          .join("");
+        document.getElementById("clockContainer").innerHTML = timezones.map(createClockCard).join("");
         document.getElementById("statsBar").innerHTML = createStatsBar();
-        updateTimezoneOptions();
+        renderQuickStatus();
       }
 
       function updateTimes() {
-        timezones.forEach((tz) => {
+        timezones.forEach(tz => {
           const now = new Date();
-          const localTime = new Date(
-            now.toLocaleString("en-US", { timeZone: tz.timezone }),
-          );
+          const localTime = new Date(now.toLocaleString("en-US", { timeZone: tz.timezone }));
           const h = localTime.getHours();
-          document
-            .querySelectorAll(`[data-timezone="${tz.timezone}"]`)
-            .forEach((el) => {
-              if (el.classList.contains("time-display"))
-                el.textContent = formatTime(localTime);
-              else if (el.classList.contains("date-display"))
-                el.textContent = formatDate(localTime);
-            });
-          const card = document
-            .querySelector(`[data-timezone="${tz.timezone}"]`)
-            ?.closest(".clock-card");
+          document.querySelectorAll(`[data-timezone="${tz.timezone}"]`).forEach(el => {
+            if (el.classList.contains("time-display")) el.textContent = formatTime(localTime);
+            else if (el.classList.contains("date-display")) el.textContent = formatDate(localTime);
+          });
+          const card = document.querySelector(`[data-timezone="${tz.timezone}"]`)?.closest(".clock-card");
           if (card) {
             const status = card.querySelector(".status-indicator");
             status.className = `status-indicator ${getWorkingStatus(h, tz.workingHours, tz.isCurrent)}`;
-            status.textContent = getStatusText(
-              h,
-              tz.workingHours,
-              tz.isCurrent,
-            );
+            status.textContent = getStatusText(h, tz.workingHours, tz.isCurrent);
           }
         });
         document.getElementById("statsBar").innerHTML = createStatsBar();
+        renderQuickStatus();
+      }
+
+      // Analog Clock Rendering
+      function initAnalogClock() {
+        const face = document.getElementById('analogClockFace');
+        for (let i = 0; i < 60; i++) {
+          if (i % 5 !== 0) continue; 
+          const tickContainer = document.createElement('div');
+          tickContainer.className = 'clock-tick-container';
+          tickContainer.style.transform = `rotate(${i * 6}deg)`;
+          const tick = document.createElement('div');
+          tick.className = i % 15 === 0 ? 'clock-tick major' : 'clock-tick';
+          tickContainer.appendChild(tick);
+          face.appendChild(tickContainer);
+        }
+      }
+
+      function updateAnalogClock() {
+        const now = new Date();
+        const sec = now.getSeconds();
+        const min = now.getMinutes();
+        const hr = now.getHours();
+
+        const secDeg = sec * 6;
+        const minDeg = min * 6 + sec * 0.1;
+        const hrDeg = (hr % 12) * 30 + min * 0.5;
+
+        document.getElementById('ahSec').style.transform = `rotate(${secDeg}deg)`;
+        document.getElementById('ahMin').style.transform = `rotate(${minDeg}deg)`;
+        document.getElementById('ahHour').style.transform = `rotate(${hrDeg}deg)`;
+
+        document.getElementById('adTime').textContent = formatTime(now);
+        document.getElementById('adDate').textContent = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'short', day: 'numeric' }).format(now);
       }
 
       function toggleTheme() {
-        document.body.classList.toggle("dark-mode");
-        const themeBtn = document.querySelector(".theme-toggle");
-        const isDark = document.body.classList.contains("dark-mode");
-        themeBtn.querySelector("i").className = isDark
-          ? "fas fa-sun"
-          : "fas fa-moon";
-        themeBtn.querySelector("span").textContent = isDark
-          ? "Light mode"
-          : "Dark mode";
-        localStorage.setItem("theme", isDark ? "dark" : "light");
+        document.body.classList.toggle('dark-mode');
+        const themeBtn = document.querySelector('.theme-toggle');
+        const isDark = document.body.classList.contains('dark-mode');
+        themeBtn.querySelector('i').className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+        themeBtn.querySelector('span').textContent = isDark ? 'Light mode' : 'Dark mode';
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
       }
 
-      // Calendar setup omitted for brevity... (Kept fully functional)
+      // Calendar controls
       function generateCalendar(date) {
-        const year = date.getFullYear(),
-          month = date.getMonth(),
-          today = new Date();
-        document.getElementById("calendarMonth").textContent =
-          monthNames[month];
-        document.getElementById("calendarYear").textContent = year;
-        const daysGrid = document.getElementById("daysGrid");
-        daysGrid.innerHTML = "";
+        const year = date.getFullYear(), month = date.getMonth(), today = new Date();
+        document.getElementById('calendarMonth').textContent = monthNames[month];
+        document.getElementById('calendarYear').textContent = year;
+        const daysGrid = document.getElementById('daysGrid'); daysGrid.innerHTML = '';
         const firstDayWeek = new Date(year, month, 1).getDay();
         const daysInPrev = new Date(year, month, 0).getDate();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
-        for (let i = firstDayWeek - 1; i >= 0; i--)
-          daysGrid.appendChild(createDayElement(daysInPrev - i, true));
+        for (let i = firstDayWeek - 1; i >= 0; i--) daysGrid.appendChild(createDayElement(daysInPrev - i, true));
         for (let day = 1; day <= daysInMonth; day++) {
           const el = createDayElement(day, false);
           const cDate = new Date(year, month, day);
-          if (cDate.toDateString() === today.toDateString())
-            el.classList.add("today");
-          if (
-            selectedDate &&
-            cDate.toDateString() === selectedDate.toDateString()
-          )
-            el.classList.add("selected");
+          if (cDate.toDateString() === today.toDateString()) el.classList.add('today');
+          if (selectedDate && cDate.toDateString() === selectedDate.toDateString()) el.classList.add('selected');
           daysGrid.appendChild(el);
         }
-        for (let day = 1; daysGrid.children.length < 42; day++)
-          daysGrid.appendChild(createDayElement(day, true));
+        for (let day = 1; daysGrid.children.length < 42; day++) daysGrid.appendChild(createDayElement(day, true));
         updateTodayInfo();
       }
       function createDayElement(day, isOtherMonth) {
-        const el = document.createElement("div");
-        el.className = "day";
-        el.textContent = day;
-        if (isOtherMonth) el.classList.add("other-month");
-        else
-          el.addEventListener("click", () => {
-            document
-              .querySelectorAll(".day.selected")
-              .forEach((e) => e.classList.remove("selected"));
-            el.classList.add("selected");
-            selectedDate = new Date(
-              currentCalendarDate.getFullYear(),
-              currentCalendarDate.getMonth(),
-              day,
-            );
-            updateTodayInfo();
-          });
+        const el = document.createElement('div'); el.className = 'day'; el.textContent = day;
+        if (isOtherMonth) el.classList.add('other-month');
+        else el.addEventListener('click', () => {
+          document.querySelectorAll('.day.selected').forEach(e => e.classList.remove('selected'));
+          el.classList.add('selected'); selectedDate = new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth(), day);
+          updateTodayInfo();
+        });
         return el;
       }
-      function updateTodayInfo() {
-        document.getElementById("todayDate").textContent = (
-          selectedDate || new Date()
-        ).toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-          weekday: "long",
-        });
-      }
-      function previousMonth() {
-        currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
-        generateCalendar(currentCalendarDate);
-      }
-      function nextMonth() {
-        currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
-        generateCalendar(currentCalendarDate);
-      }
+      function updateTodayInfo() { document.getElementById('todayDate').textContent = (selectedDate || new Date()).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }); }
+      function previousMonth() { currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1); generateCalendar(currentCalendarDate); }
+      function nextMonth() { currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1); generateCalendar(currentCalendarDate); }
 
       function filterClocks() {
-        const term = document.getElementById("searchBox").value.toLowerCase();
-        document
-          .querySelectorAll(".clock-card")
-          .forEach(
-            (card) =>
-              (card.style.display = card
-                .getAttribute("data-timezone-name")
-                .includes(term)
-                ? ""
-                : "none"),
-          );
+        const term = document.getElementById('searchBox').value.toLowerCase();
+        document.querySelectorAll('.clock-card').forEach(card => card.style.display = card.getAttribute('data-timezone-name').includes(term) ? '' : 'none');
       }
 
       function addCustomTimezone() {
-        const tz = prompt("Enter timezone identifier (e.g. Asia/Tokyo):");
-        if (!tz) return;
-        try {
-          Intl.DateTimeFormat(undefined, { timeZone: tz });
-          const n = prompt("Enter timezone name:", tz.split("/").pop());
-          if (!n) return;
-          timezones.push({
-            name: n,
-            flag: "🌍",
-            timezone: tz,
-            workingHours: [9, 18],
-          });
-          updateAllClocks();
-          showNotification(`Added: ${n}`, "success");
-        } catch (e) {
-          showNotification("Invalid timezone identifier", "error");
-        }
+        const tz = prompt("Enter timezone identifier (e.g. Asia/Tokyo):"); if (!tz) return;
+        try { 
+          Intl.DateTimeFormat(undefined, { timeZone: tz }); 
+          const n = prompt("Enter timezone name:", tz.split("/").pop()); if (!n) return;
+          timezones.push({ name: n, flag: "🌍", timezone: tz, workingHours: [9, 18] }); 
+          saveTimezones(); 
+          updateAllClocks(); showNotification(`Added: ${n}`, 'success');
+        } catch (e) { showNotification("Invalid timezone identifier", 'error'); }
       }
-      function removeTimezone(tzId) {
-        const index = timezones.findIndex((tz) => tz.timezone === tzId);
-        if (index === -1 || timezones[index].isCurrent) {
-          showNotification("Cannot delete current location", "error");
+      function editWorkingHours(tzId) {
+        const tz = timezones.find(t => t.timezone === tzId);
+        if (!tz) return;
+
+        const startStr = prompt(`${tz.name} — start hour of working time (0-23):`, tz.workingHours[0]);
+        if (startStr === null) return;
+        const endStr = prompt(`${tz.name} — end hour of working time (0-23):`, tz.workingHours[1]);
+        if (endStr === null) return;
+
+        const start = parseInt(startStr, 10);
+        const end = parseInt(endStr, 10);
+        if (isNaN(start) || isNaN(end) || start < 0 || start > 23 || end < 0 || end > 23) {
+          showNotification("Please enter whole hours between 0 and 23", 'error');
           return;
         }
+        if (start === end) {
+          showNotification("Start and end hour can't be the same", 'error');
+          return;
+        }
+
+        tz.workingHours = [start, end];
+        saveTimezones();
+        updateAllClocks();
+        showNotification(`Updated working hours for ${tz.name}`, 'success');
+      }
+
+      function removeTimezone(tzId) {
+        const index = timezones.findIndex(tz => tz.timezone === tzId);
+        if (index === -1 || timezones[index].isCurrent) { showNotification("Cannot delete current location", 'error'); return; }
         if (!confirm(`Delete ${timezones[index].name} ?`)) return;
-        const n = timezones[index].name;
-        timezones.splice(index, 1);
-        updateAllClocks();
-        showNotification(`Removed: ${n}`, "success");
+        const n = timezones[index].name; timezones.splice(index, 1); 
+        saveTimezones();
+        updateAllClocks(); showNotification(`Removed: ${n}`, 'success');
       }
 
-      function updateTimezoneOptions() {
-        const from = document.getElementById("converterFrom"),
-          to = document.getElementById("converterTo");
-        from.innerHTML = "";
-        to.innerHTML = "";
-        timezones.forEach((tz) => {
-          const o1 = document.createElement("option");
-          o1.value = tz.timezone;
-          o1.textContent = `${tz.flag} ${tz.name}`;
-          from.appendChild(o1);
-          to.appendChild(o1.cloneNode(true));
-        });
-        if (timezones.length > 0) {
-          from.value = timezones[0].timezone;
-          to.value = timezones[timezones.length - 1].timezone;
-        }
-      }
-      function convertTime() {
-        const timeInput = document.getElementById("converterTime").value;
-        if (!timeInput) return;
-        try {
-          const d = new Date(timeInput);
-          const cTime = new Intl.DateTimeFormat("en-US", {
-            timeZone: document.getElementById("converterTo").value,
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: false,
-          }).format(d);
-          const fTz = timezones.find(
-            (tz) =>
-              tz.timezone === document.getElementById("converterFrom").value,
-          );
-          const tTz = timezones.find(
-            (tz) =>
-              tz.timezone === document.getElementById("converterTo").value,
-          );
-          document.getElementById("converterResult").innerHTML =
-            `<strong>Result</strong><div class="converted-time">${cTime}</div><div class="converted-route">${fTz.flag} ${fTz.name} → ${tTz.flag} ${tTz.name}</div>`;
-        } catch (e) {
-          document.getElementById("converterResult").textContent =
-            "Conversion failed";
-        }
-      }
-
-      function toggleFullscreen() {
-        !document.fullscreenElement
-          ? document.documentElement.requestFullscreen()
-          : document.exitFullscreen();
-      }
-      function showNotification(msg, type = "info") {
-        const noti = document.createElement("div");
-        noti.className = `notification ${type}`;
-        noti.textContent = msg;
+      function toggleFullscreen() { !document.fullscreenElement ? document.documentElement.requestFullscreen() : document.exitFullscreen(); }
+      function showNotification(msg, type = 'info') {
+        const noti = document.createElement('div'); noti.className = `notification ${type}`; noti.textContent = msg;
         document.body.appendChild(noti);
-        requestAnimationFrame(() => noti.classList.add("show"));
-        setTimeout(() => {
-          noti.classList.remove("show");
-          setTimeout(() => noti.remove(), 250);
-        }, 2800);
+        requestAnimationFrame(() => noti.classList.add('show'));
+        setTimeout(() => { noti.classList.remove('show'); setTimeout(() => noti.remove(), 250); }, 2800);
       }
 
-      document.addEventListener("DOMContentLoaded", () => {
-        if (localStorage.getItem("theme") !== "light") toggleTheme();
-        updateAllClocks();
+      document.addEventListener('DOMContentLoaded', () => {
+        const savedTheme = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const shouldBeDark = savedTheme ? savedTheme === 'dark' : prefersDark;
+        if (shouldBeDark) toggleTheme();
+        updateAllClocks(); 
         generateCalendar(currentCalendarDate);
-        updateTimezoneOptions();
-        document.getElementById("converterTime").value = new Date()
-          .toISOString()
-          .slice(0, 16);
+        initAnalogClock(); 
+        updateAnalogClock(); 
       });
-      setInterval(updateTimes, 1000);
+      
       setInterval(() => {
-        document.getElementById("statsBar").innerHTML = createStatsBar();
-      }, 60000);
-      setInterval(() => {
-        if (new Date().getHours() === 0 && new Date().getMinutes() === 0)
-          generateCalendar(currentCalendarDate);
-      }, 60000);
+        updateTimes();
+        updateAnalogClock();
+      }, 1000);
+      
+      setInterval(() => { if (new Date().getHours() === 0 && new Date().getMinutes() === 0) generateCalendar(currentCalendarDate); }, 60000);
     </script>
 
-    <!-- ============================================================
-         MERGED WTB + Hex Module 
-         (Hour Explorer + Team Strips unified logic)
-         ============================================================ -->
+    <!-- WTB + Explorer Execution Script -->
     <script>
       (function () {
-        "use strict";
-        if (typeof timezones === "undefined") return;
+        'use strict';
+        if (typeof timezones === 'undefined') return;
 
-        const gridEl = document.getElementById("wtbGrid");
-        const ANCHOR_TZ = "Asia/Shanghai";
-        const ANCHOR_OFFSET_HOURS = 8;
+        const gridEl = document.getElementById('wtbGrid');
+        const ANCHOR_TZ = 'Asia/Shanghai';
+        const ANCHOR_OFFSET_HOURS = 8; 
 
-        // State
         let wtbReferenceDate = probeAtAnchorHour(currentAnchorHourFrac());
         let wtbUserMoved = false;
 
-        // Core Math / Helpers
         function getZoneOffsetHours(tzName) {
           const probe = new Date(Date.UTC(2000, 0, 1, 0, 0, 0));
-          const p = new Intl.DateTimeFormat("en-US", {
-            timeZone: tzName,
-            timeZoneName: "longOffset",
-          })
-            .formatToParts(probe)
-            .find((x) => x.type === "timeZoneName");
+          const p = new Intl.DateTimeFormat('en-US', { timeZone: tzName, timeZoneName: 'longOffset' }).formatToParts(probe).find(x => x.type === 'timeZoneName');
           if (!p) return 0;
           const m = p.value.match(/([+\-])(\d{1,2})(?::(\d{2}))?/);
           if (!m) return 0;
-          return (
-            (m[1] === "+" ? 1 : -1) *
-            (parseInt(m[2], 10) + parseInt(m[3] || "0", 10) / 60)
-          );
+          return (m[1] === '+' ? 1 : -1) * (parseInt(m[2], 10) + parseInt(m[3] || '0', 10) / 60);
         }
         function utcOffsetLabel(tzName) {
-          const p = new Intl.DateTimeFormat("en-US", {
-            timeZone: tzName,
-            timeZoneName: "shortOffset",
-          })
-            .formatToParts(new Date(Date.UTC(2000, 0, 1)))
-            .find((x) => x.type === "timeZoneName");
-          return p ? p.value : "";
+          const p = new Intl.DateTimeFormat('en-US', { timeZone: tzName, timeZoneName: 'shortOffset' }).formatToParts(new Date(Date.UTC(2000,0,1))).find(x => x.type === 'timeZoneName');
+          return p ? p.value : '';
         }
         function workingHoursToUtcSegments(wStart, wEnd, offsetHours) {
-          let utcStart = wStart - offsetHours;
-          let utcEnd = wEnd - offsetHours;
+          let utcStart = wStart - offsetHours; let utcEnd = wEnd - offsetHours;
           const segs = [];
-          if (utcStart >= 0 && utcEnd <= 24)
-            segs.push({ start: utcStart, end: utcEnd });
-          else if (utcStart < 0 && utcEnd <= 24) {
-            segs.push({ start: utcStart + 24, end: 24 });
-            if (utcEnd > 0) segs.push({ start: 0, end: utcEnd });
-          } else if (utcStart >= 0 && utcEnd > 24) {
-            segs.push({ start: utcStart, end: 24 });
-            segs.push({ start: 0, end: utcEnd - 24 });
-          }
-          return segs.filter((s) => s.end > s.start);
+          if (utcStart >= 0 && utcEnd <= 24) segs.push({ start: utcStart, end: utcEnd });
+          else if (utcStart < 0 && utcEnd <= 24) { segs.push({ start: utcStart + 24, end: 24 }); if (utcEnd > 0) segs.push({ start: 0, end: utcEnd }); }
+          else if (utcStart >= 0 && utcEnd > 24) { segs.push({ start: utcStart, end: 24 }); segs.push({ start: 0, end: utcEnd - 24 }); }
+          return segs.filter(s => s.end > s.start);
         }
         function probeAtAnchorHour(anchorHourFrac) {
-          const dtf = new Intl.DateTimeFormat("en-CA", {
-            timeZone: ANCHOR_TZ,
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-          });
-          const parts = dtf
-            .formatToParts(new Date())
-            .reduce((a, p) => ((a[p.type] = p.value), a), {});
-          const utcMs =
-            Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0) -
-            ANCHOR_OFFSET_HOURS * 3600 * 1000 +
-            anchorHourFrac * 3600 * 1000;
+          const dtf = new Intl.DateTimeFormat('en-CA', { timeZone: ANCHOR_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+          const parts = dtf.formatToParts(new Date()).reduce((a, p) => (a[p.type] = p.value, a), {});
+          const utcMs = Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0) - ANCHOR_OFFSET_HOURS * 3600 * 1000 + anchorHourFrac * 3600 * 1000;
           return new Date(utcMs);
         }
         function currentAnchorHourFrac() {
-          const p = new Intl.DateTimeFormat("en-GB", {
-            timeZone: ANCHOR_TZ,
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: false,
-          }).formatToParts(new Date());
-          const hh = parseInt(p.find((x) => x.type === "hour").value, 10);
-          const mm = parseInt(p.find((x) => x.type === "minute").value, 10);
+          const p = new Intl.DateTimeFormat('en-GB', { timeZone: ANCHOR_TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).formatToParts(new Date());
+          const hh = parseInt(p.find(x => x.type === 'hour').value, 10);
+          const mm = parseInt(p.find(x => x.type === 'minute').value, 10);
           return (hh % 24) + mm / 60;
         }
         function partsInZone(date, tzName) {
-          const p = new Intl.DateTimeFormat("en-GB", {
-            timeZone: tzName,
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: false,
-          }).formatToParts(date);
-          const hh = parseInt(p.find((x) => x.type === "hour").value, 10);
-          return {
-            hh: hh % 24,
-            mm: parseInt(p.find((x) => x.type === "minute").value, 10),
-            ss: parseInt(p.find((x) => x.type === "second").value, 10),
-          };
+          const p = new Intl.DateTimeFormat('en-GB', { timeZone: tzName, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).formatToParts(date);
+          const hh = parseInt(p.find(x => x.type === 'hour').value, 10);
+          return { hh: hh % 24, mm: parseInt(p.find(x => x.type === 'minute').value, 10), ss: parseInt(p.find(x => x.type === 'second').value, 10) };
         }
         function getLocalHourAt(probeDate, tzName) {
-          const p = partsInZone(probeDate, tzName);
-          return p.hh + p.mm / 60;
+          const p = partsInZone(probeDate, tzName); return p.hh + p.mm / 60;
         }
         function getHourInZone(hourUtc, tzName) {
           const probe = new Date(Date.UTC(2000, 0, 1, hourUtc, 0, 0));
-          return (
-            parseInt(
-              new Intl.DateTimeFormat("en-US", {
-                hour: "2-digit",
-                hour12: false,
-                timeZone: tzName,
-              }).format(probe),
-              10,
-            ) % 24
-          );
+          return parseInt(new Intl.DateTimeFormat('en-US', { hour: '2-digit', hour12: false, timeZone: tzName }).format(probe), 10) % 24;
         }
-        function setText(el, text) {
-          if (el && el.textContent !== text) el.textContent = text;
-        }
+        function setText(el, text) { if (el && el.textContent !== text) el.textContent = text; }
 
-        // Render DOM Layout
         function renderGrid() {
-          if (!gridEl) return;
+          if(!gridEl) return;
           const topAxisHtml = `
+            <div class="wtb-global-guide" id="wtbGlobalGuide"></div>
+            
             <div class="wtb-header-row">
               <div class="wtb-meta-col" style="display: flex; flex-direction: column; justify-content: center; padding-right: 16px;">
                  <div style="font-size: 0.6875rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px;">Reference (CST)</div>
-                 <div class="wtb-row-clock" id="wtbMetaUtc" style="margin-bottom: 0;">--:--</div>
+                 <div class="wtb-clock-wrapper" style="margin-bottom:0;">
+                   <div class="wtb-row-clock" id="wtbMetaUtc">--:--</div>
+                 </div>
                  <div id="wtbMetaDate" style="color: var(--text-secondary); font-size: 0.75rem;"></div>
               </div>
               <div class="wtb-axis-col">
                  <div class="hex-strip-wrap" id="wtbTopStripWrap" style="height: 36px; cursor: crosshair;">
                     <div class="hex-strip" style="height: 100%; border-radius: var(--radius-md);">
-                       <div class="hex-strip-ticks">${Array.from({ length: 24 }, (_, i) => `<div class="hex-strip-tick${i % 6 === 0 ? " major" : ""}"></div>`).join("")}</div>
+                       <div class="hex-strip-ticks">${Array.from({length: 24}, (_, i) => `<div class="hex-strip-tick${i%6===0?' major':''}"></div>`).join('')}</div>
                        <div class="hex-cursor" id="wtbTopCursor" style="display:none;">
                           <span class="hex-cursor-label" id="wtbTopCursorLabel">00:00</span>
                        </div>
                     </div>
                  </div>
                  <div class="hex-strip-axis" style="margin-top: 6px; position: relative; height: 14px;">
-                    ${Array.from({ length: 24 }, (_, i) => `<span class="hex-strip-axis-tick${i % 6 === 0 ? " major" : ""}" style="left:${(i / 24) * 100}%">${String(i).padStart(2, "0")}</span>`).join("")}
+                    ${Array.from({length: 24}, (_, i) => `<span class="hex-strip-axis-tick${i%6===0?' major':''}" style="left:${(i/24)*100}%">${String(i).padStart(2,'0')}</span>`).join('')}
                  </div>
               </div>
             </div>
           `;
 
-          const rowsHtml = timezones
-            .map((tz) => {
-              const segOffset =
-                getZoneOffsetHours(tz.timezone) - ANCHOR_OFFSET_HOURS;
-              const segs = workingHoursToUtcSegments(
-                tz.workingHours[0],
-                tz.workingHours[1],
-                segOffset,
-              );
-              const segmentsHtml = segs
-                .map(
-                  (s) =>
-                    `<div class="wtb-segment" style="left:${(s.start / 24) * 100}%; width:${((s.end - s.start) / 24) * 100}%"></div>`,
-                )
-                .join("");
-              return `
-              <div class="wtb-row" data-tz="${tz.timezone}" data-current="${!!tz.isCurrent}">
+          const rowsHtml = timezones.map((tz, index) => {
+            const segOffset = getZoneOffsetHours(tz.timezone) - ANCHOR_OFFSET_HOURS;
+            const segs = workingHoursToUtcSegments(tz.workingHours[0], tz.workingHours[1], segOffset);
+            const segmentsHtml = segs.map(s => `<div class="wtb-segment" style="left:${(s.start/24)*100}%; width:${((s.end-s.start)/24)*100}%"></div>`).join('');
+            return `
+              <div class="wtb-row" data-tz="${tz.timezone}" data-current="${!!tz.isCurrent}" id="wtbRow-${index}">
                 <div class="wtb-label-col">
                   <div class="wtb-label-flag">${tz.flag}</div>
                   <div class="wtb-label-info">
@@ -1883,7 +844,10 @@
                 </div>
                 <div class="wtb-time-col">
                   <div class="wtb-live-time">
-                    <div class="wtb-row-clock">--:--</div>
+                    <div class="wtb-clock-wrapper">
+                      <div class="wtb-row-clock">--:--</div>
+                      <div class="wtb-day-badge"></div>
+                    </div>
                     <div style="display:flex; justify-content:space-between; align-items:flex-end;">
                        <div class="wtb-row-date">--</div>
                        <div class="wtb-row-status">--</div>
@@ -1892,7 +856,7 @@
                 </div>
                 <div class="wtb-track-col">
                   <div class="wtb-track" style="cursor: crosshair;">
-                    <div class="wtb-hour-ticks">${Array.from({ length: 24 }, () => '<div class="wtb-hour-tick"></div>').join("")}</div>
+                    <div class="wtb-hour-ticks">${Array.from({length: 24}, () => '<div class="wtb-hour-tick"></div>').join('')}</div>
                     <div class="wtb-off" style="left:0; right:0;"></div>
                     ${segmentsHtml}
                     <div class="wtb-now-cursor" style="display:none;"></div>
@@ -1900,281 +864,185 @@
                 </div>
               </div>
             `;
-            })
-            .join("");
+          }).join('');
 
           gridEl.innerHTML = topAxisHtml + rowsHtml;
         }
 
-        // Live DOM updating without re-render
         function updateWtbLiveTimes() {
-          if (!wtbUserMoved)
-            wtbReferenceDate = probeAtAnchorHour(currentAnchorHourFrac());
+          if (!wtbUserMoved) wtbReferenceDate = probeAtAnchorHour(currentAnchorHourFrac());
 
           const p = partsInZone(wtbReferenceDate, ANCHOR_TZ);
           const frac = p.hh + p.mm / 60 + p.ss / 3600;
           const pctStr = `${(frac / 24) * 100}%`;
-          const cstStr = `${String(p.hh).padStart(2, "0")}:${String(p.mm).padStart(2, "0")} CST`;
+          const cstStr = `${String(p.hh).padStart(2,'0')}:${String(p.mm).padStart(2,'0')} CST`;
+          
+          const cstDateStr = new Intl.DateTimeFormat('en-CA', {timeZone: ANCHOR_TZ}).format(wtbReferenceDate);
 
-          const topCursor = document.getElementById("wtbTopCursor");
-          if (topCursor) {
-            topCursor.style.left = pctStr;
-            topCursor.style.display = "block";
-          }
-          setText(document.getElementById("wtbTopCursorLabel"), cstStr);
-          setText(document.getElementById("wtbMetaUtc"), cstStr);
-          setText(
-            document.getElementById("wtbMetaDate"),
-            new Intl.DateTimeFormat("en-US", {
-              weekday: "short",
-              month: "long",
-              day: "numeric",
-              timeZone: ANCHOR_TZ,
-            }).format(wtbReferenceDate),
-          );
+          const topCursor = document.getElementById('wtbTopCursor');
+          if (topCursor) { topCursor.style.left = pctStr; topCursor.style.display = 'block'; }
+          setText(document.getElementById('wtbTopCursorLabel'), cstStr);
+          setText(document.getElementById('wtbMetaUtc'), cstStr);
+          setText(document.getElementById('wtbMetaDate'), new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'long', day: 'numeric', timeZone: ANCHOR_TZ }).format(wtbReferenceDate));
 
-          document.querySelectorAll(".wtb-row").forEach((row) => {
-            const tz = row.getAttribute("data-tz");
-            const tzData = timezones.find((z) => z.timezone === tz);
-            const isCurrent = row.getAttribute("data-current") === "true";
-
-            const trackCursor = row.querySelector(".wtb-now-cursor");
-            if (trackCursor) {
-              trackCursor.style.left = pctStr;
-              trackCursor.style.display = "block";
+          const globalGuide = document.getElementById('wtbGlobalGuide');
+          if (globalGuide) {
+            const axisCol = document.querySelector('.wtb-axis-col');
+            if (axisCol) {
+              const paddingLeft = axisCol.offsetLeft;
+              globalGuide.style.left = `calc(${paddingLeft}px + ${(frac/24)*axisCol.clientWidth}px)`;
+              globalGuide.style.display = 'block';
             }
+          }
+
+          document.querySelectorAll('.wtb-row').forEach(row => {
+            const tz = row.getAttribute('data-tz');
+            const tzData = timezones.find(z => z.timezone === tz);
+            const isCurrent = row.getAttribute('data-current') === 'true';
+
+            const trackCursor = row.querySelector('.wtb-now-cursor');
+            if (trackCursor) { trackCursor.style.left = pctStr; trackCursor.style.display = 'block'; }
 
             const pZ = partsInZone(wtbReferenceDate, tz);
-            setText(
-              row.querySelector(".wtb-row-clock"),
-              `${String(pZ.hh).padStart(2, "0")}:${String(pZ.mm).padStart(2, "0")}`,
-            );
-            setText(
-              row.querySelector(".wtb-row-date"),
-              new Intl.DateTimeFormat("en-US", {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-                timeZone: tz,
-              }).format(wtbReferenceDate),
-            );
+            setText(row.querySelector('.wtb-row-clock'), `${String(pZ.hh).padStart(2,'0')}:${String(pZ.mm).padStart(2,'0')}`);
+            setText(row.querySelector('.wtb-row-date'), new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz }).format(wtbReferenceDate));
+
+            const tzDateStr = new Intl.DateTimeFormat('en-CA', {timeZone: tz}).format(wtbReferenceDate);
+            const badgeEl = row.querySelector('.wtb-day-badge');
+            if (badgeEl) {
+              if (tzDateStr > cstDateStr) { badgeEl.className = 'wtb-day-badge tomorrow'; badgeEl.textContent = '+1d'; }
+              else if (tzDateStr < cstDateStr) { badgeEl.className = 'wtb-day-badge yesterday'; badgeEl.textContent = '-1d'; }
+              else { badgeEl.className = 'wtb-day-badge'; badgeEl.textContent = ''; }
+            }
 
             if (tzData) {
               const lv = Math.floor(getLocalHourAt(wtbReferenceDate, tz));
               const [s, e] = tzData.workingHours;
-              const statusEl = row.querySelector(".wtb-row-status");
-              const timeBox = row.querySelector(".wtb-live-time");
-              let st = "off",
-                text = "Off hours";
+              const statusEl = row.querySelector('.wtb-row-status');
+              const timeBox = row.querySelector('.wtb-live-time');
+              let st = 'off', text = 'Off hours';
 
-              if (isCurrent) {
-                st = "current";
-                text = "Current";
-              } else if (s < e ? lv >= s && lv < e : lv >= s || lv < e) {
-                st = "working";
-                text = "Working";
-              }
+              if (isCurrent) { st = 'current'; text = 'Current'; } 
+              else if (s < e ? (lv >= s && lv < e) : (lv >= s || lv < e)) { st = 'working'; text = 'Working'; }
 
               if (statusEl) {
-                if (!statusEl.className.includes(st))
-                  statusEl.className = `wtb-row-status ${st}`;
+                if (!statusEl.className.includes(st)) statusEl.className = `wtb-row-status ${st}`;
                 setText(statusEl, text);
               }
               if (timeBox) {
-                const isActive = st === "working" || st === "current";
-                if (isActive) timeBox.classList.add("active-status");
-                else timeBox.classList.remove("active-status");
+                if (st === 'working' || st === 'current') timeBox.classList.add('active-status'); else timeBox.classList.remove('active-status');
               }
             }
           });
         }
 
-        // Mouse & Touch Drag events
         let wtbDragging = false;
         function setWtbRefFromEvent(e) {
-          const container =
-            e.target.closest(".hex-strip") || e.target.closest(".wtb-track");
+          const container = e.target.closest('.hex-strip') || e.target.closest('.wtb-track');
           if (!container) return;
           const rect = container.getBoundingClientRect();
           const clientX = e.clientX || (e.touches && e.touches[0].clientX) || 0;
-          const anchorFrac =
-            (Math.max(0, Math.min(rect.width, clientX - rect.left)) /
-              rect.width) *
-            24;
-          wtbReferenceDate = probeAtAnchorHour(
-            Math.round(anchorFrac * 60) / 60,
-          ); // snap to minute
+          const anchorFrac = (Math.max(0, Math.min(rect.width, clientX - rect.left)) / rect.width) * 24;
+          wtbReferenceDate = probeAtAnchorHour(Math.round(anchorFrac * 60) / 60); 
           wtbUserMoved = true;
           updateWtbLiveTimes();
         }
 
         if (gridEl) {
-          gridEl.addEventListener("mousedown", (e) => {
-            if (
-              e.target.closest(".hex-strip") ||
-              e.target.closest(".wtb-track")
-            ) {
-              wtbDragging = true;
-              setWtbRefFromEvent(e);
-            }
-          });
-          gridEl.addEventListener(
-            "touchstart",
-            (e) => {
-              if (
-                e.target.closest(".hex-strip") ||
-                e.target.closest(".wtb-track")
-              ) {
-                wtbDragging = true;
-                setWtbRefFromEvent(e);
-              }
-            },
-            { passive: true },
-          );
+          gridEl.addEventListener('mousedown', e => { if (e.target.closest('.hex-strip') || e.target.closest('.wtb-track')) { wtbDragging = true; setWtbRefFromEvent(e); } });
+          gridEl.addEventListener('touchstart', e => { if (e.target.closest('.hex-strip') || e.target.closest('.wtb-track')) { wtbDragging = true; setWtbRefFromEvent(e); } }, { passive: true });
         }
-        document.addEventListener("mousemove", (e) => {
-          if (wtbDragging) setWtbRefFromEvent(e);
-        });
-        document.addEventListener(
-          "touchmove",
-          (e) => {
-            if (wtbDragging) setWtbRefFromEvent(e);
-          },
-          { passive: true },
-        );
-        document.addEventListener("mouseup", () => {
-          wtbDragging = false;
-        });
-        document.addEventListener("touchend", () => {
-          wtbDragging = false;
-        });
+        document.addEventListener('mousemove', e => { if (wtbDragging) setWtbRefFromEvent(e); });
+        document.addEventListener('touchmove', e => { if (wtbDragging) setWtbRefFromEvent(e); }, { passive: true });
+        document.addEventListener('mouseup', () => { wtbDragging = false; });
+        document.addEventListener('touchend', () => { wtbDragging = false; });
 
-        // Buttons
         function shiftBy(delta) {
           const p = partsInZone(wtbReferenceDate, ANCHOR_TZ);
-          wtbReferenceDate = probeAtAnchorHour(
-            (((p.hh + p.mm / 60 + delta) % 24) + 24) % 24,
-          );
-          wtbUserMoved = true;
-          updateWtbLiveTimes();
+          wtbReferenceDate = probeAtAnchorHour(((p.hh + p.mm / 60 + delta) % 24 + 24) % 24);
+          wtbUserMoved = true; updateWtbLiveTimes();
         }
-        document
-          .getElementById("wtbShiftMinus")
-          ?.addEventListener("click", () => shiftBy(-1));
-        document
-          .getElementById("wtbShiftPlus")
-          ?.addEventListener("click", () => shiftBy(1));
-        document.getElementById("wtbNowBtn")?.addEventListener("click", () => {
-          wtbUserMoved = false;
-          wtbReferenceDate = probeAtAnchorHour(currentAnchorHourFrac());
-          updateWtbLiveTimes();
+        document.getElementById('wtbShiftMinus')?.addEventListener('click', () => shiftBy(-1));
+        document.getElementById('wtbShiftPlus')?.addEventListener('click', () => shiftBy(1));
+        document.getElementById('wtbNowBtn')?.addEventListener('click', () => { wtbUserMoved = false; wtbReferenceDate = probeAtAnchorHour(currentAnchorHourFrac()); updateWtbLiveTimes(); });
+
+        document.getElementById('wtbCopyBtn')?.addEventListener('click', () => {
+          const lines = ["🗓 Team Sync Schedule:"];
+          const baseDate = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: ANCHOR_TZ }).format(wtbReferenceDate);
+          lines.push(`Base Date: ${baseDate}\n`);
+          
+          timezones.forEach(tz => {
+            const p = partsInZone(wtbReferenceDate, tz.timezone);
+            const timeStr = `${String(p.hh).padStart(2,'0')}:${String(p.mm).padStart(2,'0')}`;
+            
+            const cstDateStr = new Intl.DateTimeFormat('en-CA', {timeZone: ANCHOR_TZ}).format(wtbReferenceDate);
+            const tzDateStr = new Intl.DateTimeFormat('en-CA', {timeZone: tz.timezone}).format(wtbReferenceDate);
+            let dayOffset = "";
+            if (tzDateStr > cstDateStr) dayOffset = " (+1 day)";
+            if (tzDateStr < cstDateStr) dayOffset = " (-1 day)";
+
+            lines.push(`${tz.flag} ${tz.name.padEnd(14, ' ')} | ${timeStr}${dayOffset}`);
+          });
+
+          const copyText = lines.join('\n');
+          navigator.clipboard.writeText(copyText).then(() => {
+            showNotification('Schedule copied to clipboard!', 'success');
+          }).catch(() => {
+            showNotification('Failed to copy', 'error');
+          });
         });
 
-        // Static Coverages
         function renderCoverage() {
           const coverage = new Array(24).fill(0);
-          timezones.forEach((tz) => {
+          timezones.forEach(tz => {
             const [s, e] = tz.workingHours;
             for (let cstH = 0; cstH < 24; cstH++) {
-              const localH = getHourInZone(
-                (((cstH - ANCHOR_OFFSET_HOURS) % 24) + 24) % 24,
-                tz.timezone,
-              );
-              if (s < e ? localH >= s && localH < e : localH >= s || localH < e)
-                coverage[cstH]++;
+              const localH = getHourInZone(((cstH - ANCHOR_OFFSET_HOURS) % 24 + 24) % 24, tz.timezone);
+              if (s < e ? (localH >= s && localH < e) : (localH >= s || localH < e)) coverage[cstH]++;
             }
           });
-          const bars = [];
-          let runStart = 0,
-            runLevel = coverage[0];
-          for (let h = 1; h < 24; h++) {
-            if (coverage[h] !== runLevel) {
-              bars.push({ start: runStart, end: h, count: runLevel });
-              runStart = h;
-              runLevel = coverage[h];
-            }
-          }
+          const bars = []; let runStart = 0, runLevel = coverage[0];
+          for (let h = 1; h < 24; h++) { if (coverage[h] !== runLevel) { bars.push({ start: runStart, end: h, count: runLevel }); runStart = h; runLevel = coverage[h]; } }
           bars.push({ start: runStart, end: 24, count: runLevel });
-          document.getElementById("wtbCoverage").innerHTML = bars
-            .map((b) => {
-              const isPartial = b.count > 0 && b.count < timezones.length;
-              return `<div class="wtb-coverage-bar${isPartial ? " partial" : ""}" style="left:${(b.start / 24) * 100}%; width:${((b.end - b.start) / 24) * 100}%"></div><span class="wtb-coverage-count" style="left:calc(${(b.start / 24) * 100}% + 6px); color:${isPartial ? "var(--text-primary)" : "var(--status-working)"};">${b.count}/${timezones.length}</span>`;
-            })
-            .join("");
+          document.getElementById('wtbCoverage').innerHTML = bars.map(b => {
+            const isPartial = b.count > 0 && b.count < timezones.length;
+            return `<div class="wtb-coverage-bar${isPartial ? ' partial' : ''}" style="left:${(b.start/24)*100}%; width:${((b.end-b.start)/24)*100}%"></div><span class="wtb-coverage-count" style="left:calc(${b.start/24*100}% + 6px); color:${isPartial?'var(--text-primary)':'var(--status-working)'};">${b.count}/${timezones.length}</span>`;
+          }).join('');
         }
 
         function renderMeetings() {
           const slots = [];
           for (let cstH = 0; cstH < 24; cstH++) {
-            const utcH = (((cstH - ANCHOR_OFFSET_HOURS) % 24) + 24) % 24;
+            const utcH = ((cstH - ANCHOR_OFFSET_HOURS) % 24 + 24) % 24;
             const richZones = [];
-            timezones.forEach((tz) => {
+            timezones.forEach(tz => {
               const localH = getHourInZone(utcH, tz.timezone);
-              if (
-                tz.workingHours[0] < tz.workingHours[1]
-                  ? localH >= tz.workingHours[0] && localH < tz.workingHours[1]
-                  : localH >= tz.workingHours[0] || localH < tz.workingHours[1]
-              )
-                richZones.push({
-                  flag: tz.flag,
-                  time: new Intl.DateTimeFormat("en-GB", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    hour12: false,
-                    timeZone: tz.timezone,
-                  }).format(new Date(Date.UTC(2000, 0, 1, utcH, 0, 0))),
-                });
+              if (tz.workingHours[0] < tz.workingHours[1] ? (localH >= tz.workingHours[0] && localH < tz.workingHours[1]) : (localH >= tz.workingHours[0] || localH < tz.workingHours[1])) 
+                richZones.push({ flag: tz.flag, time: new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz.timezone }).format(new Date(Date.UTC(2000,0,1,utcH,0,0))) });
             });
-            if (richZones.length > 0)
-              slots.push({
-                cstHour: cstH,
-                count: richZones.length,
-                zones: richZones,
-              });
+            if (richZones.length > 0) slots.push({ cstHour: cstH, count: richZones.length, zones: richZones });
           }
-          let best = slots.filter((s) => s.count === timezones.length);
-          if (!best.length)
-            best = slots.sort((a, b) => b.count - a.count).slice(0, 6);
-          else best = best.slice(0, 6);
-          document.getElementById("wtbMeetings").innerHTML = best
-            .map(
-              (s) => `
+          let best = slots.filter(s => s.count === timezones.length);
+          if (!best.length) best = slots.sort((a, b) => b.count - a.count).slice(0, 6); else best = best.slice(0, 6);
+          document.getElementById('wtbMeetings').innerHTML = best.map(s => `
             <div class="wtb-meeting-card">
-              <span class="wtb-meeting-quality ${s.count === timezones.length ? "excellent" : s.count / timezones.length >= 0.66 ? "good" : "weak"}">${s.count === timezones.length ? "Everyone synced" : `${s.count}/${timezones.length} online`}</span>
-              <div class="wtb-meeting-time">${String(s.cstHour).padStart(2, "0")}:00 CST</div>
-              <div class="wtb-meeting-zones">${s.zones.map((z) => `<span class="wtb-meeting-zone-chip">${z.flag} ${z.time}</span>`).join("")}</div>
+              <span class="wtb-meeting-quality ${s.count===timezones.length?'excellent':s.count/timezones.length>=0.66?'good':'weak'}">${s.count===timezones.length?'Everyone synced':`${s.count}/${timezones.length} online`}</span>
+              <div class="wtb-meeting-time">${String(s.cstHour).padStart(2,'0')}:00 CST</div>
+              <div class="wtb-meeting-zones">${s.zones.map(z => `<span class="wtb-meeting-zone-chip">${z.flag} ${z.time}</span>`).join('')}</div>
             </div>
-          `,
-            )
-            .join("");
+          `).join('');
         }
 
-        function renderAll() {
-          renderGrid();
-          updateWtbLiveTimes();
-          renderCoverage();
-          renderMeetings();
-        }
+        function renderAll() { renderGrid(); updateWtbLiveTimes(); renderCoverage(); renderMeetings(); }
 
-        // Hooks
         const origUpdate = window.updateAllClocks;
-        window.updateAllClocks = function () {
-          if (typeof origUpdate === "function")
-            origUpdate.apply(this, arguments);
-          renderAll();
-        };
+        window.updateAllClocks = function () { if (typeof origUpdate === 'function') origUpdate.apply(this, arguments); renderAll(); };
 
-        if (document.readyState === "loading")
-          document.addEventListener("DOMContentLoaded", renderAll);
-        else renderAll();
-        setInterval(() => {
-          if (!wtbDragging) updateWtbLiveTimes();
-        }, 1000);
-        setInterval(() => {
-          renderCoverage();
-          renderMeetings();
-        }, 60000);
-        window.addEventListener("resize", updateWtbLiveTimes);
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', renderAll); else renderAll();
+        setInterval(() => { if (!wtbDragging) updateWtbLiveTimes(); }, 1000);
+        setInterval(() => { renderCoverage(); renderMeetings(); }, 60000);
+        
+        window.addEventListener('resize', () => { updateWtbLiveTimes(); });
       })();
     </script>
   </body>
