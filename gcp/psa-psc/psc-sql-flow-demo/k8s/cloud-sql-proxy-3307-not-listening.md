@@ -8,6 +8,40 @@
 
 ---
 
+## 0.0 灵异现象的"完整脸面"
+
+把生产环境的两个直接观测摆在一起看，问题就清楚了：
+
+```bash
+# 观测 1：pod 内的 ps aux（你贴的）
+USER  PID  COMMAND
+65532 1    /cloud-sql-proxy --psc --structured-logs --auto-iam-authn \
+                  --address=127.0.0.1 --port=5432 \
+                  dev:asia-east2:sql-dev-01
+
+# 观测 2：pod 内 cloud-sql-proxy 容器的报错日志（你贴的）
+2026-07-06T11:02:56.494027231Z [dev:asia-east2:sql-dev-01] failed to connect to instance:
+Dial error: failed to dial: dial tcp 192.168.64.104:3307: i/o timeout
+```
+
+把它们**拼起来看**得到问题的完整图景：
+
+| 步骤 | 发生在哪里 | 谁在做 | 端口是什么 |
+| ---- | -------- | ------ | --------- |
+| **App → Proxy** | Pod **内部**（loopback） | 你的应用 | **5432**（proxy 听在 5432 是 `ss -nltp` 能看到的） |
+| **Proxy → Cloud SQL** | Pod **外部**（Consumer VPC → PSC Endpoint → SA → Cloud SQL） | cloud-sql-proxy 进程 | **3307**（这是 proxy 出 Pod 的目标，pod 内 `ss` **永远看不到**） |
+
+也就是说 **3307 这个端口出现两次、不同语义、不同位置**：
+
+1. **应用 → proxy** 这段是**主动 listen** 的，所以 `ss -nltp` 能看到
+2. **proxy → Cloud SQL via PSC** 这段是**主动 dial 的目标端口**，proxy 每次连接新连接都去 dial `192.168.64.104:3307`，日志里看到的就是这一步
+
+**`ss` 看不到 3307 完全正常**——因为 3307 在 pod 内从来就不是 listen 端口，它是 proxy **出 Pod**去 PSC endpoint 的目标端口。
+
+而你的网络防火墙拒绝 `192.168.64.104:3307` 出站时，proxy 就是这个报错（`i/o timeout` 或者 `connection refused`）。
+
+---
+
 ## 0. 一个朴素但关键的事实
 
 **Pod 内所有容器共享同一个 Linux Network Namespace**。这是 Kubernetes Pod 模型的基础设计：
@@ -50,7 +84,169 @@ USER     PID  %CPU %MEM   VSZ   RSS   TTY  STAT  START  TIME  COMMAND
 | `appuk-20118002-sql-dev-01` 看起来名字里有 sql（暗示 MySQL） | `-sql-` 是 PostgreSQL 实例，instance name 末尾 `-01` 是常见命名规约 | proxy 用 SQL Admin API 查 metadata 后确认是 POSTGRES → 走 PG 默认端口分支（即使没显式 `--port`，也会 5432；你又显式给了 `--port=5432`，互相印证） |
 | 启动时间是 `Jul05 0:02`，pod 一直是 stable（Ssl 状态） | proxy 进程**稳得很**，没 crash、没在循环重启、不是真相 #4 | 真相 #4 排除 |
 
-> **结论**：你的 Pod 命中了 **真相 #1**。Pod 里 listen 的就是 5432，应用要连 5432，**根本不存在 3307**。
+> **结论**：你的 Pod 命中了 **真相 #1**。Pod 里 listen 的就是 5432，应用要连 5432，**根本不存在 3307（作为 listen 端口）**。
+>
+> **但同时**：proxy 在另一端要 dial `192.168.64.104:3307` 去 PSC endpoint —— 这是 **3307 真正出现** 的地方（参见 §0.0）。
+
+### ⭐§0.1 那 3307 到底是谁配的？—— 出 Pod 目标端口的来源
+
+你的疑问是：
+
+> "我没有任何地方在代码里配置 3307，但是 cloud-sql-proxy 报错说它去 dial `192.168.64.104:3307` 了。**这 3307 是哪来的？是 proxy 自己决定的还是 Cloud SQL 服务端配的？**"
+
+简短答案：**是 Cloud SQL 服务端 + cloud-sql-proxy 协同约定，不需要你配。**
+
+详细链路：
+
+#### 出 Pod 的端口来源链
+
+```
+[你配的 deployment]
+  --port=5432               ← pod 内 listen（应用看，ss 看得见）
+  --psc                     ← 关键标志：走 PSC
+  INSTANCE_CONNECTION_NAME   ← dev:asia-east2:sql-dev-01
+                │
+                ▼
+[proxy 启动后会调 SQL Admin API]
+  GET sqladmin.googleapis.com/sql/v1/projects/dev/instances/sql-dev-01
+                │
+                ▼
+[Admin API 返回 instance metadata, 含 pscConfig]
+  { pscConfig: {
+      pscEnabled: true,
+      pscAutoConnections: [{
+        ipAddress: "192.168.64.104"     ← PSC endpoint IP
+        ...
+      }],
+      ...
+    },
+    ipAddresses: [...]                   ← 还有 PRI/PRIVATE/PSC 三种类型
+  }
+                │
+                ▼
+[proxy 用 --psc 标志 → 选 PSC 这条路的 ip + 服务端约定的 port]
+  ip   = 192.168.64.104     ← 来自 Admin API 的 pscAutoConnections.ipAddress
+  port = ???                ← 来自 Cloud SQL **服务端固定约定**,不由用户配置
+                │
+                ▼
+[proxy 每次新连接 dial 这个 endpoint]
+  dial tcp 192.168.64.104:3307    ← 这就是日志里看到的 3307
+```
+
+#### 3307 这个 port 哪里来的
+
+**Cloud SQL 服务端（Producer 侧）只接受三种 serving port**，对 PostgreSQL：
+
+| Port | Serving | 配置方 |
+| ---- | ------- | ------ |
+| **5432** | 直连 PostgreSQL | 服务端固定 |
+| **6432** | 直连 PgBouncer (Managed Connection Pooling) | 服务端固定 |
+| **3307** | 直连 Cloud SQL Auth Proxy（这是 proxy 给它的"serving port"） | 服务端固定 |
+
+**这三个端口对 Consumer 端（你）是不可选的** —— 它是 Cloud SQL PSC Service Attachment 上 NAG（Network Attachment Group）配置的固定值，跟 Cloud SQL 实例一起创建。
+
+proxy 通过 `--psc` 标志自动选 `3307`（这是 GCP 的约定：PSC + Auth Proxy → 3307）。**你不需要、也没法配置这个端口**。
+
+#### 关键洞察：同一个 `--port` 参数在不同位置是不同东西
+
+| 参数 | 位置 | 谁 listen 谁 dial | 数字来源 |
+| ---- | ---- | ----------------- | -------- |
+| `--port=5432` 你配的 | **Pod 内** | proxy listen | 你部署侧硬编码 |
+| `3307` 在 `dial tcp 192.168.64.104:3307` | **Pod 外** | proxy 去 dial Cloud SQL | Cloud SQL 服务端硬编码 |
+
+简单说：**3307 在 Pod 内的应用层面毫无存在感，3307 只在 proxy → Cloud SQL 这条 Pod 出口流量上出现**。
+
+#### 191.168.64.104 是 Private Service Connect Endpoint IP
+
+你不需要直接 ping 它，但做诊断时要知道：
+
+```bash
+# 列出项目里所有 PSC endpoints (PscNetworkEndpointGroup API + addressing endpoint)
+gcloud compute networks vpc-access connectors describe  # 跟 PSC 无关
+
+# 直接看 SQL instance 的 PSC config — 里头就是 192.168.64.104 这种内网 IP
+gcloud sql instances describe sql-dev-01 --project=dev --format=json \
+  | jq '.settings.ipConfiguration.pscConfig'
+```
+
+期望输出：
+
+```json
+{
+  "pscEnabled": true,
+  "pscAutoConnections": [
+    {
+      "consumerNetwork": "projects/dev/global/networks/dev-vpc",
+      "ipAddress": "192.168.64.104",        // ← 你看到的 IP 在这里
+      "status": "..."
+    }
+  ]
+}
+```
+
+如果 `ipAddress` 不是 `192.168.64.104`，说明这个 IP 是在**别的项目**的 VPC 里（不同 environment），proxy 会去找另一个 IP。
+
+#### §0.2 你这次的 `i/o timeout` 报错怎么修
+
+报错是：
+
+```
+Dial error: failed to dial: dial tcp 192.168.64.104:3307: i/o timeout
+```
+
+`i/o timeout` 在 K8s 出口场景里几乎只有一种意思：**包出了 Pod 到 VPC 路由，**但 Cloud SQL 的 PSC endpoint 没在**应到时间内 SYN-ACK**回来。可能的原因有三个：
+
+| # | 根因 | 信号 | 修复 |
+| | ---- | ---- | ---- |
+| **A** | **NetworkPolicy 拦截了 3307 出站** | 你 NS 是 deny all，且端口没配 3307 ——**你最可能的根因** | 给应用 Pod 的 egress 加 `port: 3307`，参考 §A 章节 |
+| **B** | GKE 节点到 PSC endpoint 的路由层防火墙拦了 | 同一 cluster / 不同 NS 跑出来同样的 dial err，看节点 `gke-xxx` | 检查 VPC firewall rules：有没有 rule 拦 192.168.64.0/24 → 192.168.64.104:3307 |
+| **C** | PSC endpoint 被 deleted / 服务端没起来 | `gcloud sql instances describe sql-dev-01` 看 `pscConfig.status` 不是 READY | 等就绪 / 重新启用 PSC |
+
+#### 速查：A 根因的 NetworkPolicy 修复
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-db-egress-3307
+  namespace: <你应用的 ns>
+spec:
+  podSelector:
+    matchLabels:
+      app: db-app                              # ← 匹配你的 db-app
+  policyTypes: ["Egress"]
+  egress:
+    # DNS
+    - to: []
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+
+    # Cloud SQL PSC endpoint:必须放 3307
+    # IP 192.168.64.104 来自 instance pscConfig.pscAutoConnections.ipAddress
+    # 如果同一个 endpoint 在多个 port 都能上,可以全部放(5432/6432/3307)
+    - to:
+        - ipBlock:
+            cidr: 192.168.64.104/32            # ← 收紧到具体 IP(推荐)
+            # 也可以放宽到 192.168.64.0/24,但不推荐
+      ports:
+        - {protocol: TCP, port: 3307}          # ← Cloud SQL proxy serving port
+
+    # cloud-sql-proxy 上 SQL Admin API 拿证书:egress 443(几乎总是要放)
+    - to: []
+      ports:
+        - {protocol: TCP, port: 443}
+```
+
+验证：
+
+```bash
+# 在 db-app 容器内直接试 TCP 三步握手,不用依赖 proxy 中继
+kubectl exec -n <ns> db-app-xxx -c db-app -- \
+  bash -c 'timeout 5 bash -c "echo > /dev/tcp/192.168.64.104/3307" && echo TCP_OK || echo TCP_BLOCKED'
+```
+
+期望 `TCP_OK` — 代表 NetworkPolicy 已放行。如果 `TCP_BLOCKED`，**NetworkPolicy 里少了 3307 egress**，加回去重 apply。
 
 下面把真相 #1 怎么诊断、怎么修讲透。
 
