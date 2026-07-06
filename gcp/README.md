@@ -5,6 +5,7 @@
 - `asm/`: 子目录: diagram, gloo, istio-egress
 - `bigquery/`: 文件: big-query-bk.md, bigquery-base-practice.md, bigquery-how-to-insert-update.md, bigquey-cmek.md, create-table-from-other-pro.md ... (共 7 个文件)
 - `buckets/`: 文件: QUICKREF.md, README.md, VERIFY-README.md, add-bucket-binding.sh, buckets-add-binging-sa.md ... (共 18 个文件)
+- `caep-infra-gcp-release/`: 文件: workflow.html, workflow.svg (CAEP Infra GCP release workflow architecture — dark-themed SVG/HTML)
 - `cloud-armor/`: 子目录: armor-python, dedicated-armor
 - `cloud-run/`: 子目录: cloud-run-automation, cloud-run-debug, cloud-run-spec, cloud-run-violation, container-validation ... (共 7 个子目录)
 - `cost/`: 子目录: gcp-cost

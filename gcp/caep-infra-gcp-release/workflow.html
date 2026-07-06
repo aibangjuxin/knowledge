@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>CAEP Infra GCP — Release Workflow (11-Step, Branch + Commit + CR)</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #020617;
+    --card: #0f172a;
+    --card-border: #1e293b;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --dim: #64748b;
+    --cyan: #22d3ee;
+    --emerald: #34d399;
+    --violet: #a78bfa;
+    --amber: #fbbf24;
+    --rose: #fb7185;
+    --orange: #fb923c;
+    --slate: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 32px 24px 48px;
+    line-height: 1.5;
+  }
+  .container { max-width: 1440px; margin: 0 auto; }
+  .header { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+  .header-dot {
+    width: 12px; height: 12px; border-radius: 50%; background: var(--emerald);
+    box-shadow: 0 0 16px var(--emerald);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.55; transform: scale(0.85); }
+  }
+  h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .subtitle { color: var(--muted); font-size: 12px; margin-bottom: 28px; }
+
+  .diagram-card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 28px;
+    overflow: hidden;
+  }
+  .diagram-card svg { display: block; width: 100%; height: auto; }
+
+  .legend-row {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    margin: 16px 0 24px;
+    padding: 14px 16px;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+  }
+  .legend-row .item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+  .legend-swatch { width: 16px; height: 12px; border-radius: 3px; }
+
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    margin-bottom: 28px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .card-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .card h3 { font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+  .card ul { list-style: none; }
+  .card li {
+    font-size: 11.5px;
+    color: var(--muted);
+    padding: 5px 0 5px 14px;
+    position: relative;
+    border-bottom: 1px dashed #1e293b;
+  }
+  .card li:last-child { border-bottom: none; }
+  .card li code {
+    background: rgba(34, 211, 238, 0.10);
+    color: var(--cyan);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 10.5px;
+  }
+  .card .gate-tag {
+    display: inline-block;
+    background: rgba(251, 113, 133, 0.12);
+    color: var(--rose);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 6px;
+  }
+
+  .footer {
+    color: var(--dim);
+    font-size: 11px;
+    text-align: center;
+    padding-top: 14px;
+    border-top: 1px solid var(--card-border);
+  }
+  .footer code { color: var(--muted); }
+
+  /* SUMMARY BAR at bottom (gates list) */
+  .summary-bar {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 18px 22px 22px;
+    margin-bottom: 28px;
+  }
+  .summary-bar h3 {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--rose);
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+  }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(251, 113, 133, 0.08);
+    color: var(--rose);
+    border: 1px solid rgba(251, 113, 133, 0.4);
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .chip .chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rose); }
+  .summary-note { color: var(--muted); font-size: 11.5px; font-style: italic; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="header-dot"></div>
+    <h1>Release Workflow — caep-infra-gcp-release</h1>
+  </div>
+  <div class="subtitle">
+    Branch model (main / dev / feature) · Commit subject <code>CAEP-xxxx:</code> · PR Approve group · 4 gates · CR with main commit id · 11-step end-to-end
+  </div>
+
+  <!-- ===== Phase ribbon (4 phases) ===== -->
+  <div class="diagram-card">
+    <svg viewBox="0 0 1440 1180" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace">
+      <!-- ===== Defs (grid + markers + masks) ===== -->
+      <defs>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+        </pattern>
+        <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+        </marker>
+        <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+        </marker>
+        <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/>
+        </marker>
+        <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+        </marker>
+      </defs>
+
+      <!-- Background grid -->
+      <rect width="1440" height="1180" fill="url(#grid)"/>
+
+      <!-- ============================================================
+           PHASE BAR (top ribbon) — 4 phases
+           ============================================================ -->
+      <rect x="20" y="20" width="1400" height="38" rx="6"
+            fill="rgba(30,41,59,0.5)" stroke="#334155" stroke-width="1"/>
+      <text x="34" y="44" fill="#94a3b8" font-size="11" font-weight="600">PHASES</text>
+
+      <rect x="100" y="28" width="320" height="22" rx="4" fill="rgba(34,211,238,0.10)" stroke="#22d3ee" stroke-width="1"/>
+      <text x="260" y="43" fill="#22d3ee" font-size="10" font-weight="600" text-anchor="middle">PHASE 1 · Develop &amp; Test</text>
+
+      <rect x="430" y="28" width="320" height="22" rx="4" fill="rgba(52,211,153,0.10)" stroke="#34d399" stroke-width="1"/>
+      <text x="590" y="43" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">PHASE 2 · Merge to dev</text>
+
+      <rect x="760" y="28" width="320" height="22" rx="4" fill="rgba(167,139,250,0.10)" stroke="#a78bfa" stroke-width="1"/>
+      <text x="920" y="43" fill="#a78bfa" font-size="10" font-weight="600" text-anchor="middle">PHASE 3 · Non-prod Execute</text>
+
+      <rect x="1090" y="28" width="320" height="22" rx="4" fill="rgba(251,191,36,0.10)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="1250" y="43" fill="#fbbf24" font-size="10" font-weight="600" text-anchor="middle">PHASE 4 · Promote &amp; CR &amp; Prod</text>
+
+      <!-- ============================================================
+           Phase column dividers (vertical, dashed amber)
+           ============================================================ -->
+      <line x1="430" y1="80" x2="430" y2="600" stroke="#475569" stroke-width="1" stroke-dasharray="4,6"/>
+      <line x1="760" y1="80" x2="760" y2="600" stroke="#475569" stroke-width="1" stroke-dasharray="4,6"/>
+      <line x1="1090" y1="80" x2="1090" y2="600" stroke="#475569" stroke-width="1" stroke-dasharray="4,6"/>
+
+      <!-- ============================================================
+           STEPS (11 boxes, vertical flow inside phase columns)
+           Phase 1 col: steps 1, 2
+           Phase 2 col: steps 3, 4
+           Phase 3 col: steps 5, 6, 7
+           Phase 4 col: steps 8, 9, 10, 11
+           ============================================================ -->
+
+      <!-- ===== STEP 1 — develop (feature branch from dev) ===== -->
+      <rect x="100" y="100" width="320" height="80" rx="6" fill="#0f172a"/>
+      <rect x="100" y="100" width="320" height="80" rx="6" fill="rgba(34,211,238,0.25)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="260" y="124" fill="#22d3ee" font-size="13" font-weight="700" text-anchor="middle">STEP 1 · develop</text>
+      <text x="260" y="144" fill="#e2e8f0" font-size="11" text-anchor="middle">git checkout -b feature/CAEP-xxxx-&lt;slug&gt;</text>
+      <text x="260" y="160" fill="#94a3b8" font-size="9.5" text-anchor="middle">off dev HEAD · any commit's subject</text>
+      <text x="260" y="172" fill="#94a3b8" font-size="9.5" text-anchor="middle">must start with <tspan fill="#22d3ee">CAEP-xxxx:</tspan> (commit-msg hook)</text>
+
+      <line x1="260" y1="180" x2="260" y2="208" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+
+      <!-- ===== STEP 2 — self test ===== -->
+      <rect x="100" y="210" width="320" height="80" rx="6" fill="#0f172a"/>
+      <rect x="100" y="210" width="320" height="80" rx="6" fill="rgba(52,211,153,0.25)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="260" y="234" fill="#34d399" font-size="13" font-weight="700" text-anchor="middle">STEP 2 · self test</text>
+      <text x="260" y="254" fill="#e2e8f0" font-size="11" text-anchor="middle">common/scripts/gitclone.sh · bats · shellcheck</text>
+      <text x="260" y="270" fill="#94a3b8" font-size="9.5" text-anchor="middle">all green? → continue · fail? → fix locally</text>
+      <text x="260" y="282" fill="#fb7185" font-size="9.5" text-anchor="middle" font-weight="600">[ GATE 1: local CI ]</text>
+
+      <!-- Cross-phase arrow from step 2 → step 3 (cyan→emerald column) -->
+      <path d="M 420 250 L 430 250" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <path d="M 440 250 L 460 250" stroke="#64748b" stroke-width="1.5"/>
+
+      <!-- ===== STEP 3 — PR feature → dev (merge to dev branch) ===== -->
+      <rect x="430" y="210" width="320" height="80" rx="6" fill="#0f172a"/>
+      <rect x="430" y="210" width="320" height="80" rx="6" fill="rgba(34,211,238,0.25)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="590" y="234" fill="#22d3ee" font-size="13" font-weight="700" text-anchor="middle">STEP 3 · merge to dev branch</text>
+      <text x="590" y="254" fill="#e2e8f0" font-size="11" text-anchor="middle">gh pr create --base dev --head feature/...</text>
+      <text x="590" y="270" fill="#94a3b8" font-size="9.5" text-anchor="middle">squash merge · linear history on dev</text>
+      <text x="590" y="282" fill="#fb7185" font-size="9.5" text-anchor="middle" font-weight="600">[ GATE 2: PR Approve group ]</text>
+
+      <line x1="590" y1="290" x2="590" y2="318" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+
+      <!-- ===== STEP 4 — review (post-merge on dev) ===== -->
+      <rect x="430" y="320" width="320" height="74" rx="6" fill="#0f172a"/>
+      <rect x="430" y="320" width="320" height="74" rx="6" fill="rgba(34,211,238,0.25)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="590" y="344" fill="#22d3ee" font-size="13" font-weight="700" text-anchor="middle">STEP 4 · review (dev HEAD)</text>
+      <text x="590" y="362" fill="#e2e8f0" font-size="11" text-anchor="middle">PR Approve group · re-confirm after squash</text>
+      <text x="590" y="378" fill="#94a3b8" font-size="9.5" text-anchor="middle">no conflict · no secrets · all _待填_ in §6</text>
+
+      <!-- Cross-phase arrow from step 4 → step 5 -->
+      <path d="M 750 357 L 760 357" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- ===== STEP 5 — do non-prod changes ===== -->
+      <rect x="760" y="100" width="320" height="80" rx="6" fill="#0f172a"/>
+      <rect x="760" y="100" width="320" height="80" rx="6" fill="rgba(167,139,250,0.25)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="920" y="124" fill="#a78bfa" font-size="13" font-weight="700" text-anchor="middle">STEP 5 · do non-prod changes</text>
+      <text x="920" y="144" fill="#e2e8f0" font-size="11" text-anchor="middle">jumpbox / UAT project · run.sh dev mode</text>
+      <text x="920" y="160" fill="#94a3b8" font-size="9.5" text-anchor="middle">release-v1/scripts/{preflight,setup,verify}-uk.sh</text>
+      <text x="920" y="172" fill="#94a3b8" font-size="9.5" text-anchor="middle">artifacts/ · real output, not synthetic</text>
+
+      <line x1="920" y1="180" x2="920" y2="208" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+
+      <!-- ===== STEP 6 — fix bugs ===== -->
+      <rect x="760" y="210" width="320" height="80" rx="6" fill="#0f172a"/>
+      <rect x="760" y="210" width="320" height="80" rx="6" fill="rgba(251,113,133,0.20)" stroke="#fb7185" stroke-width="1.5"/>
+      <text x="920" y="234" fill="#fb7185" font-size="13" font-weight="700" text-anchor="middle">STEP 6 · fix bugs</text>
+      <text x="920" y="254" fill="#e2e8f0" font-size="11" text-anchor="middle">verify fail? → feature branch hot-fix</text>
+      <text x="920" y="270" fill="#94a3b8" font-size="9.5" text-anchor="middle">commit prefix still <tspan fill="#22d3ee">CAEP-xxxx:</tspan></text>
+      <text x="920" y="282" fill="#94a3b8" font-size="9.5" text-anchor="middle">re-trigger step 2 (CI) → loop</text>
+
+      <!-- LOOP: step 6 (fix) → step 2 (self test). Route goes BELOW all step boxes to avoid overlap. -->
+      <path d="M 920 290 L 920 480 L 260 480 L 260 290"
+            stroke="#fb7185" stroke-width="1.4" stroke-dasharray="4,4" fill="none" marker-end="url(#arrow-rose)"/>
+      <rect x="430" y="468" width="340" height="22" rx="4" fill="#0f172a" stroke="#fb7185" stroke-width="1"/>
+      <text x="600" y="482" fill="#fb7185" font-size="9.5" font-weight="600" text-anchor="middle">[ LOOP · Step 6 → Step 2 ] fix found → redo</text>
+
+      <line x1="920" y1="290" x2="920" y2="318" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+
+      <!-- ===== STEP 7 — redo 2/3/4/5 ===== -->
+      <rect x="760" y="320" width="320" height="74" rx="6" fill="#0f172a"/>
+      <rect x="760" y="320" width="320" height="74" rx="6" fill="rgba(167,139,250,0.18)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="920" y="344" fill="#a78bfa" font-size="13" font-weight="700" text-anchor="middle">STEP 7 · redo 2 / 3 / 4 / 5</text>
+      <text x="920" y="362" fill="#e2e8f0" font-size="11" text-anchor="middle">until dev-head verify = green</text>
+      <text x="920" y="378" fill="#94a3b8" font-size="9.5" text-anchor="middle">dismiss_stale_reviews → re-approve</text>
+
+      <!-- Cross-phase arrow step 7 → step 8 -->
+      <path d="M 1080 357 L 1090 357" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- ===== STEP 8 — new PR dev → main (PROMOTION) ===== -->
+      <rect x="1090" y="100" width="320" height="84" rx="6" fill="#0f172a"/>
+      <rect x="1090" y="100" width="320" height="84" rx="6" fill="rgba(251,191,36,0.20)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="1250" y="124" fill="#fbbf24" font-size="13" font-weight="700" text-anchor="middle">STEP 8 · new PR dev → main</text>
+      <text x="1250" y="144" fill="#e2e8f0" font-size="11" text-anchor="middle">release/CAEP-xxxx-promote-to-main-...</text>
+      <text x="1250" y="160" fill="#94a3b8" font-size="9.5" text-anchor="middle">merge commit (no squash) — preserves history</text>
+      <text x="1250" y="172" fill="#fb7185" font-size="9.5" font-weight="600" text-anchor="middle">[ GATE 3: PR Approve group + CR Reviewer ]</text>
+
+      <line x1="1250" y1="184" x2="1250" y2="212" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+
+      <!-- ===== STEP 9 — raise CR (with main HEAD commit SHA) ===== -->
+      <rect x="1090" y="214" width="320" height="86" rx="6" fill="#0f172a"/>
+      <rect x="1090" y="214" width="320" height="86" rx="6" fill="rgba(167,139,250,0.30)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="1250" y="238" fill="#a78bfa" font-size="13" font-weight="700" text-anchor="middle">STEP 9 · raise CR with main SHA</text>
+      <text x="1250" y="258" fill="#e2e8f0" font-size="11" text-anchor="middle">CR-XXXXXX references <tspan fill="#a78bfa">main HEAD commit SHA</tspan></text>
+      <text x="1250" y="272" fill="#94a3b8" font-size="9.5" text-anchor="middle">CR template: PR URL + CAEP tickets list</text>
+      <text x="1250" y="284" fill="#94a3b8" font-size="9.5" text-anchor="middle">+ risk · + rollback plan · + sign-off</text>
+      <text x="1250" y="294" fill="#fbbf24" font-size="9" text-anchor="middle" font-weight="600">CR system = Jira (per §5.9 inference)</text>
+
+      <line x1="1250" y1="300" x2="1250" y2="328" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+
+      <!-- ===== STEP 10 — review → release notes ===== -->
+      <rect x="1090" y="330" width="320" height="80" rx="6" fill="#0f172a"/>
+      <rect x="1090" y="330" width="320" height="80" rx="6" fill="rgba(167,139,250,0.30)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="1250" y="354" fill="#a78bfa" font-size="13" font-weight="700" text-anchor="middle">STEP 10 · review → release notes</text>
+      <text x="1250" y="374" fill="#e2e8f0" font-size="11" text-anchor="middle">CR Reviewer group approves CR</text>
+      <text x="1250" y="390" fill="#94a3b8" font-size="9.5" text-anchor="middle">release notes = git log CAEP-x: | sort -u</text>
+      <text x="1250" y="402" fill="#fb7185" font-size="9.5" font-weight="600" text-anchor="middle">[ GATE 4: CR approved ]</text>
+
+      <line x1="1250" y1="410" x2="1250" y2="438" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+
+      <!-- ===== STEP 11 — do prod release ===== -->
+      <rect x="1090" y="440" width="320" height="98" rx="6" fill="#0f172a"/>
+      <rect x="1090" y="440" width="320" height="98" rx="6" fill="rgba(52,211,153,0.30)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="1250" y="464" fill="#34d399" font-size="13" font-weight="700" text-anchor="middle">STEP 11 · do prod release</text>
+      <text x="1250" y="484" fill="#e2e8f0" font-size="11" text-anchor="middle">run.sh --mode=prod EXPECTED_SHA=&lt;main-SHA&gt;</text>
+      <text x="1250" y="500" fill="#94a3b8" font-size="9.5" text-anchor="middle">prod mode: ref-use runs only if main HEAD</text>
+      <text x="1250" y="512" fill="#94a3b8" font-size="9.5" text-anchor="middle">matches CR-XXXXXX commit SHA</text>
+      <text x="1250" y="528" fill="#fbbf24" font-size="9.5" font-weight="600" text-anchor="middle">[ RELEASE CLOSED · CR closed ]</text>
+
+      <!-- =========================================================
+           BRANCH VISUALIZATION (left side, full-height)
+           Shows main / dev / feature branches as horizontal lanes
+           ========================================================= -->
+      <text x="36" y="650" fill="#94a3b8" font-size="11" font-weight="600">BRANCH LANES</text>
+
+      <!-- main lane -->
+      <rect x="36" y="666" width="44" height="16" rx="2" fill="rgba(251,113,133,0.15)" stroke="#fb7185"/>
+      <text x="40" y="678" fill="#fb7185" font-size="10" font-weight="700">main</text>
+
+      <!-- dev lane -->
+      <rect x="36" y="710" width="44" height="16" rx="2" fill="rgba(34,211,238,0.15)" stroke="#22d3ee"/>
+      <text x="40" y="722" fill="#22d3ee" font-size="10" font-weight="700">dev</text>
+
+      <!-- feature lane -->
+      <rect x="36" y="754" width="44" height="16" rx="2" fill="rgba(167,139,250,0.15)" stroke="#a78bfa"/>
+      <text x="44" y="766" fill="#a78bfa" font-size="9" font-weight="700">feat</text>
+
+      <!-- Life-line annotations -->
+      <text x="92" y="678" fill="#94a3b8" font-size="9">present in steps 8-11</text>
+      <text x="92" y="722" fill="#94a3b8" font-size="9">present in steps 1-10</text>
+      <text x="92" y="766" fill="#94a3b8" font-size="9">present in steps 1-2, 6-7 (fix-only)</text>
+
+
+
+
+
+      <!-- =========================================================
+           CR LIFECYCLE SIDEBAR (right side, full-height)
+           Shows CR system state transitions
+           ========================================================= -->
+      <text x="1390" y="600" fill="#94a3b8" font-size="11" font-weight="600" text-anchor="end">CR LIFECYCLE</text>
+
+      <!-- CR Draft -->
+      <rect x="1300" y="610" width="90" height="22" rx="4" fill="rgba(167,139,250,0.15)" stroke="#a78bfa"/>
+      <text x="1345" y="625" fill="#a78bfa" font-size="9" font-weight="600" text-anchor="middle">CR DRAFT</text>
+      <line x1="1345" y1="632" x2="1345" y2="668" stroke="#a78bfa" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- CR Submitted -->
+      <rect x="1300" y="670" width="90" height="22" rx="4" fill="rgba(251,113,133,0.15)" stroke="#fb7185"/>
+      <text x="1345" y="685" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">CR SUBMITTED</text>
+      <line x1="1345" y1="692" x2="1345" y2="728" stroke="#34d399" stroke-width="1" marker-end="url(#arrow-emerald)"/>
+
+      <!-- CR Approved -->
+      <rect x="1300" y="730" width="90" height="22" rx="4" fill="rgba(52,211,153,0.15)" stroke="#34d399"/>
+      <text x="1345" y="745" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">CR APPROVED</text>
+      <line x1="1345" y1="752" x2="1345" y2="788" stroke="#34d399" stroke-width="1" marker-end="url(#arrow-emerald)"/>
+
+      <!-- CR Closed -->
+      <rect x="1300" y="790" width="90" height="22" rx="4" fill="rgba(94,234,212,0.15)" stroke="#94a3b8"/>
+      <text x="1345" y="805" fill="#94a3b8" font-size="9" font-weight="600" text-anchor="middle">CR CLOSED</text>
+
+      <!-- =========================================================
+           BOTTOM RIBBON — single big SVG, on second iteration this becomes the GATES summary
+           (kept inside SVG for now to maintain pattern with existing diagram)
+           ========================================================= -->
+
+      <!-- Inner SVG note: axes marker for visual consistency -->
+      <text x="36" y="850" fill="#475569" font-size="9" font-style="italic">↑ BRANCH lanes (left) · 11 STEP blocks in 4 columns (centre) · CR lifecycle states (right) ↑</text>
+
+      <!-- =========================================================
+           SUB-STATEMENT BAR — gates at the bottom of the SVG
+           ========================================================= -->
+      <rect x="20" y="900" width="1400" height="140" rx="8"
+            fill="rgba(251,113,133,0.05)" stroke="#fb7185" stroke-width="1.2"/>
+      <text x="36" y="924" fill="#fb7185" font-size="11" font-weight="700" letter-spacing="0.08em">FOUR GATES — single source of truth</text>
+
+      <!-- 4 gate chips horizontally -->
+      <g transform="translate(36, 940)">
+        <!-- GATE 1 -->
+        <rect x="0" y="0" width="320" height="44" rx="6" fill="rgba(251,113,133,0.10)" stroke="#fb7185"/>
+        <text x="14" y="20" fill="#fb7185" font-size="10" font-weight="700">GATE 1 · local CI</text>
+        <text x="14" y="34" fill="#94a3b8" font-size="9">gitclone.sh + bats + shellcheck = all green</text>
+        <text x="14" y="46" fill="#94a3b8" font-size="9">Step 2 — block push on any red</text>
+
+        <!-- GATE 2 -->
+        <g transform="translate(340, 0)">
+          <rect x="0" y="0" width="320" height="44" rx="6" fill="rgba(251,113,133,0.10)" stroke="#fb7185"/>
+          <text x="14" y="20" fill="#fb7185" font-size="10" font-weight="700">GATE 2 · PR Approve group</text>
+          <text x="14" y="34" fill="#94a3b8" font-size="9">≥ 1 approval · dismiss_stale_reviews</text>
+          <text x="14" y="46" fill="#94a3b8" font-size="9">Step 3 — squash merge feature → dev</text>
+        </g>
+
+        <!-- GATE 3 -->
+        <g transform="translate(680, 0)">
+          <rect x="0" y="0" width="320" height="44" rx="6" fill="rgba(251,113,133,0.10)" stroke="#fb7185"/>
+          <text x="14" y="20" fill="#fb7185" font-size="10" font-weight="700">GATE 3 · PR Approve group on PR dev→main</text>
+          <text x="14" y="34" fill="#94a3b8" font-size="9">no-squash merge commit · linear history</text>
+          <text x="14" y="46" fill="#94a3b8" font-size="9">Step 8 — release branch promoted</text>
+        </g>
+
+        <!-- GATE 4 -->
+        <g transform="translate(1020, 0)">
+          <rect x="0" y="0" width="320" height="44" rx="6" fill="rgba(251,113,133,0.10)" stroke="#fb7185"/>
+          <text x="14" y="20" fill="#fb7185" font-size="10" font-weight="700">GATE 4 · CR Reviewer approves CR</text>
+          <text x="14" y="34" fill="#94a3b8" font-size="9">CR-XXXXXX approved · notes written</text>
+          <text x="14" y="46" fill="#94a3b8" font-size="9">Step 10 — pre-prod-release authorisation</text>
+        </g>
+      </g>
+
+      <!-- Italic note below gate row -->
+      <text x="36" y="1010" fill="#64748b" font-size="10" font-style="italic">
+        Prod release (step 11) additionally self-checks main HEAD against CR-XXXXXX SHA — refuses to run on SHA mismatch.
+      </text>
+
+      <!-- =========================================================
+           LOG ARROW NOTE — note about the loop-back
+           ========================================================= -->
+      <text x="36" y="1055" fill="#94a3b8" font-size="10" font-style="italic">
+        Order-of-operations invariant: step 9 (raise CR) MUST come AFTER step 8 (merge to main) — main HEAD SHA must exist before CR can reference it.
+      </text>
+
+      <!-- =========================================================
+           FOOTER NOTE INSIDE SVG
+           ========================================================= -->
+      <line x1="20" y1="1100" x2="1420" y2="1100" stroke="#1e293b" stroke-width="1"/>
+      <text x="36" y="1130" fill="#475569" font-size="10">
+        Refs: requirements-design.md (this repo) §1 分支模型 · §2 Commit 规则 · §3 PR 合并规则 · §4 Release Workflow (11 steps) · §5 开放决策
+      </text>
+      <text x="36" y="1150" fill="#475569" font-size="10">
+        Open decisions affecting this diagram: §5.2 (CR Reviewer group membership) · §5.9 (CR system = Jira) · §5.11 (release-bot)
+      </text>
+
+    </svg>
+  </div>
+
+  <!-- ===== Legend ===== -->
+  <div class="legend-row">
+    <div class="item"><div class="legend-swatch" style="background: rgba(34,211,238,0.25); border: 1px solid #22d3ee;"></div>feature / dev branch / code step</div>
+    <div class="item"><div class="legend-swatch" style="background: rgba(52,211,153,0.30); border: 1px solid #34d399;"></div>flow / success / prod release</div>
+    <div class="item"><div class="legend-swatch" style="background: rgba(167,139,250,0.30); border: 1px solid #a78bfa;"></div>CR / audit / non-prod execute</div>
+    <div class="item"><div class="legend-swatch" style="background: rgba(251,191,36,0.20); border: 1px solid #fbbf24;"></div>dev→main promotion / metadata</div>
+    <div class="item"><div class="legend-swatch" style="background: rgba(251,113,133,0.20); border: 1px solid #fb7185;"></div>gate / fix / blocking signal</div>
+  </div>
+
+  <!-- ===== 3 Summary cards (matches existing pattern) ===== -->
+  <div class="cards-grid">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot" style="background: var(--cyan);"></div>
+        <h3>Phase 1-2 — Develop &amp; Merge to dev</h3>
+      </div>
+      <ul>
+        <li>step 1-2: <code>feature/CAEP-xxxx-*</code> + self-test gate 1<span class="gate-tag">CI</span></li>
+        <li>step 3-4: PR <code>feature→dev</code> via PR Approve group<span class="gate-tag">GATE 2</span></li>
+        <li>step 3: squash merge · linear history on dev</li>
+        <li>step 4: post-merge review (no conflict / no secrets)</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot" style="background: var(--violet);"></div>
+        <h3>Phase 3 — Non-prod Execute &amp; Fix loop</h3>
+      </div>
+      <ul>
+        <li>step 5: jumpbox / UAT · <code>run.sh dev mode</code></li>
+        <li>step 6: <code>verify fail → fix feature</code> (commit prefix preserved)</li>
+        <li>step 7: redo 2-3-4-5 until dev HEAD verify = green</li>
+        <li>output: real <code>artifacts/&lt;r&gt;-setup-*.log</code> + <code>*-verify-*.log</code></li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot" style="background: var(--amber);"></div>
+        <h3>Phase 4 — Promote / CR / Prod release</h3>
+      </div>
+      <ul>
+        <li>step 8: PR <code>dev→main</code> (merge commit, no squash)<span class="gate-tag">GATE 3</span></li>
+        <li>step 9: raise CR — MUST reference <strong>main HEAD SHA</strong></li>
+        <li>step 10: CR Reviewer · release notes = <code>git log</code><span class="gate-tag">GATE 4</span></li>
+        <li>step 11: <code>run.sh --mode=prod EXPECTED_SHA=</code> self-checks before deploy</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===== GATES summary bar (ENCRYPTION-style) ===== -->
+  <div class="summary-bar">
+    <h3>FOUR GATES — single source of truth</h3>
+    <div class="chip-row">
+      <div class="chip"><div class="chip-dot"></div>GATE 1 · local CI (step 2)</div>
+      <div class="chip"><div class="chip-dot"></div>GATE 2 · PR Approve group (step 3)</div>
+      <div class="chip"><div class="chip-dot"></div>GATE 3 · PR dev→main (step 8)</div>
+      <div class="chip"><div class="chip-dot"></div>GATE 4 · CR Reviewer approves (step 10)</div>
+      <div class="chip" style="background: rgba(52,211,153,0.08); color: var(--emerald); border-color: rgba(52,211,153,0.4);"><div class="chip-dot" style="background: var(--emerald);"></div>STEP 11 · prod SHA self-check (defence-in-depth, runtime)</div>
+    </div>
+    <div class="summary-note">
+      All four gates are real checkpoints (branch protection hooks or human approver actions); step 11's runtime SHA self-check is defence-in-depth and cannot replace any gate.
+    </div>
+  </div>
+
+  <div class="footer">
+    caep-infra-gcp-release · <code>workflow.html</code> · 11-step release workflow · 2026-07-02 · dark theme · JetBrains Mono
+  </div>
+
+</div>
+</body>
+</html>
