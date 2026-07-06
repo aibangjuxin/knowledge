@@ -1,0 +1,567 @@
+# Cloud SQL Auth Proxy Sidecar — 3307 真的在 Listen 吗？排查真相清单
+
+> 本文承接 [`why-psc-netpolicy-3307.md`](./why-psc-netpolicy-3307.md)（为什么 NetworkPolicy 要放 3307）和 [`sql-3307-template.md`](./sql-3307-template.md)（统一 3307 的模板设计），聚焦一个**老用户/新用户都会掉进去的认知陷阱**：
+>
+> **"我登陆 Pod 执行 `ss -nltp | grep 3307` 没看到 3307 端口 —— 那 3307 怎么工作的？"**
+>
+> 这是一篇**现场排查实录**。每一条真相都配了**复现命令**和**判断信号**，让你**30 秒内确诊**到底是哪一种情况。
+
+---
+
+## 0. 一个朴素但关键的事实
+
+**Pod 内所有容器共享同一个 Linux Network Namespace**。这是 Kubernetes Pod 模型的基础设计：
+
+> "Every container in a Pod shares the network namespace, including the IP address and network ports. Inside a Pod, containers can communicate with one another using `localhost`." —— [Kubernetes Docs: Pods](https://kubernetes.io/docs/concepts/workloads/pods/)
+
+也就是说：
+
+| 容器       | 看到的 `127.0.0.1` | 看到的 `eth0`（Pod IP） | 看到的 `ss -nltp` |
+| ---------- | ------------------ | ----------------------- | ----------------- |
+| `app`      | sidecar 的所有 listen 端口 | sidecar 的所有 listen 端口 | sidecar 的所有 listen 端口 |
+| `cloud-sql-proxy` | 自己的 + `app` 的端口 | 自己的 + `app` 的端口 | 自己的 + `app` 的端口 |
+
+**`ss` 在 `app` 容器里跑，应该看到 sidecar 的端口**（前提是 sidecar 真在那个端口 listen）。
+
+所以 **`ss` 看不到 3307 这件事本身就是异常信号**。它一定意味着下面 5 个真相中的某一个。
+
+---
+
+## 1. 真相一：`--port` 没生效，proxy 跑在默认端口（5432/3306）
+
+### 这是最高频的根因
+
+**官方 v2.x 的默认行为**（见 `GoogleCloudPlatform/cloud-sql-proxy` `cmd/root.go` 的帮助文字）：
+
+> By default, the Proxy will determine the database engine and start a listener on localhost using the default database engine's port, i.e., **MySQL is 3306, Postgres is 5432, SQL Server is 1433**. If multiple instances are specified which all use the same database engine, the first will be started on the default database port and subsequent instances will be incremented from there (e.g., 3306, 3307, 3308, etc). **To disable this behavior (and reduce startup time), use the `--port` flag.**
+
+也就是说：
+
+- **如果你的 deployment 写法是：**
+
+  ```yaml
+  - name: cloud-sql-proxy
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.11.4
+    args:
+      - "--psc"
+      - "--structured-logs"
+      - "--auto-iam-authn"
+      - "--address=127.0.0.1"
+      # ⚠️  没有 --port
+      - "PROJECT:REGION:INSTANCE"
+  ```
+
+- **proxy 实际起的是** `127.0.0.1:5432`（如果是 PostgreSQL）或 `127.0.0.1:3306`（如果是 MySQL）。
+- 你应用配 `DB_PORT=5432` 才能连上。如果你配 `DB_PORT=3307`，**应用连的是个空端口**——连接会立刻 RST 拒绝。
+
+### 复现命令
+
+```bash
+NS=psc-demo
+POD=db-app-xxx
+kubectl exec -n $NS $POD -c cloud-sql-proxy -- ss -tnlp
+```
+
+**期望输出**（根据 engine）：
+
+| 你以为的           | 实际看到的                  | 含义                             |
+| ------------------ | --------------------------- | -------------------------------- |
+| `LISTEN 0 128 127.0.0.1:3307` | `LISTEN 0 128 127.0.0.1:5432`  | proxy 跑了默认端口，**你的 `--port=3307` 没用上** |
+
+### 触发场景
+
+- **template 变量渲染错误**（`--port={{ .Values.dbPort }}` 因为 values 漏了字段渲染成空串，proxy 用了引擎默认值）
+- **args 顺序错了**（cloud-sql-proxy 把 `--port` 当 boolean flag — 它不是，是需要 `=` 的 key-value，`--port 3307` 和 `--port=3307` 都接受，但**两个 `INSTANCE_CONNECTION_NAME` 之间写 `--port` 是非法语法**，见 [`why-psc-netpolicy-3307.md` §Sidecar 配置校验清单](./why-psc-netpolicy-3307.md#sidecar-配置安全校验清单cloud-sql-proxy-2114)）
+- **多 instance 没显式 `?port=`**（第一个 instance 拿 5432，第二个 +1 = 5433，但很多 template 以为两个都拿显式 port）
+
+### 修复
+
+```yaml
+- name: cloud-sql-proxy
+  image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.11.4
+  args:
+    - "--psc"
+    - "--structured-logs"
+    - "--auto-iam-authn"
+    - "--address=127.0.0.1"
+    - "--port=3307"                            # ✅ 显式指定
+    - "PROJECT:REGION:INSTANCE"
+  livenessProbe:
+    tcpSocket: { port: 3307 }                  # ✅ 与 --port 一致
+    initialDelaySeconds: 10
+```
+
+---
+
+## 2. 真相二：proxy 用了 Unix Domain Socket，不是 TCP
+
+### 第二个高频根因
+
+如果你（或你们的 template）配的是 `--unix-socket` 而不是 `--port`：
+
+```yaml
+- name: cloud-sql-proxy
+  args:
+    - "--psc"
+    - "--auto-iam-authn"
+    - "--unix-socket=/cloudsql"
+    - "PROJECT:REGION:INSTANCE"
+  volumeMounts:
+    - name: cloudsql-socket
+      mountPath: /cloudsql
+```
+
+那么 **proxy 监听的是一个 Unix socket 文件（`/cloudsql/...`）**，**不是 TCP 端口**。
+
+`ss -nltp` 默认**只显示 TCP 监听端口**，自然看不到任何 listen 项。
+
+### 复现命令
+
+```bash
+NS=psc-demo; POD=db-app-xxx
+kubectl exec -n $NS $POD -c cloud-sql-proxy -- sh -c 'ls -la /cloudsql/ 2>/dev/null && echo "---" && ss -alnp 2>/dev/null | grep -iE "(cloud|sql)" '
+```
+
+**期望输出（Unix socket 模式）：**
+
+```
+srw-rw---- 1 nonroot nonroot 0 Jul 6 19:00 /cloudsql/
+srw-rw---- 1 nonroot nonroot 0 Jul 6 19:00 /cloudsql/PROJECT:REGION:INSTANCE
+```
+
+注意 `s` 开头 = socket 文件，不是 `LISTEN` 一行。
+
+### 这种模式下 3307 是怎么"工作"的？
+
+答案是 **3307 在这种模式下根本不存在**。应用应该这样连：
+
+```yaml
+env:
+  - name: DB_HOST
+    value: "/cloudsql/PROJECT:REGION:INSTANCE"     # 注意路径是 socket 文件
+  - name: DB_PORT
+    value: "5432"                                   # PG 的 native port,JDBC 需要这个字段但 socket 模式下被忽略
+```
+
+### 触发场景
+
+- 跟着一份过时的 v1.x 教程写的（v1 默认是 Unix socket）
+- 用了官方 Helm chart 的某些 variant
+- 想避免 NetworkPolicy 多开端口 = 干脆全走 socket
+
+### 修复（如果要保持 3307 + TCP）
+
+把 args 改成 TCP 模式（见真相一的修复示例），并在 NetworkPolicy 中放行 `egress TCP/3307`。
+
+### 修复（如果保留 socket 模式）
+
+继续用 socket，不需要改任何 NetworkPolicy。但**template 一定要文档化**——很多人会预期 3307，结果 socket 路径不匹配。
+
+---
+
+## 3. 真相三：`ss` 跑错了容器，跑错了 namespace
+
+### 第三个高频根因
+
+**Pod 内的容器是隔离的进程，但共享 network namespace。** 所以 `ss -nltp` 在 Pod 内任一容器跑，**结果是一致的**（同一组 listen 端口）。
+
+但是有两个例外会让你以为"看不到"：
+
+### 3a. `ss` 命令在容器内不可用
+
+`distroless` 镜像没有 `ss` / `netstat` / shell。
+
+```bash
+kubectl exec -n $NS $POD -c cloud-sql-proxy -- ss -tnlp
+# 报错: "exec failed: container_linux.go:...: starting container process caused: exec: \"ss\": executable file not found in $PATH"
+```
+
+**这时候你以为"没 listen"，其实是 `ss` 没装。**
+
+### 复现
+
+```bash
+kubectl exec -n $NS $POD -c cloud-sql-proxy -- which ss || echo "ss not installed in this image"
+
+# 替代命令（pod 内任一容器都能跑 /proc/net/tcp）
+kubectl exec -n $NS $POD -c cloud-sql-proxy -- sh -c '
+  awk "NR>1 && \$4==\"0A\" {split(\$2,a,\":\"); printf \"listen: 127.0.0.1:%d (state=LISTEN)\n\", strtonum(\"0x\"a[2])}" /proc/net/tcp
+'
+```
+
+或者直接 `apt-get install iproute2` 装 `ss`（前提是有 root）：
+
+```bash
+kubectl exec -n $NS $POD -c cloud-sql-proxy -- bash -c 'apt-get update -qq && apt-get install -y -qq iproute2 && ss -tnlp'
+```
+
+### 3b. `kubectl exec` 没指定 `-c`
+
+如果你跑 `kubectl exec $POD -- ss -tnlp` 不带 `-c`，kubelet 会**默认进 `app` 容器**。这时如果 `app` 镜像也没有 `ss`，你又看到"命令不存在"的报错。
+
+### 复现
+
+```bash
+# 看 Pod 里有几个容器
+kubectl get pod -n $NS $POD -o jsonpath='{.spec.containers[*].name}'
+
+# 在每个容器里都试一次
+for c in $(kubectl get pod -n $NS $POD -o jsonpath='{.spec.containers[*].name}'); do
+  echo "--- container: $c ---"
+  kubectl exec -n $NS $POD -c $c -- ss -tnlp 2>&1 | head -5
+done
+```
+
+### 触发场景
+
+- `kubectl exec` 默认进 `app` 容器，但你看到的是 `app` 的报错
+- `app` 用 alpine 但 `cloud-sql-proxy` 用 distroless，你习惯了 `ss` 在哪都可用
+
+---
+
+## 真相四（最关键）：proxy 进程 crash 了，根本没 listen
+
+### **这是你生产环境最该先怀疑的真相**
+
+`--port=3307` 是写在 args 里的，**但 cloud-sql-proxy 启动失败**：
+- 拿不到 metadata server token（WI 没绑）
+- `--port` 是个 boolean flag（写错语法）
+- IAM role 没 `cloudsql.client`
+- instance 连接名打错（比如 `:` 被 shell 吃掉了）
+
+**proxy 进程反复 restart，每轮都 crashing**，循环里可能某次刚好 listen 了 3307 几秒又死了。
+
+**`ss` 偏偏在你看的那一瞬没看到 = 因为这一秒它正在重启。**
+
+### 复现
+
+```bash
+NS=psc-demo; POD=db-app-xxx
+kubectl get pod -n $NS $POD
+# 看 RESTARTS 列
+kubectl describe pod -n $NS $POD | grep -A 5 "Conditions:"
+kubectl logs -n $NS $POD -c cloud-sql-proxy --tail=50
+```
+
+**期望看到 logs 里的崩溃信号：**
+
+| 错误关键字 | 含义 | 修复 |
+| ---------- | ---- | ---- |
+| `could not find default credentials` | WI 没绑到 Pod 上的 KSA | 看 `iam.gke.io/gcp-service-account` annotation + node pool `cloud-platform` scope |
+| `400 Bad Request: Invalid instance connection name` | instance 名格式错 | `PROJECT:REGION:INSTANCE` |
+| `permission denied for cloudsql.instances.get` | GSA 缺 `cloudsql.client` role | `gcloud projects add-iam-policy-binding` |
+| `unknown flag: --port` | proxy 版本太老不识 `--port`（v2.0 之前） | 升 2.x |
+| `dial tcp ...: connect: connection refused` | 节点到 PSC Service Attachment 没路 | 检查 PSC endpoint / VPC peering |
+
+**看 secret 是被 mounted 的（distroless 模式下 WI 必须通过 metadata server，不能用 key file）：**
+
+```bash
+kubectl get pod -n $NS $POD -o jsonpath='{.spec.serviceAccountName}'
+kubectl get sa -n $NS <SA-名> -o jsonpath='{.metadata.annotations.iam\.gke\.io/gcp-service-account}'
+```
+
+### 还有一个高频触发：proxy "启动成功"但 listen 失败
+
+distroless 镜像（默认镜像）里 proxy 以非 root 用户（UID 65532）跑。如果 `127.0.0.1:3307` 已经被别的进程占了，或者 proxy 试图 listen 在一个 reserved port，又或者 `securityContext` 限制 bind 权限…
+
+但**最常见的是**：你的 proxy template 写了 `--address=0.0.0.0`，但 Pod 的 NetworkPolicy **只放行 loopback** 或 `127.0.0.1`，导致 bind 在 `0.0.0.0` 没问题但出向流量被 NetworkPolicy 拦了——这跟"3307 没 listen"是**两件事**，但很容易混淆。
+
+### 触发场景
+
+- template 配置漂移了（比如 `cloudSqlProxy.port` 在 values 里没填，自动渲染成 `--port=` 空字符串 — cloud-sql-proxy 会 reject）
+- image tag 漂移到一个有 bug 的版本
+- KSA/GSA 绑定漏配，刚刚改 NetworkPolicy 重启 Pod 后才暴露
+- 用的不是 GKE，而是 GKE Autopilot，metadata server 走 `metadata.google.internal`，而 Autopilot 会强制注入 `GKE_METADATA` env 影响 token 获取路径
+
+### 修复
+
+定位 root cause — 上面的复现命令已经把所有 lead 列齐了。最实用的一句话：
+
+```bash
+# 这一条会告诉你"为什么 proxy 没起来"
+kubectl logs -n $NS $POD -c cloud-sql-proxy --previous --tail=200
+```
+
+`--previous` 看**上一个 crashed container**的日志 = root cause 几乎都在里头。
+
+---
+
+## 真相五：你看错 Pod 了，这是 legacy 直连模式
+
+### 容易被忽略的真相
+
+Lex 的实际环境中**可能有多种部署形态混存**：
+
+| 模式 | 容器 | listen | 怎么连 |
+| ---- | ---- | ------ | ------- |
+| **直连 (老)** | 只有 `app`，无 sidecar | `app` 自己 `127.0.0.1:5432/3306`，或者直接 `:5432` 去 Pod IP | 无 sidecar，应用直连 PSC EP |
+| **Auth Proxy sidecar (新)** | `app` + `cloud-sql-proxy` | sidecar listen `127.0.0.1:3307` | `app → 127.0.0.1:3307` → proxy → `PSC EP:3307` |
+| **混合 (Dynatrace/Envoy 等其他 sidecar)** | `app` + `cloud-sql-proxy` + `xxx-agent` | 多个端口都可能被 listen | 应用看自己环境变量 |
+
+如果你不小心 `kubectl exec` 进了一个**没用 Auth Proxy 的老 Pod**，`ss -nltp | grep 3307` 自然没有任何结果 —— 这种 Pod 的应用是**直连 PSC IP**（不走 proxy）。
+
+### 复现
+
+```bash
+# 看 Pod 是不是带 sidecar
+kubectl get pod -n $NS $POD -o jsonpath='{.spec.containers[*].name}'
+
+# 看应用 DB_HOST 是什么
+kubectl exec -n $NS $POD -c <app-容器名> -- env | grep -E '^(DB_|PG|MYSQL)'
+```
+
+**判定矩阵**：
+
+| 看到 | 模式 | 怎么连 |
+| ---- | ---- | ------- |
+| 容器列表只有 `app`，`DB_HOST=10.x.x.x` (PSC EP IP) | 直连 | 必须放 `egress TCP/5432/3306` |
+| 容器列表有 `cloud-sql-proxy`，`DB_HOST=127.0.0.1` | Auth Proxy | 必须放 `egress TCP/3307` |
+| 容器列表有 `cloud-sql-proxy`，但 `DB_HOST=10.x.x.x` | 配置错误 | 应用配错，应该改成 127.0.0.1 |
+
+### 触发场景
+
+- `kubectl get pod -l app=db-app` 选错了 instance（prod vs staging）
+- replica sets 滚动升级，老的还在 running（你 `exec` 进了 old pod，新的还没起来）
+- 同 namespace 里有两套 Deployment，一个用 sidecar 一个不用
+
+---
+
+## 五秒确诊法
+
+把上面 5 个真相按"从最常见到最罕见"排个序：
+
+| 排名 | 真相 | 30 秒内能跑的诊断 | 信号判定 |
+| ---- | ---- | ----------------- | -------- |
+| **#1** | `--port` 没生效，跑默认 5432/3306 | `ss -tnlp \| grep -E ':5432\|:3306\|:3307'` 在 cloud-sql-proxy 容器内跑 | 看到 5432/3306 但**没有 3307** = **真相一** |
+| **#2** | proxy 用了 Unix socket 不是 TCP | `ls /cloudsql/`（如 mount 了） | 看到 socket 文件 = **真相二** |
+| **#3** | ss 命令在镜像里没装 | `which ss` | 不存在 = **真相三 3a** |
+| **#4** | proxy crash 循环，never stable | `kubectl get pod -o jsonpath='{.status.containerStatuses[?(@.name=="cloud-sql-proxy")].restartCount}'` | restartCount > 0 = **真相四** |
+| **#5** | 看错 Pod，Pod 里根本没有 sidecar | `kubectl get pod -o jsonpath='{.spec.containers[*].name}'` | 不含 `cloud-sql-proxy` = **真相五** |
+
+### 一键诊断脚本
+
+把上面的判定矩阵写成一个脚本：
+
+```bash
+#!/usr/bin/env bash
+# diagnose-3307-listen.sh
+# 用法: ./diagnose-3307-listen.sh <namespace> <pod>
+
+set -euo pipefail
+
+NS="${1:?usage: $0 <ns> <pod>}"
+POD="${2:?usage: $0 <ns> <pod>}"
+
+echo "===================================================="
+echo "  3307 Listening Truth-Diagnostic"
+echo "  NS/POD: $NS / $POD"
+echo "===================================================="
+
+echo ""
+echo "[1/5] Containers in this Pod:"
+kubectl get pod -n "$NS" "$POD" \
+  -o jsonpath='{range .spec.containers[*]}{"  - "}{.name}{" (image="}{.image}{")\n"}{end}'
+
+echo ""
+echo "[2/5] Is there a cloud-sql-proxy sidecar?"
+HAS_PROXY=$(kubectl get pod -n "$NS" "$POD" \
+  -o jsonpath='{.spec.containers[*].name}' 2>/dev/null \
+  | grep -cE "(cloud-sql-proxy|cloudsql-proxy|auth-proxy)" || true)
+
+if [[ "$HAS_PROXY" -eq 0 ]]; then
+  echo "  ❌ NO Auth Proxy sidecar — this Pod is direct-connect or wrong pod"
+  echo "     → This is Truth #5 (looked at wrong Pod / direct-connect)"
+  exit 0
+fi
+
+echo "  ✅ Auth Proxy sidecar detected"
+
+echo ""
+echo "[3/5] Sidecar's actual listen ports (proxy container):"
+LISTEN=$(kubectl exec -n "$NS" "$POD" -c cloud-sql-proxy -- \
+  sh -c '(ss -tnlp 2>/dev/null || netstat -tnlp 2>/dev/null) \
+    | grep -E ":330[67]|:5432|:6432"' 2>&1 || echo "(ss/netstat unavailable)")
+
+echo "$LISTEN"
+
+if echo "$LISTEN" | grep -q ":3307"; then
+  echo ""
+  echo "  ✅ 3307 IS listening — your 'not seeing' was caused by ss not installed (Truth #3) or wrong Pod"
+  exit 0
+fi
+
+if echo "$LISTEN" | grep -qE ":5432|:3306"; then
+  echo ""
+  echo "  ❌ Proxy is listening on engine default port, NOT 3307"
+  echo "     → Truth #1: --port argument is missing or not rendered correctly"
+fi
+
+if echo "$LISTEN" | grep -q "(ss/netstat unavailable)"; then
+  echo ""
+  echo "  ⚠️  ss/netstat not available in proxy image (distroless)"
+  echo "     → Truth #3: use /proc/net/tcp or install iproute2"
+  echo ""
+  echo "  Checking /proc/net/tcp directly:"
+  kubectl exec -n "$NS" "$POD" -c cloud-sql-proxy -- \
+    sh -c '
+      cat /proc/net/tcp | awk "
+        NR>1 && \$4==\"0A\" {
+          split(\$2,a,\":\");
+          port=strtonum(\"0x\"a[2]);
+          if (port==3307 || port==5432 || port==3306 || port==6432)
+            printf \"    LISTEN port=%d (uid=%s)\n\", port, \$8
+        }
+      "
+    ' 2>&1 || echo "(cannot read /proc/net/tcp either)"
+fi
+
+echo ""
+echo "[4/5] Restart count of cloud-sql-proxy container:"
+kubectl get pod -n "$NS" "$POD" \
+  -o jsonpath='{.status.containerStatuses[?(@.name=="cloud-sql-proxy")].restartCount}{"\n"}' \
+  2>/dev/null || echo "  (cannot determine)"
+
+RESTARTS=$(kubectl get pod -n "$NS" "$POD" \
+  -o jsonpath='{.status.containerStatuses[?(@.name=="cloud-sql-proxy")].restartCount}' \
+  2>/dev/null || echo 0)
+if [[ "${RESTARTS:-0}" -gt 0 ]]; then
+  echo "  ⚠️  Restart count > 0 — proxy was crashing"
+  echo "     → Truth #4: check logs with --previous flag"
+fi
+
+echo ""
+echo "[5/5] Sidecar args (from Pod spec):"
+kubectl get pod -n "$NS" "$POD" \
+  -o jsonpath='{.spec.containers[?(@.name=="cloud-sql-proxy")].args}{"\n"}'
+
+echo ""
+echo "===================================================="
+echo "  Next steps:"
+echo "    kubectl logs -n $NS $POD -c cloud-sql-proxy --previous --tail=100"
+echo "    kubectl describe pod -n $NS $POD"
+echo "===================================================="
+```
+
+---
+
+## 排查决策树（一步一步走）
+
+```
+start → ss -tnlp | grep 3307 没结果
+  │
+  ├─ Pod 里有没有 cloud-sql-proxy 容器？
+  │   ├─ 没有 → 真相五（看错 Pod / 老直连模式）
+  │   └─ 有 ↓
+  │
+  ├─ ss 命令本身能不能跑？
+  │   ├─ 报错 "executable file not found" → 真相三 3a (distroless 镜像)
+  │   │   └─ 用 /proc/net/tcp 或装 iproute2 看真实 listen
+  │   └─ ss 能跑 ↓
+  │
+  ├─ 看到 5432/3306（engine 默认端口）但没看到 3307？
+  │   ├─ 是 → 真相一（--port 没生效）
+  │   │   └─ 检查 args 里 --port=3307 是否被正确渲染
+  │   └─ 否 ↓
+  │
+  ├─ 看到 socket 文件（/cloudsql/...）但没 TCP listen？
+  │   ├─ 是 → 真相二（Unix socket 模式）
+  │   │   └─ 这时 3307 不存在，应用必须配 socket 路径连
+  │   └─ 否 ↓
+  │
+  ├─ 看到 ls socket /proc/net/tcp 都是空的？
+  │   └─ 真相四（proxy crash 循环）
+  │       └─ 必看: kubectl logs ... -c cloud-sql-proxy --previous --tail=200
+```
+
+---
+
+## NetworkPolicy 到底要不要放 3307？
+
+**回到 Lex 的原问题**：NS 默认 netpol 都是 deny all，"允许 Pod 标签 app=db 出站到 PSC SQL，**但端口没做配置**"。
+
+排查完真相一二三四五后，**NetworkPolicy 的端口配置**有三种正解：
+
+### A. 如果是真相一（proxy 在 5432 listen）
+
+```yaml
+egress:
+  - to: []
+    ports:
+      - {protocol: TCP, port: 3307}    # Auth Proxy → PSC EP 必须放
+```
+
+### B. 如果是真相二（Unix socket 模式）
+
+```yaml
+egress:
+  - to: []
+    ports:
+      - {protocol: TCP, port: 443}     # Auth Proxy 到 SQL Admin API
+      - {protocol: TCP, port: 3307}    # 也可能需要 — 即使你用 socket，proxy 还要到 SQL Admin API 注册
+```
+
+> 即使 socket 模式下，**cloud-sql-proxy 进程仍要 outbound 流量到 SQL Admin API（TCP 443）和 Cloud SQL 实例（TCP 3307）**。否则 proxy 拿不到 ephemeral cert，连不上 DB。
+
+### C. 如果是真四五（Pod 是直连，或 proxy 已 crash）
+
+```yaml
+# 真相五（直连）：放 PSC EP 端口
+egress:
+  - to: []
+    ports:
+      - {protocol: TCP, port: 5432}    # PostgreSQL
+      - {protocol: TCP, port: 6432}    # Managed Connection Pooling
+      - {protocol: TCP, port: 3307}    # 容错（如果后续切到 Auth Proxy）
+
+# 真相四（crash）：网络放通对，但 Pod 健康检查失败，跟 netpol 无关
+```
+
+### 推荐配置（覆盖所有真相）
+
+**生产推荐 "最大覆盖"**——同时放 5432 / 6432 / 3307 / 443，理由见 [`why-psc-netpolicy-3307.md` §现象补遗](./why-psc-netpolicy-3307.md#现象补遗老用户能连新用户必须开-3307)：
+
+```yaml
+egress:
+  # DNS
+  - to: []
+    ports:
+      - {protocol: UDP, port: 53}
+      - {protocol: TCP, port: 53}
+
+  # Cloud SQL PSC（直连 + Auth Proxy + Managed Pooling 全覆盖）
+  - to:
+      - ipBlock:
+          cidr: <PSC_ENDPOINT_CIDR>/32      # Consumer VPC 的 PSC EP 段
+    ports:
+      - {protocol: TCP, port: 5432}         # PG 直连
+      - {protocol: TCP, port: 6432}         # Managed Pooling PgBouncer
+      - {protocol: TCP, port: 3307}         # Auth Proxy → PSC EP
+      - {protocol: TCP, port: 3306}         # MySQL 直连（如果也用 MySQL）
+
+  # cloud-sql-proxy → SQL Admin API（拿 ephemeral cert）
+  - to: []
+    ports:
+      - {protocol: TCP, port: 443}
+```
+
+---
+
+## 一句话结论
+
+> **`ss` 看不到 3307 不等于 proxy 不 listen。** 大多数情况下 proxy 在 listen，只是 (`--port` 配置错了) / (用了 Unix socket) / (`ss` 命令不存在) / (proxy crash 循环) / (你 `exec` 错了 Pod)。
+>
+> **真正的"3307 怎么工作"**：app 连 `127.0.0.1:3307`（或 socket 路径），proxy 在 Pod 内转发，proxy 再出 Pod 到 PSC EP 的 3307。NetworkPolicy 控制的是**第三跳**——proxy → PSC EP 的 egress。
+>
+> **30 秒确诊**：跑 `diagnose-3307-listen.sh <ns> <pod>`，按上面决策树走完就知道是哪个真相。
+
+---
+
+## 附录：本文档依赖
+
+- 上游规范：[`why-psc-netpolicy-3307.md`](./why-psc-netpolicy-3307.md)（为什么 3307 + 老用户能连/新用户必开的根因）
+- 上游设计：[`sql-3307-template.md`](./sql-3307-template.md)（平台级统一 3307 的 Helm/Kustomize 模板）
+- 官方文档：
+  - [cloud-sql-proxy README](https://github.com/GoogleCloudPlatform/cloud-sql-proxy)（`--port` 默认行为、Unix socket、K8s sidecar）
+  - [Connect to Cloud SQL from GKE](https://cloud.google.com/sql/docs/postgres/connect-kubernetes-engine)
+  - [Cloud SQL Private Service Connect](https://cloud.google.com/sql/docs/postgres/about-private-service-connect)（3307 是 PSC serving port）
+  - [Kubernetes Pod network namespace](https://kubernetes.io/docs/concepts/workloads/pods/)（同 Pod 内多 container 共享）
