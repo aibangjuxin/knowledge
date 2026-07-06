@@ -1,10 +1,120 @@
 # Cloud SQL Auth Proxy Sidecar — 3307 真的在 Listen 吗？排查真相清单
 
+> **本文核心结论(写在前头,让你不用读完就能动手)**:
+>
+> **3307 出现在网络策略里,不是因为 Pod 内有人 listen 它,而是因为目的端服务器真的在侦听 3307**。
+>
+> 链路图:
+> ```
+> Pod (app:db, listen=5432)  →  [NS NetworkPolicy 管控这一段]  →
+>   auth-proxy 出 pod (dial)  →
+>     PSCEP IP (192.168.64.104:3307) →
+>       [目的端 = Cloud SQL PSC Service Attachment, 只 listen 3307]
+> ```
+>
+> 所以 **`NS 的 egress 必须放行 3307`** —— 即便你的 Pod 内 listen 的可能是 5432 / 3306 / 其它。**NetworkPolicy 不是按"Pod 内 listen 谁"配置,是按"Pod 出 Pod 的目标 server 端口"配置。** 你的 `app=db` egress 没配 3307 = 客户端出不去 = `dial tcp ...:3307: i/o timeout`。
+>
+> ---
+>
 > 本文承接 [`why-psc-netpolicy-3307.md`](./why-psc-netpolicy-3307.md)（为什么 NetworkPolicy 要放 3307）和 [`sql-3307-template.md`](./sql-3307-template.md)（统一 3307 的模板设计），聚焦一个**老用户/新用户都会掉进去的认知陷阱**：
 >
 > **"我登陆 Pod 执行 `ss -nltp | grep 3307` 没看到 3307 端口 —— 那 3307 怎么工作的？"**
 >
 > 这是一篇**现场排查实录**。每一条真相都配了**复现命令**和**判断信号**，让你**30 秒内确诊**到底是哪一种情况。
+
+---
+
+## A. 核心一句话：3307 在哪里 listen？(答案)
+
+| 位置 | 谁 listen 3307？ | 端口数 | 流量方向 |
+| --- | --- | --- | --- |
+| **Pod 内**(loopback) | **没有人**。proxy 在 pod 内 listen 的是 `--port=5432` / `3306` / 其它 | 不是 3307 | app → proxy |
+| **Pod 出站 → PSCEP**(Consumer VPC 内)| **cloud-sql-proxy 进程**主动 dial,目标 port = 3307 | 3307 这一跳 | proxy → PSCEP |
+| **PSCEP → Service Attachment → Cloud SQL** | **Cloud SQL PSC Service Attachment 服务端只 listen 3307** | **3307 是服务端唯一接受 Auth Proxy 流量的端口** | PSCEP → Cloud SQL |
+
+**所以一句话总结**：
+
+> **3307 这个端口号出现的原因 = Cloud SQL PSC 服务端(server side)在那个端口上 listen。** 它不接受任何其它端口的 Auth Proxy 流量(对 PostgreSQL)。客户端这边没法选 —— 必须 dial 3307,服务端才响应。
+>
+> 整条链路里,3307 这个 port number 是"目的端写死的",不是"客户端写死的",也不是"Pod 内 listen 写死的"。
+
+### 你的现象 = 上面这张表第 2、3 行的实景
+
+```
+1. 你 Pod 内 ss -nltp | grep 3307
+   → 结果:空。✅完全正常 — 因为 pod 内 proxy listen 的是 5432,不是 3307。
+
+2. proxy 日志:dial tcp 192.168.64.104:3307: i/o timeout
+   → 含义:proxy 试图去 dial Consumer VPC 里那个 PSC endpoint 的 3307,
+          但包**出不去你的 Pod**。
+   → 可能拦包的两层:
+      a) Namespace NetworkPolicy (你 NS 是 deny-all 没配 3307)
+      b) VPC firewall (拦了 192.168.64.104 出向 / 3307 出向)
+      c) 没有路由能到那个 IP(罕见,VPC 没接 PSC attachment 那个 net)
+   → 最常见 = a) 你的 NS NetworkPolicy egress 没配 3307。
+
+3. "目的端 listen 3307"的现实证据:
+   → cloud-sql-proxy 知道 3307 这个数字,只能通过 SQL Admin API
+     pscConfig + proxy `--psc` 标志查出来。
+   → 服务端不接受 dial 5432 / 6432 这种 Auth Proxy 流量 —— 你要么
+     Auth Proxy 出 3307,要么 server reject。
+```
+
+### 一图把这个心智模型立住
+
+```
+                         ┌─ 一段 Pod 内的 listen(可 ss 看到) ─┐
+                         │                                    │
+   +----------------+    │    +----------------------+        │
+   | 你的 app       | ───┼──▶ |  cloud-sql-proxy     |        │
+   | (Pod 内)       |    │    |  --address=127.0.0.1 |        │
+   |  listen=?      |    │    |  --port=5432         |        │
+   +----------------+    │    |  --psc               |        │
+                         │    +----------┬-----------+        │
+                         └──────────────│────────────────────┘
+                                        │
+                                        │ Pod 出站
+                                        │ NetworkPolicy 管控这一段(关键!)
+                                        ▼
+                         ┌──────────────────────────────┐
+                         │ Consumer VPC 内部:           │
+                         │   PSCEP IP: 192.168.64.104   │
+                         │   Port: 3307 ←服务端写死     │
+                         └──────────────┬───────────────┘
+                                        │
+                                        │ VPC 内部路由 / GCP-managed PSC
+                                        ▼
+                         ┌──────────────────────────────┐
+                         │ Cloud SQL PSC                │
+                         │ Service Attachment (服务端)  │
+                         │                              │
+                         │ listen port = 3307           │
+                         │ 仅接受 Auth Proxy 流量       │
+                         └──────────────────────────────┘
+```
+
+### 直接的修复(对应你 NS 配置现状)
+
+**你的现状**:`NS 是 deny-all + app=db 的 egress 但端口没配置`。这是缺一段：
+
+```yaml
+# 缺的:app=db 的 egress 必须包含 3307
+egress:
+  - to:
+      - ipBlock:
+          cidr: 192.168.64.104/32      # ← 收紧到 PSCEP IP(从 gcloud sql instances describe 拿)
+    ports:
+      - protocol: TCP
+        port: 3307                     # ← Cloud SQL PSC 服务端 listen 的端口
+```
+
+### 这个洞察的"反直觉"
+
+很多人(也包括一开始的 Lex)会本能地以为:
+
+> "**Pod 内的人都用 5432,为什么我要配 3307?** Pod 内 listen 5432 ≠ Pod 出流量目标 3307。**NetworkPolicy 不是配 Pod 内的端口,是配 Pod 出 Pod 的目的服务端端口。**
+
+这个反直觉是 NetworkPolicy 里所有 "Pod listen 5432 但 egress 必须放 3307" 现象的统一解释。不是 bug,不是配置漂移,是 K8s NetworkPolicy **按目的端配置**(egress = 出 Pod 的目标),而不是按源端 listen 配置。
 
 ---
 
