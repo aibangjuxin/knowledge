@@ -21,6 +21,8 @@
 > **"我登陆 Pod 执行 `ss -nltp | grep 3307` 没看到 3307 端口 —— 那 3307 怎么工作的？"**
 >
 > 这是一篇**现场排查实录**。每一条真相都配了**复现命令**和**判断信号**，让你**30 秒内确诊**到底是哪一种情况。
+>
+> **Bonus 章 §B**:Auth Proxy 的"身份验证"不是 Cloud SQL 服务端做,而是 **cloud-sql-proxy 进程替你做** —— [§B:Auth Proxy 身份验证在哪儿做？](#b-身份验证-是在服务端吗--答案客户端做)
 
 ---
 
@@ -115,6 +117,208 @@ egress:
 > "**Pod 内的人都用 5432,为什么我要配 3307?** Pod 内 listen 5432 ≠ Pod 出流量目标 3307。**NetworkPolicy 不是配 Pod 内的端口,是配 Pod 出 Pod 的目的服务端端口。**
 
 这个反直觉是 NetworkPolicy 里所有 "Pod listen 5432 但 egress 必须放 3307" 现象的统一解释。不是 bug,不是配置漂移,是 K8s NetworkPolicy **按目的端配置**(egress = 出 Pod 的目标),而不是按源端 listen 配置。
+
+---
+
+## B. 身份验证 是在服务端吗？ (答案:客户端做)
+
+Lex 的核心疑问:
+
+> "对于 Cloud SQL Auth 的代理进行身份验证的选项，那么所谓的这个身份验证其实是在服务端吗？"
+
+**简短答案:身份验证的主操作是 cloud-sql-proxy 进程代替你的应用(client side)去做,Cloud SQL 服务端只负责"接收 token + 验证 token"。**
+
+也就是说 **"Auth Proxy 做验证"** 里的"验证",**不是 Cloud SQL 数据库进程替你做**,**是 cloud-sql-proxy 这个 sidecar 进程在你 Pod 里替你做 token 申请+token 注入**。这点跟"3307 是服务端 listen"完全是两件事、但容易混淆。
+
+### B.1 官方文档原话(关键)
+
+Cloud SQL IAM Authentication 文档里的核心定义:
+
+> "Automatic IAM database authentication lets you hand off requesting and managing access tokens to an intermediary Cloud SQL connector, such as the **Cloud SQL Auth Proxy** or one of the Cloud SQL Language Connectors. With automatic IAM database authentication, users need to pass only the IAM database username in a connection request from the client. **The connector submits the access token information for the password attribute on behalf of the client.**" —— [Cloud SQL IAM Authentication](https://cloud.google.com/sql/docs/postgres/iam-authentication)
+
+翻译:Automatic IAM 鉴权把 "拿 token + 续 token" 这件事外包给了中间连接器(Cloud SQL Auth Proxy / language connectors)。客户端应用只需要传 IAM 用户名,**OAuth token 由 connector 代为提交,作为密码字段**。
+
+> "IAM database authentication uses OAuth 2.0 access tokens, which are short-lived and valid for only one hour. **Cloud SQL connectors are able to request and refresh these tokens**, ensuring that long-lived processes or applications that rely on connection pooling can have stable connections."
+
+翻译:Auth Proxy 还要负责 token 的 refresh,因为 token 1 小时过期。
+
+### B.2 验证流程的"7 步走"
+
+```
+[应用 app]
+    │
+    │ 1. 启动时: app 启动 psql 连接 "127.0.0.1:5432 db=my_db user=iam-sa@dev.iam.gserviceaccount.com"
+    │       ── 注意: app 只传 username,**不传 password**(或者写个 placeholder)
+    ▼
+[cloud-sql-proxy sidecar --auto-iam-authn]
+    │
+    │ 2. proxy 启动时,从 metadata server 拿 GSA 的 access token(OAuth 2.0)
+    │       (egress 443 → metadata.google.internal) ✅ 你的 NetworkPolicy 必须放
+    │
+    │ 3. proxy 把这个 OAuth token 在 PostgreSQL/MySQL 协议层作为 PASSWORD 字段
+    │       替 app 注入到下一跳 PG/MS 连接
+    ▼
+[PSCEP:192.168.64.104:3307]
+    │
+    │ 4. 包经 Consumer VPC 出 pod,经过 Egress NetworkPolicy(必须放 3307)
+    │       到 PSC Service Attachment
+    │
+    │ 5. Cloud SQL PSC SA 把流量 forward 到 Cloud SQL 实例进程
+    ▼
+[Cloud SQL PostgreSQL/MySQL 实例]
+    │
+    │ 6. PG/MS 进程收到 OAuth token,
+    │       它调用 Google IAM API 验证这个 token:
+    │       "持有这个 token 的 GSA 是不是被允许 login 到这个 DB?"
+    │       (egress 443 → iam.googleapis.com) ✅ Cloud SQL 服务端做的"验证"
+    │
+    │ 7. 验证通过 → DB 接受连接 → SET ROLE / GRANT 决定 DB-level 权限
+```
+
+**第 2、3 步在 Pod 里(客户端)** 第 6 步在 Cloud SQL 服务端(服务端)。**OAuth 2.0 token 不是密码,但在 PG/MS 协议层被当作"密码"用**。
+
+### B.3 跟"3307 是服务端 listen"对照看(防止混淆)
+
+| 概念 | 在哪发生? | 谁做? | 是配置在哪? |
+| ---- | -------- | ----- | --------- |
+| **3307 listen** | Cloud SQL PSC Service Attachment | **服务端** | GCP 服务端写死,客户端不能选 |
+| **OAuth token 申请** | cloud-sql-proxy 进程(Google STS) | **客户端** | proxy 用 GSA 通过 metadata server 拿 |
+| **Token 作为密码注入** | cloud-sql-proxy → Cloud SQL(TLS 上) | **客户端** | --auto-iam-authn 标志行为 |
+| **Token 验证** | Cloud SQL 服务端(调 IAM API) | **服务端** | GCP 服务端行为,你看不到 |
+| **DB-level GRANT** | Cloud SQL 服务端 | **服务端** | 你用 `gcloud sql users create` / `GRANT` 配 |
+
+**所以"Auth Proxy 做身份验证"** 字面上看像服务端做的,但**实际机制是客户端做的一部分 + 服务端做的一部分**:
+
+| 服务 | 客户端做 (App + Proxy) | 服务端做 (Cloud SQL) |
+| --- | --- | --- |
+| **TLS 握手** | 客户端 | ✅ |
+| **OAuth token 申请** | 客户端 ✅ (proxy 用 WI/GSA 拿) | — |
+| **OAuth token 装入连接** | 客户端 ✅ (proxy 注入 PG password 字段) | — |
+| **Token 真伪验证** | — | 服务端 ✅ (调 IAM API) |
+| **DB-level 权限** | — | 服务端 ✅ (gcloud sql users/GRANT) |
+
+**这个分工就是为什么"Cloud SQL Auth Proxy 减少了 DB 密码泄漏"的核心原因** — 应用根本不需要持有 DB 密码,它甚至不知道 DB 密码是什么;它只持有自己的 GSA token,proxy 再去换 IAM token 提交给 Cloud SQL。
+
+### B.4 客户端行为的具体代码链
+
+如果用 proxy v2.x 源码看(从 `internal/proxy/proxy.go` 读到的 `Token`、`LoginToken` 字段):
+
+```go
+// 配置结构体定义
+type Config struct {
+    // ...
+    // Token is the Bearer token used for authorization.
+    Token string
+    // LoginToken is the Bearer token used for Auto IAM AuthN. Used only in conjunction with Token.
+    LoginToken string
+    // ...
+}
+```
+
+也就是说 **proxy 自己持有 2 个 token**:
+
+| 字段 | 用途 |
+| ---- | ---- |
+| `Token` | proxy 用来调 SQL Admin API 拿 instance metadata + 拿 ephemeral client cert |
+| `LoginToken` | proxy 注入到下一跳 PG/MySQL 连接的"密码字段",让 server 验证 IAM |
+
+两个 token 都是 **proxy 自己 mint / refresh**,proxy 是一个 **有状态长跑进程**,每小时跑一次 refresh。
+
+### B.5 "服务端做不做验证"的最终回答
+
+**做,但只做最后一步** (token 真伪校验 + GRANT 级别的 DB 权限校验)。
+**不做** 的是 "去申请新的 OAuth token" — 那是 client (proxy) 的工作。
+
+如果你误以为 "Auth Proxy 做身份验证 = 服务端做",会得到这些误解:
+
+| 误解 | 修正 |
+| --- | --- |
+| "我把 NetworkPolicy egress 设成只允许 443 给 Cloud SQL,就够 IAM 验证用" | 错。443 是 SQL Admin API 调的;3307 是 IAM 鉴权连接的目的端口。两条都得放。 |
+| "我给 proxy 配 --auto-iam-authn 之后,Cloud SQL 服务端就去 IAM 拉 token 了" | 错。是 proxy 去 STS 拉 token,服务端只验证。 |
+| "我只配 IAM 给 app,proxy 不需要 IAM 权限" | 错。proxy 必须有 GSA 上的 `cloudsql.client` 角色才能调 Admin API 拿 metadata。app 的 IAM 和 proxy 的 IAM 是两件事。 |
+| "我去 Cloud SQL 服务端 db 用户的 GRANT 里看,能决定 Auth Proxy 怎么验证" | 错。GRANT 决定 **验证通过之后**给什么权限;**验证本身**靠 IAM,服务端做但不需要 GRANT 配置。 |
+| "context-aware access policy 设了就死" | 对——见上面的 "Context-aware access and IAM database authentication" 段落,context-aware access 跟 Auth Proxy + IAM authn 不兼容,**只能用直连**。 |
+
+### B.6 给 Lex 当前环境的直接结论
+
+**Lex 这次踩到的事实跟身份验证的关系**:
+
+```
+1. proxy cmdline 里 --auto-iam-authn 在跑
+   → proxy 在 Pod 里已经准备好去做 IAM 鉴权的 client 部分
+   (OAuth token 申请 + token 注入 PG password)
+
+2. proxy 报 dial tcp 192.168.64.104:3307: i/o timeout
+   → 包根本没出 Pod,根本没走到 Cloud SQL 服务端
+   → 谈不到"服务端验证 IAM"那一步了
+
+3. 即使 NS 放 3307 通了,dial 成功后,身份验证流程才开跑:
+   a) proxy 已经持有 token,直接用
+   b) TLS 握手
+   c) proxy 把 token 作为 password 发给 Cloud SQL
+   d) 服务端调 IAM API 校验 token → 失败/成功
+   e) 成功后才有 GRANT 决定的 DB-level 操作
+
+4. 所以目前你**还没到身份验证那一步**,
+   你卡在 step 3a 之前的网络层。
+   整个验证链要 NS egress 放 3307 + 443 两条才能跑通。
+```
+
+NetworkPolicy 必须配置的端口(完整):
+
+| 端口 | 用途 | 触发 | 没放的故障 |
+| --- | --- | --- | --- |
+| **TCP 443** | proxy 去 SQL Admin API + IAM 拿 metadata/token | proxy 启动 + token refresh 时 | proxy 启动失败 / token 拉不到 / connection refused |
+| **TCP 3307** | proxy 去 Cloud SQL PSC endpoint **做身份验证的实际连接** | **每次新连接** | `dial tcp ...:3307: i/o timeout`(你这次的!) |
+| (TCP 5432/3306) | optional——如果不用 Auth Proxy / 走直连 | 直连场景 | (不适用) |
+
+**所以结论回答你的问题**:**身份验证不是"服务端一家做",是"客户端 proxy 负责 token 准备 + 服务端 Cloud SQL 负责 token 校验"分工。客户端做事占大头,服务端做事是最后一步的裁决**。而**让你触发"想配 3307"的那个报错,正是 proxy 这个客户端在网络层还没出去——根本都还没到服务端做"最后一步"那一步**。
+
+### B.7 一图总结(client + server 两端各自的角色)
+
+```
+                     ┌─────────────────────────────┐
+                     │ Pod (Consumer side)         │
+                     │                             │
+                     │  app  ──password?──→  proxy │
+                     │                  │          │
+                     │                  │ OAuth    │
+                     │                  │ token    │
+                     │                  │ mint +   │
+                     │                  │ inject   │
+                     │                  ▼          │
+                     │              127.0.0.1:5432 │
+                     │              (loopback)     │
+                     │                  │          │
+                     │                  │ (PSQL/MySQL handshake)
+                     │                  │ over TLS │
+                     │             NetworkPolicy   │
+                     │             egress:3307     │
+                     │             + egress:443    │
+                     └──────────────────│──────────┘
+                                        │
+                                        │ 3307 + 443 egress
+                                        ▼
+                     ┌─────────────────────────────────────┐
+                     │ Cloud SQL (Producer side)          │
+                     │                                     │
+                     │  PSC Service Attachment            │
+                     │  listen 3307   ◄── 只这一条路       │
+                     │              │                     │
+                     │              ▼                     │
+                     │  Cloud SQL 实例进程                │
+                     │  ├── 收到 token                ◄───│── 服务端"验证"
+                     │  ├── 调 IAM API 验 token 真伪     │   (最后一步)
+                     │  ├── 验证 GSA 是否有 cloudsql    │
+                     │  │   .instances.login 权限      │
+                     │  └── 查 GRANT 表决定 DB-level    │
+                     └─────────────────────────────────────┘
+```
+
+这段图最关键的两点:
+- 左侧(客户端)做事多 — token 申请、token 注入、TLS 握手
+- 右侧(服务端)做事少但关键 — token 验证、最终裁定
+- **3307 这个 port = 是客户端去向服务端的"通道",决定了"传输层认证资料能不能送达"** —— 这就是为什么 NS egress 必须放 3307 才能让客户端做事到达服务端
 
 ---
 
