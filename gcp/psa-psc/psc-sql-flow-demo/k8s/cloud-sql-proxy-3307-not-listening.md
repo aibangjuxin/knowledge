@@ -28,6 +28,12 @@
 
 ## A. 核心一句话：3307 在哪里 listen？(答案)
 
+> **Lex 的人间清醒版总结**(用最朴素的本地-服务端二分):
+>
+> **本地端口随便(loopback)**,**服务端端口写死**(PSL Service Attachment 只 listen 3307),**所以 NS egress 必须放服务端那个端口** —— 即便你本地连 5432。
+>
+> 5432 vs 3307 看起来矛盾其实不矛盾 —— 5432 是源端 loopback 端口,3307 是出 pod 的目的端服务端口,两个数字出现在不同位置、不同语义。NetworkPolicy 永远只看后者。
+
 | 位置 | 谁 listen 3307？ | 端口数 | 流量方向 |
 | --- | --- | --- | --- |
 | **Pod 内**(loopback) | **没有人**。proxy 在 pod 内 listen 的是 `--port=5432` / `3306` / 其它 | 不是 3307 | app → proxy |
@@ -129,6 +135,58 @@ Lex 的核心疑问:
 **简短答案:身份验证的主操作是 cloud-sql-proxy 进程代替你的应用(client side)去做,Cloud SQL 服务端只负责"接收 token + 验证 token"。**
 
 也就是说 **"Auth Proxy 做验证"** 里的"验证",**不是 Cloud SQL 数据库进程替你做**,**是 cloud-sql-proxy 这个 sidecar 进程在你 Pod 里替你做 token 申请+token 注入**。这点跟"3307 是服务端 listen"完全是两件事、但容易混淆。
+
+### B.0 Lex 的人间清醒版总结(写在前面,把抽象具象化)
+
+Lex 自己已经摸到了这个事实的本质 —— 用极朴素的话翻译成:
+
+> **"我连我的本地 5432，但真正跳转到我的服务端的那个地址（192.168.64.104）的时候，我应该关心我服务端侦听的地址。** 假如说我连本地是 5432，但我服务端侦听的端口是 3307，那么我就必须允许我的 NetworkPolicy 允许流出到 3307 端口。"
+
+把这段话拆成三句可操作的话,就对应到了 NetworkPolicy 配置的全部逻辑:
+
+1. **本地端口随便** —— proxy 在 pod 里 listen 5432 也好、3307 也好、随便一个 65535 以下的数字都行（你 `--port` 配啥就是啥），app 连本地这个端口从来不卡 NetworkPolicy（因为是 loopback，永远 egress 不算到 NS）。
+2. **服务端端口是写死的** —— Cloud SQL PSC Service Attachment 只 listen **3307**（对 Auth Proxy 流量）。这个数字**不是你想改就能改**，是 GCP 服务端焊死的。
+3. **所以 NS egress 必须放服务端那个端口** —— 即便你本地连 5432 看起来很顺，但 **proxy 跳出 pod 那一刻就要去 dial 192.168.64.104:3307**，而 3307 不在 NS egress 白名单里 = `dial tcp ...:3307: i/o timeout`。
+
+这就是 **§A 的简化版**：本地端口（Loopback）和出 pod 目标端口（远端 Server）是**两件完全独立的事**，NetworkPolicy 永远只看后者。所以 Lex 的"5432 vs 3307 看起来矛盾"其实根本不矛盾 —— **5432 是源端 loopback 端口，3307 是出 pod 的目的端服务端口，两个数字出现在不同位置、不同语义**。
+
+下面把这套事实严格化、放进代码 / 文档链。
+
+### B.0.5 双重角色总表:同一个数字 vs 完全不同语义
+
+把 Lex 这次踩到的关键坑变成一张对照表,把可能混淆的所有"5432 / 3307 / 端口"全部列出来,每个数字在哪个位置、谁 listen/dial、写在哪里:
+
+| 端口号 | 出现位置 | 角色 | 谁 listen 谁 dial | 怎么定的 |
+| --- | --- | --- | --- | --- |
+| **`5432`** | Pod 内 (loopback) | app → proxy 连接的目标 | **proxy** 在 `127.0.0.1:5432` listen | 你的 deployment `--port=5432` 参数(或 PG 默认) |
+| **`5432`** | 出 pod → Cloud SQL | 直连 PG 用的端口(不用 Auth Proxy 场景) | **Cloud SQL** 在 PSCEP listen | Cloud SQL 服务端写死 |
+| **`3307`** | 出 pod → Cloud SQL | Auth Proxy 流量的承载端口 | **Cloud SQL** 在 PSCEP listen | Cloud SQL 服务端写死 |
+| **`3307`** | Pod 内 (loopback) | **不存在** —— Cloud SQL 没有任何约束要求 proxy 必须 listen 3307 | — | 你可以在 deployment 里让 proxy listen 任意端口(5432/6432/3306/3307 都行) |
+| **`443`** | 出 pod → STS / SQL Admin API | proxy 拿 metadata、拿 OAuth token、拿 ephemeral cert | 多个 Google 服务 | 你 Google Cloud 的 metadata.googleapis.com 等 |
+
+**所以**:
+
+- **app 连 127.0.0.1:5432** → 这条线在 Pod 内部,不走 NetworkPolicy
+- **proxy 连 192.168.64.104:3307** → 这条线出 Pod,被 NetworkPolicy 管控
+- **proxy 还连 metadata.google.internal:443** → 这条线出 Pod,被 NetworkPolicy 管控
+
+**Lex 现在踩的就是第二条没放出来**。第一条(本地 5432)从来没卡 NS。第三条(443),你大概率已经放过了(放 SQL Admin API 拿 cert 的需要),所以你之前没察觉。
+
+### B.0.6 一句话"心智公式"
+
+```
+app 在 Pod 内连 本地端口    → NS 不参与 (loopback)
+proxy 出 Pod 连 服务端端口  → NS 必须放行那个端口 (egress)
+                        ↑
+                你配的 NetworkPolicy
+                永远只看这一跳
+```
+
+**Lex 的精简表达**:
+
+> "**我应该关心我的服务端侦听的地址**(192.168.64.104:3307),**而不是关心我 Pod 内 listen 的端口**。"
+
+用公式表达就是:**`NetworkPolicy.egress` ⊆ { 远端 server listen 端口集合 }**,跟本地 listen 端口没半毛钱关系。
 
 ### B.1 官方文档原话(关键)
 
