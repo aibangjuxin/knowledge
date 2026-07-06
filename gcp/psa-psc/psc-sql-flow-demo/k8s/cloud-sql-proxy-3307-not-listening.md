@@ -29,6 +29,31 @@
 
 ## 1. 真相一：`--port` 没生效，proxy 跑在默认端口（5432/3306）
 
+### 0.5. 你贴的 ps aux 已经把答案直接告诉了你 ⬇️
+
+你贴的 `ps aux` 输出：
+
+```
+USER     PID  %CPU %MEM   VSZ   RSS   TTY  STAT  START  TIME  COMMAND
+65532    1    0.0  0.0  1286584 32120 ?    Ssl   Jul05  0:02  /cloud-sql-proxy \
+        --psc --structured-logs --auto-iam-authn \
+        --address=127.0.0.1 \
+        --port=5432 \
+        hsbc-20118002-appuk-dev:europe-west2:appuk-20118002-sql-dev-01
+```
+
+**直接读 cmdline 这三个事实就清楚了：**
+
+| 你以为是 | ps aux 实际写的是 | 后果 |
+| -------- | ----------------- | ---- |
+| `--port=3307`（你期望的） | `--port=5432` | proxy listen 在 5432，`ss` 永远看不到 3307 |
+| `appuk-20118002-sql-dev-01` 看起来名字里有 sql（暗示 MySQL） | `-sql-` 是 PostgreSQL 实例，instance name 末尾 `-01` 是常见命名规约 | proxy 用 SQL Admin API 查 metadata 后确认是 POSTGRES → 走 PG 默认端口分支（即使没显式 `--port`，也会 5432；你又显式给了 `--port=5432`，互相印证） |
+| 启动时间是 `Jul05 0:02`，pod 一直是 stable（Ssl 状态） | proxy 进程**稳得很**，没 crash、没在循环重启、不是真相 #4 | 真相 #4 排除 |
+
+> **结论**：你的 Pod 命中了 **真相 #1**。Pod 里 listen 的就是 5432，应用要连 5432，**根本不存在 3307**。
+
+下面把真相 #1 怎么诊断、怎么修讲透。
+
 ### 这是最高频的根因
 
 **官方 v2.x 的默认行为**（见 `GoogleCloudPlatform/cloud-sql-proxy` `cmd/root.go` 的帮助文字）：
@@ -73,6 +98,46 @@ kubectl exec -n $NS $POD -c cloud-sql-proxy -- ss -tnlp
 - **template 变量渲染错误**（`--port={{ .Values.dbPort }}` 因为 values 漏了字段渲染成空串，proxy 用了引擎默认值）
 - **args 顺序错了**（cloud-sql-proxy 把 `--port` 当 boolean flag — 它不是，是需要 `=` 的 key-value，`--port 3307` 和 `--port=3307` 都接受，但**两个 `INSTANCE_CONNECTION_NAME` 之间写 `--port` 是非法语法**，见 [`why-psc-netpolicy-3307.md` §Sidecar 配置校验清单](./why-psc-netpolicy-3307.md#sidecar-配置安全校验清单cloud-sql-proxy-2114)）
 - **多 instance 没显式 `?port=`**（第一个 instance 拿 5432，第二个 +1 = 5433，但很多 template 以为两个都拿显式 port）
+- **平台的 template 漂移：你 template 里写了 `--port=3307`，但前一代 chart / 旧的 ConfigMap / 旧的 values 还在用 `--port=5432`，Pod 是旧版本渲染出来的**（这正是 Lex 这次踩到的）
+
+### 源码级证据：cloud-sql-proxy 内部怎么决定 listen 端口
+
+从 `cloud-sql-proxy` v2.x 源码 `internal/proxy/proxy.go` 直接读到的（v2.23.0 验证）：
+
+```go
+type portConfig struct {
+    global    int     // ← 你 --port 传进来的值
+    postgres  int     // ← 否则 fallback 到 5432
+    mysql     int     // ← 否则 fallback 到 3306
+    sqlserver int     // ← 否则 fallback 到 1433
+}
+
+func newPortConfig(global int) *portConfig {
+    return &portConfig{
+        global:    global,
+        postgres:  5432,
+        mysql:     3306,
+        sqlserver: 1433,
+    }
+}
+
+func (c *portConfig) nextDBPort(version string) int {
+    switch {
+    case strings.HasPrefix(version, "MYSQL"):
+        p := c.mysql; c.mysql++; return p
+    case strings.HasPrefix(version, "POSTGRES"):
+        p := c.postgres; c.postgres++; return p   // ← PG 走这里
+    ...
+}
+```
+
+**这段代码给了三件事的确定性证据：**
+
+1. `--port=5432` 是**强约束**，proxy 不会"如果 5432 被占就自动换 3307"——只听 5432
+2. 即便你没传 `--port`，PG 实例也走 `postgres=5432` 的 fallback，永远不会出现 3307
+3. 3307 这个数字在 proxy 行为里**只在多 instance 时当 increment counter 出现**（第二个 instance = 5433……），并非 reserved for "auth proxy"
+
+也就是说：**你模板里"统一 3307"的设计选择是有团队语义的**，但 proxy 本身不会替你守这个约。你必须在 args 里显式 `--port=3307`，proxy 才会 listen 在 3307；你不写，proxy 听 5432（或 3306 MySQL），跟 3307 一点关系都没有。这就是 3307 在生产看不见的第一个根因。
 
 ### 修复
 
@@ -90,6 +155,65 @@ kubectl exec -n $NS $POD -c cloud-sql-proxy -- ss -tnlp
     tcpSocket: { port: 3307 }                  # ✅ 与 --port 一致
     initialDelaySeconds: 10
 ```
+
+### ⭐ 重要：Pod 里 listen 在 5432 ≠ "3307 这条策略没用"
+
+你的 NS 配置目前是：
+
+> "允许 app=db 出站到 PSC 的 SQL，但端口没做配置"
+
+这是**双解空间**，要看你的 NPB 设计选型：
+
+**方案 A：不改 proxy——保持 5432，NetworkPolicy 也放 5432**
+
+```yaml
+egress:
+  - to: []
+    ports:
+      - {protocol: TCP, port: 5432}    # ← 让 PG 5432 出站就完事了
+```
+
+✅ 优点：不用改任何 Deployment / template，省事
+✅ 优点：跟 Lex 实际在跑的 proxy 一致（已经是 5432）
+❌ 缺点：跟团队"统一 3307"的 template 不一致，老模板 / 新模板分裂
+
+**方案 B：修 proxy——让所有 deployment 都用 `--port=3307`**
+
+```yaml
+- name: cloud-sql-proxy
+  args:
+    - "--port=3307"
+    - "PROJECT:REGION:INSTANCE"
+```
+
+```yaml
+# NetworkPolicy
+egress:
+  - to: []
+    ports:
+      - {protocol: TCP, port: 3307}
+```
+
+✅ 优点：统一 3307（详见 [`sql-3307-template.md`](./sql-3307-template.md) 的 Helm/Kustomize 模板）
+✅ 优点：跟团队的 "统一规范" 对齐
+❌ 缺点：必须全 team 老 deployment 一起改（前向兼容的话两个端口都放）
+
+**方案 C（推荐）**：同时放 5432 和 3307，proxy 跑哪个端口都行
+
+```yaml
+egress:
+  - to: []
+    ports:
+      - {protocol: TCP, port: 5432}    # ← 老 proxy / 老直连还能用
+      - {protocol: TCP, port: 3307}    # ← 新 template / 升级后用
+      - {protocol: TCP, port: 6432}    # ← Managed Connection Pooling
+```
+
+✅ 优点：不打破任何老 Pod，proxy 跑哪个端口都行
+✅ 优点：跟 [`why-psc-netpolicy-3307.md` 现象补遗](./why-psc-netpolicy-3307.md#现象补遗老用户能连新用户必须开-3307) 里 "最大覆盖" 的推荐一致
+❌ 缺点：多开了一个端口（安全性 vs 兼容性 trade-off）
+
+**结论**：你这次的"为什么 3307 看不到"答案就是 **真相 #1 —— proxy 跑的是 5432**。但 **3307 的 NetworkPolicy 应该照常开**——**不是给当前这个 Pod 用，是给以后按新 template 部署的 Pod、或者团队别的同名 template 用**。
 
 ---
 
