@@ -157,7 +157,7 @@ gcloud compute networks subnets describe SUBNET_NAME \
 ```
 Subnet: cinternal-vpc1-us-east4-caep-psc-int-ingress-01
 IP Range: 192.168.240.0/26
-VPC: caep-11646547-capppdus-dev-cinternal-vpc1
+VPC: caep-12345678-capppdus-dev-cinternal-vpc1
 Region: us-east4
 Used IPs: 5
 Free IPs: 59
