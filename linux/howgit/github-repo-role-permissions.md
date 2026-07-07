@@ -541,34 +541,34 @@ CODEOWNERS 文件的位置(任选其一):
 
 # ─────── 全局 owner ───────
 # 任意文件改 PR → 默认所有改动都需要 admin-team 这个 org team 审批
-*                       @hsbc/admin-team
+*                       @caep/admin-team
 
 # ─────── 子目录 owner ───────
 # 改 /src/db/ 目录的所有文件 → db-team 这个 team 审批
-/src/db/               @hsbc/db-team
+/src/db/               @caep/db-team
 
 # ─────── 多个 owner(任一即可) ───────
 # 改 /src/payments/ 目录 → payments-team OR security-team 任何一个人审批
-/src/payments/         @hsbc/payments-team @hsbc/security-team
+/src/payments/         @caep/payments-team @caep/security-team
 
 # ─────── 具体文件 ───────
 # 单文件 owner
 README.md              @lex
-SECURITY.md            @hsbc/security-team
+SECURITY.md            @caep/security-team
 
 # ─────── 通配符模式 ───────
 # 任意 .sql 文件
-*.sql                  @hsbc/db-team
+*.sql                  @caep/db-team
 
 # 任意 docs/ 目录下的 .md 文件 (不递归)
-/docs/*.md             @hsbc/docs-team
+/docs/*.md             @caep/docs-team
 
 # 任意 docs/ 目录及其子目录下的 .md 文件 (递归)
-/docs/**/*.md          @hsbc/docs-team
+/docs/**/*.md          @caep/docs-team
 
 # ─────── 行末注释 ───────
 # 这行只有 final approver(team 必须配 write 权限,详见 §11.5)
-/src/core/             @hsbc/core-team     # 核心代码组双重审批
+/src/core/             @caep/core-team     # 核心代码组双重审批
 ```
 
 **注意**:CODEOWNERS 的**路径是相对仓库根**,`/` 开头 = 锚定根,`/` 结尾 = 目录(递归),不带 `/` 结尾 = 单文件或匹配 glob。
@@ -677,16 +677,16 @@ Lex 最关心的"具体怎么 work":
 
 ```
 [1] Developer X 提 PR: 修改 src/payments/test.py
-    (src/payments/ 的 CODEOWNERS 是 @hsbc/payments-team)
+    (src/payments/ 的 CODEOWNERS 是 @caep/payments-team)
 
 [2] GitHub 检查 PR 修改的文件
     → 哪些文件落在哪个 CODEOWNERS pattern 上
-    → src/payments/test.py → @hsbc/payments-team
+    → src/payments/test.py → @caep/payments-team
 
 [3] Branch protection rule "Require review from Code Owners" 开启
     → 合并按钮被 lock,直到满足:
         ✓ 一般 N 个 approve(假设 N=1)
-        ✓ @hsbc/payments-team 中至少 1 人 approve
+        ✓ @caep/payments-team 中至少 1 人 approve
         ✓ PR author 自己的 approve 不算
         ✓ 旧的 stale approval 被 dismiss(dismiss_stale_reviews=true 时)
 
@@ -696,7 +696,7 @@ Lex 最关心的"具体怎么 work":
     → 必须找一个在 payments-team 的同事 approve
 
 [5] X 可以请求 review:
-    → 点 PR 右上 "Reviewers" → 选 @hsbc/payments-team
+    → 点 PR 右上 "Reviewers" → 选 @caep/payments-team
     → 会通知整个 team(每个 member 都看到 pending)
 
 [6] 当所有条件满足:
@@ -705,7 +705,7 @@ Lex 最关心的"具体怎么 work":
 
 ### §11.7 完成态 Lex 的实际配置示例
 
-**目标**:Lex 的 aibang knowledge repo main 分支,只有 `hsbc/security-team` 的成员 approve 才能 merge 到 main。
+**目标**:Lex 的 aibang knowledge repo main 分支,只有 `caep/security-team` 的成员 approve 才能 merge 到 main。
 
 #### 11.7.1 创建安全 team(如果还没有)
 
@@ -730,7 +730,7 @@ Repo Settings → Collaborators and teams → Add teams
 ```gitignore
 # 默认全文件 → security-team 才有审批权(可选更宽泛)
 # 这个例子演示全 repo 受安全组保护
-*                       @hsbc/security-team
+*                       @caep/security-team
 
 # 例外:doc 文件开放给任何人审批
 /docs/                  # (无 owner = 不需要 CODEOWNER approval)
@@ -757,13 +757,13 @@ Branch name pattern: main
 场景 A — security-team 成员提 PR
   → 提了 PR,自己点 "Merge" 还是被 lock
   → 需要另一个 security-team 成员 approve
-  → 找谁: 在 PR 页面右 "Reviewers" 边输入 @hsbc/security-team
+  → 找谁: 在 PR 页面右 "Reviewers" 边输入 @caep/security-team
   → 等任意 member approve 后,"Merge" 按钮激活
 
 场景 B — 非 security-team 成员提 PR  
   → PR 自动 wait for code owner review
   → 必须在 security-team 里找 1 个 member approve
-  → 在 PR 评论里会显示 "Review required from @hsbc/security-team"
+  → 在 PR 评论里会显示 "Review required from @caep/security-team"
   → member 收到 email / GitHub notification
 ```
 
