@@ -1,5 +1,9 @@
 # argo-cd-release.md — 基于 Argo CD 的 GCP Release 推送探索
 
+> ⚠️ **本文件状态:** v1 探索性文档,**已被 [`crossplane-gcp-family-best-practices.md`](./crossplane-gcp-family-best-practices.md) 取代**。
+> 本文件作为 v1 决策过程的历史档案保留(不动),新方向已迁移到 crossplane-gcp-family 方案。
+> **生效顺序:** 看 [`crossplane-gcp-family-best-practices.md`](./crossplane-gcp-family-best-practices.md) → 再回看本文作对比。
+>
 > **性质:** 探索性储备文档。**不动现有代码、不动 `_template/`、不动任何 release 目录、不动 `common/lib/`。**
 > 与 `one-more-thing.md` 同类 — 只回答问题 + 给出能照着做的步骤。后续是否落地由 owner 决定。
 > **生成时间参考:** 2026-07,基于 Argo CD v3.4.4(2026-06-18 release,本会话拉取 `https://api.github.com/repos/argoproj/argo-cd/releases/latest` 确认)、GCP/GKE 公开文档 + 本仓库实际结构。
@@ -57,7 +61,7 @@
 
 | 痛点 | 为什么 |
 |------|--------|
-| **gcloud 资源(GCS / GAR / Secret Manager / DNS / IAM)** | 这些是 GCP 资源,**Argo CD 本身管不到** — 但**配合 Config Connector(§11 详细探索)后,Argo CD + Config Connector 可以兼管**。**v1 结论(本节)是 "继续走 jumpbox + setup-*.sh";v2 结论见 §11,推荐 Config Connector + Argo CD 双轨** |
+| **gcloud 资源(GCS / GAR / Secret Manager / DNS / IAM)** | 这些是 GCP 资源,**Argo CD 本身管不到** — 但**配合 Config Connector(§11 详细探索)后,Argo CD + Config Connector 可以兼管**。**v1 结论(本节)是 "继续走 jumpbox + setup-*.sh";v2 结论已迁移,见 [`crossplane-gcp-family-best-practices.md`](./crossplane-gcp-family-best-practices.md) — 最终方案是 **Crossplane(upbound/provider-gcp v2.6.0) + Argo CD 双轨**;Config Connector 已被 Crossplane 取代作为 GCP 资源管理工具** |
 | **公司 CR 系统工单** | Argo CD 不是 CR 系统,它是 deployment controller |
 | **annotated git tag** | Argo CD 不替你打 tag,这是 git 操作,跑在 CI 或本地 |
 | **跨 region 资源本身的网络拓扑** | 这是 GCP infra 设计,不是 deployment 工具的责任 |
