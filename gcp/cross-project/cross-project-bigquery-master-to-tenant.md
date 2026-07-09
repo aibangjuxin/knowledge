@@ -536,6 +536,10 @@ bq mk --transfer_config \
 
 **适用**:**金融 / 医疗 / 严格合规场景**。**默认不要碰**。
 
+> 📖 **完整工程实现**:**BigQuery 实际不是 VPC-hosted 服务** — 它是 `*.googleapis.com` PaaS,没有 PSC Service Attachment。跨项目 BigQuery 的"private 路径" 实际上是 **Private Google Access (PGA) + `restricted.googleapis.com` (199.36.153.4/30)**,机制跟本节 §5.3 方案 6 草图描述的 PSC 不同。
+>
+> 完整命令栈(subnet enable PGA + Cloud DNS private zone + 8 步验证脚本)+ 跟 Cloud SQL PSC 的 1-to-1 机制对照 + 4-zone SVG 架构图,见姊妹篇 **[`cross-project-bigquery.md`](./cross-project-bigquery.md)** + 配套架构图 [`cross-project-bigquery-architecture.html`](./cross-project-bigquery-architecture.html)。
+
 ### 5.4 方案选型三角
 
 ```
