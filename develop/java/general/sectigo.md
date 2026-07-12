@@ -108,6 +108,51 @@ else
   echo "  keytool -importcert -cacerts -storepass changeit \\"
   echo "    -alias sectigotlsroote46 -file SectigoPublicServerAuthenticationRootE46.pem"
 fi
+
+
+#!/bin/bash
+# check-sectigo-trust.sh - Verify if the current Java keystore trusts Sectigo/Comodo roots
+set -e
+
+# 1. Locate JAVA_HOME accurately
+JAVA_HOME=$(java -XshowSettings:properties -version 2>&1 | awk -F= '/java.home/ {gsub(/^[ \t]+/, "", $2); print $2}')
+
+# 2. Support both modern (JDK 9+) and legacy layout paths for cacerts
+if [[ -f "$JAVA_HOME/lib/security/cacerts" ]]; then
+  CACERTS="$JAVA_HOME/lib/security/cacerts"
+elif [[ -f "$JAVA_HOME/conf/security/cacerts" ]]; then
+  CACERTS="$JAVA_HOME/conf/security/cacerts"
+else
+  echo "ERROR: cacerts not found under $JAVA_HOME"
+  exit 1
+fi
+
+echo "JDK:     $JAVA_HOME"
+echo "cacerts: $CACERTS"
+
+TOTAL_CERTS=$(keytool -list -cacerts -storepass changeit 2>/dev/null | grep -c 'trustedCertEntry' || true)
+echo "Total trusted certs: $TOTAL_CERTS"
+echo
+echo "=== Searching Sectigo / Comodo / USERTrust roots ==="
+
+# Crucial Fix: Use '-v' to print the full Distinguished Name (DN) instead of just the alias.
+# This prevents false negatives where the alias doesn't contain the string but the owner does.
+FOUND_DETAILS=$(keytool -list -v -cacerts -storepass changeit 2>/dev/null \
+  | grep -iE "Owner:|Issuer:|Alias" \
+  | grep -iB1 -A1 -E "sectigo|comodo|usertrust|addtrust" || true)
+
+if [[ -n "$FOUND_DETAILS" ]]; then
+  echo "$FOUND_DETAILS" | grep -v "^--"
+  echo
+  echo "✅ YES - This JDK explicitly trusts the Sectigo/Comodo family."
+else
+  echo "❌ NO Sectigo root found in cacerts."
+  echo "----------------------------------------------------"
+  echo "Fix: Update your JDK (preferred) or manually import the missing root:"
+  echo "  curl -sO https://crt.sectigo.com/SectigoPublicServerAuthenticationRootE46.pem"
+  echo "  sudo keytool -importcert -cacerts -storepass changeit -noprompt \\"
+  echo "    -alias sectigotlsroote46 -file SectigoPublicServerAuthenticationRootE46.pem"
+fi
 ```
 
 运行:

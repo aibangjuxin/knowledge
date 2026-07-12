@@ -1,4 +1,4 @@
-# 如何理解 GitHub App —— 跟 OAuth App / PAT / Webhook 的区别,以及它在 GitHub→GitLab 触发链路里的真实角色
+# 为什么用 GitHub Apps —— 跟 OAuth App / PAT / Webhook 的区别,以及它在 GitHub→GitLab 触发链路里的真实角色
 
 > **TL;DR — 30 秒版本**
 >
@@ -30,7 +30,6 @@
 | "App 收 webhook 时,receiver 怎么回 call GitHub API?" | 从 payload 读 `installation.id` → 签 JWT → 换 1h token → 调 API(见 §6) |
 
 把这篇读完,你会用**一张心智模型**把"GitHub 通知 + 触发"这件事在 3 个不同的解法路径里**精确选型**,而不是听别人说"用 App"你就用 App。
-
 ---
 
 ## 2. 三种视角:同一件事的三个切面

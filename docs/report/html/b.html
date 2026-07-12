@@ -67,6 +67,12 @@
         --font-mono: "JetBrains Mono", "SF Mono", "Monaco", monospace;
 
         --transition: 200ms cubic-bezier(0.16, 1, 0.3, 1);
+
+        /* Apple-style motion tokens (§4 springs, §7 symmetric paths, §11 frame smoothness) */
+        --ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* standard "Apple out" */
+        --ease-in: cubic-bezier(0.7, 0, 0.84, 0); /* reverse-mirror for symmetric enter/exit */
+        --spring-press: cubic-bezier(0.5, 1.5, 0.6, 1); /* brief overshoot for press-down */
+        --press-scale: 0.97;
       }
 
       .dark-mode {
@@ -106,6 +112,26 @@
         margin: 0;
         padding: 0;
         box-sizing: border-box;
+        /* §1: instant feedback on press across all interactive surfaces.
+           Use `:active` (pointer-down) not `:hover`+transition so the
+           press is immediate — matches Apple's "respond on touch-down". */
+      }
+      button,
+      .theme-toggle,
+      .control-btn,
+      .hex-btn,
+      .nav-btn,
+      .day {
+        -webkit-tap-highlight-color: transparent;
+      }
+      button:active,
+      .theme-toggle:active,
+      .control-btn:active,
+      .hex-btn:active,
+      .nav-btn:active,
+      .day:active {
+        transform: scale(var(--press-scale));
+        transition: transform 80ms var(--ease-out);
       }
       html {
         font-size: 16px;
@@ -121,6 +147,7 @@
         padding: 32px 24px 96px;
         line-height: 1.5;
         -webkit-font-smoothing: antialiased;
+        font-feature-settings: "ss01", "cv11";
         transition:
           background-color var(--transition),
           color var(--transition);
@@ -146,6 +173,25 @@
         display: flex;
         flex-direction: column;
         gap: 24px;
+        /* §16.1 Purpose + §6 motion serving design:
+           a gentle fade-up on page load is the only "ambient" animation
+           used here — it's set, not scattered, and respects reduce-motion. */
+        animation: page-enter 520ms var(--ease-out) both;
+      }
+      @keyframes page-enter {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .page {
+          animation: none !important;
+        }
       }
 
       /* General Layout Header */
@@ -194,12 +240,22 @@
         font-size: 0.8125rem;
         font-weight: 500;
         cursor: pointer;
-        transition: all var(--transition);
+        transition:
+          background-color var(--transition),
+          border-color var(--transition),
+          color var(--transition),
+          transform 120ms var(--ease-out);
         box-shadow: var(--shadow-sm);
+        will-change: transform;
       }
       .theme-toggle:hover {
         background: var(--bg-subtle);
         border-color: var(--border-strong);
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-md);
+      }
+      .theme-toggle:active {
+        transform: scale(var(--press-scale));
       }
 
       .search-container {
@@ -447,7 +503,8 @@
         font-size: 1.375rem;
         font-weight: 600;
         color: var(--text-primary);
-        letter-spacing: -0.02em;
+        letter-spacing: -0.015em;
+        font-variant-numeric: tabular-nums;
       }
       .analog-digital-date {
         font-size: 0.8125rem;
@@ -467,15 +524,22 @@
         border: 1px solid var(--border);
         border-radius: var(--radius-lg);
         padding: 20px;
-        transition: all var(--transition);
+        transition:
+          border-color var(--transition),
+          box-shadow var(--transition),
+          transform 240ms var(--ease-out);
         position: relative;
         cursor: default;
         box-shadow: var(--shadow-sm);
+        will-change: transform;
       }
       .clock-card:hover {
         border-color: var(--border-strong);
         box-shadow: var(--shadow-md);
-        transform: translateY(-1px);
+        transform: translateY(-2px);
+      }
+      .clock-card:active {
+        transform: translateY(-1px) scale(0.99);
       }
       .card-header {
         display: flex;
@@ -566,8 +630,9 @@
         font-family: var(--font-mono);
         font-size: 2rem;
         font-weight: 600;
-        letter-spacing: -0.04em;
+        letter-spacing: -0.025em;
         margin-bottom: 4px;
+        font-variant-numeric: tabular-nums;
       }
       .date-display {
         font-size: 0.8125rem;
@@ -752,10 +817,17 @@
         box-shadow: var(--shadow-lg);
         z-index: 100;
         transform: translateX(120%);
-        transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+        opacity: 0;
+        will-change: transform, opacity;
+        /* §4 + §7: spring-entered, mirror-eased exit for symmetric paths.
+           360ms is close to Apple's notification sheet (~400ms response, bounce ≈ 0). */
+        transition:
+          transform 360ms var(--ease-out),
+          opacity 220ms var(--ease-out);
       }
       .notification.show {
         transform: translateX(0);
+        opacity: 1;
       }
       .notification.error {
         border-left-color: var(--status-off);
@@ -923,6 +995,9 @@
         color: var(--text-primary);
         line-height: 1.1;
         font-variant-numeric: tabular-nums;
+        /* §11: subtle ease on time-text changes so the HH:MM doesn't
+           visually "snap" every second. */
+        transition: color 280ms var(--ease-out);
       }
 
       /* Day Badge tomorrow / yesterday indicator */
@@ -1099,6 +1174,9 @@
         pointer-events: none;
         z-index: 10;
         background: var(--accent);
+        /* §4 + §11: spring ease the top cursor too, compositor-only. */
+        transition: left 200ms var(--ease-out);
+        will-change: left;
       }
       .hex-cursor-label {
         position: absolute;
@@ -1124,6 +1202,20 @@
         background: var(--accent);
         z-index: 4;
         pointer-events: none;
+        /* §11: animate only compositor properties for smooth redraws at 60fps.
+           The cursor is repositioned every drag-tick — this makes the move
+           look like a smooth glide instead of a jump. */
+        transition: left 180ms var(--ease-out);
+        will-change: left;
+      }
+      .wtb-now-cursor::after {
+        content: "";
+        position: absolute;
+        inset: -2px -0.5px;
+        background: var(--accent);
+        opacity: 0.25;
+        border-radius: inherit;
+        filter: blur(3px);
       }
 
       /* Heatmaps */
@@ -1302,6 +1394,66 @@
         }
         .wtb-global-guide {
           display: none !important;
+        }
+      }
+
+      /* ============================================================
+         §14 Reduced motion / transparency / contrast — three signals.
+         Cross-fade or static, never springs or slides, when reduce is set.
+         ============================================================ */
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition-duration: 1ms !important;
+          animation-duration: 1ms !important;
+          animation-iteration-count: 1 !important;
+          scroll-behavior: auto !important;
+        }
+        .wtb-now-cursor,
+        .hex-cursor {
+          transition: none !important;
+        }
+        button:active,
+        .theme-toggle:active,
+        .control-btn:active,
+        .hex-btn:active,
+        .nav-btn:active,
+        .day:active,
+        .clock-card:active {
+          transform: none !important;
+        }
+        .notification {
+          transition: opacity 200ms linear !important;
+          transform: none !important;
+        }
+        .notification.show {
+          transform: none !important;
+        }
+      }
+      @media (prefers-reduced-transparency: reduce) {
+        :root {
+          --bg-overlay: #ffffff;
+        }
+        .dark-mode {
+          --bg-overlay: #121215;
+        }
+        .notification {
+          background: var(--bg-elevated);
+        }
+      }
+      @media (prefers-contrast: more) {
+        :root {
+          --border: #76767c;
+          --border-strong: #4a4a4f;
+        }
+        .dark-mode {
+          --border: #6b6b71;
+          --border-strong: #d4d4d8;
+        }
+        .clock-card,
+        .card {
+          border-width: 1.5px;
         }
       }
     </style>
@@ -2352,44 +2504,41 @@
           updateWtbLiveTimes();
         }
 
+        // §1 + §2: Apple-style drag — setPointerCapture so tracking continues
+        // even when the pointer leaves the strip mid-drag (1:1 tracking §2).
+        // We still call updateWtbLiveTimes synchronously to keep cursor visuals
+        // glued to the finger; the CSS transition on `left` (§11) smooths the
+        // redraw, which already approximates spring smoothing on the web.
         if (gridEl) {
-          gridEl.addEventListener("mousedown", (e) => {
-            if (
+          gridEl.addEventListener("pointerdown", (e) => {
+            const target =
               e.target.closest(".hex-strip") ||
-              e.target.closest(".wtb-track")
-            ) {
-              wtbDragging = true;
-              setWtbRefFromEvent(e);
-            }
+              e.target.closest(".wtb-track");
+            if (!target) return;
+            wtbDragging = true;
+            try {
+              target.setPointerCapture(e.pointerId);
+            } catch (_) {}
+            setWtbRefFromEvent(e);
           });
-          gridEl.addEventListener(
-            "touchstart",
-            (e) => {
-              if (
-                e.target.closest(".hex-strip") ||
-                e.target.closest(".wtb-track")
-              ) {
-                wtbDragging = true;
-                setWtbRefFromEvent(e);
-              }
-            },
-            { passive: true },
-          );
         }
-        document.addEventListener("mousemove", (e) => {
+        document.addEventListener("pointermove", (e) => {
           if (wtbDragging) setWtbRefFromEvent(e);
         });
-        document.addEventListener(
-          "touchmove",
-          (e) => {
-            if (wtbDragging) setWtbRefFromEvent(e);
-          },
-          { passive: true },
-        );
-        document.addEventListener("mouseup", () => {
-          wtbDragging = false;
+        document.addEventListener("pointerup", (e) => {
+          if (wtbDragging) {
+            wtbDragging = false;
+            const target =
+              e.target && (e.target.closest(".hex-strip") ||
+                e.target.closest(".wtb-track"));
+            if (target) {
+              try {
+                target.releasePointerCapture(e.pointerId);
+              } catch (_) {}
+            }
+          }
         });
-        document.addEventListener("touchend", () => {
+        document.addEventListener("pointercancel", () => {
           wtbDragging = false;
         });
 
