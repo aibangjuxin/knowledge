@@ -49,6 +49,28 @@ version: 1
 
 这种精细化的权限划分是安全的核心。
 
+#### 三个预定义角色到底分别能干什么？
+
+权限分离的原则有了，但 `cryptoKeyEncrypter` / `cryptoKeyDecrypter` / `cryptoKeyEncrypterDecrypter` 这三个角色的**精确边界**必须讲清楚 —— 否则"为什么不能用 EncrypterDecrypter 一把梭"就没法落地。下面是 GCP 官方的逐字定义（来自 `cloud.google.com/kms/docs/reference/permissions-and-roles`，fetched 2026-07-16），三句话**一字不改**：
+
+| 角色 ID | GCP 官方原文（一字不改）| 包含的 IAM 权限 | 唯一可执行操作 |
+|---|---|---|---|
+| `roles/cloudkms.cryptoKeyEncrypter` | "Provides ability to use Cloud KMS resources for **encrypt operations only**." | `cloudkms.cryptoKeyVersions.useToEncrypt`<br>`cloudkms.locations.get` / `.list`<br>`resourcemanager.projects.get` | `gcloud kms encrypt` ✅ / `gcloud kms decrypt` ❌ |
+| `roles/cloudkms.cryptoKeyDecrypter` | "Provides ability to use Cloud KMS resources for **decrypt operations only**." | `cloudkms.cryptoKeyVersions.useToDecrypt`<br>`cloudkms.locations.get` / `.list`<br>`resourcemanager.projects.get` | `gcloud kms decrypt` ✅ / `gcloud kms encrypt` ❌ |
+| `roles/cloudkms.cryptoKeyEncrypterDecrypter` | "Provides ability to use Cloud KMS resources for **encrypt and decrypt operations only**." | `cloudkms.cryptoKeyVersions.useToEncrypt`<br>`cloudkms.cryptoKeyVersions.useToDecrypt`<br>`cloudkms.locations.get` / `.list`<br>`resourcemanager.projects.get` | 双向 ✅ |
+
+**三个角色都不包含** `keyRings.create` / `cryptoKeys.create` / `cryptoKeyVersions.destroy` —— 也就是说拿到任何这三种角色，**都无法创建/轮换/销毁密钥本身**，只能"用"。这就是为什么这层 IAM 可以放在业务项目 SA 上 —— 攻破业务项目 = 只能解密密文，**不能**导出/删除密钥。
+
+**最低可授予层级**：三个角色都是 **CryptoKey** 级别（GCP 原文："Lowest-level resources where you can grant this role: CryptoKey"）。这意味着可以精细到"这个密钥能解，那个密钥不能解"，而不是粗暴的"整个 KMS 项目的所有密钥"。
+
+##### 为什么不用 `cryptoKeyEncrypterDecrypter` 一把梭？
+
+1. **审计视角**：如果一个 SA 同时有 encrypt + decrypt 权限，Cloud Audit Logs 里出现 `useToEncrypt` 时分不清"这个 SA 是把数据写出去的人，还是个被偷了凭证后乱搞的入侵者"。把 encrypt 和 decrypt 分到不同 SA，**正向业务（`env01-uk-encrypt-sa`）和反向读（`env01-uk-kdp-sa`）的身份就拆开了** —— 这就是文档 L40-41 那段 IAM 策略的实际意义。
+2. **攻陷半径**：CI runner 上的 `env01-uk-kdp-sa` 被偷 = 攻击者只能解密，不能伪造密文去喂其他服务（比如喂一个假的 DB password 给下游 ETL）。**单向权限 = 单向攻击能力**。
+3. **撤销成本**：`env01-uk-encrypt-sa` 在 prod 误发证书 → 撤掉 encrypt 权限**不影响 decrypt 服务运行**。一把梭角色下，撤 = 整个服务宕机。
+
+> ⚠️ **关于 `*ViaDelegation` 变体（顺便说一下）**：同一份文档里还有 `cryptoKeyEncrypterDecrypterViaDelegation` / `cryptoKeyDecrypterViaDelegation` / `cryptoKeyEncrypterViaDelegation` 三个角色，permission 是 `*ViaDelegation` 后缀。它们的语义是"通过其他 Google Cloud 服务（不是直接调 KMS API）进行加解密"，典型场景是 **GCS 用 CMEK 加密对象时**，GCS service agent 代表用户去调 KMS —— 这种情况下用户 SA 需要的是 `*ViaDelegation` 角色，而不是直接的 `useToEncrypt`。**本文档不涉及此场景**，仅作为完整性提示。
+
 ### 2. 自动化脚本：在 CI/CD 或应用启动时执行解密
 
 在业务项目的服务器或 CI/CD 环境中，我们需要在应用启动前解密一些敏感的配置文件（如证书、私钥）。
@@ -163,6 +185,6 @@ echo "文件解密成功, 应用可以启动."
 
 ## 总结与最佳实践
 1.  **集中管理密钥**  ：始终将密钥存储在专用的、高度安全管制的 GCP 项目中。
-2.  **最小权限原则**  ：为服务账号授予精准的 `cryptoKeyEncrypter` 或 `cryptoKeyDecrypter` 角色，而不是宽泛的 `cryptoKeyEncrypterDecrypter` 角色。
+2.  **最小权限原则**  ：为服务账号授予精准的 `cryptoKeyEncrypter` 或 `cryptoKeyDecrypter` 角色，而不是宽泛的 `cryptoKeyEncrypterDecrypter` 角色。三个角色的精确定义与"为什么不用一把梭"的 3 条理由，参见上文 §"三个预定义角色到底分别能干什么？"小节。
 3.  **自动化与动态配置**  ：在 CI/CD 和部署脚本中使用动态配置，使其能够适应不同环境，减少硬编码。
 4.  **审计与监控**  ：在 KMS 项目中启用审计日志，监控所有密钥的使用情况，以便及时发现异常访问。
