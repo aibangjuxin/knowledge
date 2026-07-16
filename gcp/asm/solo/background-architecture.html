@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ASM Solo Gateway — 3-NS Multi-Tenant Traffic Flow</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px;
+      background: #22d3ee;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.8rem; margin-left: 1.75rem; }
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1100px; display: block; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.85rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.72rem; line-height: 1.6; }
+    .card ul li::before { content: "• "; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>ASM Solo Gateway — 3-NS Multi-Tenant Traffic Flow</h1>
+      </div>
+      <div class="subtitle">
+        Gateway API (Istio GW Class) + ListenerSet + HTTPRoute · 两段 TLS(terminate + re-encrypt) · 平台侧冻结,租户侧可复制
+      </div>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1360 880" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+          <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+          </marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/>
+          </marker>
+          <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+          </marker>
+        </defs>
+
+        <!-- Background grid -->
+        <rect width="1360" height="880" fill="url(#grid)"/>
+
+        <!-- ============ ZONE 1: External Client + Edge (TOP, outside cluster) ============ -->
+
+        <!-- Client -->
+        <rect x="60" y="50" width="180" height="60" rx="6" fill="#0f172a"/>
+        <rect x="60" y="50" width="180" height="60" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="150" y="74" fill="white" font-size="12" font-weight="600" text-anchor="middle">Client</text>
+        <text x="150" y="90" fill="#94a3b8" font-size="9" text-anchor="middle">HTTPS · 域名请求</text>
+
+        <!-- NGINX on GCE (PSC attachment) -->
+        <rect x="320" y="50" width="200" height="60" rx="6" fill="#0f172a"/>
+        <rect x="320" y="50" width="200" height="60" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="420" y="74" fill="white" font-size="12" font-weight="600" text-anchor="middle">NGINX on GCE</text>
+        <text x="420" y="90" fill="#fbbf24" font-size="9" text-anchor="middle">PSC Service Attachment</text>
+
+        <!-- ILB -->
+        <rect x="600" y="50" width="220" height="60" rx="6" fill="#0f172a"/>
+        <rect x="600" y="50" width="220" height="60" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="710" y="74" fill="white" font-size="12" font-weight="600" text-anchor="middle">GCP Internal LB</text>
+        <text x="710" y="90" fill="#fbbf24" font-size="9" text-anchor="middle">内网 IP · ILB 后端</text>
+
+        <!-- ============ Cluster boundary ============ -->
+        <rect x="40" y="140" width="1280" height="540" rx="12"
+              fill="rgba(120,53,15,0.04)" stroke="#fbbf24" stroke-width="1.5"
+              stroke-dasharray="8,4"/>
+        <text x="60" y="166" fill="#fbbf24" font-size="11" font-weight="600">⊞ Kubernetes Cluster (Istio Gateway Class)</text>
+
+        <!-- ======================================================
+             NS 1: Platform Gateway (amber, abjx-gw-int)
+             ====================================================== -->
+        <rect x="80" y="200" width="280" height="200" rx="8"
+              fill="rgba(120,53,15,0.06)" stroke="#fbbf24" stroke-width="1.2"
+              stroke-dasharray="5,3"/>
+        <text x="100" y="222" fill="#fbbf24" font-size="10" font-weight="600">▸ NS: abjx-gw-int</text>
+        <text x="100" y="236" fill="#fb923c" font-size="8">platform-owned · 冻结</text>
+
+        <!-- Gateway CR box -->
+        <rect x="110" y="260" width="220" height="120" rx="6" fill="#0f172a"/>
+        <rect x="110" y="260" width="220" height="120" rx="6"
+              fill="rgba(251,191,36,0.18)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="220" y="284" fill="white" font-size="12" font-weight="600" text-anchor="middle">Gateway (CR)</text>
+        <text x="220" y="304" fill="#94a3b8" font-size="9" text-anchor="middle">gatewayClassName: istio</text>
+        <text x="220" y="324" fill="#fbbf24" font-size="8" text-anchor="middle">spec.allowedRoutes.from: ListenerSet</text>
+        <text x="220" y="340" fill="#fbbf24" font-size="8" text-anchor="middle">spec.allowedRoutes.selector:</text>
+        <text x="220" y="355" fill="#94a3b8" font-size="8" text-anchor="middle">gateway.abjx.com/listener-enabled=true</text>
+
+        <!-- ======================================================
+             NS 2: ListenerSet (emerald, abjx-listenerset-int)
+             ====================================================== -->
+        <rect x="420" y="200" width="420" height="380" rx="8"
+              fill="rgba(6,78,59,0.08)" stroke="#34d399" stroke-width="1.2"
+              stroke-dasharray="5,3"/>
+        <text x="440" y="222" fill="#34d399" font-size="10" font-weight="600">▸ NS: abjx-listenerset-int</text>
+        <text x="440" y="236" fill="#94a3b8" font-size="8">集中监听 · 平台/共享层 owned · 冻结</text>
+
+        <!-- ListenerSet CR box -->
+        <rect x="450" y="260" width="360" height="180" rx="6" fill="#0f172a"/>
+        <rect x="450" y="260" width="360" height="180" rx="6"
+              fill="rgba(52,211,153,0.18)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="630" y="286" fill="white" font-size="12" font-weight="600" text-anchor="middle">ListenerSet (CR)</text>
+        <text x="630" y="306" fill="#94a3b8" font-size="9" text-anchor="middle">hostname: *.teamlevel.caep.uk   port: 443</text>
+        <text x="630" y="324" fill="#94a3b8" font-size="9" text-anchor="middle">tls.mode: Terminate</text>
+        <text x="630" y="342" fill="#94a3b8" font-size="9" text-anchor="middle">tls.certificateRefs → abjx-listenerset-int/wildcard-tls-secret</text>
+        <text x="630" y="360" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">↓ TLS Terminate (wildcard cert)</text>
+        <text x="630" y="378" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">parentRef → abjx-gw-int/Gateway</text>
+        <text x="630" y="398" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">allowedRoutes selector → tenant NS label</text>
+
+        <!-- TLS Secret box -->
+        <rect x="450" y="470" width="360" height="80" rx="6" fill="#0f172a"/>
+        <rect x="450" y="470" width="360" height="80" rx="6"
+              fill="rgba(136,19,55,0.25)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="630" y="495" fill="white" font-size="12" font-weight="600" text-anchor="middle">TLS Secret (通配证书)</text>
+        <text x="630" y="513" fill="#94a3b8" font-size="9" text-anchor="middle">abjx-listenerset-int/wildcard-tls-secret</text>
+        <text x="630" y="530" fill="#fb7185" font-size="8" text-anchor="middle">type: kubernetes.io/tls</text>
+
+        <!-- ======================================================
+             NS 3: Tenant Runtime (violet, user-rt-ns / runtime-int)
+             ====================================================== -->
+        <rect x="900" y="200" width="400" height="450" rx="8"
+              fill="rgba(76,29,149,0.08)" stroke="#a78bfa" stroke-width="1.2"
+              stroke-dasharray="5,3"/>
+        <text x="920" y="222" fill="#a78bfa" font-size="10" font-weight="600">▸ NS: user-rt-ns / runtime-int</text>
+        <text x="920" y="236" fill="#94a3b8" font-size="8">租户业务 · tenant team owned · 可复制模板</text>
+
+        <!-- HTTPRoute -->
+        <rect x="930" y="260" width="340" height="110" rx="6" fill="#0f172a"/>
+        <rect x="930" y="260" width="340" height="110" rx="6"
+              fill="rgba(8,51,68,0.45)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="1100" y="284" fill="white" font-size="12" font-weight="600" text-anchor="middle">HTTPRoute (CR)</text>
+        <text x="1100" y="304" fill="#94a3b8" font-size="9" text-anchor="middle">hostnames: [&lt;新服务 FQDN&gt;]</text>
+        <text x="1100" y="322" fill="#22d3ee" font-size="9" font-weight="600" text-anchor="middle">parentRefs → ListenerSet (不是 Gateway)</text>
+        <text x="1100" y="340" fill="#94a3b8" font-size="9" text-anchor="middle">rules[].backendRefs → Service:port</text>
+
+        <!-- Service -->
+        <rect x="930" y="395" width="340" height="70" rx="6" fill="#0f172a"/>
+        <rect x="930" y="395" width="340" height="70" rx="6"
+              fill="rgba(6,78,59,0.35)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1100" y="418" fill="white" font-size="12" font-weight="600" text-anchor="middle">Service (ClusterIP)</text>
+        <text x="1100" y="436" fill="#94a3b8" font-size="9" text-anchor="middle">selector: {app: &lt;svc&gt;} · port 80 → &lt;containerPort&gt;</text>
+
+        <!-- DestinationRule -->
+        <rect x="930" y="490" width="340" height="90" rx="6" fill="#0f172a"/>
+        <rect x="930" y="490" width="340" height="90" rx="6"
+              fill="rgba(251,146,60,0.2)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="1100" y="513" fill="white" font-size="12" font-weight="600" text-anchor="middle">DestinationRule</text>
+        <text x="1100" y="531" fill="#94a3b8" font-size="9" text-anchor="middle">trafficPolicy: connectionPool / outlierDetection</text>
+        <text x="1100" y="549" fill="#fb923c" font-size="9" font-weight="600" text-anchor="middle">↓ TLS re-encrypt (DR SIMPLE + skip-verify)</text>
+
+        <!-- Pods -->
+        <rect x="930" y="605" width="340" height="40" rx="6" fill="#0f172a"/>
+        <rect x="930" y="605" width="340" height="40" rx="6"
+              fill="rgba(6,78,59,0.5)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1100" y="630" fill="white" font-size="11" font-weight="600" text-anchor="middle">Deployment / Pods · 业务容器</text>
+
+        <!-- ==================== ARROWS (drawn early, behind shapes) ==================== -->
+
+        <!-- 1: Client → NGINX -->
+        <line x1="240" y1="80" x2="320" y2="80" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="280" y="73" fill="#94a3b8" font-size="9" text-anchor="middle">① HTTPS</text>
+
+        <!-- 2: NGINX → ILB -->
+        <line x1="520" y1="80" x2="600" y2="80" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="560" y="73" fill="#94a3b8" font-size="9" text-anchor="middle">② PSC</text>
+
+        <!-- 3: ILB → Gateway -->
+        <path d="M 710 110 L 710 175 L 220 175 L 220 258" fill="none" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrow-amber)"/>
+        <text x="465" y="168" fill="#fbbf24" font-size="9" text-anchor="middle">③ ILB → Gateway (Service 后端)</text>
+
+        <!-- 4: Gateway → ListenerSet (parentRef) — label placed ABOVE the arrow in the gap, no overlap -->
+        <path d="M 332 320 L 448 320" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrow-amber)"/>
+        <text x="390" y="304" fill="#fbbf24" font-size="9" text-anchor="middle">④ parentRef / 扩展 listener</text>
+
+        <!-- 5: ListenerSet → HTTPRoute (parentRef) — consolidate label, keep above arrow -->
+        <path d="M 812 320 L 928 320" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="870" y="304" fill="#34d399" font-size="9" text-anchor="middle">⑤ parentRef / hostname·path 分发</text>
+
+        <!-- 6: HTTPRoute → Service -->
+        <path d="M 1100 372 L 1100 393" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="1118" y="386" fill="#22d3ee" font-size="9" text-anchor="start">⑥ backendRefs</text>
+
+        <!-- 7: Service → DestinationRule -->
+        <path d="M 1100 467 L 1100 488" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+        <!-- 8: DestinationRule → Pods -->
+        <path d="M 1100 582 L 1100 603" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="1118" y="595" fill="#94a3b8" font-size="9" text-anchor="start">⑦→⑧ 流量策略 + 送达容器</text>
+
+        <!-- ==================== Cross-NS: TLS Secret 跨 NS 复制 ==================== -->
+        <!-- rose curved dashed arrow from ListenerSet NS Secret → tenant NS (pod optionally mounts).
+             Path moved DOWNWARD through the empty gap between the ListenerSet NS bottom (y=580)
+             and the cluster bottom (y=680), so labels never collide with the TLS Secret box. -->
+        <path d="M 630 552 C 630 615, 1100 615, 1100 488"
+              fill="none" stroke="#fb7185" stroke-width="1.5"
+              stroke-dasharray="5,3" marker-end="url(#arrow-rose)"/>
+        <text x="860" y="608" fill="#fb7185" font-size="9" text-anchor="middle">⑨ Secret 跨 NS 复制 (kubectl get -o json | jq | apply)</text>
+
+        <!-- (the downward cross-NS arrow above passes through the gap between
+             the ListenerSet NS bottom (y=580) and the cluster bottom (y=680),
+             and does not enter the TLS Secret box itself.) -->
+
+        <!-- ==================== Legend (OUTSIDE cluster boundary) ==================== -->
+        <rect x="60" y="710" width="1240" height="100" rx="6"
+              fill="rgba(15,23,42,0.8)" stroke="#1e293b" stroke-width="1"/>
+        <text x="80" y="735" fill="white" font-size="11" font-weight="600">Legend</text>
+
+        <!-- Item 1: Platform NS -->
+        <rect x="80" y="755" width="14" height="14" rx="3" fill="rgba(120,53,15,0.3)" stroke="#fbbf24"/>
+        <text x="100" y="767" fill="#94a3b8" font-size="10">L1 平台 Gateway (abjx-gw-int) · 冻结</text>
+
+        <!-- Item 2: ListenerSet NS -->
+        <rect x="320" y="755" width="14" height="14" rx="3" fill="rgba(6,78,59,0.4)" stroke="#34d399"/>
+        <text x="340" y="767" fill="#94a3b8" font-size="10">L2 集中监听 (abjx-listenerset-int) · 冻结</text>
+
+        <!-- Item 3: Tenant NS -->
+        <rect x="640" y="755" width="14" height="14" rx="3" fill="rgba(76,29,149,0.4)" stroke="#a78bfa"/>
+        <text x="660" y="767" fill="#94a3b8" font-size="10">L3 租户 (user-rt-ns) · 可复制</text>
+
+        <!-- Item 4: HTTPRoute -->
+        <rect x="900" y="755" width="14" height="14" rx="3" fill="rgba(8,51,68,0.4)" stroke="#22d3ee"/>
+        <text x="920" y="767" fill="#94a3b8" font-size="10">HTTPRoute (parentRef → ListenerSet)</text>
+
+        <!-- Item 5: TLS Secret (rose) -->
+        <rect x="80" y="785" width="14" height="14" rx="3" fill="rgba(136,19,55,0.4)" stroke="#fb7185"/>
+        <text x="100" y="797" fill="#94a3b8" font-size="10">TLS Secret (通配证书,跨 NS 复制)</text>
+
+        <!-- Item 6: DR / re-encrypt (orange) -->
+        <rect x="430" y="785" width="14" height="14" rx="3" fill="rgba(251,146,60,0.3)" stroke="#fb923c"/>
+        <text x="450" y="797" fill="#94a3b8" font-size="10">DR · TLS re-encrypt (port 443 → svc)</text>
+
+        <!-- Item 7: parentRef / cross-NS -->
+        <rect x="780" y="785" width="14" height="14" rx="3" fill="none" stroke="#fbbf24" stroke-dasharray="3,2"/>
+        <text x="800" y="797" fill="#94a3b8" font-size="10">amber dashed = 跨 NS parentRef</text>
+
+        <!-- ==================== VERIFICATION bar (very bottom) ==================== -->
+        <text x="80" y="848" fill="#34d399" font-size="10" font-weight="600">▶ 收工后,下一个服务接入只需:</text>
+        <text x="80" y="866" fill="#94a3b8" font-size="9">
+          kubectl get listenerset -n &lt;tenant-ns&gt; -o yaml → 复制 4 个 YAML (Service / Deployment / HTTPRoute / DestinationRule) → curl 200
+        </text>
+
+      </svg>
+    </div>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>L1 Platform — abjx-gw-int</h3>
+        </div>
+        <ul>
+          <li>Gateway CR (gatewayClassName: istio)</li>
+          <li>持有 listener 占位,真正的 listener 由 ListenerSet 注入</li>
+          <li>spec.allowedRoutes.from = ListenerSet + namespace selector 锁定租户 NS</li>
+          <li>改变频率:0(收工后冻结)</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>L2 ListenerSet — abjx-listenerset-int</h3>
+        </div>
+        <ul>
+          <li>ListenerSet CR (hostname 通配 + TLS Terminate)</li>
+          <li>引用当前 NS 内的 wildcard TLS Secret</li>
+          <li>parentRef → abjx-gw-int/Gateway(扩展 listener)</li>
+          <li>改变频率:0(冻结),但新 hostname 需在原 ListenerSet 上加 rule 或新建一个</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>L3 Tenant Runtime — 唯一可复制层</h3>
+        </div>
+        <ul>
+          <li>HTTPRoute(parentRef 指回 ListenerSet,不是 Gateway)</li>
+          <li>Service (ClusterIP) + Deployment + Pods</li>
+          <li>DestinationRule (TLS re-encrypt / outlier / pool)</li>
+          <li>pod 用的通配证书如需,需跨 NS 复制 Secret(json + jq)</li>
+        </ul>
+      </div>
+
+    </div>
+
+  </div>
+</body>
+</html>
