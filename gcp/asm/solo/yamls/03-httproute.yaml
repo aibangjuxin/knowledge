@@ -1,0 +1,41 @@
+# =====================================================================
+# File: 03-httproute.yaml
+# 作用: 租户业务流量从 ListenerSet 路由到 Service
+#
+# 与 background.md 的"无感"差异: 这一段 HTTPRoute 的 parentRef / hostnames
+# / backendRefs 写法**完全不变**,Zatmbient 的好处是 Gateway/ListenerSet 到
+# Pod 这一段由 ztunnel 接管 mTLS,**租户无需改任何 DR 也不用 skip-verify**
+# =====================================================================
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: tenant-app-httproute
+  namespace: tenant-runtime
+  labels:
+    abjx.com/tenant-listener: "allowed"
+spec:
+  # ⚠️ parentRef 仍然指 ListenerSet,不是 Gateway(背景文档明确这一点)
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: ListenerSet
+      name: abjx-public-listenerset
+      namespace: abjx-listenerset-int
+      # ⚠️ 必须先 kubectl get 拿到实际 sectionName(背景文档 §3.3 易错点之一)
+
+  # 租户 FQDN(必须被 ListenerSet.hostname 通配覆盖)
+  hostnames:
+    - app1.teamlevel.caep.uk
+
+  # 路由规则:把匹配流量打到 service:8080
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: tenant-app-svc
+          port: 8080
+          weight: 100

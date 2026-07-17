@@ -1,0 +1,116 @@
+# =====================================================================
+# File: 02-gateway-agentgateway.yaml
+# 作用: 平台侧 Gateway + ListenerSet 的 Ambient 适配版
+#
+# 与 background.md 现有方案的关键差异:
+#   ✅ 这里 GatewayClass 仍是 `istio`(Istio 自己的 GatewayClass 实现,
+#      它在 ambient 下依然可以正常 serve client 流量 — 因为 Gateway Pod 内部
+#      仍有 envoy sidecar 用于 TLS 终结)
+#   ✅ TLS 终结位置"不变" — 还是 ListenerSet 这一段完成 wildcard 证书卸载
+#   ✅ 第二段(Gateway → Pod)的传输层从此**由 ztunnel 在节点级透明接管**,
+#      所以 ListenerSet 之后到 Pod 的链路上**不再需要 DestinationRule
+#      写 TLS re-encrypt / skip-verify** — 这是 Ambient 最大的架构红利
+#
+# 注意:
+#   - 标签 abjx-gw-int / abjx-listenerset-int 已经在 01 文件里创建
+#   - ListenerSet 的 hostname 通配必须覆盖到所有租户 FQDN
+#   - 证书仍是 `wildcard-tls-secret`,但 listener 终止的内部 LB 端口仍是 443
+# =====================================================================
+---
+# L1 平台层 Gateway
+# 由 Istio GatewayClass 实现,与 background.md 同源(冻结不变)
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: abjx-public-gateway
+  namespace: abjx-gw-int
+  labels:
+    # 平台 ns 是不挂 ambient 的(=none),但 Gateway 自身的"listener 占位"
+    # 由 Istio GatewayClass 实现,不需要 ambient 标签
+    abjx.com/listener-enabled: "true"
+spec:
+  # ⭐ Ambient 下 GatewayClass 仍然用 `istio`,因为 Gateway Pod 内部还需要
+  # envoy sidecar 去做 TLS 终结(zturnel 不负责 L7 终结)
+  gatewayClassName: istio
+
+  # 与 background.md 完全一致:只允许 ListenerSet 接入
+  listeners:
+    - name: https-placeholder
+      port: 443
+      protocol: HTTPS
+      # 占位,真正的 listener 由 ListenerSet 注入
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              abjx.com/listener-enabled: "true"
+
+  # 跨 ns 绑定约束
+  allowedRoutes:
+    from: ListenerSet
+    selector:
+      matchLabels:
+        abjx.com/listener-enabled: "true"
+
+---
+# L2 集中监听 ListenerSet — TLS 终结位置(**不变**)
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: ListenerSet
+metadata:
+  name: abjx-public-listenerset
+  namespace: abjx-listenerset-int
+  labels:
+    abjx.com/listener-enabled: "true"
+spec:
+  # 挂在 L1 Gateway 上
+  parentRef:
+    name: abjx-public-gateway
+    namespace: abjx-gw-int
+    sectionName: https-placeholder
+
+  # hostname 通配(Lab 默认)
+  hostnames:
+    - "*.teamlevel.caep.uk"
+
+  # TLS 终结位置
+  tls:
+    mode: Terminate
+    certificateRefs:
+      - name: wildcard-tls-secret
+        namespace: abjx-listenerset-int
+        kind: Secret
+
+  # 监听端口
+  port: 443
+  protocol: HTTPS
+
+  # 监听器对租户可见性约束:只放行打了 `abjx.com/tenant-listener=allowed` 的 ns
+  allowedRoutes:
+    from: Selector
+    selector:
+      matchLabels:
+        abjx.com/tenant-listener: "allowed"
+
+---
+# Wildcard TLS Secret(示例,真实使用时请用 cert-manager / 平台管)
+# 注意:Secret type 必须是 kubernetes.io/tls
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wildcard-tls-secret
+  namespace: abjx-listenerset-int
+  labels:
+    is-tls: "true"
+type: kubernetes.io/tls
+stringData:
+  # ⛔ 真实环境使用 cert-manager 签发 + Workload Identity / KMS 加密
+  # 这里只是占位,Lab 跑通即可
+  tls.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIDazCCAlOgAwIBAgIUJq...
+    -----END CERTIFICATE-----
+  tls.key: |
+    -----BEGIN RSA PRIVATE KEY-----
+    MIIEowIBAAKCAQEA...
+    -----END RSA PRIVATE KEY-----

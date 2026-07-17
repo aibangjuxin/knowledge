@@ -1,0 +1,24 @@
+# =====================================================================
+# File: 05-peer-authentication.yaml
+# 作用: Ambient 下的 STRICT mTLS 策略
+#
+# 为什么需要它:
+#   Ambient 自动注入 mesh-wide mTLS(zatmbient 默认 STRICT),但凡是要
+#   "锁住 / 验证 / 收紧" 某个 ns 内的 mTLS 行为,都用 PeerAuthentication
+#   ambient 模式下,PeerAuthentication 不需要 selector(因为 ztunnel 接管),
+#   也不需要 tls.mode = ISTIO_MUTUAL 那种 IstioDR 配对(不再有 sidecar 配证书)
+#
+# 推荐:
+#   把整个 tenant-runtime ns 锁成 STRICT mTLS,意味着任何未经过 mTLS 认证
+#   的来源(client)都不允许访问该 ns 内的 Pod
+# =====================================================================
+---
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: tenant-runtime-strict
+  namespace: tenant-runtime
+spec:
+  # 不写 selector → 应用于整个 ns 内所有 workload
+  mtls:
+    mode: STRICT

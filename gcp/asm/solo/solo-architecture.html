@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ASM Solo Ambient Mesh — 2-Segment TLS with ztunnel HBONE</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1480px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px;
+      background: #22d3ee;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.8rem; margin-left: 1.75rem; }
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1280px; display: block; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.85rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.72rem; line-height: 1.6; }
+    .card ul li::before { content: "• "; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>ASM Solo Ambient Mesh — 2-Segment TLS with ztunnel HBONE</h1>
+      </div>
+      <div class="subtitle">
+        一段 TLS 终结(L1/L2 不变) + 一段 ztunnel 节点级 mTLS(L3 应用无感) · Solo Distribution 1.30.2-solo-fips · 对照 <a href="./background.md" style="color:#22d3ee;text-decoration:none">background.md</a>
+      </div>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1420 980" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+          <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+          </marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/>
+          </marker>
+          <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+          </marker>
+          <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+          </marker>
+        </defs>
+
+        <rect width="1420" height="980" fill="url(#grid)"/>
+
+        <!-- ============== ZONE 1: External Client + Edge ============== -->
+        <rect x="60" y="40" width="180" height="60" rx="6" fill="#0f172a"/>
+        <rect x="60" y="40" width="180" height="60" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="150" y="64" fill="white" font-size="12" font-weight="600" text-anchor="middle">Client</text>
+        <text x="150" y="80" fill="#94a3b8" font-size="9" text-anchor="middle">HTTPS · *.teamlevel.caep.uk</text>
+
+        <rect x="320" y="40" width="200" height="60" rx="6" fill="#0f172a"/>
+        <rect x="320" y="40" width="200" height="60" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="420" y="64" fill="white" font-size="12" font-weight="600" text-anchor="middle">NGINX on GCE</text>
+        <text x="420" y="80" fill="#fbbf24" font-size="9" text-anchor="middle">PSC Service Attachment</text>
+
+        <rect x="600" y="40" width="220" height="60" rx="6" fill="#0f172a"/>
+        <rect x="600" y="40" width="220" height="60" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="710" y="64" fill="white" font-size="12" font-weight="600" text-anchor="middle">GCP Internal LB</text>
+        <text x="710" y="80" fill="#fbbf24" font-size="9" text-anchor="middle">PSC backend · :443</text>
+
+        <!-- Cluster boundary -->
+        <rect x="40" y="130" width="1340" height="800" rx="12"
+              fill="rgba(120,53,15,0.04)" stroke="#fbbf24" stroke-width="1.5"
+              stroke-dasharray="8,4"/>
+        <text x="60" y="156" fill="#fbbf24" font-size="11" font-weight="600">⊞ Kubernetes Cluster · Solo 1.30.2-solo-fips</text>
+        <text x="430" y="156" fill="#34d399" font-size="11" font-weight="600">install profile=ambient</text>
+
+        <!-- ============== NS 1: Platform Gateway (sidecar, =none) ============== -->
+        <rect x="70" y="190" width="290" height="220" rx="8"
+              fill="rgba(120,53,15,0.06)" stroke="#fbbf24" stroke-width="1.2"
+              stroke-dasharray="5,3"/>
+        <text x="90" y="212" fill="#fbbf24" font-size="10" font-weight="600">▸ NS: abjx-gw-int</text>
+        <text x="90" y="226" fill="#94a3b8" font-size="8">label: dataplane-mode=none (kept sidecar)</text>
+
+        <rect x="100" y="245" width="230" height="140" rx="6" fill="#0f172a"/>
+        <rect x="100" y="245" width="230" height="140" rx="6"
+              fill="rgba(251,191,36,0.18)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="215" y="270" fill="white" font-size="12" font-weight="600" text-anchor="middle">Gateway (CR)</text>
+        <text x="215" y="290" fill="#94a3b8" font-size="9" text-anchor="middle">gatewayClassName: istio</text>
+        <text x="215" y="310" fill="#94a3b8" font-size="9" text-anchor="middle">allowedRoutes.from = ListenerSet</text>
+        <text x="215" y="332" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">envoy sidecar ✦ TLS 终结</text>
+        <text x="215" y="350" fill="#fbbf24" font-size="8" text-anchor="middle">(Gateway pod 内部仍是 Envoy sidecar)</text>
+        <text x="215" y="368" fill="#94a3b8" font-size="8" text-anchor="middle">不依赖 ambient(zatmbient 不管 L7)</text>
+
+        <!-- ============== NS 2: ListenerSet (sidecar, =none) ============== -->
+        <rect x="420" y="190" width="380" height="400" rx="8"
+              fill="rgba(6,78,59,0.08)" stroke="#34d399" stroke-width="1.2"
+              stroke-dasharray="5,3"/>
+        <text x="440" y="212" fill="#34d399" font-size="10" font-weight="600">▸ NS: abjx-listenerset-int</text>
+        <text x="440" y="226" fill="#94a3b8" font-size="8">label: dataplane-mode=none · wildcard cert holder</text>
+
+        <rect x="450" y="245" width="330" height="220" rx="6" fill="#0f172a"/>
+        <rect x="450" y="245" width="330" height="220" rx="6"
+              fill="rgba(52,211,153,0.18)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="615" y="270" fill="white" font-size="12" font-weight="600" text-anchor="middle">ListenerSet (CR)</text>
+        <text x="615" y="290" fill="#94a3b8" font-size="9" text-anchor="middle">hostname: *.teamlevel.caep.uk</text>
+        <text x="615" y="308" fill="#94a3b8" font-size="9" text-anchor="middle">tls.mode: Terminate</text>
+        <text x="615" y="326" fill="#94a3b8" font-size="9" text-anchor="middle">port: 443</text>
+        <text x="615" y="348" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">★ 段 1 TLS Terminate</text>
+        <text x="615" y="364" fill="#34d399" font-size="9" text-anchor="middle">wildcard 证书加载</text>
+        <text x="615" y="382" fill="#fbbf24" font-size="8" text-anchor="middle">parentRef → abjx-gw-int/Gateway</text>
+        <text x="615" y="398" fill="#fbbf24" font-size="8" text-anchor="middle">allowedRoutes → tenant-runtime label</text>
+        <text x="615" y="416" fill="#94a3b8" font-size="8" text-anchor="middle">⛔ 不变 · 跟 background.md 同款</text>
+        <text x="615" y="436" fill="#94a3b8" font-size="8" text-anchor="middle">这一段是 Segment 1</text>
+        <text x="615" y="452" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">↳ TLS 终结后,内层 HTTP</text>
+
+        <rect x="450" y="490" width="330" height="80" rx="6" fill="#0f172a"/>
+        <rect x="450" y="490" width="330" height="80" rx="6"
+              fill="rgba(136,19,55,0.25)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="615" y="514" fill="white" font-size="12" font-weight="600" text-anchor="middle">TLS Secret (wildcard)</text>
+        <text x="615" y="532" fill="#94a3b8" font-size="9" text-anchor="middle">abjx-listenerset-int/wildcard-tls-secret</text>
+        <text x="615" y="548" fill="#fb7185" font-size="8" text-anchor="middle">type: kubernetes.io/tls · 不变</text>
+
+        <!-- ============== NS 3: Tenant Runtime (ambient mode) ============== -->
+        <rect x="860" y="190" width="500" height="600" rx="8"
+              fill="rgba(76,29,149,0.08)" stroke="#a78bfa" stroke-width="1.2"
+              stroke-dasharray="5,3"/>
+        <text x="880" y="212" fill="#a78bfa" font-size="10" font-weight="600">▸ NS: tenant-runtime</text>
+        <text x="880" y="226" fill="#34d399" font-size="8">⭐ label: istio.io/dataplane-mode=ambient · 全部 Pod 由 ztunnel 接管</text>
+
+        <!-- HTTPRoute -->
+        <rect x="890" y="245" width="450" height="100" rx="6" fill="#0f172a"/>
+        <rect x="890" y="245" width="450" height="100" rx="6"
+              fill="rgba(8,51,68,0.45)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="1115" y="270" fill="white" font-size="12" font-weight="600" text-anchor="middle">HTTPRoute (CR)</text>
+        <text x="1115" y="290" fill="#94a3b8" font-size="9" text-anchor="middle">hostnames: [app1.teamlevel.caep.uk]</text>
+        <text x="1115" y="308" fill="#94a3b8" font-size="9" text-anchor="middle">parentRefs → ListenerSet (跨 NS)</text>
+        <text x="1115" y="328" fill="#22d3ee" font-size="9" font-weight="600" text-anchor="middle">⛔ 无变化 · 跟 background.md 同款</text>
+
+        <!-- Service -->
+        <rect x="890" y="370" width="450" height="60" rx="6" fill="#0f172a"/>
+        <rect x="890" y="370" width="450" height="60" rx="6"
+              fill="rgba(6,78,59,0.35)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1115" y="395" fill="white" font-size="12" font-weight="600" text-anchor="middle">Service (ClusterIP)</text>
+        <text x="1115" y="412" fill="#94a3b8" font-size="9" text-anchor="middle">port 80 → targetPort 8080 (HTTP)</text>
+
+        <!-- DR — DELETED! Red strike-through -->
+        <rect x="890" y="455" width="450" height="58" rx="6" fill="#0f172a"/>
+        <rect x="890" y="455" width="450" height="58" rx="6"
+              fill="rgba(136,19,55,0.18)" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <text x="1115" y="476" fill="#fb7185" font-size="11" font-weight="600" text-anchor="middle">✗ DestinationRule — DELETE</text>
+        <text x="1115" y="492" fill="#94a3b8" font-size="8" text-anchor="middle">在 Ambient 下 istiod 会拒绝 trafficPolicy.tls 配置;由 ztunnel 取代</text>
+
+        <!-- ============== Node layer with ztunnel DaemonSet ============== -->
+        <!-- node 1 -->
+        <rect x="870" y="538" width="220" height="180" rx="8"
+              fill="rgba(6,78,59,0.06)" stroke="#34d399" stroke-width="1.2" stroke-dasharray="4,3"/>
+        <text x="888" y="558" fill="#34d399" font-size="10" font-weight="600">▸ Node A</text>
+
+        <rect x="884" y="572" width="195" height="54" rx="6" fill="#0f172a"/>
+        <rect x="884" y="572" width="195" height="54" rx="6"
+              fill="rgba(251,146,60,0.20)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="981" y="591" fill="white" font-size="11" font-weight="600" text-anchor="middle">ztunnel</text>
+        <text x="981" y="608" fill="#fb923c" font-size="9" font-weight="600" text-anchor="middle">HBONE :15008</text>
+        <text x="981" y="621" fill="#94a3b8" font-size="8" text-anchor="middle">SPIFFE mTLS</text>
+
+        <!-- Pod 1 (no sidecar) -->
+        <rect x="884" y="640" width="92" height="64" rx="6" fill="#0f172a"/>
+        <rect x="884" y="640" width="92" height="64" rx="6"
+              fill="rgba(52,211,153,0.18)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="930" y="660" fill="white" font-size="10" font-weight="600" text-anchor="middle">Pod A</text>
+        <text x="930" y="676" fill="#94a3b8" font-size="8" text-anchor="middle">app</text>
+        <text x="930" y="691" fill="#34d399" font-size="8" text-anchor="middle">:8080 HTTP</text>
+        <text x="930" y="703" fill="#22d3ee" font-size="7" text-anchor="middle">no sidecar ✓</text>
+
+        <!-- Pod 2 (no sidecar) -->
+        <rect x="987" y="640" width="92" height="64" rx="6" fill="#0f172a"/>
+        <rect x="987" y="640" width="92" height="64" rx="6"
+              fill="rgba(52,211,153,0.18)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1033" y="660" fill="white" font-size="10" font-weight="600" text-anchor="middle">Pod B</text>
+        <text x="1033" y="676" fill="#94a3b8" font-size="8" text-anchor="middle">app</text>
+        <text x="1033" y="691" fill="#34d399" font-size="8" text-anchor="middle">:8080 HTTP</text>
+        <text x="1033" y="703" fill="#22d3ee" font-size="7" text-anchor="middle">no sidecar ✓</text>
+
+        <!-- node 2 -->
+        <rect x="1110" y="538" width="220" height="180" rx="8"
+              fill="rgba(6,78,59,0.06)" stroke="#34d399" stroke-width="1.2" stroke-dasharray="4,3"/>
+        <text x="1128" y="558" fill="#34d399" font-size="10" font-weight="600">▸ Node B</text>
+
+        <rect x="1124" y="572" width="195" height="54" rx="6" fill="#0f172a"/>
+        <rect x="1124" y="572" width="195" height="54" rx="6"
+              fill="rgba(251,146,60,0.20)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="1221" y="591" fill="white" font-size="11" font-weight="600" text-anchor="middle">ztunnel</text>
+        <text x="1221" y="608" fill="#fb923c" font-size="9" font-weight="600" text-anchor="middle">HBONE :15008</text>
+        <text x="1221" y="621" fill="#94a3b8" font-size="8" text-anchor="middle">SPIFFE mTLS</text>
+
+        <rect x="1124" y="640" width="92" height="64" rx="6" fill="#0f172a"/>
+        <rect x="1124" y="640" width="92" height="64" rx="6"
+              fill="rgba(52,211,153,0.18)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1170" y="660" fill="white" font-size="10" font-weight="600" text-anchor="middle">Pod C</text>
+        <text x="1170" y="676" fill="#94a3b8" font-size="8" text-anchor="middle">app</text>
+        <text x="1170" y="691" fill="#34d399" font-size="8" text-anchor="middle">:8080 HTTP</text>
+        <text x="1170" y="703" fill="#22d3ee" font-size="7" text-anchor="middle">no sidecar ✓</text>
+
+        <rect x="1227" y="640" width="92" height="64" rx="6" fill="#0f172a"/>
+        <rect x="1227" y="640" width="92" height="64" rx="6"
+              fill="rgba(52,211,153,0.18)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1273" y="660" fill="white" font-size="10" font-weight="600" text-anchor="middle">Pod D</text>
+        <text x="1273" y="676" fill="#94a3b8" font-size="8" text-anchor="middle">app</text>
+        <text x="1273" y="691" fill="#34d399" font-size="8" text-anchor="middle">:8080 HTTP</text>
+        <text x="1273" y="703" fill="#22d3ee" font-size="7" text-anchor="middle">no sidecar ✓</text>
+
+        <!-- istio-cni-node (small box) -->
+        <rect x="870" y="730" width="220" height="50" rx="6" fill="#0f172a"/>
+        <rect x="870" y="730" width="220" height="50" rx="6"
+              fill="rgba(8,51,68,0.30)" stroke="#22d3ee" stroke-width="1.2"/>
+        <text x="980" y="750" fill="white" font-size="10" font-weight="600" text-anchor="middle">istio-cni-node (DaemonSet)</text>
+        <text x="980" y="765" fill="#22d3ee" font-size="8" text-anchor="middle">namespace: kube-system · ambient 模式</text>
+
+        <!-- istiod / control plane -->
+        <rect x="1110" y="730" width="220" height="50" rx="6" fill="#0f172a"/>
+        <rect x="1110" y="730" width="220" height="50" rx="6"
+              fill="rgba(6,78,59,0.30)" stroke="#34d399" stroke-width="1.2"/>
+        <text x="1220" y="750" fill="white" font-size="10" font-weight="600" text-anchor="middle">istiod (Deployment)</text>
+        <text x="1220" y="765" fill="#94a3b8" font-size="8" text-anchor="middle">xDS + SPIFFE 证书签发 · 无 sidecar 推送</text>
+
+        <!-- PeerAuthentication strip (vertical) -->
+        <rect x="870" y="800" width="460" height="58" rx="6" fill="#0f172a"/>
+        <rect x="870" y="800" width="460" height="58" rx="6"
+              fill="rgba(136,19,55,0.20)" stroke="#fb7185" stroke-width="1.4" stroke-dasharray="4,3"/>
+        <text x="1100" y="822" fill="white" font-size="11" font-weight="600" text-anchor="middle">PeerAuthentication (新增)</text>
+        <text x="1100" y="838" fill="#fb7185" font-size="8" text-anchor="middle">spec.mtls.mode: STRICT</text>
+        <text x="1100" y="852" fill="#94a3b8" font-size="8" text-anchor="middle">tenant-runtime · 不写 selector 应用于整个 ns</text>
+
+        <!-- ============== Arrows ============== -->
+
+        <!-- External: Client → NGINX -->
+        <line x1="240" y1="70" x2="320" y2="70" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="280" y="63" fill="#94a3b8" font-size="9" text-anchor="middle">① HTTPS</text>
+
+        <line x1="520" y1="70" x2="600" y2="70" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="560" y="63" fill="#94a3b8" font-size="9" text-anchor="middle">② PSC</text>
+
+        <!-- ILB → Gateway (L1) -->
+        <path d="M 710 100 L 710 165 L 215 165 L 215 245" fill="none" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrow-amber)"/>
+        <text x="465" y="158" fill="#fbbf24" font-size="9" text-anchor="middle">③ ILB → Gateway Service</text>
+
+        <!-- Gateway → ListenerSet parentRef -->
+        <line x1="330" y1="305" x2="450" y2="305" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrow-amber)"/>
+        <text x="390" y="297" fill="#fbbf24" font-size="9" text-anchor="middle">④ parentRef / extend listener</text>
+
+        <!-- ListenerSet → HTTPRoute parentRef -->
+        <line x1="780" y1="305" x2="890" y2="295" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+        <text x="835" y="289" fill="#34d399" font-size="9" text-anchor="middle">⑤ parentRef / 路由</text>
+
+        <!-- HTTPRoute → Service -->
+        <line x1="1115" y1="345" x2="1115" y2="370" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="1132" y="362" fill="#22d3ee" font-size="9">⑥ backendRefs</text>
+
+        <!-- Service → ztunnel (mesh mTLS goes around the DR-DELETE box) -->
+        <!-- Service rect: y=370-430. DR rect: y=455-513. ztunnel: y=572. -->
+        <!-- Path goes RIGHT from Service, then DOWN, then LEFT to ztunnel — avoiding DR box. -->
+        <path d="M 1340 400 L 1380 400 L 1380 600 L 1320 600 L 1320 626" fill="none" stroke="#34d399" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#arrow-emerald)"/>
+        <text x="1380" y="510" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">⑦ mesh mTLS</text>
+        <text x="1380" y="525" fill="#34d399" font-size="8" text-anchor="middle">(SPIFFE)</text>
+
+        <!-- ztunnel Node A → Pod A (just no sidecar pipes) -->
+        <line x1="930" y1="626" x2="930" y2="640" fill="none" stroke="#fb923c" stroke-width="1.2"/>
+
+        <!-- Cross-node ztunnel A → ztunnel B (HBONE 15008) annotation -->
+        <line x1="1079" y1="599" x2="1124" y2="599" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="4,2" marker-end="url(#arrow)"/>
+        <text x="1101" y="588" fill="#fb923c" font-size="9" font-weight="600" text-anchor="middle">⑨ HBONE</text>
+        <text x="1101" y="615" fill="#94a3b8" font-size="8" text-anchor="middle">:15008</text>
+
+        <!-- Ambient intent note (placed cleanly below tenant-runtime NS, doesn't overlap anything) -->
+        <text x="880" y="884" fill="#22d3ee" font-size="9" font-style="italic">↳ 应用层看 HTTP :8080; mesh 层看 mTLS — 两层互不感知,zatmbient 不污染容器</text>
+
+        <!-- ============== Legend ============== -->
+        <rect x="60" y="950" width="1300" height="20" rx="0" fill="none"/>
+        <text x="60" y="962" fill="#94a3b8" font-size="9">Legend:</text>
+        <rect x="125" y="950" width="14" height="14" rx="3" fill="rgba(120,53,15,0.3)" stroke="#fbbf24"/>
+        <text x="146" y="962" fill="#94a3b8" font-size="9">L1 平台 Gateway (sidecar)</text>
+        <rect x="340" y="950" width="14" height="14" rx="3" fill="rgba(6,78,59,0.4)" stroke="#34d399"/>
+        <text x="361" y="962" fill="#94a3b8" font-size="9">L2 ListenerSet (sidecar, 不变)</text>
+        <rect x="600" y="950" width="14" height="14" rx="3" fill="rgba(76,29,149,0.4)" stroke="#a78bfa"/>
+        <text x="621" y="962" fill="#94a3b8" font-size="9">L3 租户 (ambient 模式)</text>
+        <rect x="830" y="950" width="14" height="14" rx="3" fill="rgba(251,146,60,0.3)" stroke="#fb923c"/>
+        <text x="851" y="962" fill="#94a3b8" font-size="9">ztunnel + istio-cni-node (新增)</text>
+        <rect x="1100" y="950" width="14" height="14" rx="3" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-dasharray="2,1"/>
+        <text x="1121" y="962" fill="#94a3b8" font-size="9">DR / PeerAuth (新规则 / 删除)</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>段 1 · Client → Gateway(不变)</h3>
+        </div>
+        <ul>
+          <li>ListenerSet 上 <strong>tls.mode: Terminate</strong> 不变</li>
+          <li>wildcard TLS Secret 不变(在 abjx-listenerset-int)</li>
+          <li>Gateway GW Class = `istio` 不变</li>
+          <li>Gateway Pod 内部还是 Envoy sidecar(zatmbient 不管 L7)</li>
+          <li>跨平台方向的边界划界完全跟 background.md 一致</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>段 2 · Gateway → Pod(根本改变)</h3>
+        </div>
+        <ul>
+          <li><strong>ztunnel</strong> DaemonSet 在每节点抓包,运行 HBONE 15008</li>
+          <li>跨节点流量 ztunnel↔ztunnel 双跳 SPIFFE mTLS</li>
+          <li>节点↔pod 仍然走 ambient CNI 创建的 iptables 初始 redirect</li>
+          <li>Pod 内部仅 listen HTTP :8080,无证书 mount,无 443</li>
+          <li>HTTPRoute / Service 形态不变,只是流量加密层透明了</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>架构红利(为什么值得切换)</h3>
+        </div>
+        <ul>
+          <li><strong>DR 删除</strong>:不再配置 trafficPolicy.tls.mode = ISTIO_MUTUAL</li>
+          <li><strong>应用回归 HTTP</strong>:不再 mount 证书、不再 skip-verify</li>
+          <li><strong>资源瘦身</strong>:每个 Pod 省一份 Envoy sidecar(典型 -50~100m CPU / -128Mi mem)</li>
+          <li><strong>跨租户接入样式 3 YAML</strong>(Service/Deploy/HTTPRoute),从 4 降到 3</li>
+          <li><strong>SPIFFE 自动</strong>:istiod 在 mesh 内部自动签发,跨 ns 零配置</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>踩过的坑 / 反模式(必读)</h3>
+        </div>
+        <ul>
+          <li>⚠️ Platform NS 也打 ambient → Gateway 内部 Envoy 被 Zatmbient 干扰</li>
+          <li>⚠️ DR 残留 trafficPolicy.tls → 路由冲突,502</li>
+          <li>⚠️ Pod 上 istio-proxy 还在 → 重启 deployment 让 webhook 重评</li>
+          <li>⚠️ NetPol 默认 deny 阻断 HBONE 15008 / Envoy 15021 / 15090</li>
+          <li>⚠️ GKE Dataplane V2 与 Istio CNI 冲突 → 改用 V1 或 chianed=true</li>
+        </ul>
+      </div>
+
+    </div>
+
+  </div>
+</body>
+</html>
