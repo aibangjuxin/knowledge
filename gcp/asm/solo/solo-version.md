@@ -12,3 +12,4 @@ https://docs.solo.io/istio/1.30.x/ambient/about/images/overview/
 
 
 ns ==> created istio-system
+CNI + ztunnel Ambient 
