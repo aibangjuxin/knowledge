@@ -90,6 +90,114 @@ kubectl get peerauthentication -n tenant-runtime
 
 ---
 
+## 1A. Helm 安装路径(GKE 生态主推,跟 istioctl 路径等价)
+
+> **本节定位**: GKE / EKS / AKS 运维侧更习惯用 `helm install` 把每个 Istio 控制平面组件当成普通 chart 来管理
+> —— 因为 Helm 可以 `helm status / helm get all / helm history / helm rollback` 处理 release 生命周期(对应你提到的 4 条查询命令)。
+> **与 §1 路径的关系**:两条路径**互斥**,只能选一条;跑通之后不要混搭。Solo 1.30.2-solo-fips 的 chart 仍来自官方 `istio-release` repo,只是镜像被 Solo 重 tag 到 `gcr.io/istio-release`。
+
+### 1A.1 添加 Helm 仓库 + 前置 CRD
+
+```bash
+# Istio 官方 helm 仓库(Solo 也重用这个 repo,只重 tag 镜像)
+helm repo add istio https://istio-release.storage.googleapis.com/charts
+helm repo update
+
+# 验证 chart 版本(应该能看到 base / istiod / cni / ztunnel / gateway)
+helm search repo istio
+
+# Gateway API CRD(同 §1.1,Helm 路径也需要)
+kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null || \
+  kubectl apply --server-side \
+    -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
+```
+
+### 1A.2 装 4 个 chart(顺序敏感)
+
+**关键开关**:`istiod` 和 `istio-cni` 两个 chart 都必须带 `--set profile=ambient`,否则装的是传统 sidecar mesh。
+
+```bash
+# 1) istio-base:CRD + ClusterRoles(必须在 istiod 之前)
+helm install istio-base istio/base \
+  -n istio-system --create-namespace --wait
+
+# 2) istiod:控制面核心;profile=ambient 是核心开关
+helm install istiod istio/istiod \
+  -n istio-system \
+  --set profile=ambient \
+  --set hub=gcr.io/istio-release \
+  --set tag=1.30.2-solo-fips \
+  --wait
+
+# 3) istio-cni:接管 pod iptables;同样是 ambient 模式
+helm install istio-cni istio/cni \
+  -n istio-system \
+  --set profile=ambient \
+  --wait
+
+# 4) ztunnel:节点级 mTLS 网关(HBONE 15008);Ambient 独立 chart,无 profile 参数
+helm install ztunnel istio/ztunnel \
+  -n istio-system \
+  --wait
+```
+
+### 1A.3 你要的 4 条 helm 查询命令 — 验证及运维姿势
+
+```bash
+# 查看 release 部署状态(替代 kubectl get pods 之外,告诉你 release 健康度)
+helm status istio-base  -n istio-system
+helm status istiod      -n istio-system
+helm status istio-cni   -n istio-system
+helm status ztunnel     -n istio-system
+# 期望所有 4 条都显示 STATUS: deployed
+
+# 查 manifest 实际渲染结果(看 istiod 真的有 profile=ambient)
+helm get all istiod     -n istio-system | grep -A2 -E "profile|hub|tag"
+# 期望:看到 profile: ambient、hub: gcr.io/istio-release、tag: 1.30.2-solo-fips
+
+# 查看某条 chart 的部署历史(便于回滚)
+helm history istiod     -n istio-system
+helm history ztunnel    -n istio-system
+
+# 一条命令看全当前所有 istio-system 下的 release
+helm ls -n istio-system
+# NAME            NAMESPACE    REVISION   STATUS      CHART         APP VERSION
+# istio-base      istio-system 1          deployed    base-1.30.x
+# istio-cni       istio-system 1          deployed    cni-1.30.x
+# istiod          istio-system 1          deployed    istiod-1.30.x
+# ztunnel         istio-system 1          deployed    ztunnel-1.30.x
+```
+
+### 1A.4 (可选)Gateway 默认 chart
+
+```bash
+# Standard Ingress Gateway(传统 sidecar 形态,与 ambient 兼容,但非本探索路径)
+# 本探索用的是 ListenerSet 模式,实际并未依赖这张 chart
+helm install istio-ingress istio/gateway \
+  -n istio-ingress --create-namespace --wait
+```
+
+### 1A.5 Helm 路径的 Pod 实际形态验证
+
+```bash
+kubectl get pods -n istio-system
+# 期望:
+# NAME                             READY   STATUS    RESTARTS   AGE
+# istio-cni-node-xxxxx             1/1     Running   0          Xm
+# istiod-xxxxx                     1/1     Running   0          Xm
+# ztunnel-xxxxx                    1/1     Running   0          Xm
+
+# ⚠️ Helm 路径下你会看到 4 个 release 而 istioctl 路径下你看到的是
+# 一个 `istio-system` 整体 — 这是为什么 GKE 运维更喜欢 Helm:
+# 升级、回滚、排查全都按 release 粒度,Granular control
+```
+
+### 1A.6 命名空间 + Gateway + 业务资源 (Helm 路径下不变)
+
+§1.3 / §1.4 / §1.5 的 `kubectl apply -f ../yamls/*.yaml` 在 Helm 路径下**完全通用**——Helm 只管控制面,业务资源仍归 Kustomize / 手 apply。
+
+---
+
 ## 2. 控制面组件清单(Ambient 必有)
 
 | 资源 | Namespace | 谁管的 | 数量 | 关键作用 |
@@ -158,18 +266,35 @@ curl -k --resolve "$HOST:8443:127.0.0.1" "https://$HOST:8443/" -I
 
 ## 4. 卸载 (Lab tear-down)
 
-```bash
-# 1) 卸 istio 控制面
-/usr/local/bin/istioctl-solo uninstall --purge -y
+### 4.1 卸 istio 控制面 — istioctl 路径
 
-# 2) 删 lab 资源
+```bash
+/usr/local/bin/istioctl-solo uninstall --purge -y
+```
+
+### 4.2 卸 istio 控制面 — Helm 路径
+
+```bash
+# 顺序与安装相反(ztunnel / cni 先卸,因为它们被 istiod 创建的资源依赖)
+helm delete ztunnel   -n istio-system
+helm delete istio-cni -n istio-system
+helm delete istiod    -n istio-system
+helm delete istio-base -n istio-system
+
+# (可选)Ingress Gateway chart(如 §1A.4 装了)
+helm delete istio-ingress -n istio-ingress
+kubectl delete namespace istio-ingress
+```
+
+### 4.3 删 lab 业务资源 + 命名空间(两条路径通用)
+
+```bash
 kubectl delete -f ../yamls/05-peer-authentication.yaml
 kubectl delete -f ../yamls/04-service-deployment.yaml
 kubectl delete -f ../yamls/03-httproute.yaml
 kubectl delete -f ../yamls/02-gateway-agentgateway.yaml
 kubectl delete -f ../yamls/01-namespace-ambient-label.yaml
 
-# 3) 删 ns
 kubectl delete namespace istio-system tenant-runtime abjx-gw-int abjx-listenerset-int --ignore-not-found
 kubectl delete -n kube-system ds istio-cni-node --ignore-not-found
 ```
@@ -199,6 +324,8 @@ kubectl delete -n kube-system ds istio-cni-node --ignore-not-found
 | 断言 | 来源 |
 |---|---|
 | `istioctl install --set profile=ambient` 是官方安装姿势 | [Istio Ambient Install (istioctl)](https://istio.io/latest/docs/ambient/install/istioctl/) |
+| **`helm install istiod/istio-cni` 各加 `--set profile=ambient` + `helm install ztunnel`(独立 chart) 是官方 Helm 安装姿势** | [Istio Ambient Install (Helm)](https://istio.io/latest/docs/ambient/install/helm/) |
+| Helm 仓库 `https://istio-release.storage.googleapis.com/charts` 是 Istio 官方 chart 源(Solo 直接重用) | 同上 |
 | Gateway API v1.5.1 experimental-install.yaml 是 Ambient 安装的前置依赖 | [Istio Ambient Install](https://istio.io/latest/docs/ambient/install/) |
 | Namespace 标签 `istio.io/dataplane-mode=ambient` 是 Ambient 开启粒度 | [Istio Ambient — Add workloads to the mesh](https://istio.io/latest/docs/ambient/user-guides/add-workloads/) |
 | HBONE 协议运行在 TCP 15008 端口,ztunnel 提供节点级 mTLS | [Istio Ambient Architecture — HBONE](https://istio.io/latest/docs/ambient/architecture/hbone/) |

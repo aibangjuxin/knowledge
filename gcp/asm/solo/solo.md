@@ -6,6 +6,86 @@
 
 ---
 
+## 0a. 交付清单(本次实现做了什么)
+
+### A. 安装路径
+
+| 项 | 值 | 来源 |
+|---|---|---|
+| 集群底色 | **全新 GKE Lab 集群**,无任何残留 Istio | 你 7-17 的拍板:抛弃旧东西,从零跑通 |
+| Istio 发行版 | **Solo Distribution 1.30.2-solo-fips** (≈ upstream Istio 1.30.2 + Solo FIPS build) | 题目指定 |
+| 安装命令 | `istioctl install --set profile=ambient --set hub=gcr.io/istio-release --set tag=1.30.2-solo-fips -y` | Istio 官方权威:`https://istio.io/latest/docs/ambient/install/istioctl/` |
+| 前置 CRD | Gateway API v1.5.1 `experimental-install.yaml` | 同上 |
+| Ambient 开启粒度 | **Namespace 级** `istio.io/dataplane-mode=ambient`(平台 NS 显式 `=none` 防误连) | 你偏好的灰度姿势 |
+
+https://docs.solo.io/istio/1.30.x/ambient/about/images/overview/
+
+Both Solo’s standard and solo distributions of Istio come in the following optional varieties.
+
+- FIPS: An image that is tagged with fips complies with NIST FIPS, for use cases that require federal information processing capabilities. For more information, see About Solo FIPS distribution of Istio. Examples: 1.30.2-fips, 1.30.2-solo-fips
+- Distroless: An image that is tagged with distroless is a slimmed down distribution with the minimum set of binary dependencies to run the image, for enhanced performance and security. Note that if your app relies on package management, shell, or other operating system tools such as pip, apt, ls, grep, or bash, you must find another way to install these dependencies. Examples: 1.30.2-distroless, 1.30.2-solo-distroless
+  
+An image might be tagged to meet multiple use cases, such as 1.30.2-solo-fips-distroless.
+
+
+### B. 资源变化(对比 background.md 的 Sidecar 模式)
+
+| 维度 | Sidecar(`background.md`) | Ambient(本次实现) |
+|---|---|---|
+| **新增控制面组件** | — | `ztunnel` DaemonSet、`istio-cni-node` DaemonSet(ambient 模式)、`istiod` Deployment |
+| **新增节点端口** | 15090(envoy stats) | +**15008(HBONE)**、+15021(envoy admin) |
+| **Namespace 标签** | `istio-injection=enabled` | `istio.io/dataplane-mode=ambient`(平台 NS 显式 `=none`) |
+| **Pod 注入** | `istio-proxy` sidecar(每 Pod 一份) | **不注入**(容器单 layer) |
+| **Pod 应用层** | listen 443 + mount 通配证书 volumeMount + skip-verify | **listen 8080 HTTP**(完全无 TLS 代码) |
+| **DestinationRule** | 必加 (`trafficPolicy.tls.mode: ISTIO_MUTUAL` + outlierDetection) | **删除**(ztunnel 自动接管 mesh 内 mTLS,DR.tls 反而制造路由冲突) |
+| **PeerAuthentication** | 可选 | **新增**(推荐 STRICT) |
+| **TLS 跨 NS 复制 Secret** | 必需(租户 Pod 自己读证书) | **删除**(第二段加密在网络层) |
+| **HTTPRoute / ListenerSet / Gateway / wildcard TLS Secret** | ✅ | ✅ **完全不变** |
+| **下一个服务接入修改的 YAML 数** | 4 个 | **降到 3 个**(DR 消失) |
+
+### C. 架构红利(实现效果)
+
+1. **不再手动重新加密**:`trafficPolicy.tls` 消失,ztunnel 在节点级透明用 SPIFFE mTLS 接管 mesh 内流量
+2. **应用回归简单 HTTP**:无证书 mount、无 skip-verify、无 443 listener,`/etc/tls` 目录从镜像里删掉
+3. **跨 ns 零证书复制**:旧模式下 ListenerSet 上的 wildcard Secret 必须 `kubectl get -o json | jq | apply` 复制到租户 NS,Ambient 下完全不必要
+4. **下一服务接入成本下降**:从 4 个 YAML 降到 3 个(DR 永久消失);`background.md` 的接入流程可直接复用
+
+### D. 落盘产物清单
+
+```
+gcp/asm/solo/
+├── solo.md                       ← 本文档(主流程 + 资源变化 + 架构红利)
+├── solo-architecture.html        ← 深色主题 SVG 架构图(mmx architecture-design skill 风格)
+├── install/
+│   └── install.md                ← 全量安装 4 步 + 卸载 + 验证清单
+└── yamls/
+    ├── 00-istiooperator.yaml           ← IstioOperator ambient profile 控制面声明
+    ├── 01-namespace-ambient-label.yaml ← 三 ns + ambient/none 标签
+    ├── 02-gateway-agentgateway.yaml    ← Gateway + ListenerSet + wildcard TLS Secret
+    ├── 03-httproute.yaml               ← 租户 HTTPRoute(parentRef → ListenerSet)
+    ├── 04-service-deployment.yaml      ← Service + Deployment(裸 HTTP 无证书)
+    └── 05-peer-authentication.yaml     ← STRICT mTLS(ns 级)
+```
+
+### E. 已知踩坑(本次实现过程中已收录到 §5)
+
+- ⚠️ Platform NS 也打 ambient → Gateway 内部 Envoy 被 ztunnel 干扰 → 平台 NS 显式 `=none`
+- ⚠️ DR 残留 `trafficPolicy.tls` → 路由冲突 502 → **删除 DR**
+- ⚠️ Pod 已注 sidecar 后改 ns 标签无效 → `kubectl rollout restart` 让 webhook 重评
+- ⚠️ NetPol 默认 deny 阻断 HBONE 15008 / Envoy 15021 / 15090 → NetPol 必须放行
+- ⚠️ GKE Dataplane V2(eBPF)与 Istio CNI 冲突 → Lab 用 GKE Standard + Dataplane V1
+
+### F. 权威证据(完整链接见 §8)
+
+| 断言 | 来源 |
+|---|---|
+| Ambient 安装单一开关 `profile=ambient` + 必备 Gateway API CRD v1.5.1 | [Istio Ambient Install(istioctl)](https://istio.io/latest/docs/ambient/install/istioctl/) |
+| Namespace 标签 `istio.io/dataplane-mode=ambient` 是开启粒度 | [Istio Ambient — Add workloads to the mesh](https://istio.io/latest/docs/ambient/user-guides/add-workloads/) |
+| HBONE 协议运行在 TCP/15008,ztunnel 提供节点级 mTLS | [Istio Ambient Architecture — HBONE](https://istio.io/latest/docs/ambient/architecture/hbone/) |
+| Ambient 下 DR 的 `trafficPolicy.tls` 配置不再生效 | [Istio Ambient — Use Layer 4 security policy](https://istio.io/latest/docs/ambient/user-guides/waypoint/) |
+
+---
+
 ## 0. 一句话流程(Ambient 视角)
 
 **Client → 公网/内网入口 → Gateway (TLS 终结于 ListenerSet) → HTTPRoute → Service (HTTP `80`) → ztunnel 透明接管 mTLS → Pod (裸 HTTP `8080`)**
