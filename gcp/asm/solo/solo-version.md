@@ -13,3 +13,6 @@ https://docs.solo.io/istio/1.30.x/ambient/about/images/overview/
 
 ns ==> created istio-system
 CNI + ztunnel Ambient 
+
+确保每一条的资源数量都要有高可用 eg:
+Deployment number

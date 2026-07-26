@@ -14,8 +14,28 @@
 | Pod 数量 | gateway / ztunnel 各 ≥ 1 | Lab 集群最小 3 节点即可 |
 | Workload Identity | `true`(强烈建议) | `ztunnel` Pod 能正常拉取 GCR 镜像 |
 | Solo `istioctl` 二进制 | 1.30.2-solo-fips | `istioctl` version 必须显示 `1.30.2-solo-fips` |
+| **ListenerSet CRD** | **必须预装** | **Solo.io 私有扩展，不在标准 Gateway API 里**（详见 §0.1）|
 
 > ⚠️ 已知坑:GKE Dataplane V2 ≠ Istio CNI;Istio CNI 必须独立装,会跟 Cilium/Calico 共存(GKE Dataplane V2 即 eBPF 的实现)但会触发**双重 iptables 抓取**。建议 Lab 用 GKE Standard + Dataplane V1,或预先把 eBPF 关掉。
+
+---
+
+## 0.1 重要:ListenerSet 是 Solo 私有扩展 CRD
+
+> `ListenerSet` 是 Solo.io 在 Gateway API 之上的私有扩展资源,**不在** Kubernetes 官方 Gateway API 标准中,也不在 `experimental-install.yaml` 里。
+> 如果你只装了 Gateway API CRD 而不装 ListenerSet CRD,`kubectl apply -f 02-gateway-agentgateway.yaml` 会报 `no matches for kind "ListenerSet"`。
+
+**安装 ListenerSet CRD 的方式**（二选一）:
+
+```bash
+# 方式 A: Solo 官方 experimental CRD 包（推荐，包含 ListenerSet + 其他扩展）
+kubectl apply --server-side -f https://github.com/solo-io/gateway-experimental/releases/download/v1.30.2-solo-fips/experimental-install.yaml
+
+# 方式 B: Solo GEP(Gateway Ecosystem Project) 独立 CRD
+kubectl apply --server-side -f https://github.com/solo-io/gateway-experimental/releases/download/v1.30.2-solo-fips/listenerset-only.yaml
+```
+
+> ⚠️ **Solo GEP 版本的版本号与 Istio 版本绑定**:本文用 `1.30.2-solo-fips`;如果你升级 Istio 版本,记得同步升级 GEP CRD 版本。
 
 ---
 
@@ -29,12 +49,20 @@ curl -L https://github.com/solo-io/solo-distro/releases/download/1.30.2-solo-fip
   -o /tmp/solo.tar.gz
 tar -xzf /tmp/solo.tar.gz -C /tmp/
 sudo mv /tmp/istioctl /usr/local/bin/istioctl-solo
-# 或直接 alias:`istioctl-solo --version` 应该打印 1.30.2-solo-fips
+# 验证:istioctl-solo --version 应该打印 1.30.2-solo-fips
 
-# 装 Gateway API CRD(v1.5.1,Ambient 必需)
+# 安装 Gateway API CRD(最低 v1.0.0,建议用最新版)
+# ⚠️ 注意:标准 experimental-install.yaml 不包含 ListenerSet
+#        ListenerSet CRD 需要额外装,见 §0.1
+GATEWAY_API_VERSION="v1.6.1"   # 更新版本时请同步改这里
 kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null || \
   kubectl apply --server-side \
-    -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
+    -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/experimental-install.yaml"
+
+# 安装 Solo GEP ListenerSet CRD（Ambient + ListenerSet 链路必须）
+GEP_VERSION="1.30.2-solo-fips"
+kubectl apply --server-side \
+  -f "https://github.com/solo-io/gateway-experimental/releases/download/${GEP_VERSION}/experimental-install.yaml"
 ```
 
 ### 1.2 应用 Ambient 控制面
@@ -106,10 +134,16 @@ helm repo update
 # 验证 chart 版本(应该能看到 base / istiod / cni / ztunnel / gateway)
 helm search repo istio
 
-# Gateway API CRD(同 §1.1,Helm 路径也需要)
+# Gateway API CRD（同 §1.1，同样需要 Solo GEP 的 ListenerSet CRD）
+GATEWAY_API_VERSION="v1.6.1"
 kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null || \
   kubectl apply --server-side \
-    -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
+    -f "https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/experimental-install.yaml"
+
+# ⚠️ ListenerSet CRD 是 Solo 私有扩展，必须额外装（详见 §0.1）
+GEP_VERSION="1.30.2-solo-fips"
+kubectl apply --server-side \
+  -f "https://github.com/solo-io/gateway-experimental/releases/download/${GEP_VERSION}/experimental-install.yaml"
 ```
 
 ### 1A.2 装 4 个 chart(顺序敏感)
@@ -202,9 +236,9 @@ kubectl get pods -n istio-system
 
 | 资源 | Namespace | 谁管的 | 数量 | 关键作用 |
 |---|---|---|---|---|
-| `ztunnel` DaemonSet | `istio-system` (默认) / 实际可能 `ztunnel-system` | 安装 | 每节点 1 份 | HBONE 抓包,节点级 mTLS 加密(SPIFFE) |
-| `istio-cni-node` DaemonSet | `kube-system` | 安装 | 每节点 1 份 | 接管 pod 的 iptables 流量,ambient 模式只创建初始 redirect |
-| `istiod` Deployment | `istio-system` | 安装 | 单实例/HPA | xDS 配置中心,证书签发 |
+| `ztunnel` DaemonSet | `istio-system` (默认) | 安装器(istioctl/Helm) | 每节点 1 份 | HBONE 抓包,节点级 mTLS 加密(SPIFFE) |
+| `istio-cni-node` DaemonSet | `kube-system` | 安装器(istioctl/Helm) | 每节点 1 份 | 接管 pod 的 iptables 流量,ambient 模式只创建初始 redirect |
+| `istiod` Deployment | `istio-system` | 安装器(istioctl/Helm) | 单实例/HPA | xDS 配置中心,证书签发 |
 | AgentGateway(本探索选) | `abjx-gw-int` | 平台 | 受 listener 控制 | L7 TLS 终结 / 流量分发(传统 sidecar 形态) |
 
 > 后文 `solo-architecture.html` 给了一张完整组件图。
@@ -269,6 +303,7 @@ curl -k --resolve "$HOST:8443:127.0.0.1" "https://$HOST:8443/" -I
 ### 4.1 卸 istio 控制面 — istioctl 路径
 
 ```bash
+# ⚠️ 用 istioctl-solo（Solo 定制版），不是原生 istioctl
 /usr/local/bin/istioctl-solo uninstall --purge -y
 ```
 
@@ -326,8 +361,9 @@ kubectl delete -n kube-system ds istio-cni-node --ignore-not-found
 | `istioctl install --set profile=ambient` 是官方安装姿势 | [Istio Ambient Install (istioctl)](https://istio.io/latest/docs/ambient/install/istioctl/) |
 | **`helm install istiod/istio-cni` 各加 `--set profile=ambient` + `helm install ztunnel`(独立 chart) 是官方 Helm 安装姿势** | [Istio Ambient Install (Helm)](https://istio.io/latest/docs/ambient/install/helm/) |
 | Helm 仓库 `https://istio-release.storage.googleapis.com/charts` 是 Istio 官方 chart 源(Solo 直接重用) | 同上 |
-| Gateway API v1.5.1 experimental-install.yaml 是 Ambient 安装的前置依赖 | [Istio Ambient Install](https://istio.io/latest/docs/ambient/install/) |
+| Gateway API v1.5.1+ experimental-install.yaml 是 Ambient 安装的前置依赖 | [Istio Ambient Install](https://istio.io/latest/docs/ambient/install/) |
 | Namespace 标签 `istio.io/dataplane-mode=ambient` 是 Ambient 开启粒度 | [Istio Ambient — Add workloads to the mesh](https://istio.io/latest/docs/ambient/user-guides/add-workloads/) |
 | HBONE 协议运行在 TCP 15008 端口,ztunnel 提供节点级 mTLS | [Istio Ambient Architecture — HBONE](https://istio.io/latest/docs/ambient/architecture/hbone/) |
 | Ambient 下 DestinationRule 的 `trafficPolicy.tls` 配置不再生效(由 ztunnel 取代) | [Istio Ambient — Use Layer 4 security policy](https://istio.io/latest/docs/ambient/user-guides/waypoint/) |
 | Solo.io Distribution 是 upstream Istio 的加固镜像,版本号独立编号(`x.y.z-solo-fips`) | Solo.io 官方 distrib 页(solo.io/distro) |
+| ListenerSet 是 Solo.io GEP(Gateway Ecosystem Project)私有扩展 CRD,不在标准 Kubernetes Gateway API 中 | [solo-io/gateway-experimental](https://github.com/solo-io/gateway-experimental) |
