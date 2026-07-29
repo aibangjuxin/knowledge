@@ -10,50 +10,32 @@ An image might be tagged to meet multiple use cases, such as 1.30.2-solo-fips-di
 
 https://docs.solo.io/istio/1.30.x/ambient/about/images/overview/
 
+maybe todo:
+- ns ==> created istio-system
+- CNI + ztunnel Ambient 
 
-ns ==> created istio-system
-CNI + ztunnel Ambient 
 
 确保每一条的资源数量都要有高可用 eg:
 Deployment number
 
-kind:目的地规则→
-DestinationRule仅受支持
-gateway类名：istio
-因为我们将开始使用环境网格
-代理（入口）将被替换为
-我们必须开始使用Solo agw
-种类：后端TLSPolicy
-如果我们想继续，请从Gateway APl
-使用TLS公开租户工作负载
--首先，我们不应该永远
-使用“insecureSkipVerify：true”作为此项
-是不安全的
--第二：我们正在使用一些虚拟工具
-用户证书，例如“CN=*.dev-sprintboot-rt.aliyun.cloud.us.local”，这也不是
-真的很安全
-所以在这种情况下，这会阻碍我们
-从使用网格开始
-后端TLSPolicy需要适当的
-安全的TLS设置才能正常工作。
+```
+kind: 目的地规则 
+DestinationRule仅受支持 gateway类名：istio
+
+因为我们将开始使用环境网格 代理（入口）将被替换为 我们必须开始使用Solo agw
+
+种类：后端TLSPolicy 如果我们想继续，请从Gateway APl使用TLS公开租户工作负载
+
+- 首先，我们不应该永远使用“insecureSkipVerify：true”作为此项 是不安全的
+
+- 第二：我们正在使用一些虚拟用户证书，例如“CN=*.dev-sprintboot-rt.aliyun.cloud.us.local”，这也不是真的很安全그래서这种情况下，这会阻碍我们 从使用网格 开始后端TLSPolicy需要适当的安全的TLS设置才能正常工作。
+
 可能的解决方案：
--为什么我们甚至需要暴露租户
-使用TLS的应用程序？这看起来像
- old env's some legacy
-在网格中，mTLS由ztunnel保证
-（环境模式）或侧车（侧车
-模式），因此在mTLS中执行TLS是
-不必要的，可能已经
-性能影响，解决方案将是
-让租户暴露自己
-纯HTTP，让mesh来处理
-工作负载之间的mTLS
--使用一些证书管理器来创建
-具有正确FQDN的证书
-需求，但这似乎是多余的
-如果加密已经由mesh完成
-并且不会提供任何额外的
-价值
+
+- 为什么我们甚至需要暴露租户使用TLS的应用程序？这看起来像 old env's some legacy
+- 在网格中，mTLS由ztunnel保证（环境模式）或侧车（侧车模式），因此在mTLS中执行TLS是 不必要的，可能已经性能影响，解决方案将是让租户暴露自己 纯HTTP，让mesh来处理工作负载之间的mTLS
+- 使用一些证书管理器来创建具有正确FQDN的证书需求，但这似乎是多余的如果加密已经由mesh完成 并且不会提供任何额外的价值
+```
 
 kind: DestinationRule → DestinationRule is supported only by
 gatewayClassName: istio，
