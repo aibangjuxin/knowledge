@@ -55,15 +55,18 @@ gateway类名：istio
 并且不会提供任何额外的
 价值
 
-kind: DestinationRule →
-DestinationRule is supported only by
-gatewayClassName:istio，
+kind: DestinationRule → DestinationRule is supported only by
+gatewayClassName: istio，
+
 Since we willl start using ambient mesh
 and proxy （ingress） will be replaced by
 Solo agw we will have to start using
+
 kind: BackendTLSPolicy
 from Gateway APl if we want to continue
 expose tenants workloads with TLS
+
+
 - first of all, we shouldn't permanently
 use "insecureSkipVerify: true" as this
 is insecure
