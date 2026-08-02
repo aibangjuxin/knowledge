@@ -1,461 +1,7 @@
 # Shell Scripts Collection
 
-Generated on: 2025-11-10 11:35:40
+Generated on: 2026-08-02 11:48:38
 Directory: /Users/lex/git/knowledge/safe/gcp-safe
-
-## `debug-test.sh`
-
-```bash
-#!/bin/bash
-
-################################################################################
-# KMS 验证脚本调试工具
-# 用于快速诊断环境问题
-################################################################################
-
-set -euo pipefail
-
-echo "=========================================="
-echo "KMS 验证脚本环境诊断"
-echo "=========================================="
-echo ""
-
-# 1. 检查 Shell 环境
-echo "1. Shell 环境:"
-echo "   Shell: $SHELL"
-echo "   Bash 版本: $BASH_VERSION"
-echo ""
-
-# 2. 检查必需命令
-echo "2. 检查必需命令:"
-if command -v gcloud &> /dev/null; then
-    echo "   ✓ gcloud: $(command -v gcloud)"
-    gcloud_version=$(gcloud version --format="value(core)" 2>&1 || echo "无法获取版本")
-    echo "     版本: $gcloud_version"
-else
-    echo "   ✗ gcloud: 未找到"
-fi
-
-if command -v jq &> /dev/null; then
-    echo "   ✓ jq: $(command -v jq)"
-    jq_version=$(jq --version 2>&1 || echo "无法获取版本")
-    echo "     版本: $jq_version"
-else
-    echo "   ✗ jq: 未找到"
-fi
-echo ""
-
-# 3. 检查 gcloud 认证
-echo "3. 检查 gcloud 认证:"
-if command -v gcloud &> /dev/null; then
-    echo "   尝试获取活动账号..."
-    
-    # 方法 1: 使用 filter
-    auth_account1=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>&1 || echo "ERROR")
-    echo "   方法1 (filter): $auth_account1"
-    
-    # 方法 2: 不使用 filter
-    auth_account2=$(gcloud auth list --format="value(account)" 2>&1 | head -1 || echo "ERROR")
-    echo "   方法2 (no filter): $auth_account2"
-    
-    # 方法 3: 使用 config
-    auth_account3=$(gcloud config get-value account 2>&1 || echo "ERROR")
-    echo "   方法3 (config): $auth_account3"
-    
-    # 显示完整的认证列表
-    echo ""
-    echo "   完整认证列表:"
-    gcloud auth list 2>&1 | sed 's/^/     /'
-else
-    echo "   跳过 (gcloud 未安装)"
-fi
-echo ""
-
-# 4. 检查临时目录权限
-echo "4. 检查临时目录:"
-TEMP_TEST_DIR="/tmp/kms-validator-test-$$"
-if mkdir -p "$TEMP_TEST_DIR" 2>&1; then
-    echo "   ✓ 可以创建临时目录: $TEMP_TEST_DIR"
-    if echo "test" > "$TEMP_TEST_DIR/test.txt" 2>&1; then
-        echo "   ✓ 可以写入文件"
-    else
-        echo "   ✗ 无法写入文件"
-    fi
-    rm -rf "$TEMP_TEST_DIR"
-else
-    echo "   ✗ 无法创建临时目录"
-fi
-echo ""
-
-# 5. 测试 set -euo pipefail 行为
-echo "5. 测试错误处理:"
-test_function() {
-    local result
-    result=$(false 2>&1 || true)
-    echo "   ✓ 使用 '|| true' 可以捕获错误"
-}
-test_function
-echo ""
-
-# 6. 测试 jq 解析
-echo "6. 测试 jq 解析:"
-if command -v jq &> /dev/null; then
-    test_json='{"test": "value", "number": 123}'
-    parsed=$(echo "$test_json" | jq -r '.test' 2>&1 || echo "ERROR")
-    if [[ "$parsed" == "value" ]]; then
-        echo "   ✓ jq 解析正常"
-    else
-        echo "   ✗ jq 解析失败: $parsed"
-    fi
-else
-    echo "   跳过 (jq 未安装)"
-fi
-echo ""
-
-echo "=========================================="
-echo "诊断完成"
-echo "=========================================="
-echo ""
-echo "如果所有检查都通过，请尝试运行:"
-echo "  ./verify-kms-enhanced.sh --verbose [其他参数]"
-echo ""
-echo "如果仍有问题，请提供以上输出信息"
-
-```
-
-## `quick-test.sh`
-
-```bash
-#!/bin/bash
-
-################################################################################
-# 快速测试脚本 - 验证修复是否生效
-################################################################################
-
-echo "=========================================="
-echo "快速测试：验证计数器修复"
-echo "=========================================="
-echo ""
-
-# 模拟脚本的 set -euo pipefail 环境
-set -euo pipefail
-
-echo "1. 测试变量初始化"
-TOTAL_CHECKS=0
-PASSED_CHECKS=0
-FAILED_CHECKS=0
-WARNING_CHECKS=0
-echo "   ✓ 变量初始化成功"
-echo ""
-
-echo "2. 测试计数器递增（新方式）"
-TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
-echo "   TOTAL_CHECKS = $TOTAL_CHECKS"
-
-PASSED_CHECKS=$((PASSED_CHECKS + 1))
-echo "   PASSED_CHECKS = $PASSED_CHECKS"
-
-WARNING_CHECKS=$((WARNING_CHECKS + 1))
-echo "   WARNING_CHECKS = $WARNING_CHECKS"
-
-FAILED_CHECKS=$((FAILED_CHECKS + 1))
-echo "   FAILED_CHECKS = $FAILED_CHECKS"
-echo "   ✓ 所有计数器递增成功"
-echo ""
-
-echo "3. 测试多次递增"
-for i in {1..5}; do
-    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
-done
-echo "   TOTAL_CHECKS 经过 5 次递增 = $TOTAL_CHECKS"
-echo "   ✓ 循环递增成功"
-echo ""
-
-echo "4. 测试在函数中使用"
-test_function() {
-    local local_counter=0
-    local_counter=$((local_counter + 1))
-    echo "   函数内计数器 = $local_counter"
-}
-test_function
-echo "   ✓ 函数内递增成功"
-echo ""
-
-echo "5. 模拟实际使用场景"
-simulate_check() {
-    local check_name="$1"
-    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
-    
-    if [[ "$check_name" == "success" ]]; then
-        PASSED_CHECKS=$((PASSED_CHECKS + 1))
-        echo "   [✓] $check_name 检查"
-    elif [[ "$check_name" == "warning" ]]; then
-        WARNING_CHECKS=$((WARNING_CHECKS + 1))
-        echo "   [⚠] $check_name 检查"
-    else
-        FAILED_CHECKS=$((FAILED_CHECKS + 1))
-        echo "   [✗] $check_name 检查"
-    fi
-}
-
-simulate_check "success"
-simulate_check "warning"
-simulate_check "success"
-
-echo ""
-echo "   最终统计:"
-echo "   - 总检查: $TOTAL_CHECKS"
-echo "   - 通过: $PASSED_CHECKS"
-echo "   - 警告: $WARNING_CHECKS"
-echo "   - 失败: $FAILED_CHECKS"
-echo "   ✓ 实际场景模拟成功"
-echo ""
-
-echo "=========================================="
-echo "✅ 所有测试通过！"
-echo "=========================================="
-echo ""
-echo "修复已生效，脚本不会因为计数器递增而退出。"
-echo "现在可以安全地运行主脚本了。"
-
-```
-
-## `test-arithmetic.sh`
-
-```bash
-#!/bin/bash
-
-echo "测试 Bash 算术运算在 set -euo pipefail 下的行为"
-echo "================================================"
-echo ""
-
-# 测试 1: 不使用 set -e
-echo "测试 1: 正常模式"
-COUNTER=0
-((COUNTER++))
-echo "COUNTER = $COUNTER (成功)"
-echo ""
-
-# 测试 2: 使用 set -e
-echo "测试 2: set -e 模式"
-(
-    set -e
-    COUNTER=0
-    ((COUNTER++)) || true  # 需要 || true 来避免退出
-    echo "COUNTER = $COUNTER (成功)"
-)
-echo ""
-
-# 测试 3: 演示问题
-echo "测试 3: 演示 ((COUNTER++)) 的退出码"
-COUNTER=0
-((COUNTER++))
-echo "退出码: $?"
-echo "COUNTER = $COUNTER"
-echo ""
-
-# 测试 4: 当值为 0 时
-echo "测试 4: 当值为 0 时的退出码"
-COUNTER=0
-if ((COUNTER)); then
-    echo "COUNTER 为真"
-else
-    echo "COUNTER 为假 (退出码: $?)"
-fi
-echo ""
-
-# 测试 5: 安全的递增方式
-echo "测试 5: 安全的递增方式"
-set -euo pipefail
-COUNTER=0
-
-# 方式 1: 使用 let
-let COUNTER++ || true
-echo "方式 1 (let): COUNTER = $COUNTER"
-
-# 方式 2: 使用算术展开
-COUNTER=$((COUNTER + 1))
-echo "方式 2 (算术展开): COUNTER = $COUNTER"
-
-# 方式 3: 使用 (()) 但加 || true
-((COUNTER++)) || true
-echo "方式 3 ((++)) || true: COUNTER = $COUNTER"
-
-# 方式 4: 最安全的方式
-: $((COUNTER++))
-echo "方式 4 (: $((++))): COUNTER = $COUNTER"
-
-echo ""
-echo "结论: 在 set -e 模式下，((COUNTER++)) 可能导致脚本退出！"
-echo "推荐使用: COUNTER=\$((COUNTER + 1)) 或 : \$((COUNTER++))"
-
-```
-
-## `test-permissions.sh`
-
-```bash
-#!/bin/bash
-
-################################################################################
-# KMS 权限测试脚本
-# 用于测试 describe vs list 命令的权限要求
-################################################################################
-
-set -euo pipefail
-
-echo "=========================================="
-echo "KMS 权限测试：describe vs list"
-echo "=========================================="
-echo ""
-
-# 检查参数
-if [[ $# -lt 4 ]]; then
-    echo "使用方法: $0 KMS_PROJECT LOCATION KEYRING CRYPTO_KEY"
-    echo ""
-    echo "示例:"
-    echo "  $0 my-kms-project global my-keyring my-key"
-    exit 1
-fi
-
-KMS_PROJECT="$1"
-LOCATION="$2"
-KEYRING="$3"
-CRYPTO_KEY="$4"
-
-echo "测试配置:"
-echo "  KMS 项目: $KMS_PROJECT"
-echo "  位置: $LOCATION"
-echo "  Keyring: $KEYRING"
-echo "  CryptoKey: $CRYPTO_KEY"
-echo ""
-
-# ============================================================================
-# 测试 Keyring 访问
-# ============================================================================
-echo "1. 测试 Keyring 访问方法"
-echo "----------------------------------------"
-
-# 方法 1: describe (需要 cloudkms.keyRings.get 权限)
-echo "方法 1: gcloud kms keyrings describe"
-if gcloud kms keyrings describe "$KEYRING" \
-    --project="$KMS_PROJECT" \
-    --location="$LOCATION" \
-    --format=json &> /dev/null; then
-    echo "  ✓ describe 成功 (有 cloudkms.keyRings.get 权限)"
-else
-    echo "  ✗ describe 失败 (缺少 cloudkms.keyRings.get 权限)"
-fi
-echo ""
-
-# 方法 2: list (需要 cloudkms.keyRings.list 权限)
-echo "方法 2: gcloud kms keyrings list"
-keyring_list=$(gcloud kms keyrings list \
-    --project="$KMS_PROJECT" \
-    --location="$LOCATION" \
-    --filter="name:$KEYRING" \
-    --format=json 2>&1 || echo "[]")
-
-keyring_count=$(echo "$keyring_list" | jq '. | length' 2>/dev/null || echo "0")
-
-if [[ "$keyring_count" -gt 0 ]]; then
-    echo "  ✓ list 成功 (有 cloudkms.keyRings.list 权限)"
-    echo "  找到 Keyring: $(echo "$keyring_list" | jq -r '.[0].name')"
-else
-    echo "  ✗ list 失败或未找到 (缺少 cloudkms.keyRings.list 权限或 Keyring 不存在)"
-fi
-echo ""
-
-# ============================================================================
-# 测试 CryptoKey 访问
-# ============================================================================
-echo "2. 测试 CryptoKey 访问方法"
-echo "----------------------------------------"
-
-# 方法 1: describe (需要 cloudkms.cryptoKeys.get 权限)
-echo "方法 1: gcloud kms keys describe"
-if key_info=$(gcloud kms keys describe "$CRYPTO_KEY" \
-    --project="$KMS_PROJECT" \
-    --keyring="$KEYRING" \
-    --location="$LOCATION" \
-    --format=json 2>&1); then
-    echo "  ✓ describe 成功 (有 cloudkms.cryptoKeys.get 权限)"
-    key_purpose=$(echo "$key_info" | jq -r '.purpose // "unknown"')
-    key_state=$(echo "$key_info" | jq -r '.primary.state // "unknown"')
-    echo "  密钥用途: $key_purpose"
-    echo "  密钥状态: $key_state"
-else
-    echo "  ✗ describe 失败 (缺少 cloudkms.cryptoKeys.get 权限)"
-fi
-echo ""
-
-# 方法 2: list (需要 cloudkms.cryptoKeys.list 权限)
-echo "方法 2: gcloud kms keys list"
-key_list=$(gcloud kms keys list \
-    --project="$KMS_PROJECT" \
-    --keyring="$KEYRING" \
-    --location="$LOCATION" \
-    --filter="name:$CRYPTO_KEY" \
-    --format=json 2>&1 || echo "[]")
-
-key_count=$(echo "$key_list" | jq '. | length' 2>/dev/null || echo "0")
-
-if [[ "$key_count" -gt 0 ]]; then
-    echo "  ✓ list 成功 (有 cloudkms.cryptoKeys.list 权限)"
-    echo "  找到 CryptoKey: $(echo "$key_list" | jq -r '.[0].name')"
-    key_purpose=$(echo "$key_list" | jq -r '.[0].purpose // "unknown"')
-    key_state=$(echo "$key_list" | jq -r '.[0].primary.state // "unknown"')
-    echo "  密钥用途: $key_purpose"
-    echo "  密钥状态: $key_state"
-else
-    echo "  ✗ list 失败或未找到 (缺少 cloudkms.cryptoKeys.list 权限或 Key 不存在)"
-fi
-echo ""
-
-# ============================================================================
-# 测试 IAM 策略访问
-# ============================================================================
-echo "3. 测试 IAM 策略访问"
-echo "----------------------------------------"
-
-echo "gcloud kms keys get-iam-policy"
-if iam_policy=$(gcloud kms keys get-iam-policy "$CRYPTO_KEY" \
-    --project="$KMS_PROJECT" \
-    --keyring="$KEYRING" \
-    --location="$LOCATION" \
-    --format=json 2>&1); then
-    echo "  ✓ get-iam-policy 成功 (有 cloudkms.cryptoKeys.getIamPolicy 权限)"
-    bindings_count=$(echo "$iam_policy" | jq '.bindings | length // 0')
-    echo "  IAM 绑定数量: $bindings_count"
-else
-    echo "  ✗ get-iam-policy 失败 (缺少 cloudkms.cryptoKeys.getIamPolicy 权限)"
-fi
-echo ""
-
-# ============================================================================
-# 总结
-# ============================================================================
-echo "=========================================="
-echo "总结"
-echo "=========================================="
-echo ""
-echo "权限对比:"
-echo ""
-echo "describe 方法需要的权限:"
-echo "  - cloudkms.keyRings.get"
-echo "  - cloudkms.cryptoKeys.get"
-echo ""
-echo "list 方法需要的权限:"
-echo "  - cloudkms.keyRings.list"
-echo "  - cloudkms.cryptoKeys.list"
-echo ""
-echo "建议:"
-echo "  - 如果只有 list 权限，使用 list 方法（脚本已优化）"
-echo "  - 如果有 get 权限，describe 方法可以获取更详细的信息"
-echo "  - list 方法更适合最小权限原则"
-echo ""
-echo "当前脚本使用: list 方法 (v2.0.1+)"
-
-```
 
 ## `verify-kms-enhanced.sh`
 
@@ -538,12 +84,21 @@ cleanup_temp_dir() {
 }
 
 # 记录检查结果
+# 用 jq -n 构造 JSON 对象,避免 message/detail 含双引号时把 JSON 行打坏
 record_check() {
     local status="$1"
     local message="$2"
     local detail="${3:-}"
-    
-    CHECK_RESULTS+=("{\"status\":\"$status\",\"message\":\"$message\",\"detail\":\"$detail\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}")
+
+    local entry
+    entry=$(jq -n \
+        --arg status "$status" \
+        --arg message "$message" \
+        --arg detail "$detail" \
+        --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        '{status: $status, message: $message, detail: $detail, timestamp: $timestamp}')
+
+    CHECK_RESULTS+=("$entry")
 }
 
 # 打印信息
@@ -920,11 +475,12 @@ check_service_account_permissions() {
         local has_encrypt=false
         local has_decrypt=false
         
-        if echo "$encrypters" | grep -qF "$sa"; then
+        # -xF = 整行精确匹配:避免短 SA 名误中长 SA 的子串(grep -qF 默认子串匹配)
+        if echo "$encrypters" | grep -qxF "$sa"; then
             has_encrypt=true
         fi
-        
-        if echo "$decrypters" | grep -qF "$sa"; then
+
+        if echo "$decrypters" | grep -qxF "$sa"; then
             has_decrypt=true
         fi
         
@@ -1324,6 +880,460 @@ EOF
 
 # 执行主函数
 main "$@"
+
+```
+
+## `test-permissions.sh`
+
+```bash
+#!/bin/bash
+
+################################################################################
+# KMS 权限测试脚本
+# 用于测试 describe vs list 命令的权限要求
+################################################################################
+
+set -euo pipefail
+
+echo "=========================================="
+echo "KMS 权限测试：describe vs list"
+echo "=========================================="
+echo ""
+
+# 检查参数
+if [[ $# -lt 4 ]]; then
+    echo "使用方法: $0 KMS_PROJECT LOCATION KEYRING CRYPTO_KEY"
+    echo ""
+    echo "示例:"
+    echo "  $0 my-kms-project global my-keyring my-key"
+    exit 1
+fi
+
+KMS_PROJECT="$1"
+LOCATION="$2"
+KEYRING="$3"
+CRYPTO_KEY="$4"
+
+echo "测试配置:"
+echo "  KMS 项目: $KMS_PROJECT"
+echo "  位置: $LOCATION"
+echo "  Keyring: $KEYRING"
+echo "  CryptoKey: $CRYPTO_KEY"
+echo ""
+
+# ============================================================================
+# 测试 Keyring 访问
+# ============================================================================
+echo "1. 测试 Keyring 访问方法"
+echo "----------------------------------------"
+
+# 方法 1: describe (需要 cloudkms.keyRings.get 权限)
+echo "方法 1: gcloud kms keyrings describe"
+if gcloud kms keyrings describe "$KEYRING" \
+    --project="$KMS_PROJECT" \
+    --location="$LOCATION" \
+    --format=json &> /dev/null; then
+    echo "  ✓ describe 成功 (有 cloudkms.keyRings.get 权限)"
+else
+    echo "  ✗ describe 失败 (缺少 cloudkms.keyRings.get 权限)"
+fi
+echo ""
+
+# 方法 2: list (需要 cloudkms.keyRings.list 权限)
+echo "方法 2: gcloud kms keyrings list"
+keyring_list=$(gcloud kms keyrings list \
+    --project="$KMS_PROJECT" \
+    --location="$LOCATION" \
+    --filter="name:$KEYRING" \
+    --format=json 2>&1 || echo "[]")
+
+keyring_count=$(echo "$keyring_list" | jq '. | length' 2>/dev/null || echo "0")
+
+if [[ "$keyring_count" -gt 0 ]]; then
+    echo "  ✓ list 成功 (有 cloudkms.keyRings.list 权限)"
+    echo "  找到 Keyring: $(echo "$keyring_list" | jq -r '.[0].name')"
+else
+    echo "  ✗ list 失败或未找到 (缺少 cloudkms.keyRings.list 权限或 Keyring 不存在)"
+fi
+echo ""
+
+# ============================================================================
+# 测试 CryptoKey 访问
+# ============================================================================
+echo "2. 测试 CryptoKey 访问方法"
+echo "----------------------------------------"
+
+# 方法 1: describe (需要 cloudkms.cryptoKeys.get 权限)
+echo "方法 1: gcloud kms keys describe"
+if key_info=$(gcloud kms keys describe "$CRYPTO_KEY" \
+    --project="$KMS_PROJECT" \
+    --keyring="$KEYRING" \
+    --location="$LOCATION" \
+    --format=json 2>&1); then
+    echo "  ✓ describe 成功 (有 cloudkms.cryptoKeys.get 权限)"
+    key_purpose=$(echo "$key_info" | jq -r '.purpose // "unknown"')
+    key_state=$(echo "$key_info" | jq -r '.primary.state // "unknown"')
+    echo "  密钥用途: $key_purpose"
+    echo "  密钥状态: $key_state"
+else
+    echo "  ✗ describe 失败 (缺少 cloudkms.cryptoKeys.get 权限)"
+fi
+echo ""
+
+# 方法 2: list (需要 cloudkms.cryptoKeys.list 权限)
+echo "方法 2: gcloud kms keys list"
+key_list=$(gcloud kms keys list \
+    --project="$KMS_PROJECT" \
+    --keyring="$KEYRING" \
+    --location="$LOCATION" \
+    --filter="name:$CRYPTO_KEY" \
+    --format=json 2>&1 || echo "[]")
+
+key_count=$(echo "$key_list" | jq '. | length' 2>/dev/null || echo "0")
+
+if [[ "$key_count" -gt 0 ]]; then
+    echo "  ✓ list 成功 (有 cloudkms.cryptoKeys.list 权限)"
+    echo "  找到 CryptoKey: $(echo "$key_list" | jq -r '.[0].name')"
+    key_purpose=$(echo "$key_list" | jq -r '.[0].purpose // "unknown"')
+    key_state=$(echo "$key_list" | jq -r '.[0].primary.state // "unknown"')
+    echo "  密钥用途: $key_purpose"
+    echo "  密钥状态: $key_state"
+else
+    echo "  ✗ list 失败或未找到 (缺少 cloudkms.cryptoKeys.list 权限或 Key 不存在)"
+fi
+echo ""
+
+# ============================================================================
+# 测试 IAM 策略访问
+# ============================================================================
+echo "3. 测试 IAM 策略访问"
+echo "----------------------------------------"
+
+echo "gcloud kms keys get-iam-policy"
+if iam_policy=$(gcloud kms keys get-iam-policy "$CRYPTO_KEY" \
+    --project="$KMS_PROJECT" \
+    --keyring="$KEYRING" \
+    --location="$LOCATION" \
+    --format=json 2>&1); then
+    echo "  ✓ get-iam-policy 成功 (有 cloudkms.cryptoKeys.getIamPolicy 权限)"
+    bindings_count=$(echo "$iam_policy" | jq '.bindings | length // 0')
+    echo "  IAM 绑定数量: $bindings_count"
+else
+    echo "  ✗ get-iam-policy 失败 (缺少 cloudkms.cryptoKeys.getIamPolicy 权限)"
+fi
+echo ""
+
+# ============================================================================
+# 总结
+# ============================================================================
+echo "=========================================="
+echo "总结"
+echo "=========================================="
+echo ""
+echo "权限对比:"
+echo ""
+echo "describe 方法需要的权限:"
+echo "  - cloudkms.keyRings.get"
+echo "  - cloudkms.cryptoKeys.get"
+echo ""
+echo "list 方法需要的权限:"
+echo "  - cloudkms.keyRings.list"
+echo "  - cloudkms.cryptoKeys.list"
+echo ""
+echo "建议:"
+echo "  - 如果只有 list 权限，使用 list 方法（脚本已优化）"
+echo "  - 如果有 get 权限，describe 方法可以获取更详细的信息"
+echo "  - list 方法更适合最小权限原则"
+echo ""
+echo "当前脚本使用: list 方法 (v2.0.1+)"
+
+```
+
+## `test-arithmetic.sh`
+
+```bash
+#!/bin/bash
+
+echo "测试 Bash 算术运算在 set -euo pipefail 下的行为"
+echo "================================================"
+echo ""
+
+# 测试 1: 不使用 set -e
+echo "测试 1: 正常模式"
+COUNTER=0
+((COUNTER++))
+echo "COUNTER = $COUNTER (成功)"
+echo ""
+
+# 测试 2: 使用 set -e
+echo "测试 2: set -e 模式"
+(
+    set -e
+    COUNTER=0
+    ((COUNTER++)) || true  # 需要 || true 来避免退出
+    echo "COUNTER = $COUNTER (成功)"
+)
+echo ""
+
+# 测试 3: 演示问题
+echo "测试 3: 演示 ((COUNTER++)) 的退出码"
+COUNTER=0
+((COUNTER++))
+echo "退出码: $?"
+echo "COUNTER = $COUNTER"
+echo ""
+
+# 测试 4: 当值为 0 时
+echo "测试 4: 当值为 0 时的退出码"
+COUNTER=0
+if ((COUNTER)); then
+    echo "COUNTER 为真"
+else
+    echo "COUNTER 为假 (退出码: $?)"
+fi
+echo ""
+
+# 测试 5: 安全的递增方式
+echo "测试 5: 安全的递增方式"
+set -euo pipefail
+COUNTER=0
+
+# 方式 1: 使用 let
+let COUNTER++ || true
+echo "方式 1 (let): COUNTER = $COUNTER"
+
+# 方式 2: 使用算术展开
+COUNTER=$((COUNTER + 1))
+echo "方式 2 (算术展开): COUNTER = $COUNTER"
+
+# 方式 3: 使用 (()) 但加 || true
+((COUNTER++)) || true
+echo "方式 3 ((++)) || true: COUNTER = $COUNTER"
+
+# 方式 4: 最安全的方式
+: $((COUNTER++))
+echo "方式 4 (: $((++))): COUNTER = $COUNTER"
+
+echo ""
+echo "结论: 在 set -e 模式下，((COUNTER++)) 可能导致脚本退出！"
+echo "推荐使用: COUNTER=\$((COUNTER + 1)) 或 : \$((COUNTER++))"
+
+```
+
+## `quick-test.sh`
+
+```bash
+#!/bin/bash
+
+################################################################################
+# 快速测试脚本 - 验证修复是否生效
+################################################################################
+
+echo "=========================================="
+echo "快速测试：验证计数器修复"
+echo "=========================================="
+echo ""
+
+# 模拟脚本的 set -euo pipefail 环境
+set -euo pipefail
+
+echo "1. 测试变量初始化"
+TOTAL_CHECKS=0
+PASSED_CHECKS=0
+FAILED_CHECKS=0
+WARNING_CHECKS=0
+echo "   ✓ 变量初始化成功"
+echo ""
+
+echo "2. 测试计数器递增（新方式）"
+TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
+echo "   TOTAL_CHECKS = $TOTAL_CHECKS"
+
+PASSED_CHECKS=$((PASSED_CHECKS + 1))
+echo "   PASSED_CHECKS = $PASSED_CHECKS"
+
+WARNING_CHECKS=$((WARNING_CHECKS + 1))
+echo "   WARNING_CHECKS = $WARNING_CHECKS"
+
+FAILED_CHECKS=$((FAILED_CHECKS + 1))
+echo "   FAILED_CHECKS = $FAILED_CHECKS"
+echo "   ✓ 所有计数器递增成功"
+echo ""
+
+echo "3. 测试多次递增"
+for i in {1..5}; do
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
+done
+echo "   TOTAL_CHECKS 经过 5 次递增 = $TOTAL_CHECKS"
+echo "   ✓ 循环递增成功"
+echo ""
+
+echo "4. 测试在函数中使用"
+test_function() {
+    local local_counter=0
+    local_counter=$((local_counter + 1))
+    echo "   函数内计数器 = $local_counter"
+}
+test_function
+echo "   ✓ 函数内递增成功"
+echo ""
+
+echo "5. 模拟实际使用场景"
+simulate_check() {
+    local check_name="$1"
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
+    
+    if [[ "$check_name" == "success" ]]; then
+        PASSED_CHECKS=$((PASSED_CHECKS + 1))
+        echo "   [✓] $check_name 检查"
+    elif [[ "$check_name" == "warning" ]]; then
+        WARNING_CHECKS=$((WARNING_CHECKS + 1))
+        echo "   [⚠] $check_name 检查"
+    else
+        FAILED_CHECKS=$((FAILED_CHECKS + 1))
+        echo "   [✗] $check_name 检查"
+    fi
+}
+
+simulate_check "success"
+simulate_check "warning"
+simulate_check "success"
+
+echo ""
+echo "   最终统计:"
+echo "   - 总检查: $TOTAL_CHECKS"
+echo "   - 通过: $PASSED_CHECKS"
+echo "   - 警告: $WARNING_CHECKS"
+echo "   - 失败: $FAILED_CHECKS"
+echo "   ✓ 实际场景模拟成功"
+echo ""
+
+echo "=========================================="
+echo "✅ 所有测试通过！"
+echo "=========================================="
+echo ""
+echo "修复已生效，脚本不会因为计数器递增而退出。"
+echo "现在可以安全地运行主脚本了。"
+
+```
+
+## `debug-test.sh`
+
+```bash
+#!/bin/bash
+
+################################################################################
+# KMS 验证脚本调试工具
+# 用于快速诊断环境问题
+################################################################################
+
+set -euo pipefail
+
+echo "=========================================="
+echo "KMS 验证脚本环境诊断"
+echo "=========================================="
+echo ""
+
+# 1. 检查 Shell 环境
+echo "1. Shell 环境:"
+echo "   Shell: $SHELL"
+echo "   Bash 版本: $BASH_VERSION"
+echo ""
+
+# 2. 检查必需命令
+echo "2. 检查必需命令:"
+if command -v gcloud &> /dev/null; then
+    echo "   ✓ gcloud: $(command -v gcloud)"
+    gcloud_version=$(gcloud version --format="value(core)" 2>&1 || echo "无法获取版本")
+    echo "     版本: $gcloud_version"
+else
+    echo "   ✗ gcloud: 未找到"
+fi
+
+if command -v jq &> /dev/null; then
+    echo "   ✓ jq: $(command -v jq)"
+    jq_version=$(jq --version 2>&1 || echo "无法获取版本")
+    echo "     版本: $jq_version"
+else
+    echo "   ✗ jq: 未找到"
+fi
+echo ""
+
+# 3. 检查 gcloud 认证
+echo "3. 检查 gcloud 认证:"
+if command -v gcloud &> /dev/null; then
+    echo "   尝试获取活动账号..."
+    
+    # 方法 1: 使用 filter
+    auth_account1=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>&1 || echo "ERROR")
+    echo "   方法1 (filter): $auth_account1"
+    
+    # 方法 2: 不使用 filter
+    auth_account2=$(gcloud auth list --format="value(account)" 2>&1 | head -1 || echo "ERROR")
+    echo "   方法2 (no filter): $auth_account2"
+    
+    # 方法 3: 使用 config
+    auth_account3=$(gcloud config get-value account 2>&1 || echo "ERROR")
+    echo "   方法3 (config): $auth_account3"
+    
+    # 显示完整的认证列表
+    echo ""
+    echo "   完整认证列表:"
+    gcloud auth list 2>&1 | sed 's/^/     /'
+else
+    echo "   跳过 (gcloud 未安装)"
+fi
+echo ""
+
+# 4. 检查临时目录权限
+echo "4. 检查临时目录:"
+TEMP_TEST_DIR="/tmp/kms-validator-test-$$"
+if mkdir -p "$TEMP_TEST_DIR" 2>&1; then
+    echo "   ✓ 可以创建临时目录: $TEMP_TEST_DIR"
+    if echo "test" > "$TEMP_TEST_DIR/test.txt" 2>&1; then
+        echo "   ✓ 可以写入文件"
+    else
+        echo "   ✗ 无法写入文件"
+    fi
+    rm -rf "$TEMP_TEST_DIR"
+else
+    echo "   ✗ 无法创建临时目录"
+fi
+echo ""
+
+# 5. 测试 set -euo pipefail 行为
+echo "5. 测试错误处理:"
+test_function() {
+    local result
+    result=$(false 2>&1 || true)
+    echo "   ✓ 使用 '|| true' 可以捕获错误"
+}
+test_function
+echo ""
+
+# 6. 测试 jq 解析
+echo "6. 测试 jq 解析:"
+if command -v jq &> /dev/null; then
+    test_json='{"test": "value", "number": 123}'
+    parsed=$(echo "$test_json" | jq -r '.test' 2>&1 || echo "ERROR")
+    if [[ "$parsed" == "value" ]]; then
+        echo "   ✓ jq 解析正常"
+    else
+        echo "   ✗ jq 解析失败: $parsed"
+    fi
+else
+    echo "   跳过 (jq 未安装)"
+fi
+echo ""
+
+echo "=========================================="
+echo "诊断完成"
+echo "=========================================="
+echo ""
+echo "如果所有检查都通过，请尝试运行:"
+echo "  ./verify-kms-enhanced.sh --verbose [其他参数]"
+echo ""
+echo "如果仍有问题，请提供以上输出信息"
 
 ```
 
