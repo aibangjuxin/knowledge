@@ -76,12 +76,21 @@ cleanup_temp_dir() {
 }
 
 # 记录检查结果
+# 用 jq -n 构造 JSON 对象,避免 message/detail 含双引号时把 JSON 行打坏
 record_check() {
     local status="$1"
     local message="$2"
     local detail="${3:-}"
-    
-    CHECK_RESULTS+=("{\"status\":\"$status\",\"message\":\"$message\",\"detail\":\"$detail\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}")
+
+    local entry
+    entry=$(jq -n \
+        --arg status "$status" \
+        --arg message "$message" \
+        --arg detail "$detail" \
+        --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        '{status: $status, message: $message, detail: $detail, timestamp: $timestamp}')
+
+    CHECK_RESULTS+=("$entry")
 }
 
 # 打印信息
@@ -458,11 +467,12 @@ check_service_account_permissions() {
         local has_encrypt=false
         local has_decrypt=false
         
-        if echo "$encrypters" | grep -qF "$sa"; then
+        # -xF = 整行精确匹配:避免短 SA 名误中长 SA 的子串(grep -qF 默认子串匹配)
+        if echo "$encrypters" | grep -qxF "$sa"; then
             has_encrypt=true
         fi
-        
-        if echo "$decrypters" | grep -qF "$sa"; then
+
+        if echo "$decrypters" | grep -qxF "$sa"; then
             has_decrypt=true
         fi
         
