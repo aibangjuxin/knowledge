@@ -1,3 +1,16 @@
+- [im](#im)
+  - [问题分析](#问题分析)
+  - [解决方案:整合后的原地迁移执行计划](#解决方案整合后的原地迁移执行计划)
+    - [阶段总览](#阶段总览)
+    - [阶段 0:迁移前功能对齐核查(原文档缺失,新增)](#阶段-0迁移前功能对齐核查原文档缺失新增)
+    - [阶段 1:现网信息固化(沿用原文档,补充变量)](#阶段-1现网信息固化沿用原文档补充变量)
+    - [阶段 2:逐个 backend service 迁移(沿用原文档状态机,补充熔断标准)](#阶段-2逐个-backend-service-迁移沿用原文档状态机补充熔断标准)
+    - [阶段 3:backend bucket 迁移(如无可跳过,原文档命令保留)](#阶段-3backend-bucket-迁移如无可跳过原文档命令保留)
+    - [阶段 4:forwarding rule 迁移(所有 backend service 必须已完成)](#阶段-4forwarding-rule-迁移所有-backend-service-必须已完成)
+    - [阶段 5:全链路验证](#阶段-5全链路验证)
+    - [阶段 6:apiname3 接入 PSC NEG(原文档缺失,这才是迁移的目的)](#阶段-6apiname3-接入-psc-neg原文档缺失这才是迁移的目的)
+    - [阶段 7:观察期(90 天窗口)](#阶段-7观察期90-天窗口)
+  - [注意事项](#注意事项)
 - [My understanding](#my-understanding)
   - [问题分析](#问题分析-1)
   - [解决方案:最简化命令(跳过灰度,不跳过状态机)](#解决方案最简化命令跳过灰度不跳过状态机)
@@ -26,9 +39,7 @@
     - [3.1 通用迁移函数(直接复制使用)](#31-通用迁移函数直接复制使用)
     - [3.2 操作步骤](#32-操作步骤)
       - [Step 3.1: 迁移 `bs-caep-apiname1`](#step-31-迁移-bs-caep-apiname1)
-- [必要时打开 Cloud Monitoring:](#必要时打开-cloud-monitoring)
-- [resource.type="loadbalancer.googleapis.com" AND](#resourcetypeloadbalancergoogleapiscom-and)
-- [resource.label.backend\_service\_name="bs-caep-apiname1"](#resourcelabelbackend_service_namebs-caep-apiname1)
+      - [Step 3.2: 迁移 `bs-caep-apiname2`](#step-32-迁移-bs-caep-apiname2)
       - [Step 3.3: 迁移 `bs-caep-default`](#step-33-迁移-bs-caep-default)
     - [3.3 通过标准](#33-通过标准)
   - [4. 阶段 4: 等待 + 观测窗口 (建议 10 分钟缓冲)](#4-阶段-4-等待--观测窗口-建议-10-分钟缓冲)
@@ -66,6 +77,9 @@
   - [9. 完整实施脚本索引 (一栏总览)](#9-完整实施脚本索引-一栏总览)
   - [10. 紧急回滚决策树](#10-紧急回滚决策树)
   - [11. 实施 Checklist (打印版)](#11-实施-checklist-打印版)
+
+# im
+- [](./to.md#原地迁移详细实施)
 
 ## 问题分析
 
@@ -152,8 +166,6 @@ To begin the migration from EXTERNAL to EXTERNAL_MANAGED, the state must be chan
 
 EXTERNAL_MANAGED_MIGRATION_STATE must be one of: PREPARE, TEST_BY_PERCENTAGE, TEST_ALL_TRAFFIC.
 ```
-
-
 
 以 `bs-caep-apiname1` 为例,其余按同样流程串行执行(**不要并行**,原文档这点是对的)。
 
@@ -423,9 +435,9 @@ flowchart TD
 - **URL Map**: `caep-api-matcher`
 - **Backend Services** (按迁移顺序): `bs-caep-apiname1` → `bs-caep-apiname2` → `bs-caep-default`
 - **目的**: 把现网 Classic ALB 迁到 Global external ALB (`EXTERNAL_MANAGED`),以便后续
-  apiname3 直挂 PSC NEG(详见 §阶段 6)
-- **预期窗口**: 全部 BS 串行迁移 + FR 切 scheme,每个 BS ≈ 12-15 分钟(2 个 6 分钟等待 +
-  切 scheme 后 1 个 6 分钟等待),3 个 BS + FR ≈ 60-75 分钟
+  apiname3 直挂 PSC NEG(详见 §阶段 7)
+- **预期窗口**: 全部 BS 串行迁移 + FR 切 scheme,每个 BS ≈ 18 分钟(2 个 6 分钟等待 +
+  切 scheme 后 1 个 6 分钟缓冲),3 个 BS + FR ≈ 60-75 分钟
 
 ### 0.2 To-Do List (执行前先逐项打勾)
 
@@ -449,7 +461,7 @@ flowchart TD
 | 1 | 实施前准备 | baseline 导出 + 健康检查 + 工具就绪 | 10 分钟 |
 | 2 | 现网环境冻结 | 业务方通知 + Go/No-Go 决策 | 即时 |
 | 3 | BS 状态机迁移 × 3 | PREPARE → TEST_ALL_TRAFFIC → 切 scheme | 每个 BS 18 分钟,合计 54 分钟 |
-| 4 | 等待 + 观测窗口 | 每个 BS 切完看 4xx/5xx/p95 | 持续 |
+| 4 | 等待 + 观测窗口 | 确认全量 BS 无残留及 4xx/5xx/p95 指标 | 10 分钟 |
 | 5 | Forwarding Rule 迁移 | 切 FR scheme=`EXTERNAL_MANAGED` | 6 分钟 |
 | 6 | 全链路验证 | curl + health check + describe | 5 分钟 |
 | 7 | apiname3 PSC NEG 接入 | 创建 PSC NEG + 新 BS + URL Map | 15 分钟 |
@@ -509,13 +521,9 @@ ls -la "$BACKUP_DIR"
 
 #### Step 1.3: 备份脚本 - 一键导出全量配置
 
-> **说明**: 这是为防止手动漏导出某个资源而准备的"全量快照",实际执行可以用 Step 1.1-1.2 的
-> 精准导出,也可以用这个"全量一把梭"版本。
-
 ```bash
 #!/usr/bin/env bash
 # backup-baseline.sh — 一键导出 PROJECT_A 的 LB 全量配置到本地 yaml 留档
-# 用法: bash backup-baseline.sh
 set -euo pipefail
 
 : "${PROJECT_A:?must set PROJECT_A}"
@@ -578,8 +586,8 @@ for bs in "${BS_LIST[@]}"; do
   echo "--- $bs ---"
   health_out=$(gcloud compute backend-services get-health "$bs" --global --project="$PROJECT_A" 2>&1)
   echo "$health_out"
-
-  # 多 backend 场景下 get-health 返回多行状态,改用 grep 匹配异常关键字(鲁棒)
+  
+  # 判断输出中是否包含非 HEALTHY 状态
   if echo "$health_out" | grep -qE "UNHEALTHY|DRAINING|TIMEOUT|UNKNOWN"; then
     echo "❌ $bs has unhealthy targets!"
     unhealthy_count=$((unhealthy_count + 1))
@@ -641,7 +649,7 @@ Go/No-Go: @xxx (决策人) / @yyy (备份决策人)
 ## 3. 阶段 3:Backend Service 状态机迁移 (54 分钟)
 
 > **本阶段是核心**,严格按顺序,**绝对不要并行**。每个 BS 三个固定步骤:
-> PREPARE (6min wait) → TEST_ALL_TRAFFIC (6min wait) → 切 scheme=`EXTERNAL_MANAGED`
+> PREPARE (6min wait) → TEST_ALL_TRAFFIC (6min wait) → 切 scheme=`EXTERNAL_MANAGED` (6min wait)
 
 ### 3.1 通用迁移函数(直接复制使用)
 
@@ -649,7 +657,6 @@ Go/No-Go: @xxx (决策人) / @yyy (备份决策人)
 #!/usr/bin/env bash
 # migrate-bs.sh — 把单个 EXTERNAL backend service 迁到 EXTERNAL_MANAGED
 # 用法: bash migrate-bs.sh <BS_NAME>
-# 前置: 阶段 1 已完成,baseline 已备份
 
 set -euo pipefail
 
@@ -670,6 +677,7 @@ wait_with_progress() {
 # 1. 迁移前校验
 current_scheme=$(gcloud compute backend-services describe "$BS" --global \
   --project="$PROJECT_A" --format="value(loadBalancingScheme)")
+
 if [[ "$current_scheme" == "EXTERNAL_MANAGED" ]]; then
   echo "⚠ $BS already EXTERNAL_MANAGED, skip"
   exit 0
@@ -679,6 +687,7 @@ if [[ "$current_scheme" != "EXTERNAL" ]]; then
   exit 1
 fi
 
+# Step 1/3: PREPARE
 echo "==> [$(date -Iseconds)] Step 1/3: $BS → PREPARE"
 gcloud compute backend-services update "$BS" --global --project="$PROJECT_A" \
   --external-managed-migration-state=PREPARE
@@ -712,13 +721,10 @@ fi
 
 #### Step 3.1: 迁移 `bs-caep-apiname1`
 
-> ⚠️ **注意**: `bash -x` 会**实际执行**里面的命令并输出详细日志,并非不产生变更的 dry-run。如需仅做语法验证,建议直接用 `bash -n migrate-bs.sh`(只检查语法,完全不会执行任何命令)。
+> ⚠️ **注意**: `bash -x` 会**实际执行**里面的命令并输出详细日志,并非不产生变更的 dry-run。如需语法验证,请直接运行或检查脚本。
 
 ```bash
-# 仅做语法验证(可选,不执行任何 gcloud)
-bash -n migrate-bs.sh && echo "OK: syntax check passed"
-
-# 正式执行(约 18 分钟,带进度点反馈)
+# 正式执行(约 18 分钟)
 bash migrate-bs.sh bs-caep-apiname1
 ```
 
@@ -729,16 +735,11 @@ bash migrate-bs.sh bs-caep-apiname1
 gcloud compute backend-services get-health bs-caep-apiname1 --global --project="$PROJECT_A"
 ```
 
-# 必要时打开 Cloud Monitoring:
-#   resource.type="loadbalancer.googleapis.com" AND
-#   resource.label.backend_service_name="bs-caep-apiname1"
-```
-
-**熔断标准**(对照 §阶段 2 方案原文):
+**熔断标准**:
 
 | 指标 | 阈值 | 行动 |
 |---|---|---|
-| 5xx 错误率 | 上升 > 0.5 个百分点 | 暂停,执行回滚(见 §6) |
+| 5xx 错误率 | 上升 > 0.5 个百分点 | 暂停,执行回滚(见 §10) |
 | p95 延迟 | 上升 > 20% | 暂停 |
 | 后端连接数/内存 | 超过容量规划 80% | 暂停 |
 
@@ -757,7 +758,7 @@ bash migrate-bs.sh bs-caep-default
 ### 3.3 通过标准
 
 - [ ] 3 个 BS 全部 `loadBalancingScheme=EXTERNAL_MANAGED`
-- [ ] 3 个 BS `get-health` 全 `HEALTHY`
+- [ ] 3 个 BS `get-health` 均无异常
 - [ ] 期间无熔断指标触发
 
 ---
@@ -814,7 +815,7 @@ fi
 ### 4.3 通过标准
 
 - [ ] `leftover` 为空(没有 EXTERNAL BS 残留)
-- [ ] 3 个 BS 全部 HEALTHY
+- [ ] 3 个 BS 全部健康状态正常
 
 ---
 
@@ -1019,8 +1020,7 @@ fi
 ### 7.1 前置假设(B 工程侧已完成)
 
 - B 工程 Service Attachment `SA-1` 已创建并接受 PROJECT_A 的连接请求
-- B 工程内部 L7 ILB + MIG (nginx 反代到 K8s Gateway) 已就绪(详见
-  `knowledge/cloud/k8s/k8s-gateway/public-fqdn-explorer.md §1 / §3`)
+- B 工程内部 L7 ILB + MIG (nginx 反代到 K8s Gateway) 已就绪
 
 ### 7.2 操作步骤
 
@@ -1129,9 +1129,9 @@ curl -v -o /dev/null -w "HTTP %{http_code}, time %{time_total}s\n" \
 
 ### 8.1 0-7 天:高频观察
 
-- 每天看一次 Cloud Monitoring:5xx 错误率、p95 延迟、4xx 比例
+- 每天看一次 Cloud Monitoring: 5xx 错误率、p95 延迟、4xx 比例
 - 关注 Cloud Armor 命中日志(迁移前后拦截规则命中数不应有明显跳变)
-- 关注 LB access log:是否出现新错误码(如 502/504)
+- 关注 LB access log: 是否出现新错误码(如 502/504)
 
 ### 8.2 8-30 天:常规观察
 
@@ -1240,4 +1240,4 @@ done
 [ T10]  curl https://www.caep.uk/{apiname1,apiname2,/} 验证正常
 [ T11]  apiname3 PSC NEG + 新 BS + URL Map (export/import) 路径追加完成
 [ T12]  baseline 归档保留 90 天, 监控指标保留 90 天
-``` 
+```
