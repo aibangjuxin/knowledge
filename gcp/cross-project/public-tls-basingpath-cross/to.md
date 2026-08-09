@@ -20,7 +20,33 @@
     - [Step 7:验证](#step-7验证)
   - [注意事项](#注意事项-1)
 - [原地迁移详细实施](#原地迁移详细实施)
+  - [迁移前检查](#迁移前检查)
+  - [迁移控制面](#迁移控制面)
+  - [1. 迁移 backend service](#1-迁移-backend-service)
+    - [1.1 进入 PREPARE](#11-进入-prepare)
+    - [1.2 小流量验证](#12-小流量验证)
+    - [1.3 全流量验证](#13-全流量验证)
+    - [1.4 切换 scheme](#14-切换-scheme)
+    - [1.5 重复其他 backend service](#15-重复其他-backend-service)
+  - [2. 如果有 backend bucket](#2-如果有-backend-bucket)
+  - [3. 迁移 forwarding rule](#3-迁移-forwarding-rule)
+  - [4. 验证清单](#4-验证清单)
+  - [5. Zero downtime 控制点](#5-zero-downtime-控制点)
+    - [必须遵守的节奏](#必须遵守的节奏)
+    - [建议的观测窗口](#建议的观测窗口)
+    - [不要同时做的事](#不要同时做的事)
+  - [6. 回滚方案](#6-回滚方案)
+    - [回滚顺序](#回滚顺序)
+    - [回滚 forwarding rule](#回滚-forwarding-rule)
+    - [回滚 backend service](#回滚-backend-service)
+  - [7. 迁移完成后你能得到什么](#7-迁移完成后你能得到什么)
 - [chatgpt](#chatgpt)
+  - [可行性复核](#可行性复核)
+    - [结论校验](#结论校验)
+    - [需要修正的认知点](#需要修正的认知点)
+    - [我对方案 B 的判断](#我对方案-b-的判断)
+    - [我对方案 A 的判断](#我对方案-a-的判断)
+    - [最终建议](#最终建议)
 
 # summary 
 - 1. Classic Application Load Balancer 保留旧的这个类型，然后只是新增的 API 走新的 load-balancing-scheme=EXTERNAL_MANAGED  这种方案经过分析是不行的
@@ -32,6 +58,18 @@
   - 这样 Classic ALB 本身丝毫不动(scheme 依旧是 EXTERNAL),apiname1/2 零风险,只是给 apiname3 单独多接了一跳。
   - 这样做的代价是增加一个 MIG 的维护成本
 - 3. 另外一个就是方案里边提到的就地迁移 
+  - [阶段 2:逐个 backend service 迁移(沿用原文档状态机,补充熔断标准)](./in-situ-migration.md#阶段-2逐个-backend-service-迁移沿用原文档状态机补充熔断标准)
+  - 如果没有 bucket 对应的迁移，那么是不是对应理解成 
+    - 1 就是backend service 迁移 成load-balancing-scheme=EXTERNAL_MANAGED 其实是直接Update 
+    - 2 forwarding rule 迁移 load-balancing-scheme=EXTERNAL_MANAGED 我如果不做percentage的迁移校验的话，直接这两个命令也就搞定了 
+      - 不能跳过状态机直接一条 --load-balancing-scheme=EXTERNAL_MANAGED 命令搞定。官方文档明确写了硬性前置条件:
+      - https://oneuptime.com/blog/post/2026-02-17-how-to-migrate-from-classic-to-global-external-application-load-balancer-in-gcp/view
+      ```
+      在把资源状态从 PREPARE 切换到 TEST_BY_PERCENTAGE 或 TEST_ALL_TRAFFIC 之后,需要等待约 6 分钟让资源就绪;资源必须先进入 TEST_ALL_TRAFFIC 状态,才能变更其负载均衡 scheme
+      也就是说,--external-managed-migration-state 必须先走到 TEST_ALL_TRAFFIC,你才被允许执行 --load-balancing-scheme=EXTERNAL_MANAGED 这条命令——这是 API 层面的强制前置校验,不是"建议流程",直接跳过去执行大概率会被拒绝(报状态不满足的错误)
+      但你可以跳过的是 TEST_BY_PERCENTAGE 这个"按比例灰度"的中间态,因为它本质是给你留的一个"小流量先验证一下"的可选缓冲,不是强制状态。也就是说最简化路径是: PREPARE → TEST_ALL_TRAFFIC → 切 scheme=EXTERNAL_MANAGED三步,而不是你说的两步。少了中间灰度验证,风险自然更高(相当于一次性把 100% 流量切到新基础设施),但流程上是允许跳过百分比灰度这一步的。
+      ```
+    - 3 我想确认的是，执行命令的过程中，原来的流量不能正常工作。就说我旧的API都能够正常访问
 
 
 
