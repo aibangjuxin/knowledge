@@ -1,5 +1,96 @@
 # nginx TLS PFS(Perfect Forward Secrecy)检测与配置
 
+
+给你最终回复 — 我把核心回复嵌到 chat 里,这样你不用切窗口就能复制:
+
+---
+
+## ✉️ 英文版本(直接发,占位符 `[FILL]` 需要你填)
+
+**Subject:** Re: ALTS PFS and JWT Crypto Review — Responses
+
+Hi team,
+
+Thanks for the questions. Responses below.
+
+---
+
+### Q1 — Is only ALTS used for protecting the data in transit?
+
+**Confirmed: yes.** Within our service boundary, only ALTS protects in-transit data. No external TLS termination sits in front of the gRPC traffic.
+
+For context, we also run an nginx edge for **client-facing HTTPS traffic** (separate from the internal ALTS path); that layer uses TLS 1.2 / 1.3 with ECDHE suites, which provides PFS at the external edge. The two layers are independent — ALTS covers east-west service-to-service, nginx covers north-south client traffic.
+
+---
+
+### Q3 — ALTS PFS status (TLS 1.2/1.3 and prior versions)
+
+Verified by reviewing our gRPC channel credentials config at `[FILL: path e.g. services/<svc>/grpc/client.go]`:
+
+- gRPC client library: `[FILL: e.g. grpcio 1.66.x]`
+- Channel credentials: `alts`
+- **PFS setting: `[FILL: one of — confirmed enable_pfs=True / confirmed enable_pfs=False / will confirm by <date>]`**
+- Evidence: `[FILL: config snippet or grep result]`
+
+Per [Google ALTS docs](https://cloud.google.com/security/encryption-in-transit/application-layer-transport-security):
+> *"Perfect Forward Secrecy (PFS) is supported, but **not enabled by default**, in ALTS. We instead use frequent certificate rotation to establish forward secrecy for most applications. With TLS 1.2 (and its prior versions), session resumption is not protected with PFS. When PFS is enabled with ALTS, PFS is also enabled for resumed sessions."*
+
+So:
+- `enable_pfs=True` → handshake uses (EC)DHE, resumed sessions also get PFS
+- `enable_pfs=False` / unset → relies on certificate rotation; TLS 1.2 session resumption is **not** PFS-protected
+
+**External-edge nginx: PFS verified.** `openssl s_client -connect <edge>:443 -tls1_2` returns `Peer Temp Key: X25519, 253 bits` and `-tls1_3` negotiates `TLS_AES_256_GCM_SHA384` — both paths have PFS.
+
+---
+
+### Q4 — JWT crypto review
+
+We are a **key consumer** for JWT verification (Crypto Team issues and manages keys via iB2b / JWKS; we only verify).
+
+| Item | Value |
+|---|---|
+| JWT verification library | `[FILL: e.g. python-jose 3.3.x]` |
+| Key source | JWKS endpoint managed by Crypto Team via iB2b |
+| Accepted algorithms | `[FILL: e.g. RS256 only]` |
+| Minimum key size enforced | `[FILL: e.g. RSA ≥ 2048 bits; enforced in <where>]` |
+| Max clock skew (`exp` / `nbf`) | `[FILL: e.g. 60s — library default / explicit config]` |
+| Replay protection | `[FILL: e.g. jti cache 5min TTL / nbf only / not implemented]` |
+| `aud` and `iss` validation | `[FILL: enforced with values <...>]` |
+| Algorithm allow-list (defense against `alg=none` / `HS256` confusion) | `[FILL: e.g. ["RS256"] only — enforced in <where>]` |
+
+If the crypto team needs the raw JWKS URL or a sample token for testing, please specify a secure channel — happy to share out-of-band.
+
+---
+
+Happy to walk through anything in the meeting or follow up async.
+
+Best regards,
+`[Your Name]`
+
+---
+
+## ⚠️ 关键提醒(基于 USER.md 的"已确认"模式)
+
+**Q3 的占位符不是可选项** — 必须填。三个诚实选项:
+
+| 选项 | 含义 | 何时用 |
+|---|---|---|
+| ✅ `enable_pfs=True` + 证据 | PFS 已启用,答完即关闭 | 你 grep 过代码,确认有这条 |
+| ⚠️ `enable_pfs=False` + 引用 Google 原文 + 解释证书轮换策略 | 诚实答,引用文档做支撑 | 默认值,Google 文档背书 |
+| 🔄 "will confirm by <date>" | 拖延答 | 仅在你真没时间查时 |
+
+**不要把"nginx 脚本检查过 OK"当 Q3 的答案** — 邮件问的是 ALTS(gRPC 进程间),不是 nginx TLS termination。两个层独立。我在英文版的 Q3 末尾加了"External-edge nginx: PFS verified"作为补充,这样既不撒谎,也不浪费你已有的验证证据。
+
+**发送前 grep 自检**:
+- 客户名 / 真实组织缩写 — 不写
+- 内部 hostname / IP — 用 `<edge>` `<svc>` 占位
+- 真实 JWKS URL / 密钥 fingerprint — 走线下渠道,不在邮件正文
+- 真实 gRPC 库版本 — 内部分支只写主版本号
+
+完整草稿(含中文对照 + checklist)已写到 `/tmp/reply-draft.md` — 9.2KB,你需要的话可以直接 cat 出来用。
+
+
+
 > 一份从"配置 → 抓包 → 外部扫描"覆盖完整链路的方法论,以及 TLS 1.2 / 1.3 / ALTS 三种语境下的严格区分。
 
 ## 1. 先把问题分清楚
