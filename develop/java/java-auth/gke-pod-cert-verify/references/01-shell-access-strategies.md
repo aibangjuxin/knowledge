@@ -222,9 +222,256 @@ openssl s_client \
 | `-connect IP:PORT` | 必填 | 连谁 |
 | `-servername HOST` | **强烈推荐** | SNI;不填时,如果一个 IP 后面挂了多证书,可能拿到默认那张而非你预期那张 |
 | `-showcerts` | 推荐 | 把整个证书链都打出来,便于看 CA 是否签发 |
-| `-verify_quiet` | 可选 | 静默 verify 错误(自签证书场景下你不想看到 verify error 干扰阅读) |
+| `-verify_quiet` | 可选 | 静默 verify 错误(自签证书场景必备,否则 verify 直接失败) |
 | `-tls1_2` / `-tls1_3` | 可选 | 强制协议版本(用于排查"我只想要 TLSv1.3 但服务端返回了 TLSv1.2") |
 | `-CAfile <ca-bundle>` | 可选 | 信任的服务端 CA(自签证书场景必备,否则 verify 直接失败) |
+
+#### SNI 从哪来 — Java 应用自己怎么决定 `-servername`
+
+**重要前提**:`openssl s_client -servername <HOST>` 是**外部探测**用的。**Java 应用自身作为客户端连服务端时,也会发 SNI** —— 这个 SNI 是 JSSE(Java Secure Socket Extension)在 TLS ClientHello 里自动塞的。所以你的"Java 应用"既可能是 **HTTPS Server**(回答外部客户端的 SNI),也可能是 **HTTPS Client**(主动发 SNI 给上游),甚至两者都是。
+
+##### 包 1:代码层 — JSSE 的 SNI 来自哪里
+
+Java 的 SNI 行为由 `javax.net.ssl.SSLParameters` 控制,**默认从 `InetSocketAddress.getHostString()` 拿 host**(就是 JDK 自己解析的 hostname,不是 IP),塞进 TLS ClientHello 的 `extension_server_name` 字段。
+
+```java
+// === 模式 A:JDBC / HttpClient 用 URI — SNI 自动 = URI 里的 host ===
+HttpClient client = HttpClient.newBuilder()
+    .build();
+HttpRequest req = HttpRequest.newBuilder()
+    .uri(URI.create("https://team1.caep.uk:8443/api/users"))   // ← SNI = "team1.caep.uk"
+    .build();
+
+// === 模式 B:SSLSocket 显式 connect — SNI = 你传的 host ===
+SSLSocketFactory factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+SSLSocket socket = (SSLSocket) factory.createSocket("10.72.1.50", 8443);
+// 关键:createSocket(InetAddress, port) → SNI 是 null(IP 不算 SNI)
+socket.getSslSession().getCipherSuite();   // 此时握手还没发 SNI
+// 想加 SNI 必须走 SSLParameters:
+SSLParameters params = socket.getSSLParameters();
+params.setServerNames(List.of(new SNIHostName("team1.caep.uk")));   // ← 这里手动塞
+socket.setSSLParameters(params);
+socket.startHandshake();   // 这才把 SNI 发出去
+```
+
+**判定**:
+- 如果用户用 `URI.create("https://host:port/path")` → **SNI = URI 的 host**
+- 如果用 `InetSocketAddress(host, port)` 创建 socket → **SNI = host 字符串**(可能跟 IP 不一样)
+- 如果直接 `createSocket(InetAddress, port)` → **SNI = null**(很多老 MySQL JDBC 驱动这么干)
+
+**Tomcat 服务端怎么处理收到的 SNI**(SNIHostName extension 在 TLS ServerHello 之前到达):
+- 默认 `Tomcat 9+` 支持 SNI — 根据收到的 SNI 找对应的 `SSLHostConfig`(每个 `<SSLHostConfig host="...">` 可以绑不同证书)
+- **如果用户在 `server.xml` / Spring Boot 只配了一个 cert**(绝大多数场景),服务端**忽略 SNI,统一用那份 cert** — 那你 `openssl s_client -servername <随便什么>` 拿到的都是同一张
+- **如果用户在 Spring Boot 配了多证书**(少见,但 `spring.ssl.bundle` + SNI routing 可能做),那 `-servername` 必须匹配才能拿到预期的 cert
+
+##### 包 2:应用层 — 用户 JAR 里 3 种最常见的 SNI 来源
+
+| 模式 | 用户代码里长什么样 | 实际 SNI | 你怎么查 |
+|---|---|---|---|
+| **写死常量** | `URI.create("https://openam.abj.uk:8443/...")`(见 `../java-application-auth.md` §一) | "openam.abj.uk" | `unzip -p app.jar .../application.yml \| grep -i url` |
+| **从配置读** | `openam.url: https://url:8443/...` 写进 yaml,代码里 `@Value` 注入 URI | yaml 里的 host | 同上 |
+| **从请求 Host 头动态读** | 用户做了一个反向代理 / API gateway,SNI 来自入站请求的 Host | 不可预测 | 看 inbound LB 的 Host 规则 |
+
+**最常见的坑**:`openam.url: https://url:8443/...`(见 `../java-application-auth.md`)— **`url` 是占位符,没替换**。Pod 启动时 Java 把 `url` 当成 hostname 发 SNI 给"url"(DNS 解析失败),TLS 握手直接挂。这种情况你从 Pod 日志里看 `UnknownHostException: url` 就能定位。
+
+##### 包 3:排查层 — 反推 Java 应用实际用的 SNI
+
+**从外部反向 dial**(用 `openssl s_client` 模拟 JSSE):
+
+```bash
+# 1) 用 application.yml / ConfigMap 里的 URL 提取 host
+SNI=$(kubectl -n <NS> get cm <CM> -o jsonpath='{.data.application\.yaml}' \
+      | grep -oE 'https://[^:/]+' | head -1 | sed 's|https://||')
+echo "Suspected SNI: $SNI"
+
+# 2) 用这个 SNI dial,看服务端是不是真按这个 SNI 路由 cert
+openssl s_client -connect <IP>:8443 -servername "$SNI" -showcerts \
+  </dev/null 2>/dev/null | openssl x509 -noout -subject -fingerprint -sha256
+
+# 3) 对比:不传 SNI 拿到的 cert
+openssl s_client -connect <IP>:8443 -showcerts \
+  </dev/null 2>/dev/null | openssl x509 -noout -subject -fingerprint -sha256
+
+# 两张 cert 不一样 → 服务端真的做了 SNI routing
+# 两张 cert 一样   → 服务端忽略 SNI(只看 IP:PORT),任何 -servername 都拿同一张
+```
+
+**从 Pod 内部主动抓包**(最强证据 — 真的能看到 ClientHello 里的 SNI 扩展):
+
+```bash
+# 进 Pod 后(场景 1),如果容器里有 tcpdump / tshark
+tcpdump -i any -nn -s 0 -w /tmp/cap.pcap 'tcp port 8443 and (tcp[((tcp[12]>>4)*4)+9+0] > 22)'
+# 然后在本机用 wireshark 打开,过滤 tls.handshake.extensions_server_name
+
+# 没有 tcpdump?用 strace 间接看(只支持 OpenJDK 的 SSL 写路径)
+strace -f -e trace=write -p <JAVA_PID> 2>&1 | grep -A2 "write.*:443" | head
+# 太吵,基本不可用 — 优先 tcpdump
+```
+
+**从 Java 应用日志反推**(很多 JSSE 实现把 SNI 打 INFO/WARN):
+
+```bash
+# 1) 找应用日志里的 SSL / handshake 关键字
+kubectl -n <NS> logs <POD> --tail=500 | grep -iE 'sni|server_name|hostname|peer|principal'
+
+# 2) JDK 的 -Djavax.net.debug=ssl:handshake 会打印完整 ClientHello/ServerHello
+#    如果用户 Pod 启动脚本带了这条,直接 grep 'server_name' 就能拿到 SNI
+kubectl -n <NS> logs <POD> --tail=2000 | grep -i 'extension_server_name\|server_name extension'
+# 输出示例:
+#   *** ClientHello, TLSv1.3 (Random, Session ID, Cipher Suites, Extensions)
+#   Extension server_name, server_name: [host_name: team1.caep.uk]   ← 这就是 SNI
+```
+
+**判定定理**:`extension server_name` 字段出现哪个 host,Java 客户端连服务端时发的就是哪个。**这个 host 必须匹配服务端 cert 的 SAN**(否则客户端报 `SSLHandshakeException: No subject alternative DNS name matching ...`)。所以 `openssl s_client -servername` 跟 Java 客户端用同一个 host,才能复现"Java 客户端能连上 / 连不上"的现象。
+
+#### §3.1.1 双角色场景 — Server 收的 SNI 跟 Client 发的 SNI 不一致时,代码层要注意什么
+
+**前提回顾**:你的 Java 应用**同时是 HTTPS Server 和 HTTPS Client**,两个方向的 SNI 是**两个独立事件**:
+
+```
+方向 1 (Server):外部 client → TLS ClientHello[server_name: 外部 host] → 你的 Tomcat
+                                                       ↓
+                                  多个 SSLHostConfig → 按 SNI 选 cert
+                                  单 cert 配置    → 忽略 SNI,统一用同一张
+
+方向 2 (Client):你 → TLS ClientHello[server_name: 上游 host] → 上游服务
+                                                       ↓
+                                  上游 cert 的 SAN 必须包含这个 host(否则客户端报 SSLHandshakeException)
+```
+
+**最关键的点:两个方向共用同一张 cert 的 SAN 字段**。两个 host 不一致时,cert 必须**同时覆盖两个 host**(多 SAN),或者为两个方向**分别签 cert**。
+
+**典型真实场景**(引用 `../java-application-auth.md` §一 的 case):
+
+```
+方向 1:外部 OpenAM 客户端用 https://team1.caep.uk:8443/... 访问你的 Pod
+       → 你 Tomcat 收到的 SNI = "team1.caep.uk"
+       → 你的 cert 的 SAN 必须包含 "team1.caep.uk"
+
+方向 2:你的 Pod 用 openam.url=https://openam.abj.uk:8443/... 访问 OpenAM
+       → 你发的 ClientHello 里的 SNI = "openam.abj.uk"
+       → 上游 OpenAM 的 cert 的 SAN 必须包含 "openam.abj.uk"(否则 SSLHandshakeException)
+```
+
+**两边 host 不同 → 你需要 cert 的 SAN 同时包含 "team1.caep.uk" 和 "openam.abj.uk",或者为两个方向各签一张 cert。**
+
+##### 注意事项 1:`application.yml` 的 Server / Client 配置**不能共用同一个 keystore**
+
+`server.ssl.*` 只管 Server 侧配置;Client 侧的 keystore/truststore 是另一组配置:
+
+```yaml
+# === Server 角色(你的 Pod 被外部访问)— server.ssl.* ===
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    key-store: classpath:CertKey/team_a_env_server.jks     # 服务端 keystore
+    key-store-password: ${SVR_KEYSTORE_PWD}
+    key-alias: team_a_env_server                            # ← PrivateKeyEntry
+    key-store-type: JKS
+    client-auth: none                                       # 单向 TLS
+
+# === Client 角色(你的 Pod 访问上游)— 独立 ssl bundle ===
+spring:
+  ssl:
+    bundle:
+      jks:
+        client:
+          keystore:                                         # 你作为客户端的 keystore
+            location: classpath:CertKey/team_a_env_client.jks
+            password: ${CLIENT_KEYSTORE_PWD}
+          truststore:                                       # 信任上游 OpenAM 的 CA
+            location: classpath:CertKey/team_a_env_client_reduced_v1.jks
+            password: ${TRUSTSTORE_PWD}
+```
+
+**关键**:Server 用 `team_a_env_server.jks`(必须是 PrivateKeyEntry,Tomcat 才能拿来做服务端 cert);Client 用 `team_a_env_client.jks` + `team_a_env_client_reduced_v1.jks`(trustedCertEntry 类型,只信任上游 CA)。**两个 keystore 别混用**——这就是 `../java-application-auth.md` §一 那个 `Alias name [team_a_env_server] does not identify a key entry` 报错的根因之一:用户把 client 的 keystore 误塞给 server.ssl.key-store。
+
+##### 注意事项 2:Client 侧的 SNI = `URI.create()` 里的 host,**跟你自己的服务名无关**
+
+JSSE(Java Secure Socket Extension)默认从 `URI.create()` 抽 host 塞进 ClientHello 的 `extension_server_name` 字段:
+
+```java
+// ❌ 用你的服务名当上游 host(常见错误)
+URI upstream = URI.create("https://team_a_env_server:8443/...");
+// JSSE 把 "team_a_env_server" 发成 SNI
+// 上游 cert SAN 不包含这个名字 → SSLHandshakeException: No subject alternative DNS name matching team_a_env_server
+
+// ✅ 用上游服务的真实 hostname
+URI upstream = URI.create("https://openam.abj.uk:8443/...");
+// SNI = "openam.abj.uk",跟上游 cert SAN 对齐
+
+// ❌❌ 占位符没替换(来自 ../java-application-auth.md 真实 case)
+URI upstream = URI.create("https://url:8443/...");
+// JSSE 发 SNI = "url",DNS 解析直接挂
+// Pod 日志:java.net.UnknownHostException: url
+```
+
+**判定**:Pod 日志里只要出现 `UnknownHostException` 或 `SSLHandshakeException: No subject alternative DNS name matching`,**100% 是 Client 侧的 SNI / cert SAN 对不齐** —— 跟 Server 侧无关,别去查 `application.yml` 的 `server.ssl.*`。
+
+##### 注意事项 3:如果想用**一张 cert 同时覆盖两个方向** —— 必须是多 SAN 的 cert
+
+```bash
+# === 错:一张 cert 只覆盖一个 host ===
+# SAN = [DNS:team1.caep.uk]
+# ✅ 服务端方向(外部访问我)能用
+# ❌ Client 方向(我访问 openam.abj.uk)报 SSLHandshakeException
+
+# === 对:签发时把两个 host 都列进 SAN ===
+keytool -certreq -alias team_a_env_server -keystore team_a_env_server.jks \
+    -file team_a_env_server.csr \
+    -ext SAN=dns:team1.caep.uk,dns:openam.abj.uk
+# 生成的 cert:
+#   X509v3 Subject Alternative Name:
+#       DNS:team1.caep.uk, DNS:openam.abj.uk
+```
+
+**这样一张 cert 既能回答外部 SNI "team1.caep.uk",也能作为 Client 访问 openam.abj.uk**(因为客户端校验服务端 cert 时,SAN 覆盖了目标 host)。
+
+##### 最容易踩的 3 个坑(基于 `../java-application-auth.md` 那个 case)
+
+| 坑 | 现象 | 修法 |
+|---|---|---|
+| **两个方向共用 `key-store`** | 启动崩 `Alias name [team_a_env_server] does not identify a key entry`(server.jks 里只有 PrivateKeyEntry,没 trustedCertEntry 给 truststore 用) | Client 侧用独立 `spring.ssl.bundle.jks.client.keystore`,别复用 server 的 |
+| **Client URI 写成 https://url:8443/... 占位符没替换** | Pod 启动 OK,首次访问上游时报 `UnknownHostException: url` | 全 repo grep `https://url` / `https://localhost:8443` 等占位符;CI 加 lint |
+| **cert SAN 只写了 "team1.caep.uk" 没写 "openam.abj.uk"** | 服务端方向 OK,Client 访问 OpenAM 时 SSL 握手失败 | 重签 cert 把两个 host 都加进 SAN;或 OpenAM 侧加 cert 到它的 truststore |
+
+##### 验证 — 1 分钟自检双方向 SNI 配置
+
+```bash
+KS=/path/to/team_a_env_server.jks
+
+# 1) 服务端 cert 的 SAN 是否覆盖"外部访问你的 host"
+keytool -list -v -alias team_a_env_server -keystore "$KS" -storepass '<P>' 2>&1 \
+  | grep -A2 'SubjectAlternativeName' | grep -E 'DNS:|IPAddress:'
+# 必须看到 DNSName: team1.caep.uk(你的外部访问地址)
+
+# 2) Client URI 实际发给上游的 host(从 yaml 提取)
+kubectl -n <NS> exec <POD> -- cat /app/application.yml 2>/dev/null \
+  | grep -oE 'https://[^:/]+:[0-9]+' | sort -u
+# 输出示例:
+#   https://team1.caep.uk:8443       ← Server 端地址(被外部访问)
+#   https://openam.abj.uk:8443       ← Client 端地址(主动访问上游)
+
+# 3) 上游 cert 的 SAN 是否覆盖 Client URI 里的 host
+openssl s_client -connect openam.abj.uk:8443 -servername openam.abj.uk \
+  </dev/null 2>/dev/null \
+  | openssl x509 -noout -ext subjectAltName
+# 必须包含 DNS:openam.abj.uk
+
+# 4) Pod 日志扫 SSL 异常
+kubectl -n <NS> logs <POD> --tail=1000 \
+  | grep -iE 'SSLHandshakeException|UnknownHostException|No subject alternative|hostname'
+# 任何一行 → 方向 2(Client 侧)配置有错,跟 server.ssl.* 无关
+```
+
+##### 一句话总结
+
+**Server 收的 SNI**(决定 Tomcat 选哪张 cert / 验证外部客户端用的 host)和 **Client 发的 SNI**(JSSE 从 `URI.create(...)` 里抽出的 host)是**两个独立事件**,但**共用同一张 cert 的 SAN**。两个 host 不一致时,代码层要做 3 件事:
+
+1. `server.ssl.*`(server)跟 `spring.ssl.bundle.jks.client.*`(client)**分开配置,别共用 keystore**
+2. Client URI 用上游真实 hostname,**别留 `https://url:8443/...` 这种占位符**
+3. 签 cert 时把两个 host 都列进 SAN,**或为两个方向各签一张 cert**
 
 ### 3.2 把证书 dump 下来做指纹比对
 
