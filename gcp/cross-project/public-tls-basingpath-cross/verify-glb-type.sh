@@ -158,12 +158,11 @@ echo ""
 if [[ "$FR_COUNT" == "0" ]]; then
   echo "  (none — no Target HTTPS Proxy LB found)"
 else
-  echo "$HTTPS_FRS" | jq -r '
-    ["name", "region", "scheme", "LB type", "verdict"] | @tsv
-    ,
-    [.name, (.region // "GLOBAL"), .scheme,
+  echo "$HTTPS_FRS" | jq -rs '
+    "name\tregion\tscheme\tLB type\tverdict",
+    (.[] | [.name, (if (.region | type) == "null" then "GLOBAL" else .region end), .scheme,
       (if .scheme == "EXTERNAL_MANAGED"
-       then (if (.region // null) == null then "A: Global external ALB" else "B: Regional external ALB" end)
+       then (if (.region | type) == "null" then "A: Global external ALB" else "B: Regional external ALB" end)
        elif .scheme == "EXTERNAL" then "G: Classic ALB"
        elif .scheme == "INTERNAL_MANAGED" or .scheme == "INTERNAL" then "INTERNAL LB"
        else "OTHER" end),
@@ -171,19 +170,22 @@ else
        elif .scheme == "EXTERNAL" then "❌ DEAD END — must migrate to A/B"
        elif .scheme == "INTERNAL_MANAGED" or .scheme == "INTERNAL" then "⚠ Internal LB — not a public ingress"
        else "⚠ Unknown — manual check needed" end)
-    ] | @tsv
-  ' | column -t -s $'\t' | while IFS= read -r line; do
-      echo "  $line"
+    ] | @tsv)
+  ' | while IFS=$'\t' read -r name region scheme lbtag verdict; do
+      echo "  $name  $region  $scheme  $lbtag  $verdict"
     done
 fi
 
 echo ""
 
-while IFS=$'\t' read -r name region scheme; do
-  [[ -z "$name" ]] && continue
+while IFS= read -r fr_json; do
+  [[ -z "$fr_json" ]] && continue
+  name=$(echo "$fr_json" | jq -r '.name')
+  region=$(echo "$fr_json" | jq -r 'if (.region | type) == "null" then "" else .region end')
+  scheme=$(echo "$fr_json" | jq -r '.scheme')
   case "$scheme" in
     EXTERNAL_MANAGED)
-      if [[ -z "$region" || "$region" == "null" ]]; then
+      if [[ -z "$region" ]]; then
         AB_FRS+=("$name (A: Global)")
       else
         AB_FRS+=("$name (B: Regional)")
@@ -196,7 +198,7 @@ while IFS=$'\t' read -r name region scheme; do
       INTERNAL_FRS+=("$name")
       ;;
   esac
-done < <(echo "$HTTPS_FRS" | jq -r '"\(.name)\t\(.region // "")\t\(.scheme)"')
+done < <(echo "$HTTPS_FRS" | jq -c '.')
 
 # ---------- 最终 verdict ----------
 echo -e "${BOLD}════════════════════════════════════════════════════════════${NC}"

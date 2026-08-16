@@ -70,6 +70,8 @@
       但你可以跳过的是 TEST_BY_PERCENTAGE 这个"按比例灰度"的中间态,因为它本质是给你留的一个"小流量先验证一下"的可选缓冲,不是强制状态。也就是说最简化路径是: PREPARE → TEST_ALL_TRAFFIC → 切 scheme=EXTERNAL_MANAGED三步,而不是你说的两步。少了中间灰度验证,风险自然更高(相当于一次性把 100% 流量切到新基础设施),但流程上是允许跳过百分比灰度这一步的。
       ```
     - 3 我想确认的是，执行命令的过程中，原来的流量不能正常工作。就说我旧的API都能够正常访问
+    - 4 总结一下，我们最终采用的方案是保持这个 Classic Application Load Balancer不变。 因为我们这个对应的后面一个 MIG，MIG 是一个对应的 Nginx ,所以我们基于 localtion path 把这个用户的请求转发到一个本地的 PSC NEG 上面就可以
+      - 唯一需要注意的是，这个 PSC 的 NEG 其实可以 创建在不同的网络里。PSC NEG ===> cross Project ==> connect another Project's attachment ===> cross Project another MIG(Nginx)  OR ==> K8s
 
 
 

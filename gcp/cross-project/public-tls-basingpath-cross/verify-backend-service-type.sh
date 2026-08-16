@@ -178,42 +178,39 @@ fi
 echo -e "${BOLD}Backend Services:${NC}"
 echo ""
 echo "$BS_ALL" | jq -r '
-  ["name", "scope", "protocol", "scheme", "BS class", "PSC verdict"] | @tsv
-  ,
-  (
-    .[] | [
-      .name,
-      (if (.region // null) == null then "GLOBAL" else "REGIONAL" end),
-      (.protocol // "—"),
-      .loadBalancingScheme,
-      (
-        if .loadBalancingScheme == "EXTERNAL_MANAGED" then
-          (if (.region // null) == null then "A: Global external ALB / proxy NLB" else "B: Regional external ALB / proxy NLB" end)
-        elif .loadBalancingScheme == "EXTERNAL" then
-          (if .protocol == "TCP" or .protocol == "UDP" then "Classic NLB / Internal passthrough"
-           elif .protocol == "SSL" then "G-SSL: Classic SSL Proxy LB"
-           else "G-ALB: Classic Application LB" end)
-        elif .loadBalancingScheme == "EXTERNAL_PASSTHROUGH" then "External passthrough NLB"
-        elif .loadBalancingScheme == "INTERNAL_MANAGED" then "I-M: Internal ALB / proxy NLB"
-        elif .loadBalancingScheme == "INTERNAL" then "INTERNAL: Cloud Service Mesh"
-        elif .loadBalancingScheme == "INTERNAL_SELF_MANAGED" then "INTERNAL_SELF_MANAGED"
-        else "OTHER"
-        end
-      ),
-      (
-        if .loadBalancingScheme == "EXTERNAL_MANAGED" then "✅ PSC NEG (public)"
-        elif .loadBalancingScheme == "INTERNAL_MANAGED" then "✅ PSC NEG (internal)"
-        elif .loadBalancingScheme == "EXTERNAL" then "❌ DEAD END — migrate"
-        elif .loadBalancingScheme == "EXTERNAL_PASSTHROUGH" then "❌ Passthrough — no BS"
-        elif .loadBalancingScheme == "INTERNAL" then "❌ Service Mesh"
-        elif .loadBalancingScheme == "INTERNAL_SELF_MANAGED" then "⚠ Self-managed"
-        else "⚠ Unknown"
-        end
-      )
-    ] | @tsv
-  )
-' | column -t -s $'\t' | while IFS= read -r line; do
-    echo "  $line"
+  "name\tscope\tprotocol\tscheme\tBS class\tPSC verdict",
+  (.[] | [
+    .name,
+    (if (.region | type) == "null" then "GLOBAL" else "REGIONAL" end),
+    (.protocol // "—"),
+    .loadBalancingScheme,
+    (
+      if .loadBalancingScheme == "EXTERNAL_MANAGED" then
+        (if (.region | type) == "null" then "A: Global external ALB / proxy NLB" else "B: Regional external ALB / proxy NLB" end)
+      elif .loadBalancingScheme == "EXTERNAL" then
+        (if .protocol == "TCP" or .protocol == "UDP" then "Classic NLB / Internal passthrough"
+         elif .protocol == "SSL" then "G-SSL: Classic SSL Proxy LB"
+         else "G-ALB: Classic Application LB" end)
+      elif .loadBalancingScheme == "EXTERNAL_PASSTHROUGH" then "External passthrough NLB"
+      elif .loadBalancingScheme == "INTERNAL_MANAGED" then "I-M: Internal ALB / proxy NLB"
+      elif .loadBalancingScheme == "INTERNAL" then "INTERNAL: Cloud Service Mesh"
+      elif .loadBalancingScheme == "INTERNAL_SELF_MANAGED" then "INTERNAL_SELF_MANAGED"
+      else "OTHER"
+      end
+    ),
+    (
+      if .loadBalancingScheme == "EXTERNAL_MANAGED" then "✅ PSC NEG (public)"
+      elif .loadBalancingScheme == "INTERNAL_MANAGED" then "✅ PSC NEG (internal)"
+      elif .loadBalancingScheme == "EXTERNAL" then "❌ DEAD END — migrate"
+      elif .loadBalancingScheme == "EXTERNAL_PASSTHROUGH" then "❌ Passthrough — no BS"
+      elif .loadBalancingScheme == "INTERNAL" then "❌ Service Mesh"
+      elif .loadBalancingScheme == "INTERNAL_SELF_MANAGED" then "⚠ Self-managed"
+      else "⚠ Unknown"
+      end
+    )
+  ] | @tsv)
+' | while IFS=$'\t' read -r name scope protocol scheme bsclass verdict; do
+    echo "  $name  $scope  $protocol  $scheme  $bsclass  $verdict"
   done
 
 echo ""
@@ -223,8 +220,11 @@ declare -a CLASSIC_BS=()
 declare -a MANAGED_BS=()
 declare -a OTHER_BS=()
 
-while IFS=$'\t' read -r name scheme scope; do
-  [[ -z "$name" ]] && continue
+while IFS= read -r bs_json; do
+  [[ -z "$bs_json" ]] && continue
+  name=$(echo "$bs_json" | jq -r '.name')
+  scheme=$(echo "$bs_json" | jq -r '.loadBalancingScheme')
+  scope=$(echo "$bs_json" | jq -r 'if (.region | type) == "null" then "GLOBAL" else "REGIONAL" end')
   case "$scheme" in
     EXTERNAL_MANAGED|INTERNAL_MANAGED)
       MANAGED_BS+=("$name ($scope)")
@@ -236,7 +236,7 @@ while IFS=$'\t' read -r name scheme scope; do
       OTHER_BS+=("$name ($scope, scheme=$scheme)")
       ;;
   esac
-done < <(echo "$BS_ALL" | jq -r '"\(.name)\t\(.loadBalancingScheme)\t\(if (.region // null) == null then "GLOBAL" else "REGIONAL" end)"')
+done < <(echo "$BS_ALL" | jq -c '.[]')
 
 # ---------- 最终 verdict ----------
 echo -e "${BOLD}════════════════════════════════════════════════════════════════════${NC}"
