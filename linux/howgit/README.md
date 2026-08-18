@@ -13,6 +13,7 @@ howgit/
 ├── scripts_new/                           # 新脚本
 ├── How-to-get-commitid.md                 # Rebase 后获取 PR 最新 commit ID(实用操作)
 ├── How-to-understand-tree-id-and-commit-id.md  # 理解 tree id / commit id 是什么(概念原理)
+├── How-to-understand-git-pull-rebase.md   # 理解 git pull --rebase:跟 merge 的区别、内部机制、何时用何时不能用
 ├── why-to-using-githubapps.md                  # 为什么用 GitHub Apps —— App 是什么、跟 OAuth/PAT/Webhook 区别、GitHub→GitLab 触发场景
 ├── github-repo-role-permissions.md        # GitHub 仓库角色权限详解
 └── README.md
@@ -22,6 +23,7 @@ howgit/
 
 - `How-to-get-commitid.md`: PR rebase 后如何拿到最新的 commit ID(gh CLI / REST API / GitLab / Gitee / 本地 git)
 - `How-to-understand-tree-id-and-commit-id.md`: tree id 和 commit id 的本质 —— 它们的字节级结构、决定字段、互相关系,以及 SHA-1 为何被一改就全改(配套上文的"概念扫盲"篇)
+- `How-to-understand-git-pull-rebase.md`: `git pull --rebase` 是什么 —— 跟默认 merge 模式的对比、内部 transplant 步骤、何时该用 / 绝对不能用、出错怎么 recover、跟 `--autostash` / `pull.rebase=true` 等常见组合
 - `why-to-using-githubapps.md`: **为什么用 GitHub Apps** —— GitHub App 是什么(first-class actor + 1h token + fine-grained permission)、跟 OAuth App / PAT / Webhook 的根本区别,以及"GitHub 变更 → GitLab pipeline" 的 3 条真实路径(自建 App / GitLab external repo / pull mirror)。**关键澄清:GitHub App 装不到 GitLab 上**,装在 GitHub 自己的 repo/org 上
 - `github-repo-role-permissions.md`: GitHub 仓库角色权限(RBAC)详解
 
