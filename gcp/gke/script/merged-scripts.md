@@ -1,7 +1,727 @@
 # Shell Scripts Collection
 
-Generated on: 2026-05-30 09:57:59
+Generated on: 2026-08-20 17:19:12
 Directory: /Users/lex/git/knowledge/gcp/gke/script
+
+## `update-node-pools-firewall.sh`
+
+```bash
+#!/usr/bin/env bash
+# =============================================================================
+# update-node-pools-firewall.sh — GKE Node Pool Network Tags 更新脚本
+#
+# 用途: 给指定 GKE 集群下的一个或多个 Node Pool 添加/替换 network tags,
+#      以便 VPC firewall rules 通过 targetTags 匹配这些节点。
+#
+# 用法: ./update-node-pools-firewall.sh --project <PROJECT_ID> \
+#                                      --cluster <CLUSTER_NAME> \
+#                                      --location <LOCATION> \
+#                                      --add-tags <TAG1,TAG2,...> \
+#                                      [--node-pool <NP_NAME>|--all-node-pools] \
+#                                      [--apply] [-h]
+#
+# 默认行为 (无 --apply): 仅打印将要执行的 gcloud 命令,不真正调用。
+# 加 --apply:           才真正执行 gcloud container node-pools update --tags=...
+#
+# 依赖: gcloud, jq (可选,用于校验 JSON 输出)
+#
+# 关键事实 (2026-08-20, 来源 https://cloud.google.com/kubernetes-engine/docs/how-to/autopilot-network-tags):
+#   - Standard 集群下, --tags 作用在 Node Pool 级别, GKE 会把 tags
+#     同步到底层 Compute Engine VM 实例, 并应用到后续自动 provision 的新节点。
+#   - Autopilot 集群没有 node pool 概念, 应该用 --autoprovisioning-network-tags
+#     (本脚本不覆盖 Autopilot)。
+#   - GKE 1.28+ 推荐使用 Tags (key-value + IAM) 而非 legacy network tags,
+#     本脚本用的是 legacy --tags, 与 Lex 当前命令风格一致。
+#
+# 重要副作用提醒:
+#   gcloud container node-pools update --tags=... 会 REPLACE 整个 tags 列表,
+#   不会追加。如果想保留已有 tag, 必须把已有 tag 一起传进来。
+#   脚本默认会先 describe 当前 tags, 打印合并后的最终 tag 列表, 供用户核对。
+# =============================================================================
+
+set -euo pipefail
+
+# --------------------------------------------------------------------------- #
+# 颜色 & 格式化
+# --------------------------------------------------------------------------- #
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+BLUE='\033[0.34m'
+BOLD='\033[1m'
+DIM='\033[2m'
+RESET='\033[0m'
+
+info()    { echo -e "${CYAN}[INFO]${RESET}  $*"; }
+warn()    { echo -e "${YELLOW}[WARN]${RESET}  $*"; }
+error()   { echo -e "${RED}[ERROR]${RESET} $*" >&2; }
+success() { echo -e "${GREEN}[OK]${RESET}    $*"; }
+header()  { echo -e "\n${BOLD}${BLUE}== $* ==${RESET}"; }
+
+# --------------------------------------------------------------------------- #
+# 默认值
+# --------------------------------------------------------------------------- #
+PROJECT=""
+CLUSTER=""
+LOCATION=""
+NEW_TAGS=""           # 逗号分隔, 例如 "https-server,sslv2"
+NODE_POOL=""          # 单个 node pool 名称
+ALL_NODE_POOLS=false  # 处理该集群下全部 node pool
+APPLY=false
+
+# --------------------------------------------------------------------------- #
+# 帮助
+# --------------------------------------------------------------------------- #
+show_help() {
+    echo -e "${BOLD}update-node-pools-firewall.sh${RESET} — 给 GKE Node Pool 添加 / 替换 network tags"
+    echo ""
+    echo -e "${BOLD}用法:${RESET}"
+    echo -e "    $0 --project PROJECT_ID --cluster CLUSTER_NAME --location LOCATION \\"
+    echo -e "       --add-tags TAG1,TAG2,... [OPTIONS]"
+    echo ""
+    echo -e "${BOLD}必填:${RESET}"
+    echo -e "    --project      PROJECT_ID          GCP project ID"
+    echo -e "    --cluster      CLUSTER_NAME        GKE 集群名"
+    echo -e "    --location     LOCATION            region 或 zone (例如 asia-east2 / asia-east2-a)"
+    echo -e "    --add-tags     TAG1,TAG2,...       要设置的 network tags (逗号分隔)"
+    echo ""
+    echo -e "${BOLD}可选:${RESET}"
+    echo -e "    --node-pool    NP_NAME             只处理指定 node pool (默认)"
+    echo -e "    --all-node-pools                    处理该集群下全部 node pool"
+    echo -e "    --apply                           真正执行 gcloud (默认只打印命令)"
+    echo -e "    -h, --help                        显示本帮助"
+    echo ""
+    echo -e "${BOLD}示例:${RESET}"
+    echo -e "    # 只打印命令, 不真正执行"
+    echo -e "    $0 --project my-proj --cluster my-cluster --location asia-east2 \\"
+    echo -e "       --add-tags https-server,api-gateway --node-pool default-pool"
+    echo ""
+    echo -e "    # 真正执行, 并应用到全部 node pool"
+    echo -e "    $0 --project my-proj --cluster my-cluster --location asia-east2 \\"
+    echo -e "       --add-tags https-server --all-node-pools --apply"
+    echo ""
+    echo -e "${BOLD}注意:${RESET}"
+    echo -e "    gcloud container node-pools update --tags=... 是 REPLACE 语义,"
+    echo -e "    不是 APPEND。已有 tag 必须一起传入,否则会被清除。"
+}
+
+# --------------------------------------------------------------------------- #
+# 参数解析
+# --------------------------------------------------------------------------- #
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --project)
+            PROJECT="${2:-}"; shift 2 ;;
+        --cluster)
+            CLUSTER="${2:-}"; shift 2 ;;
+        --location)
+            LOCATION="${2:-}"; shift 2 ;;
+        --add-tags)
+            NEW_TAGS="${2:-}"; shift 2 ;;
+        --node-pool)
+            NODE_POOL="${2:-}"; shift 2 ;;
+        --all-node-pools)
+            ALL_NODE_POOLS=true; shift ;;
+        --apply)
+            APPLY=true; shift ;;
+        -h|--help)
+            show_help; exit 0 ;;
+        *)
+            error "未知参数: $1"
+            echo "运行 $0 -h 查看用法" >&2
+            exit 1 ;;
+    esac
+done
+
+# --------------------------------------------------------------------------- #
+# 参数校验
+# --------------------------------------------------------------------------- #
+require_param() {
+    if [[ -z "${!1}" ]]; then
+        error "缺少必填参数: --$1"
+        show_help >&2
+        exit 1
+    fi
+}
+
+require_param PROJECT
+require_param CLUSTER
+require_param LOCATION
+require_param NEW_TAGS
+
+if [[ -n "${NODE_POOL}" && "${ALL_NODE_POOLS}" == "true" ]]; then
+    error "--node-pool 和 --all-node-pools 不能同时使用"
+    exit 1
+fi
+
+if [[ -z "${NODE_POOL}" && "${ALL_NODE_POOLS}" == "false" ]]; then
+    warn "未指定 --node-pool, 默认只处理名为 'default-pool' 的 node pool。"
+    warn "如需处理全部 node pool, 加 --all-node-pools。"
+    NODE_POOL="default-pool"
+fi
+
+# 校验 tag 格式: 字母数字 + 短横线 + 下划线, 不允许逗号/空格混进 tag 本身
+if ! [[ "${NEW_TAGS}" =~ ^[A-Za-z0-9_.-]+(,[A-Za-z0-9_.-]+)*$ ]]; then
+    error "--add-tags 格式非法: '${NEW_TAGS}'"
+    error "每个 tag 只能含 [A-Za-z0-9_.-], 多个 tag 用英文逗号分隔"
+    exit 1
+fi
+
+# 校验依赖
+if ! command -v gcloud >/dev/null 2>&1; then
+    error "gcloud 未安装或不在 PATH"
+    exit 1
+fi
+
+# --------------------------------------------------------------------------- #
+# 核心逻辑
+# --------------------------------------------------------------------------- #
+# 取单个 node pool 当前 tags (GKE 在 describe 输出中不直接暴露 tags,
+# 但底层是同步到 instance template 的 tags 字段。
+# 我们用 gcloud container node-pools describe 拿 config.instanceTemplate,
+# 然后从 instance template 上读 tags。)
+get_current_tags() {
+    local np_name="$1"
+
+    # 拿到 instance template URL
+    local it_url
+    if ! it_url="$(gcloud container node-pools describe "${np_name}" \
+            --cluster="${CLUSTER}" \
+            --location="${LOCATION}" \
+            --project="${PROJECT}" \
+            --format="value(config.instanceTemplate)" 2>/dev/null)"; then
+        return 1
+    fi
+
+    # 空值 = 没设过
+    if [[ -z "${it_url}" ]]; then
+        return 0
+    fi
+
+    # 从 instance template 取 tags.items
+    gcloud compute instance-templates describe "${it_url##*/}" \
+        --project="${PROJECT}" \
+        --format="value(properties.tags.items)" 2>/dev/null \
+        | tr ';' ',' \
+        | sed 's/^,*//; s/,*$//'
+}
+
+# 列出该集群下全部 node pool 名称
+list_node_pools() {
+    gcloud container node-pools list \
+        --cluster="${CLUSTER}" \
+        --location="${LOCATION}" \
+        --project="${PROJECT}" \
+        --format="value(name)"
+}
+
+# 计算合并后的最终 tag 列表 (REPLACE 语义下, 我们把 [已有] + [新增] 求并集去重)
+merge_tags() {
+    local current="$1"
+    local incoming="$2"
+    local merged
+    merged="$(printf "%s,%s" "${current}" "${incoming}" \
+        | tr ',' '\n' \
+        | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
+        | grep -v '^$' \
+        | sort -u \
+        | paste -sd ',' -)"
+    echo "${merged}"
+}
+
+# 执行单个 node pool 的更新
+update_one_pool() {
+    local np_name="$1"
+
+    header "Node pool: ${np_name}"
+
+    local current_tags=""
+    if current_tags="$(get_current_tags "${np_name}")"; then
+        if [[ -n "${current_tags}" ]]; then
+            info "当前 tags: ${current_tags}"
+        else
+            info "当前 tags: (无)"
+        fi
+    else
+        warn "读取 instance template 失败, 跳过 (cluster 可能不是 Standard 或权限不足)"
+        return 1
+    fi
+
+    local final_tags
+    final_tags="$(merge_tags "${current_tags}" "${NEW_TAGS}")"
+
+    info "合并后 tags: ${final_tags}"
+
+    local cmd
+    cmd="gcloud container node-pools update ${np_name} \
+    --cluster=${CLUSTER} \
+    --location=${LOCATION} \
+    --project=${PROJECT} \
+    --tags=${final_tags}"
+
+    if [[ "${APPLY}" == "true" ]]; then
+        echo -e "${DIM}\$ ${cmd}${RESET}"
+        if eval "${cmd}"; then
+            success "${np_name} tags 已更新"
+        else
+            error "${np_name} 更新失败"
+            return 1
+        fi
+    else
+        echo -e "${YELLOW}[DRY-RUN]${RESET} 将执行:"
+        echo -e "${DIM}${cmd}${RESET}"
+        echo ""
+        echo -e "${YELLOW}[DRY-RUN]${RESET} 注: gcloud --tags 是 REPLACE 语义,"
+        echo -e "${YELLOW}[DRY-RUN]${RESET} 实际写入的 tags = ${BOLD}${final_tags}${RESET}"
+        echo -e "${YELLOW}[DRY-RUN]${RESET} 加 --apply 才真正调用 gcloud"
+    fi
+}
+
+# --------------------------------------------------------------------------- #
+# 主流程
+# --------------------------------------------------------------------------- #
+header "参数"
+echo "  project      : ${PROJECT}"
+echo "  cluster      : ${CLUSTER}"
+echo "  location     : ${LOCATION}"
+echo "  add-tags     : ${NEW_TAGS}"
+if [[ "${ALL_NODE_POOLS}" == "true" ]]; then
+    echo "  node pool    : (全部)"
+else
+    echo "  node pool    : ${NODE_POOL}"
+fi
+echo "  mode         : $([[ "${APPLY}" == "true" ]] && echo "APPLY (真正执行)" || echo "DRY-RUN (只打印命令)")"
+
+# 校验集群存在
+if ! gcloud container clusters describe "${CLUSTER}" \
+        --location="${LOCATION}" \
+        --project="${PROJECT}" \
+        --format="value(name)" >/dev/null 2>&1; then
+    error "集群不存在或无权限: ${CLUSTER} @ ${LOCATION} (project=${PROJECT})"
+    exit 1
+fi
+
+# 决定处理哪些 node pool
+if [[ "${ALL_NODE_POOLS}" == "true" ]]; then
+    np_list="$(list_node_pools || true)"
+    if [[ -z "${np_list}" ]]; then
+        error "集群 ${CLUSTER} 下没有 node pool, 或读取失败"
+        exit 1
+    fi
+    header "将处理 $(echo "${np_list}" | wc -l | tr -d ' ') 个 node pool"
+    echo "${np_list}" | while read -r np; do
+        [[ -z "${np}" ]] && continue
+        update_one_pool "${np}" || warn "${np} 处理失败, 继续下一个"
+    done
+else
+    # 校验指定 node pool 存在
+    if ! gcloud container node-pools describe "${NODE_POOL}" \
+            --cluster="${CLUSTER}" \
+            --location="${LOCATION}" \
+            --project="${PROJECT}" \
+            --format="value(name)" >/dev/null 2>&1; then
+        error "node pool 不存在: ${NODE_POOL}"
+        exit 1
+    fi
+    update_one_pool "${NODE_POOL}"
+fi
+
+if [[ "${APPLY}" == "true" ]]; then
+    success "全部完成"
+else
+    info "全部完成 (DRY-RUN)。 加 --apply 才真正调用 gcloud。"
+fi
+
+```
+
+## `upgrade-gke-node.sh`
+
+```bash
+#!/usr/bin/env bash
+# =============================================================================
+# upgrade-gke-node.sh — GKE Node Pool 升级脚本
+#
+# 功能：升级 GKE 节点池到指定版本，支持 Surge Upgrade 策略
+# 版本：v1.3 | 2026-05-30（修复版本一致性检查：current==target 时跳过）
+# =============================================================================
+
+set -uo pipefail
+
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+BLUE=$'\033[0;34m'
+CYAN=$'\033[0;36m'
+BOLD=$'\033[1m'
+RESET=$'\033[0m'
+
+CLUSTER_NAME=""
+REGION=""
+PROJECT_ID=""
+NODE_POOL_NAME=""
+TARGET_VERSION=""
+DRY_RUN=false
+AUTO_YES=false
+
+# -----------------------------------------------------------------------------
+info()    { echo -e "${BLUE}[INFO]${RESET}  $*"; }
+warn()    { echo -e "${YELLOW}[WARN]${RESET}  $*" >&2; }
+error()   { echo -e "${RED}[ERROR]${RESET} $*" >&2; }
+success() { echo -e "${GREEN}[OK]${RESET}    $*"; }
+
+usage() {
+  cat <<EOF
+$(basename "$0") — GKE Node Pool 升级脚本 v1.3
+
+用法: $(basename "$0") --cluster <CLUSTER> --region <REGION> --project <PROJECT>
+                [--node-pool-version <VERSION>] [--node-pool <POOL>]
+                [--dry-run] [--yes]
+
+必需参数:
+  --cluster       GKE 集群名称
+  --region        集群区域（如 europe-west2）
+  --project       GCP 项目 ID
+
+可选参数:
+  --node-pool-version   目标版本（默认：跟随 Master 版本）
+  --node-pool           指定节点池（默认：全部）
+  --dry-run             仅验证，不执行
+  --yes                 跳过确认
+
+版本约束:
+  1. 目标版本不能超过 Master 版本（硬约束）
+  2. 如果节点当前版本已等于目标版本，直接退出，不执行升级
+  3. 升级顺序：Master → Node（Node ≤ Master）
+EOF
+  exit 1
+}
+
+# -----------------------------------------------------------------------------
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --cluster)         CLUSTER_NAME="$2"; shift 2 ;;
+      --region)          REGION="$2";       shift 2 ;;
+      --project)         PROJECT_ID="$2";    shift 2 ;;
+      --node-pool)       NODE_POOL_NAME="$2"; shift 2 ;;
+      --node-pool-version) TARGET_VERSION="$2"; shift 2 ;;
+      --dry-run)  DRY_RUN=true;  shift ;;
+      --yes)      AUTO_YES=true; shift ;;
+      --help|-h)  usage ;;
+      *)          error "未知参数: $1"; usage ;;
+    esac
+  done
+}
+
+validate_args() {
+  local missing=0
+  [[ -z "$CLUSTER_NAME" ]] && { error "缺少 --cluster"; missing=1; }
+  [[ -z "$REGION" ]]      && { error "缺少 --region"; missing=1; }
+  [[ -z "$PROJECT_ID" ]] && { error "缺少 --project"; missing=1; }
+  (( missing == 1 )) && usage
+}
+
+# -----------------------------------------------------------------------------
+get_cluster_info() {
+  gcloud container clusters describe "$CLUSTER_NAME" \
+    --region="$REGION" \
+    --project="$PROJECT_ID" \
+    --format=json 2>/dev/null
+}
+
+get_node_pool_names() {
+  local json="$1"
+  echo "$json" | jq -r '.nodePools[].name' 2>/dev/null
+}
+
+get_pool_version() {
+  local pool="$1"
+  local json="$2"
+  echo "$json" | jq -r ".nodePools[] | select(.name==\"$pool\") | .version" 2>/dev/null
+}
+
+check_pdbs() {
+  info "检查 PodDisruptionBudget..."
+  local out
+  out=$(kubectl get pdb --all-namespaces 2>/dev/null || true)
+  if [[ -z "$out" ]] || echo "$out" | grep -q "No resources"; then
+    warn "未发现 PDB，建议为关键应用配置 PDB"
+    return 0
+  fi
+  local bad
+  bad=$(echo "$out" | awk 'NR>1 && ($3!=$5)')
+  if [[ -n "$bad" ]]; then
+    error "发现不健康的 PDB:"
+    echo "$bad" | column -t
+    return 1
+  fi
+  success "PDB 检查通过"
+  return 0
+}
+
+# -----------------------------------------------------------------------------
+do_upgrade_cmd() {
+  local ver="$1"
+  local pool="$2"
+  local op_id
+
+  if [[ -n "$pool" ]]; then
+    op_id=$(gcloud container clusters upgrade "$CLUSTER_NAME" \
+      --region="$REGION" \
+      --project="$PROJECT_ID" \
+      --cluster-version="$ver" \
+      --node-pool="$pool" \
+      --async \
+      --format='value(operation.name)' 2>/dev/null)
+  else
+    op_id=$(gcloud container clusters upgrade "$CLUSTER_NAME" \
+      --region="$REGION" \
+      --project="$PROJECT_ID" \
+      --cluster-version="$ver" \
+      --async \
+      --format='value(operation.name)' 2>/dev/null)
+  fi
+
+  echo "$op_id"
+}
+
+wait_op() {
+  local op_id="$1"
+  local desc="$2"
+  local max_wait=600
+  local elapsed=0
+  local interval=15
+
+  info "$desc"
+  info "操作 ID: $op_id"
+
+  while (( elapsed < max_wait )); do
+    local status
+    status=$(gcloud container operations describe "$op_id" \
+      --region="$REGION" \
+      --project="$PROJECT_ID" \
+      --format='value(status)' 2>/dev/null)
+
+    case "$status" in
+      DONE)  success "操作已完成"; return 0 ;;
+      RUNNING)
+        info "升级进行中... 已等待 ${elapsed}s"
+        sleep $interval
+        (( elapsed += interval ))
+        ;;
+      *)  error "操作状态异常: $status"; return 1 ;;
+    esac
+  done
+
+  warn "等待超时，检查最终状态..."
+  status=$(gcloud container operations describe "$op_id" \
+    --region="$REGION" \
+    --project="$PROJECT_ID" \
+    --format='value(status)' 2>/dev/null)
+  [[ "$status" == "DONE" ]] && success "操作已确认完成" || error "操作状态: $status"
+  [[ "$status" == "DONE" ]] && return 0 || return 1
+}
+
+# -----------------------------------------------------------------------------
+preflight_check() {
+  local json
+  json=$(get_cluster_info)
+
+  if [[ -z "$json" ]]; then
+    error "无法获取集群信息"
+    exit 1
+  fi
+
+  local master_ver cluster_status current_ver
+  master_ver=$(echo "$json" | jq -r '.currentMasterVersion')
+  cluster_status=$(echo "$json" | jq -r '.status')
+  current_ver=$(echo "$json" | jq -r '.currentNodeVersion')
+
+  info "集群状态: $cluster_status"
+  info "Master 版本: $master_ver"
+  info "Node 当前版本: $current_ver"
+
+  if [[ "$cluster_status" != "RUNNING" ]]; then
+    error "集群状态非 RUNNING: $cluster_status"
+    exit 3
+  fi
+
+  if [[ -z "$TARGET_VERSION" ]]; then
+    TARGET_VERSION="$master_ver"
+    info "目标版本未指定，自动跟随 Master: $TARGET_VERSION"
+  fi
+
+  # 硬约束：目标版本不能超过 Master
+  local p_target p_master
+  p_target="${TARGET_VERSION##*-gke.}"  && p_target="${p_target//[^0-9]/}"
+  p_master="${master_ver##*-gke.}"       && p_master="${p_master//[^0-9]/}"
+  if (( p_target > p_master )); then
+    error "版本约束违反: 目标($TARGET_VERSION) > Master($master_ver)"
+    error "Node 版本不得超过 Master 版本"
+    exit 2
+  fi
+
+  # 如果已经一致，直接退出
+  if [[ "$current_ver" == "$TARGET_VERSION" ]]; then
+    success "Node 当前版本($current_ver) 已等于目标版本，无需升级"
+    exit 0
+  fi
+
+  info "版本升级路径: $current_ver -> $TARGET_VERSION (Master=$master_ver)"
+
+  # 节点池列表
+  echo -e "\n${BOLD}节点池当前版本:${RESET}"
+  local pool_name pool_ver
+  while IFS= read -r pool_name; do
+    [[ -z "$pool_name" ]] && continue
+    pool_ver=$(get_pool_version "$pool_name" "$json")
+    printf "  %-20s %s\n" "$pool_name" "$pool_ver"
+  done < <(get_node_pool_names "$json")
+
+  if command -v kubectl >/dev/null 2>&1; then
+    check_pdbs || true
+  else
+    info "kubectl 未安装，跳过 PDB 检查"
+  fi
+}
+
+# -----------------------------------------------------------------------------
+print_summary() {
+  local action="$1"
+  cat <<EOF
+
+${BOLD}══════════════════════════════════════════════════════════════${RESET}
+${BOLD}  GKE Node 池升级摘要${RESET}
+${BOLD}══════════════════════════════════════════════════════════════${RESET}
+
+  集群:       $CLUSTER_NAME
+  区域:       $REGION
+  项目:       $PROJECT_ID
+  节点池:     ${NODE_POOL_NAME:-全部}
+  目标版本:   $TARGET_VERSION
+  策略:       surge=1 / maxUnavailable=0
+  操作:       $action
+
+${BOLD}══════════════════════════════════════════════════════════════${RESET}
+EOF
+}
+
+confirm_upgrade() {
+  print_summary "待执行"
+
+  [[ "$DRY_RUN" == "true" ]] && info "[DRY-RUN] 预览完成" && return 1
+  [[ "$AUTO_YES" == "true" ]] && return 0
+
+  echo -n -e "${YELLOW}[CONFIRM]${RESET} 确定升级 Node 池吗？[y/N]: "
+  read -r ans
+  [[ "$ans" == "y" || "$ans" == "Y" ]] && return 0
+  info "取消升级"
+  exit 0
+}
+
+# -----------------------------------------------------------------------------
+do_upgrade() {
+  local json
+  json=$(get_cluster_info)
+
+  if [[ -n "$NODE_POOL_NAME" ]]; then
+    do_upgrade_single "$NODE_POOL_NAME"
+  else
+    do_upgrade_all "$json"
+  fi
+}
+
+do_upgrade_single() {
+  local pool="$1"
+  local ver
+  ver=$(get_pool_version "$pool" "$(get_cluster_info)")
+  info "升级节点池: $pool ($ver -> $TARGET_VERSION)"
+
+  local op_id
+  op_id=$(do_upgrade_cmd "$TARGET_VERSION" "$pool")
+
+  if [[ -z "$op_id" ]]; then
+    error "获取操作 ID 失败（可能升级已在进行中）"
+    exit 1
+  fi
+
+  wait_op "$op_id" "升级节点池 $pool"
+}
+
+do_upgrade_all() {
+  local json="$1"
+  local first_op
+
+  while IFS= read -r pool; do
+    [[ -z "$pool" ]] && continue
+    local ver
+    ver=$(get_pool_version "$pool" "$json")
+    info "升级节点池: $pool ($ver -> $TARGET_VERSION)"
+
+    local op_id
+    op_id=$(do_upgrade_cmd "$TARGET_VERSION" "$pool")
+
+    if [[ -z "$op_id" ]]; then
+      warn "节点池 $pool 获取操作 ID 失败，跳过"
+      continue
+    fi
+    [[ -z "$first_op" ]] && first_op="$op_id"
+  done < <(get_node_pool_names "$json")
+
+  if [[ -n "$first_op" ]]; then
+    wait_op "$first_op" "升级所有节点池"
+  else
+    error "没有成功发起任何升级操作"
+    exit 1
+  fi
+}
+
+post_verify() {
+  info "验证升级结果..."
+
+  local json
+  json=$(get_cluster_info)
+
+  echo -e "\n${BOLD}节点池版本状态:${RESET}"
+  local pool pool_ver
+  while IFS= read -r pool; do
+    [[ -z "$pool" ]] && continue
+    pool_ver=$(get_pool_version "$pool" "$json")
+    printf "  %-20s %s\n" "$pool" "$pool_ver"
+  done < <(get_node_pool_names "$json")
+
+  local final_ver
+  final_ver=$(echo "$json" | jq -r '.currentNodeVersion' 2>/dev/null || echo "?")
+
+  if [[ "$final_ver" == "$TARGET_VERSION" ]]; then
+    success "Node 版本已升级到: $TARGET_VERSION"
+  else
+    success "Node 版本: $final_ver"
+  fi
+}
+
+# -----------------------------------------------------------------------------
+main() {
+  parse_args "$@"
+  validate_args
+
+  info "========================================"
+  info " GKE Node 池升级工具 v1.3"
+  info "========================================"
+
+  preflight_check
+  confirm_upgrade || return 0
+  [[ "$DRY_RUN" == "true" ]] && print_summary "dry-run 完成" && return 0
+
+  do_upgrade
+  post_verify
+  print_summary "升级完成"
+  success "Node 池升级成功"
+}
+
+main "$@"
+```
 
 ## `upgrade-gke-cluster.sh`
 
