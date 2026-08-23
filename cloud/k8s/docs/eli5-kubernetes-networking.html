@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ELI5: How Kubernetes Networking Works — 5岁也能懂</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #020617;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    .wrap { max-width: 880px; margin: 0 auto; }
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.01em;
+    }
+    .lede {
+      color: #94a3b8;
+      font-size: 0.95rem;
+      margin-bottom: 2rem;
+    }
+    .panel {
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid #1e293b;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .panel-num {
+      color: #22d3ee;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+    .panel h2 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: white;
+    }
+    .panel p {
+      color: #cbd5e1;
+      font-size: 0.92rem;
+      margin-bottom: 0.5rem;
+    }
+    .visual {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 1rem 0;
+    }
+    .key {
+      background: rgba(34, 211, 238, 0.12);
+      color: #67e8f9;
+      padding: 0.1rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.85em;
+    }
+    .ok {
+      color: #34d399;
+      font-weight: 600;
+    }
+    .aside {
+      background: rgba(52, 211, 153, 0.08);
+      border-left: 3px solid #34d399;
+      padding: 0.75rem 1rem;
+      margin-top: 1rem;
+      border-radius: 0 0.5rem 0.5rem 0;
+      font-size: 0.85rem;
+      color: #a7f3d0;
+    }
+    .footer {
+      text-align: center;
+      color: #475569;
+      font-size: 0.75rem;
+      margin-top: 2rem;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>🤔 一群小盒子怎么互相说话?</h1>
+  <p class="lede">Kubernetes 把你的程序装进很多小盒子(<span class="key">Pod</span>)。问题是:它们怎么找到对方?</p>
+
+  <!-- ============ Panel 1 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 1 · 问题</div>
+    <h2>每个盒子有自己的地址,但地址会变</h2>
+    <div class="visual">
+      <svg width="320" height="100" viewBox="0 0 320 100">
+        <rect x="20" y="20" width="60" height="50" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="50" y="42" fill="white" font-size="10" text-anchor="middle" font-weight="600">Pod A</text>
+        <text x="50" y="58" fill="#94a3b8" font-size="8" text-anchor="middle">10.0.0.1</text>
+        <rect x="130" y="20" width="60" height="50" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="160" y="42" fill="white" font-size="10" text-anchor="middle" font-weight="600">Pod B</text>
+        <text x="160" y="58" fill="#94a3b8" font-size="8" text-anchor="middle">10.0.0.7</text>
+        <rect x="240" y="20" width="60" height="50" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="270" y="42" fill="white" font-size="10" text-anchor="middle" font-weight="600">Pod C</text>
+        <text x="270" y="58" fill="#94a3b8" font-size="8" text-anchor="middle">10.0.0.3</text>
+      </svg>
+    </div>
+    <p>Kubernetes 给每个 Pod 一个 IP 地址。但 Pod 可能被杀掉、新建、换机器 — <span class="ok">地址一直在变</span>。</p>
+    <p>如果别的程序要连 "盒子 A",光记地址会失效。</p>
+  </section>
+
+  <!-- ============ Panel 2 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 2 · 解决:给一组盒子起个固定名字</div>
+    <h2><span class="key">Service</span> = 一组 Pod 的稳定外号</h2>
+    <div class="visual">
+      <svg width="320" height="110" viewBox="0 0 320 110">
+        <rect x="100" y="10" width="120" height="32" rx="6" fill="rgba(6,78,59,0.30)" stroke="#34d399" stroke-width="2"/>
+        <text x="160" y="30" fill="#34d399" font-size="11" text-anchor="middle" font-weight="700">Service "api"</text>
+        <line x1="130" y1="42" x2="60" y2="80" stroke="#34d399" stroke-width="1.5"/>
+        <line x1="160" y1="42" x2="160" y2="80" stroke="#34d399" stroke-width="1.5"/>
+        <line x1="190" y1="42" x2="260" y2="80" stroke="#34d399" stroke-width="1.5"/>
+        <rect x="30" y="80" width="60" height="24" rx="4" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="60" y="96" fill="#67e8f9" font-size="9" text-anchor="middle">Pod 1</text>
+        <rect x="130" y="80" width="60" height="24" rx="4" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="160" y="96" fill="#67e8f9" font-size="9" text-anchor="middle">Pod 2</text>
+        <rect x="230" y="80" width="60" height="24" rx="4" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="260" y="96" fill="#67e8f9" font-size="9" text-anchor="middle">Pod 3</text>
+      </svg>
+    </div>
+    <p>Service 就像一个"组的名字":叫 "api",背后可能是 3 个、5 个、10 个 Pod。</p>
+    <p>谁想知道 "api 在哪" — 问 Service 就行。<span class="ok">底层 Pod 换来换去,Service 不变</span>。</p>
+  </section>
+
+  <!-- ============ Panel 3 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 3 · 怎么找 Service</div>
+    <h2>DNS:Service 有个域名,大家查名字就能找到</h2>
+    <div class="visual">
+      <svg width="320" height="100" viewBox="0 0 320 100">
+        <rect x="20" y="20" width="80" height="50" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="60" y="42" fill="white" font-size="10" text-anchor="middle" font-weight="600">Pod 客户</text>
+        <text x="60" y="58" fill="#67e8f9" font-size="8" text-anchor="middle">问:api?</text>
+        <rect x="120" y="20" width="80" height="50" rx="6" fill="rgba(76,29,149,0.25)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="160" y="42" fill="#a78bfa" font-size="10" text-anchor="middle" font-weight="600">CoreDNS</text>
+        <text x="160" y="58" fill="#a7f3d0" font-size="8" text-anchor="middle">翻译名字</text>
+        <rect x="220" y="20" width="80" height="50" rx="6" fill="rgba(6,78,59,0.30)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="260" y="42" fill="#34d399" font-size="10" text-anchor="middle" font-weight="600">Service IP</text>
+        <text x="260" y="58" fill="#a7f3d0" font-size="8" text-anchor="middle">10.96.0.10</text>
+      </svg>
+    </div>
+    <p>集群里有个翻译员叫 <span class="key">CoreDNS</span>(kube-dns)。</p>
+    <p>Pod 问 "api",翻译员告诉它 IP。然后流量走到那个 IP,再由 <span class="key">kube-proxy</span> 转发到真的 Pod。</p>
+  </section>
+
+  <!-- ============ Panel 4 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 4 · Pod 之间真能通吗</div>
+    <h2>魔法:所有 Pod 都能直接互访</h2>
+    <div class="visual">
+      <svg width="320" height="100" viewBox="0 0 320 100">
+        <rect x="20" y="20" width="120" height="50" rx="6" fill="rgba(15,23,42,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="80" y="42" fill="white" font-size="10" text-anchor="middle" font-weight="600">Node 1</text>
+        <text x="80" y="58" fill="#94a3b8" font-size="8" text-anchor="middle">Pod 10.0.0.1</text>
+        <rect x="180" y="20" width="120" height="50" rx="6" fill="rgba(15,23,42,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="240" y="42" fill="white" font-size="10" text-anchor="middle" font-weight="600">Node 2</text>
+        <text x="240" y="58" fill="#94a3b8" font-size="8" text-anchor="middle">Pod 10.0.0.2</text>
+        <path d="M 140 45 Q 160 20 180 45" stroke="#34d399" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+        <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><polygon points="0 0, 10 5, 0 10" fill="#34d399"/></marker></defs>
+        <text x="160" y="86" fill="#34d399" font-size="9" text-anchor="middle">跨机器也能直连</text>
+      </svg>
+    </div>
+    <p>Kubernetes 承诺:<span class="ok">不用 NAT、不用 VPN</span>,任何 Pod 直接连任何 Pod,无论是否在同一台机器。</p>
+    <p>这个魔法靠一个叫 <span class="key">CNI 插件</span> 的网络工人实现(每个节点装一个),常见的如 Calico、Cilium、Flannel。</p>
+  </section>
+
+  <!-- ============ Panel 5 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 5 · 外面的人怎么进来?</div>
+    <h2><span class="key">Ingress / Gateway</span> = 集群的大门</h2>
+    <div class="visual">
+      <svg width="320" height="100" viewBox="0 0 320 100">
+        <rect x="20" y="30" width="60" height="40" rx="6" fill="rgba(15,23,42,0.5)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="50" y="54" fill="white" font-size="10" text-anchor="middle" font-weight="600">外部</text>
+        <rect x="110" y="30" width="100" height="40" rx="6" fill="rgba(251,191,36,0.15)" stroke="#fbbf24" stroke-width="2"/>
+        <text x="160" y="54" fill="#fbbf24" font-size="10" text-anchor="middle" font-weight="700">Ingress</text>
+        <rect x="240" y="30" width="60" height="40" rx="6" fill="rgba(6,78,59,0.30)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="270" y="54" fill="#34d399" font-size="10" text-anchor="middle" font-weight="600">Service</text>
+      </svg>
+    </div>
+    <p>外面的人没 CoreDNS 可以查 — 他们需要一个固定的大门。</p>
+    <p><span class="key">Ingress</span>(或新的 <span class="key">Gateway API</span>)就是这扇大门:看到 "api.example.com" 就把请求转给集群里叫 "api" 的 Service。</p>
+  </section>
+
+  <!-- ============ Panel 6 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 6 · 谁在管这些?</div>
+    <h2>👤 集群管理员配置规则,改动留痕</h2>
+    <p>谁能创建 Service / Ingress?靠 <span class="key">RBAC</span>(基于角色的访问控制)。</p>
+    <p>每次谁加了 Service、谁改了 Ingress — 都在 <span class="key">kube-apiserver audit log</span> 里留痕,运维能查到谁、什么时候、改了什么。</p>
+    <div class="aside">
+      双向都覆盖:Pod 找 Service / Service 找 Pod / 外面找里面(正向),谁能配置 + 谁留痕(反向)。
+    </div>
+  </section>
+
+  <p class="footer">ELI5 · Kubernetes Networking · 6 面板</p>
+
+  <!--
+    Citations (factual claims + official Kubernetes docs URLs):
+    1. K8s networking has 4 distinct problems (container-to-container / Pod-to-Pod / Pod-to-Service / External-to-Service)
+       cite: https://kubernetes.io/docs/concepts/cluster-administration/networking/
+       exact: "there are 4 distinct networking problems to address"
+    2. Every Pod gets its own IP address (network plugins ensure this)
+       cite: https://kubernetes.io/docs/concepts/services-networking/service/
+       exact: "Each Pod gets its own IP address (Kubernetes expects network plugins to ensure this)"
+    3. Service is an abstraction exposing a logical set of Pods
+       cite: https://kubernetes.io/docs/concepts/services-networking/service/
+       exact: "The Service API, part of Kubernetes, is an abstraction to help you expose groups of Pods over a network"
+    4. Network model implemented by CNI plugins
+       cite: https://kubernetes.io/docs/concepts/cluster-administration/networking/
+       exact: "The network model is implemented by the container runtime on each node. The most common container runtimes use Container Network Interface (CNI) plugins"
+    5. Ingress as the entry point for the cluster
+       cite: https://kubernetes.io/docs/concepts/services-networking/service/
+       exact: "Ingress ... acts as the entry point for your cluster"
+    6. Gateway API as more flexible alternative to Ingress
+       cite: https://kubernetes.io/docs/concepts/services-networking/service/
+       exact: "The Gateway API for Kubernetes provides extra capabilities beyond Ingress and Service"
+    Verified: 2026-08-23
+  -->
+
+</div>
+</body>
+</html>
