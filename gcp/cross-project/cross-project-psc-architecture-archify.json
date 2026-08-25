@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Cross-Project PSC Architecture",
+    "output": "cross-project-psc-architecture-archify.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "External Client",
+      "sublabel": "HTTPS :443",
+      "pos": [120, 80],
+      "size": [170, 60]
+    },
+    {
+      "id": "glb",
+      "type": "cloud",
+      "label": "GLB",
+      "sublabel": "Global HTTPS LB",
+      "pos": [120, 180],
+      "size": [170, 70]
+    },
+    {
+      "id": "armor",
+      "type": "security",
+      "label": "Cloud Armor",
+      "sublabel": "WAF / DDoS policy",
+      "pos": [120, 290],
+      "size": [170, 70]
+    },
+    {
+      "id": "bs-a",
+      "type": "backend",
+      "label": "Backend Service",
+      "sublabel": "Global HTTPS proxy",
+      "pos": [120, 400],
+      "size": [170, 70]
+    },
+    {
+      "id": "psc-neg",
+      "type": "cloud",
+      "label": "PSC NEG",
+      "sublabel": "PRIVATE_SERVICE_CONNECT",
+      "tag": "type: network_endpoint",
+      "pos": [120, 510],
+      "size": [170, 80]
+    },
+    {
+      "id": "psc-tunnel",
+      "type": "cloud",
+      "label": "PSC Tunnel",
+      "sublabel": "no peering · overlapping IP ok",
+      "pos": [490, 530],
+      "size": [320, 80]
+    },
+    {
+      "id": "nat-subnet",
+      "type": "security",
+      "label": "PSC NAT Subnet",
+      "sublabel": "purpose: PRIVATE_SERVICE_CONNECT",
+      "pos": [970, 80],
+      "size": [220, 70]
+    },
+    {
+      "id": "sa",
+      "type": "security",
+      "label": "Service Attachment",
+      "sublabel": "consumer-accept-list: a-project=100",
+      "tag": "ACCEPT_MANUAL",
+      "pos": [970, 190],
+      "size": [220, 80]
+    },
+    {
+      "id": "ilb",
+      "type": "backend",
+      "label": "Internal LB",
+      "sublabel": "L4 / L7 forwarding rule",
+      "pos": [970, 310],
+      "size": [220, 70]
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "Backend",
+      "sublabel": "GKE / VM / MIG — IP hidden",
+      "pos": [970, 420],
+      "size": [220, 80]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "A Project — Shared VPC (Consumer)",
+      "wraps": ["client", "glb", "armor", "bs-a", "psc-neg"]
+    },
+    {
+      "kind": "region",
+      "label": "B Project — Private VPC (Producer)",
+      "wraps": ["nat-subnet", "sa", "ilb", "backend"]
+    },
+    {
+      "kind": "security-group",
+      "label": "PSC private channel — no public internet, no peering",
+      "wraps": ["psc-neg", "psc-tunnel", "nat-subnet", "sa"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "client-glb",
+      "from": "client",
+      "to": "glb",
+      "label": "HTTPS",
+      "labelDy": -54,
+      "labelAt": [205, 160]
+    },
+    {
+      "id": "glb-armor",
+      "from": "glb",
+      "to": "armor",
+      "label": "policy",
+      "labelDy": 24
+    },
+    {
+      "id": "armor-bs",
+      "from": "armor",
+      "to": "bs-a",
+      "label": "filter",
+      "labelDy": 24
+    },
+    {
+      "id": "bs-neg",
+      "from": "bs-a",
+      "to": "psc-neg",
+      "label": "NEG",
+      "labelDy": 24
+    },
+    {
+      "id": "neg-tunnel",
+      "from": "psc-neg",
+      "to": "psc-tunnel",
+      "label": "private IP",
+      "labelDy": 24
+    },
+    {
+      "id": "tunnel-nat",
+      "from": "psc-tunnel",
+      "to": "nat-subnet",
+      "label": "SNAT",
+      "labelDy": -64
+    },
+    {
+      "id": "nat-sa",
+      "from": "nat-subnet",
+      "to": "sa",
+      "label": "binds",
+      "labelDy": 24
+    },
+    {
+      "id": "sa-ilb",
+      "from": "sa",
+      "to": "ilb",
+      "label": "route",
+      "labelDy": 24
+    },
+    {
+      "id": "ilb-backend",
+      "from": "ilb",
+      "to": "backend",
+      "label": "forward",
+      "labelDy": 24
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "PSC NEG — consumer side",
+      "items": [
+        "type: PRIVATE_SERVICE_CONNECT",
+        "Allocates PSC entry IP from the consumer subnet",
+        "Backend real IP never exposed",
+        "Belongs to A Project Shared VPC"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Service Attachment — producer side",
+      "items": [
+        "Must bind a PSC NAT subnet",
+        "connection-preference: ACCEPT_MANUAL",
+        "consumer-accept-list controls access",
+        "Belongs to B Project Private VPC"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "PSC tunnel — cross-project",
+      "items": [
+        "Built automatically on GCP backbone",
+        "No VPC peering required",
+        "Overlapping IP ranges OK both sides",
+        "SNAT gives bidirectional IP isolation"
+      ]
+    }
+  ]
+}

@@ -126,6 +126,127 @@ readinessProbe:
 	•	maxUnavailable：升级过程中最多不可用的节点数（默认 1）。
 	•	通过 GKE 的 Node Pool 配置，确保滚动升级平滑且负载正常。
 
+## Pre-Upgrade: Static Pod Manifest Audit (K8s 1.37+)
+
+> **为什么需要这一步**：从 **Kubernetes v1.37**（**2026-08-26 GA**）起，kubelet 会**强制拒绝**任何带 `configMapRef` / `secretRef` 的 static pod manifest；之前用于绕过限制的 `PreventStaticPodAPIReferences` feature gate 已被**移除**，**无 opt-out**。如果集群里有任何 `kube-apiserver / kube-controller-manager / kube-scheduler / etcd` 的 static pod manifest 仍然通过 API 引用 Secret 或 ConfigMap，升级到 1.37 后 **kubelet 解析失败 → 控制面起不来**。
+>
+> 详细背景、严格定义、应对模式（内联 / hostPath / 模板 / Deployment 替换）见 ADR-008：[`gcp/adr/008-static-pod-no-secret-configmap-k8s-137.md`](../../adr/008-static-pod-no-secret-configmap-k8s-137.md)，本文只挂上跑在升级前/后必须做的 smoke test。
+
+### 按集群类型分支
+
+| 你的集群类型 | 是否需要跑 manifest 审计 | 原因 |
+|---|---|---|
+| **GKE Standard / Autopilot**（Lex 当前所在） | ❌ **跳过 manifest 审计**。GKE 自己维护 CP 节点的 static pod manifest，不会推送含 `configMapRef` 的版本。 | CP 节点对用户不可见，`/etc/kubernetes/manifests/` 由 Google 接管 |
+| **GKE on bare-metal / GKE attached clusters / 自建 kubeadm 集群** | ✅ **必须跑审计**。你控制节点，manifest 由你自己维护。 | static pod manifest 是用户面配置 |
+
+### GKE Standard / Autopilot 用户的等价验证（GKE Standard users, skip the script）
+
+```bash
+# 验证 GKE 控制面组件（apiserver / controller-manager / scheduler）没有用 API 引用 Secret/ConfigMap
+# 预期输出：空（即没有任何匹配行）
+kubectl -n kube-system get pod -l tier=control-plane -o yaml \
+  | grep -E 'configMapRef|secretRef'
+echo "exit=$?  # exit=1 表示没有匹配（符合预期）"
+```
+
+**预期输出（合规）**：
+
+```
+exit=1
+```
+
+如果出现任何匹配行，例如：
+
+```
+    - name: my-secret-ref
+      secretRef:
+        name: bootstrap-token
+```
+
+→ 说明 GKE 控制面静态清单**理论上不该出现的内容**。在 1.37 升级前立即开 case 给 GCP，并把审计原始 YAML 保留下来。
+
+### GKE on bare-metal / attached / 自建 kubeadm 用户的 manifest 审计
+
+审计脚本路径：`gcp/gke/script/audit-static-pod-refs.sh`（由 infra-gcp Bot 维护，对照 [ADR-008 §6 step 2](../../adr/008-static-pod-no-secret-configmap-k8s-137.md)）。在脚本可用之前，可用以下一行命令作为临时等效：
+
+```bash
+# 在 control-plane 节点上直接跑（或对每个 node pool 的第一个节点 SSH 上去执行）
+for f in /etc/kubernetes/manifests/*.yaml /var/lib/kubelet/manifests/*.yaml; do
+  [ -f "$f" ] || continue
+  hits=$(grep -nE 'configMapRef|secretRef|volumes:[[:space:]]*$|\.configMap:|\.secret:' "$f" \
+         | grep -vE '^\s*#' || true)
+  if [ -n "$hits" ]; then
+    echo "[HIT] $f"
+    echo "$hits"
+  else
+    echo "[OK]  $f"
+  fi
+done
+```
+
+**预期输出（合规）**：
+
+```
+[OK]  /etc/kubernetes/manifests/kube-apiserver.yaml
+[OK]  /etc/kubernetes/manifests/kube-controller-manager.yaml
+[OK]  /etc/kubernetes/manifests/kube-scheduler.yaml
+[OK]  /etc/kubernetes/manifests/etcd.yaml
+```
+
+**预期输出（不合规）**：
+
+```
+[HIT] /etc/kubernetes/manifests/kube-apiserver.yaml
+12:        - name: audit-policy
+14:            configMap:
+15:              name: audit-policy-cm
+78:        envFrom:
+79:        - secretRef:
+80:            name: bootstrap-token
+[OK]  /etc/kubernetes/manifests/kube-controller-manager.yaml
+[OK]  /etc/kubernetes/manifests/kube-scheduler.yaml
+[OK]  /etc/kubernetes/manifests/etcd.yaml
+```
+
+出现 `[HIT]` → **不要升级**。按 §4 应对模式（ADR-008 §4）把对应字段改为 `hostPath` 引用节点本地文件，或将 Secret/ConfigMap 内容**内联到 manifest**，再跑一遍审计确认 `[OK]`，**然后**才能升 1.37。
+
+> 完整 Rapid-channel dev-cluster smoke test（含 `gcloud container clusters create --release-channel=rapid --cluster-version=1.37.0-gke.1173000+preview` 和 `kubectl -n kube-system logs -l component=kube-apiserver` 检查 `prevent|static` 关键字）见 ADR-008 §5.4： [`gcp/adr/008-static-pod-no-secret-configmap-k8s-137.md` §5.4](../../adr/008-static-pod-no-secret-configmap-k8s-137.md#54-smoke-test在-rapid-channel-验证)。
+
+## Post-Upgrade Verification (1.37 升级完成后立刻跑)
+
+```bash
+# 1. 重新跑一遍 manifest 审计（确认节点升级 manifest 没有被 GKE / kubeadm 重新写入违规引用）
+#    GKE Standard 用户可跳过；自建用户必跑。
+for f in /etc/kubernetes/manifests/*.yaml /var/lib/kubelet/manifests/*.yaml; do
+  [ -f "$f" ] || continue
+  hits=$(grep -nE 'configMapRef|secretRef' "$f" | grep -vE '^\s*#' || true)
+  if [ -n "$hits" ]; then
+    echo "[HIT] $f"
+    echo "$hits"
+  else
+    echo "[OK]  $f"
+  fi
+done
+
+# 2. 验证 GKE 控制面组件健康（所有用户都跑）
+kubectl -n kube-system get pod -l tier=control-plane -o wide
+kubectl -n kube-system get pod -l component=kube-apiserver -o wide
+
+# 3. 检查 kubelet 没有因为 v1.37 拒绝解析而打 error
+kubectl -n kube-system logs -l component=kube-apiserver --tail=200 \
+  | grep -iE 'prevent|static.*pod|configMapRef.*not allowed' || echo "clean: no v1.37 rejection log lines"
+
+# 4. kubelet 自身健康检查（在每个 control-plane 节点上 SSH 后执行）
+sudo systemctl status kubelet --no-pager
+sudo journalctl -u kubelet --since "10 minutes ago" --no-pager \
+  | grep -iE 'failed to load|static pod.*rejected|preventstaticpodapireferences' \
+  || echo "clean: kubelet healthy, no static-pod rejection"
+```
+
+**判定**：
+- 所有 `[OK]` + `clean: ...` 行 → 升级成功，CP 节点就绪。
+- 出现 `[HIT]` 或 `clean: no v1.37 rejection log lines` 没出现 → **立刻暂停**，把命中文件和 journal 日志保留下来，开 case 给 architect-gcp / infra-gcp。
+
 升级的安全检查
 	1.	提前测试升级：
 	•	使用非生产环境测试 Master 和 Node Pool 升级，确认应用行为和 PDB 配置是否生效。
