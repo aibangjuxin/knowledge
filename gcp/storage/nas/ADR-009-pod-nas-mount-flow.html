@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ADR-009 · Pod 挂 NAS 完整链路与 PSC 位置 — 流程图</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px; background: #22d3ee;
+      border-radius: 50%; animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.75rem; color: white; }
+    h3 { font-size: 0.875rem; font-weight: 600; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .section { margin-top: 2.5rem; }
+    .section-sub { color: #94a3b8; font-size: 0.8rem; margin-bottom: 1rem; }
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; display: block; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan    { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet  { background: #a78bfa; }
+    .card-dot.amber   { background: #fbbf24; }
+    .card-dot.rose    { background: #fb7185; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; line-height: 1.6; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer {
+      text-align: center;
+      margin-top: 2rem;
+      color: #475569;
+      font-size: 0.75rem;
+    }
+    .legend {
+      display: flex; gap: 1.25rem; flex-wrap: wrap;
+      margin-top: 1rem; font-size: 0.75rem; color: #94a3b8;
+    }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+    .legend-swatch { width: 14px; height: 14px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="header-row">
+      <div class="pulse-dot"></div>
+      <h1>ADR-009 · Pod 挂 NAS 完整链路与 PSC 位置</h1>
+    </div>
+    <p class="subtitle">6 层抽象 + 1 条数据通路 + PSC 在哪(或不在这) · 配套文档 ADR-009-pod-nas-mount-flow.md</p>
+  </div>
+
+  <!-- =================== 图 1: 6 层抽象(从上到下) =================== -->
+  <section class="section">
+    <h2>① 6 层抽象 —— 从 Pod 到 NAS 的完整链路</h2>
+    <p class="section-sub">业务方写 Pod manifest 时,只接触 L1 + L2,中间 4 层(L3-PV / L4-CSI / L5-协议 / L6-存储)由平台 + 协议自动处理。</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1320 720">
+        <defs>
+          <marker id="arr1" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8"/>
+          </marker>
+          <marker id="arr-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+          </marker>
+          <pattern id="grid1" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid1)"/>
+
+        <!-- L1: Pod -->
+        <rect x="100" y="40" width="1120" height="80" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="2"/>
+        <text x="60" y="68" fill="#22d3ee" font-size="13" font-weight="700">L1</text>
+        <text x="100" y="68" fill="white" font-size="13" font-weight="700">Pod (使用者)</text>
+        <text x="180" y="68" fill="#cbd5e1" font-size="10">业务方写 manifest: volumes: [ {csi: ...} ] + volumeMounts: [/mnt/nas]</text>
+        <text x="100" y="90" fill="#67e8f9" font-size="9">业务方只需要写这一层,后面 5 层都不用管</text>
+
+        <!-- L2: PVC -->
+        <rect x="100" y="150" width="1120" height="80" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="2"/>
+        <text x="60" y="178" fill="#a78bfa" font-size="13" font-weight="700">L2</text>
+        <text x="100" y="178" fill="white" font-size="13" font-weight="700">PVC (申请单)</text>
+        <text x="200" y="178" fill="#cbd5e1" font-size="10">namespace-scoped: storageClassName / accessModes / resources.requests.storage</text>
+        <text x="100" y="200" fill="#c4b5fd" font-size="9">命名空间级隔离:其他 ns 看不到这张申请单</text>
+
+        <!-- L3: PV -->
+        <rect x="100" y="260" width="1120" height="80" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="2"/>
+        <text x="60" y="288" fill="#a78bfa" font-size="13" font-weight="700">L3</text>
+        <text x="100" y="288" fill="white" font-size="13" font-weight="700">PV (货架 — 卷本身)</text>
+        <text x="260" y="288" fill="#cbd5e1" font-size="10">cluster-scoped: spec.csi.driver / volumeAttributes / nodePublishSecretRef</text>
+        <text x="100" y="310" fill="#c4b5fd" font-size="9">关键字段: spec.csi.driver = "smb.csi.k8s.io"  ← 决定走哪条路</text>
+
+        <!-- L4: CSI driver -->
+        <rect x="100" y="370" width="1120" height="80" rx="8" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="2"/>
+        <text x="60" y="398" fill="#fbbf24" font-size="13" font-weight="700">L4</text>
+        <text x="100" y="398" fill="white" font-size="13" font-weight="700">CSI driver (翻译官)</text>
+        <text x="270" y="398" fill="#cbd5e1" font-size="10">smb.csi.k8s.io / pd.csi.storage.gke.io / nfs.csi... (DaemonSet, privileged)</text>
+        <text x="100" y="420" fill="#fde68a" font-size="9">把 K8s 抽象翻译成具体协议(SMB / NFS / iSCSI),跟真实存储说话</text>
+
+        <!-- L5: 协议 -->
+        <rect x="100" y="480" width="540" height="80" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="2"/>
+        <text x="60" y="508" fill="#22d3ee" font-size="13" font-weight="700">L5a</text>
+        <text x="100" y="508" fill="white" font-size="13" font-weight="700">SMB 协议 (本 ADR)</text>
+        <text x="280" y="508" fill="#cbd5e1" font-size="10">TCP 445, SMB 3.1.1 + signing + encryption</text>
+        <text x="100" y="530" fill="#67e8f9" font-size="9">公司 NAS 路径</text>
+
+        <rect x="680" y="480" width="540" height="80" rx="8" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6,3"/>
+        <text x="640" y="508" fill="#94a3b8" font-size="13" font-weight="700">L5b</text>
+        <text x="680" y="508" fill="white" font-size="13" font-weight="700">NFS 协议 (替代方案)</text>
+        <text x="870" y="508" fill="#cbd5e1" font-size="10">TCP 2049, NFSv3/v4 (Filestore)</text>
+        <text x="680" y="530" fill="#94a3b8" font-size="9">未来如走 Filestore</text>
+
+        <!-- L6: NAS -->
+        <rect x="100" y="590" width="540" height="100" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="2"/>
+        <text x="60" y="618" fill="#a78bfa" font-size="13" font-weight="700">L6a</text>
+        <text x="100" y="618" fill="white" font-size="13" font-weight="700">公司 NAS</text>
+        <text x="100" y="640" fill="#cbd5e1" font-size="10">nas.address.aibang, \\\\hk\\gsd\\application\\</text>
+        <text x="100" y="660" fill="#fbbf24" font-size="9">⚠ 公司内网,跨网络边界(场景 A 直连 / 场景 B Cloud VPN)</text>
+        <text x="100" y="678" fill="#94a3b8" font-size="9">⚠ NAS 文件物理位置:始终在公司 NAS 上,不在 GCP</text>
+
+        <!-- L6b: Filestore -->
+        <rect x="680" y="590" width="540" height="100" rx="8" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6,3"/>
+        <text x="640" y="618" fill="#94a3b8" font-size="13" font-weight="700">L6b</text>
+        <text x="680" y="618" fill="white" font-size="13" font-weight="700">GCP Filestore (替代方案 B)</text>
+        <text x="680" y="640" fill="#cbd5e1" font-size="10">GCP 托管 NFS, 同 VPC 内,无需 VPN</text>
+        <text x="680" y="660" fill="#a7f3d0" font-size="9">✓ 走回 PV 体系 (CMEK / labels / quota 全覆盖)</text>
+        <text x="680" y="678" fill="#fb7185" font-size="9">✗ 数据需迁移到 Filestore</text>
+
+        <!-- 箭头 L1 → L2 -->
+        <line x1="660" y1="120" x2="660" y2="148" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr1)"/>
+        <!-- 箭头 L2 → L3 -->
+        <line x1="660" y1="230" x2="660" y2="258" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr1)"/>
+        <!-- 箭头 L3 → L4 -->
+        <line x1="660" y1="340" x2="660" y2="368" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr1)"/>
+        <!-- 箭头 L4 → L5a (主路径) -->
+        <line x1="370" y1="450" x2="370" y2="478" stroke="#34d399" stroke-width="2" marker-end="url(#arr-emerald)"/>
+        <text x="380" y="470" fill="#34d399" font-size="9">本 ADR</text>
+        <!-- 箭头 L4 → L5b (替代) -->
+        <line x1="950" y1="450" x2="950" y2="478" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr1)"/>
+        <text x="960" y="470" fill="#94a3b8" font-size="9">替代方案 B</text>
+        <!-- 箭头 L5a → L6a -->
+        <line x1="370" y1="560" x2="370" y2="588" stroke="#34d399" stroke-width="2" marker-end="url(#arr-emerald)"/>
+        <!-- 箭头 L5b → L6b -->
+        <line x1="950" y1="560" x2="950" y2="588" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr1)"/>
+
+        <!-- 关键观察标签 -->
+        <rect x="20" y="700" width="1280" height="16" rx="3" fill="rgba(52,211,153,0.10)" stroke="#34d399" stroke-width="1"/>
+        <text x="660" y="712" fill="#34d399" font-size="10" text-anchor="middle">关键观察:数据通道只在 L5a/L5b 和 L6a/L6b 之间流动,L1-L4 全是 K8s 抽象层,不参与数据流</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-swatch" style="background:#22d3ee"></div>Pod / 协议层</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#a78bfa"></div>PV / PVC / NAS</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#fbbf24"></div>CSI driver / 翻译层</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#34d399"></div>本 ADR 主路径(NAS)</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#94a3b8; border:1px dashed"></div>替代方案(Filestore)</div>
+    </div>
+  </section>
+
+  <!-- =================== 图 2: 时序图(Pod 创建 → NAS 可读) =================== -->
+  <section class="section">
+    <h2>② 时序图 —— Pod 创建到 NAS 可读(10 步)</h2>
+    <p class="section-sub">业务方只关心 ① 和 ⑩;中间 8 步(②-⑨)由 K8s + CSI driver + SMB 协议自动完成。</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1320 620">
+        <defs>
+          <marker id="arr2" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8"/>
+          </marker>
+          <marker id="arr-emerald2" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+          </marker>
+          <pattern id="grid2" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid2)"/>
+
+        <!-- 列标题 -->
+        <text x="120" y="30" fill="#67e8f9" font-size="11" font-weight="700" text-anchor="middle">业务方</text>
+        <text x="340" y="30" fill="#a78bfa" font-size="11" font-weight="700" text-anchor="middle">K8s API</text>
+        <text x="560" y="30" fill="#fbbf24" font-size="11" font-weight="700" text-anchor="middle">Kubelet / 调度器</text>
+        <text x="800" y="30" fill="#fbbf24" font-size="11" font-weight="700" text-anchor="middle">CSI driver</text>
+        <text x="1100" y="30" fill="#a78bfa" font-size="11" font-weight="700" text-anchor="middle">公司 NAS</text>
+
+        <!-- 生命线 -->
+        <line x1="120" y1="40" x2="120" y2="580" stroke="#1e293b" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="340" y1="40" x2="340" y2="580" stroke="#1e293b" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="560" y1="40" x2="560" y2="580" stroke="#1e293b" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="800" y1="40" x2="800" y2="580" stroke="#1e293b" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="1100" y1="40" x2="1100" y2="580" stroke="#1e293b" stroke-width="1" stroke-dasharray="3,3"/>
+
+        <!-- ① 业务方写 Pod manifest -->
+        <text x="40" y="80" fill="#67e8f9" font-size="10" font-weight="700">①</text>
+        <rect x="60" y="60" width="120" height="40" rx="4" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="120" y="76" fill="white" font-size="9" text-anchor="middle" font-weight="600">kubectl apply</text>
+        <text x="120" y="92" fill="#94a3b8" font-size="8" text-anchor="middle">Pod manifest</text>
+
+        <!-- ② K8s API 校验 + 创建 -->
+        <text x="260" y="120" fill="#a78bfa" font-size="10" font-weight="700">②</text>
+        <rect x="280" y="100" width="120" height="40" rx="4" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="340" y="116" fill="white" font-size="9" text-anchor="middle" font-weight="600">RBAC + PodSec</text>
+        <text x="340" y="132" fill="#94a3b8" font-size="8" text-anchor="middle">create Pod in etcd</text>
+
+        <!-- 箭头 ① → ② -->
+        <line x1="180" y1="80" x2="280" y2="115" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#arr2)"/>
+
+        <!-- ③ 调度器 -->
+        <text x="480" y="160" fill="#fbbf24" font-size="10" font-weight="700">③</text>
+        <rect x="500" y="140" width="120" height="40" rx="4" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="560" y="156" fill="white" font-size="9" text-anchor="middle" font-weight="600">调度器选 Node</text>
+        <text x="560" y="172" fill="#94a3b8" font-size="8" text-anchor="middle">Pending → Creating</text>
+
+        <line x1="400" y1="125" x2="500" y2="155" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#arr2)"/>
+
+        <!-- ④ Kubelet 调 CSI -->
+        <text x="480" y="210" fill="#fbbf24" font-size="10" font-weight="700">④</text>
+        <rect x="500" y="195" width="120" height="40" rx="4" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="560" y="211" fill="white" font-size="9" text-anchor="middle" font-weight="600">NodePublishVolume</text>
+        <text x="560" y="227" fill="#94a3b8" font-size="8" text-anchor="middle">→ CSI driver</text>
+
+        <!-- ⑤ CSI 读 Secret -->
+        <text x="720" y="250" fill="#fbbf24" font-size="10" font-weight="700">⑤</text>
+        <rect x="740" y="235" width="120" height="40" rx="4" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="800" y="251" fill="white" font-size="9" text-anchor="middle" font-weight="600">读 Secret</text>
+        <text x="800" y="267" fill="#94a3b8" font-size="8" text-anchor="middle">nas-smb-creds</text>
+
+        <line x1="620" y1="220" x2="740" y2="250" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#arr2)"/>
+        <line x1="800" y1="240" x2="340" y2="140" stroke="#a78bfa" stroke-width="1.2" stroke-dasharray="3,3" marker-end="url(#arr2)"/>
+        <text x="600" y="200" fill="#a78bfa" font-size="8">从 K8s API 读</text>
+
+        <!-- ⑥-⑦ SMB 握手 -->
+        <text x="960" y="305" fill="#fbbf24" font-size="10" font-weight="700">⑥⑦</text>
+        <rect x="740" y="285" width="120" height="40" rx="4" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="800" y="301" fill="white" font-size="9" text-anchor="middle" font-weight="600">SMB TCP 445</text>
+        <text x="800" y="317" fill="#94a3b8" font-size="8" text-anchor="middle">Negotiate + Session Setup</text>
+
+        <rect x="1040" y="285" width="120" height="40" rx="4" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="1100" y="301" fill="white" font-size="9" text-anchor="middle" font-weight="600">NAS 鉴权</text>
+        <text x="1100" y="317" fill="#94a3b8" font-size="8" text-anchor="middle">signing + ACL</text>
+
+        <line x1="860" y1="305" x2="1040" y2="305" stroke="#34d399" stroke-width="1.5" marker-end="url(#arr-emerald2)"/>
+        <text x="950" y="298" fill="#34d399" font-size="8" text-anchor="middle">SMB</text>
+
+        <!-- ⑧ CSI mount -->
+        <text x="720" y="355" fill="#fbbf24" font-size="10" font-weight="700">⑧</text>
+        <rect x="740" y="340" width="120" height="40" rx="4" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="800" y="356" fill="white" font-size="9" text-anchor="middle" font-weight="600">mount -t cifs</text>
+        <text x="800" y="372" fill="#94a3b8" font-size="8" text-anchor="middle">Node 本地路径</text>
+
+        <!-- ⑨ Kubelet bind mount -->
+        <text x="480" y="405" fill="#fbbf24" font-size="10" font-weight="700">⑨</text>
+        <rect x="500" y="390" width="120" height="40" rx="4" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="560" y="406" fill="white" font-size="9" text-anchor="middle" font-weight="600">bind mount</text>
+        <text x="560" y="422" fill="#94a3b8" font-size="8" text-anchor="middle">→ 容器 namespace</text>
+
+        <line x1="800" y1="360" x2="620" y2="405" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="3,3" marker-end="url(#arr2)"/>
+
+        <!-- ⑩ 容器启动 -->
+        <text x="40" y="465" fill="#67e8f9" font-size="10" font-weight="700">⑩</text>
+        <rect x="60" y="445" width="120" height="40" rx="4" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="120" y="461" fill="white" font-size="9" text-anchor="middle" font-weight="600">read(open)</text>
+        <text x="120" y="477" fill="#67e8f9" font-size="8" text-anchor="middle">/mnt/nas/foo.csv</text>
+
+        <!-- ⑩ → NAS 实际 read -->
+        <path d="M 180 470 Q 640 520 1040 320" stroke="#34d399" stroke-width="2" fill="none" marker-end="url(#arr-emerald2)"/>
+        <text x="600" y="510" fill="#34d399" font-size="11" font-weight="700" text-anchor="middle">实际 SMB read(每次 open/read 都走这条路)</text>
+
+        <!-- read response -->
+        <path d="M 1040 320 Q 640 480 180 480" stroke="#34d399" stroke-width="2" fill="none" marker-end="url(#arr-emerald2)"/>
+
+        <!-- 业务方只关心 ① ⑩ 标注 -->
+        <rect x="20" y="540" width="240" height="40" rx="4" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="140" y="556" fill="#67e8f9" font-size="10" text-anchor="middle" font-weight="700">业务方接触范围:① ⑩</text>
+        <text x="140" y="572" fill="#94a3b8" font-size="8" text-anchor="middle">中间 8 步全部自动</text>
+
+        <rect x="280" y="540" width="1020" height="40" rx="4" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="790" y="556" fill="#cbd5e1" font-size="10" text-anchor="middle">②-⑨:平台(K8s + CSI driver + SMB 协议)自动完成</text>
+        <text x="790" y="572" fill="#94a3b8" font-size="8" text-anchor="middle">业务方完全不用管,只看到 read() 返回文件内容</text>
+      </svg>
+    </div>
+  </section>
+
+  <!-- =================== 图 3: PSC 在哪 / 不在哪 =================== -->
+  <section class="section">
+    <h2>③ PSC 位置 —— 在哪 / 不在哪</h2>
+    <p class="section-sub">挂 NAS 跟 PSC 没关系;PSC 用于访问 GCP 托管服务(如 Cloud SQL),不适用于公司内网 SMB。</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1320 620">
+        <defs>
+          <marker id="arr3" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8"/>
+          </marker>
+          <marker id="arr-emerald3" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+          </marker>
+          <pattern id="grid3" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid3)"/>
+
+        <!-- 场景标题 -->
+        <text x="40" y="30" fill="#fbbf24" font-size="13" font-weight="700">场景对比:挂 NAS(本 ADR) vs 访问 Cloud SQL(PSC)</text>
+
+        <!-- ===== 场景 1: 挂 NAS(不经过 PSC) ===== -->
+        <rect x="40" y="60" width="600" height="240" rx="12" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="8,4"/>
+        <text x="60" y="85" fill="#34d399" font-size="12" font-weight="700">场景 1:挂 NAS(本 ADR)</text>
+        <text x="60" y="103" fill="#94a3b8" font-size="9">走 SMB TCP 445,跨网络边界,❌ 不经过 PSC</text>
+
+        <!-- GKE Pod -->
+        <rect x="80" y="120" width="140" height="50" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="150" y="144" fill="white" font-size="11" font-weight="600" text-anchor="middle">GKE Pod</text>
+        <text x="150" y="160" fill="#67e8f9" font-size="9" text-anchor="middle">/mnt/nas</text>
+
+        <!-- CSI driver 路径 -->
+        <rect x="260" y="120" width="140" height="50" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="330" y="144" fill="white" font-size="10" font-weight="600" text-anchor="middle">CSI driver</text>
+        <text x="330" y="160" fill="#fbbf24" font-size="9" text-anchor="middle">smb.csi.k8s.io</text>
+
+        <!-- 网络边界(场景 A 路由) -->
+        <rect x="440" y="120" width="180" height="50" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="530" y="144" fill="white" font-size="10" font-weight="600" text-anchor="middle">底层打通路由</text>
+        <text x="530" y="160" fill="#94a3b8" font-size="9" text-anchor="middle">场景 A(无 VPN)</text>
+
+        <!-- 公司 NAS -->
+        <rect x="440" y="220" width="180" height="50" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="2"/>
+        <text x="530" y="244" fill="white" font-size="11" font-weight="600" text-anchor="middle">公司 NAS</text>
+        <text x="530" y="260" fill="#c4b5fd" font-size="9" text-anchor="middle">nas.address.aibang</text>
+
+        <!-- 箭头 -->
+        <line x1="220" y1="145" x2="258" y2="145" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr3)"/>
+        <line x1="400" y1="145" x2="438" y2="145" stroke="#34d399" stroke-width="1.5" marker-end="url(#arr-emerald3)"/>
+        <text x="425" y="138" fill="#34d399" font-size="9">SMB 445</text>
+        <line x1="530" y1="170" x2="530" y2="218" stroke="#34d399" stroke-width="1.5" marker-end="url(#arr-emerald3)"/>
+        <text x="540" y="200" fill="#34d399" font-size="9">SMB 445</text>
+
+        <!-- ❌ PSC 标签 -->
+        <rect x="80" y="195" width="140" height="20" rx="3" fill="rgba(251,113,133,0.15)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="150" y="208" fill="#fb7185" font-size="9" text-anchor="middle">❌ 不经过 PSC</text>
+
+        <text x="60" y="285" fill="#34d399" font-size="9" font-weight="600">→ 数据通道:Pod → CSI → 网络 → NAS(GCP 外)</text>
+
+        <!-- ===== 场景 2: 访问 Cloud SQL(走 PSC) ===== -->
+        <rect x="680" y="60" width="600" height="240" rx="12" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="8,4"/>
+        <text x="700" y="85" fill="#a78bfa" font-size="12" font-weight="700">场景 2:访问 GCP Cloud SQL(对比)</text>
+        <text x="700" y="103" fill="#94a3b8" font-size="9">走 PSC Endpoint, VPC 内网,✓ 经 PSC</text>
+
+        <!-- GKE Pod -->
+        <rect x="720" y="120" width="120" height="50" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="780" y="144" fill="white" font-size="11" font-weight="600" text-anchor="middle">GKE Pod</text>
+
+        <!-- PSC Endpoint -->
+        <rect x="880" y="120" width="140" height="50" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="2"/>
+        <text x="950" y="142" fill="white" font-size="10" font-weight="700" text-anchor="middle">PSC Endpoint</text>
+        <text x="950" y="158" fill="#c4b5fd" font-size="9" text-anchor="middle">10.x.x.x</text>
+
+        <!-- Service Attachment -->
+        <rect x="1060" y="120" width="200" height="50" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="1160" y="142" fill="white" font-size="10" font-weight="700" text-anchor="middle">Service Attachment</text>
+        <text x="1160" y="158" fill="#67e8f9" font-size="9" text-anchor="middle">(GCP 托管服务暴露)</text>
+
+        <!-- Cloud SQL -->
+        <rect x="1060" y="220" width="200" height="50" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="2"/>
+        <text x="1160" y="244" fill="white" font-size="11" font-weight="700" text-anchor="middle">Cloud SQL</text>
+        <text x="1160" y="260" fill="#a7f3d0" font-size="9" text-anchor="middle">(GCP 托管)</text>
+
+        <!-- 箭头 -->
+        <line x1="840" y1="145" x2="878" y2="145" stroke="#a78bfa" stroke-width="2" marker-end="url(#arr3)"/>
+        <text x="850" y="138" fill="#a78bfa" font-size="8">DNS</text>
+        <line x1="1020" y1="145" x2="1058" y2="145" stroke="#a78bfa" stroke-width="2" marker-end="url(#arr3)"/>
+        <line x1="1160" y1="170" x2="1160" y2="218" stroke="#a78bfa" stroke-width="2" marker-end="url(#arr3)"/>
+
+        <text x="700" y="285" fill="#a78bfa" font-size="9" font-weight="600">→ 数据通道:Pod → PSC Endpoint → SA → Cloud SQL(GCP 内)</text>
+
+        <!-- ===== 底部对比表 ===== -->
+        <rect x="40" y="340" width="1240" height="240" rx="12" fill="rgba(15,23,42,0.5)" stroke="#1e293b" stroke-width="1.5"/>
+        <text x="60" y="370" fill="#fbbf24" font-size="13" font-weight="700">关键对比:挂 NAS vs 走 PSC</text>
+
+        <!-- 表头 -->
+        <text x="60" y="400" fill="#94a3b8" font-size="10" font-weight="700">维度</text>
+        <text x="280" y="400" fill="#34d399" font-size="10" font-weight="700">挂 NAS(本 ADR)</text>
+        <text x="640" y="400" fill="#a78bfa" font-size="10" font-weight="700">走 PSC</text>
+
+        <!-- 行 -->
+        <text x="60" y="425" fill="#cbd5e1" font-size="9">目标</text>
+        <text x="280" y="425" fill="white" font-size="9">公司内网 NAS</text>
+        <text x="640" y="425" fill="white" font-size="9">GCP 托管服务(Cloud SQL / Filestore / 自定义)</text>
+
+        <text x="60" y="450" fill="#cbd5e1" font-size="9">协议</text>
+        <text x="280" y="450" fill="white" font-size="9">SMB 445</text>
+        <text x="640" y="450" fill="white" font-size="9">VPC 内网(任意 TCP/UDP)</text>
+
+        <text x="60" y="475" fill="#cbd5e1" font-size="9">网络范围</text>
+        <text x="280" y="475" fill="white" font-size="9">跨网络边界(场景 A 路由 / 场景 B Cloud VPN)</text>
+        <text x="640" y="475" fill="white" font-size="9">GCP VPC 内网</text>
+
+        <text x="60" y="500" fill="#cbd5e1" font-size="9">走公网?</text>
+        <text x="280" y="500" fill="#34d399" font-size="9">❌ 不走(走场景 A 直连内网 / 或场景 B 加密 VPN)</text>
+        <text x="640" y="500" fill="#34d399" font-size="9">❌ 不走(走 VPC 内网)</text>
+
+        <text x="60" y="525" fill="#cbd5e1" font-size="9">PSC 角色</text>
+        <text x="280" y="525" fill="#fb7185" font-size="9">❌ PSC 不参与</text>
+        <text x="640" y="525" fill="#a78bfa" font-size="9">✓ 必须有 PSC Endpoint + Service Attachment</text>
+
+        <text x="60" y="550" fill="#cbd5e1" font-size="9">何时用</text>
+        <text x="280" y="550" fill="white" font-size="9">业务方原始需求(挂公司 NAS)</text>
+        <text x="640" y="550" fill="white" font-size="9">业务方想用 GCP 托管服务</text>
+      </svg>
+    </div>
+  </section>
+
+  <!-- =================== 图 4: 决策树 —— NAS vs Filestore vs PSC =================== -->
+  <section class="section">
+    <h2>④ 决策树 —— 何时用 NAS,何时用 Filestore,何时用 PSC</h2>
+    <p class="section-sub">三种路径适用场景完全不同,业务方根据数据迁移意愿 + 协议偏好 + 多租户需求选择。</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1320 460">
+        <defs>
+          <marker id="arr4" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8"/>
+          </marker>
+          <pattern id="grid4" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid4)"/>
+
+        <!-- 起点:决策问题 -->
+        <rect x="500" y="30" width="320" height="60" rx="8" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="2"/>
+        <text x="660" y="58" fill="white" font-size="12" font-weight="700" text-anchor="middle">业务方要"挂存储到 Pod"</text>
+        <text x="660" y="78" fill="#fbbf24" font-size="10" text-anchor="middle">数据能迁出原位置吗?</text>
+
+        <!-- 分叉 1: 不能迁移 -->
+        <line x1="660" y1="90" x2="220" y2="170" stroke="#34d399" stroke-width="2" marker-end="url(#arr4)"/>
+        <text x="380" y="125" fill="#34d399" font-size="11" text-anchor="middle" font-weight="700">NO · 数据不动</text>
+
+        <!-- 分叉 2: 能迁移 -->
+        <line x1="660" y1="90" x2="1100" y2="170" stroke="#a78bfa" stroke-width="2" marker-end="url(#arr4)"/>
+        <text x="940" y="125" fill="#a78bfa" font-size="11" text-anchor="middle" font-weight="700">YES · 可迁移</text>
+
+        <!-- 路径 1: NAS -->
+        <rect x="60" y="170" width="320" height="180" rx="8" fill="rgba(6,78,59,0.20)" stroke="#34d399" stroke-width="2"/>
+        <text x="220" y="200" fill="#34d399" font-size="13" font-weight="700" text-anchor="middle">✅ 走 NAS(本 ADR)</text>
+
+        <text x="80" y="225" fill="#cbd5e1" font-size="10">协议:SMB 3.1.1</text>
+        <text x="80" y="245" fill="#cbd5e1" font-size="10">位置:公司内网</text>
+        <text x="80" y="265" fill="#cbd5e1" font-size="10">网络:场景 A / 场景 B</text>
+        <text x="80" y="285" fill="#cbd5e1" font-size="10">多租户:❌ 失效(需修补)</text>
+        <text x="80" y="305" fill="#fbbf24" font-size="10">⚠ G7 强制加密必选</text>
+        <text x="80" y="325" fill="#34d399" font-size="10">✓ 不需要 PSC</text>
+
+        <text x="220" y="345" fill="#34d399" font-size="9" text-anchor="middle" font-weight="700">→ 推荐(原始需求)</text>
+
+        <!-- 路径 2: Filestore -->
+        <rect x="500" y="170" width="320" height="180" rx="8" fill="rgba(76,29,149,0.20)" stroke="#a78bfa" stroke-width="2"/>
+        <text x="660" y="200" fill="#a78bfa" font-size="13" font-weight="700" text-anchor="middle">方案 B:GCP Filestore</text>
+
+        <text x="520" y="225" fill="#cbd5e1" font-size="10">协议:NFSv3/v4</text>
+        <text x="520" y="245" fill="#cbd5e1" font-size="10">位置:GCP VPC 内</text>
+        <text x="520" y="265" fill="#cbd5e1" font-size="10">网络:无需 VPN</text>
+        <text x="520" y="285" fill="#34d399" font-size="10">✓ 多租户完整覆盖</text>
+        <text x="520" y="305" fill="#fbbf24" font-size="10">⚠ 数据需迁移</text>
+        <text x="520" y="325" fill="#94a3b8" font-size="10">同 VPC 内无需 PSC</text>
+
+        <text x="660" y="345" fill="#a78bfa" font-size="9" text-anchor="middle" font-weight="700">→ 数据可迁 + 接受 NFS</text>
+
+        <!-- 路径 3: 访问 GCP 服务 -->
+        <rect x="940" y="170" width="320" height="180" rx="8" fill="rgba(8,51,68,0.20)" stroke="#22d3ee" stroke-width="2"/>
+        <text x="1100" y="200" fill="#22d3ee" font-size="13" font-weight="700" text-anchor="middle">PSC(完全不同场景)</text>
+
+        <text x="960" y="225" fill="#cbd5e1" font-size="10">目标:Cloud SQL / 自定义服务</text>
+        <text x="960" y="245" fill="#cbd5e1" font-size="10">位置:GCP VPC 内</text>
+        <text x="960" y="265" fill="#cbd5e1" font-size="10">网络:VPC 内网</text>
+        <text x="960" y="285" fill="#22d3e e" font-size="10">✓ 多租户完整覆盖</text>
+        <text x="960" y="305" fill="#67e8f9" font-size="10">✓ 不经公网</text>
+        <text x="960" y="325" fill="#a78bfa" font-size="10">✓ 必须有 PSC Endpoint</text>
+
+        <text x="1100" y="345" fill="#22d3ee" font-size="9" text-anchor="middle" font-weight="700">→ 想用 GCP 托管服务</text>
+
+        <!-- 关键决策标注 -->
+        <rect x="40" y="380" width="1240" height="60" rx="4" fill="rgba(251,191,36,0.10)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="60" y="405" fill="#fbbf24" font-size="11" font-weight="700">⚠ 关键判断:业务方"挂 NAS"跟"用 PSC"是两个完全不同的需求</text>
+        <text x="60" y="425" fill="#94a3b8" font-size="10">  - NAS = 挂公司内网文件服务器(本 ADR 主体) → 不经过 PSC</text>
+        <text x="60" y="435" fill="#94a3b8" font-size="10">  - PSC = 私有访问 GCP 托管服务(Cloud SQL / Filestore 自定义服务等) → 不挂网盘</text>
+      </svg>
+    </div>
+  </section>
+
+  <!-- =================== 总结卡片 =================== -->
+  <section class="section">
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>核心结论</h3>
+        </div>
+        <ul>
+          <li>• 挂 NAS = 6 层抽象 + 1 条 SMB 数据通路</li>
+          <li>• PSC = GCP 内部私有访问机制</li>
+          <li>• <strong>两者完全无关</strong></li>
+          <li>• 业务方只接触 L1 (Pod) + L2 (PVC)</li>
+          <li>• 中间 4 层由平台 + 协议自动处理</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>业务方 FAQ</h3>
+        </div>
+        <ul>
+          <li>• NAS 跟 PV 是什么关系?PV = K8s 抽象,跟"什么存储"无关</li>
+          <li>• NAS 跟 PSC 是什么关系?❌ 没关系</li>
+          <li>• 数据会经过 GCP 吗?❌ 不会</li>
+          <li>• 跟 Filestore 区别?Filestore 在 GCP VPC 内</li>
+          <li>• Pod spec 要写 NAS 地址吗?❌ 不需要</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>本文档范围</h3>
+        </div>
+        <ul>
+          <li>• 概念澄清 + 流程图</li>
+          <li>• <strong>不实施任何 provision</strong></li>
+          <li>• 不创建 PV / PVC / Secret / PSC</li>
+          <li>• 不跑 gcloud / kubectl</li>
+          <li>• 配套文档: ADR-009-pod-nas-mount-flow.md</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <p class="footer">ADR-009 · Pod 挂 NAS 完整链路与 PSC 位置 · 4 视角 · 2026-08-28</p>
+
+</div>
+</body>
+</html>
