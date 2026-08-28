@@ -71,6 +71,28 @@
 
 > 详见 §11 Review Notes —— 本轮追加 3 点的完整展开。
 
+#### 1.3.3 平台"不存储用户数据"原则的 4 条工程红线
+
+业务方在 review 中提出的根本原则问题"挂 NAS 算不算存储用户数据"经过 §6.3 深度分析后,落地为 **4 条强制红线** —— 任意一条违反,**NAS 挂载申请直接驳回**,不允许通过 POC 例外。
+
+| # | 红线 | 违规示例 | 检测方法 |
+|---|---|---|---|
+| **R1** | **不持久化到 GCP 服务** —— Pod 禁止把 NAS 内容写到 PD / GCS / Firestore / BigQuery / Cloud SQL | 应用代码 `gsutil cp /mnt/nas/foo.csv gs://bucket/` | Platform 团队 review grep `gcs/firestore/bigquery` API call |
+| **R2** | **不写 log / metric 暴露用户数据** —— Pod log 不出现 NAS 文件路径 / API payload / user-facing event | `logger.info(f"processed {filepath}")` | CI 阶段 `grep -rE "nas.*path\|/mnt/nas" service.yaml log_schema.json` 应为空 |
+| **R3** | **不主动观察用户行为** —— Cloud Audit Logs 只记录操作类型,不记录文件路径 / 内容 | 业务方要求 audit 留 "读取了什么 NAS 文件" 内容 | Platform review 拒绝任何 audit 字段含 file_content / path |
+| **R4** | **Pod lifecycle 与 NAS 内容解耦** —— Pod 重建 = NAS 访问状态清空 | 把 NAS 内容打包成 ConfigMap / Secret / initContainer 长存缓存 | CI 阶段校验 mount point 不在 ConfigMap 引用路径上 |
+
+**详细论证 + 7 种行为判定矩阵 + 流程图** 见 §6.3。
+
+**给业务方的一句话答复**(可直接复制给业务方):
+
+> **挂 NAS 本身 ≠ 存储用户数据**,但**取决于 Pod 怎么用**:
+> - ✅ Pod 只读 NAS 内容进内存、不持久化、不写 log、不暴露 user-facing 行为 → **不违反原则**
+> - ❌ Pod 把 NAS 内容写到 GCP 服务 → **明确违反**
+> - ⚠ Pod 把处理结果写回 NAS → **需 PM + Manager 评估 + POC**
+
+---
+
 ---
 
 ## 2. Blast Radius —— 6 个冲击维度
@@ -428,7 +450,111 @@ K8s namespace 是天然隔离边界:**默认情况下,namespace A 的 Pod 不能
 | **ro(只读)** | Pod 启动时加载 NAS 文件到内存 | 低(若 Pod 无状态) |
 | **rw(读写)** | Pod 把运行时数据写回 NAS | **高** —— 这等于把 NAS 当成平台的"持久层",GKE 故障域 ≠ NAS 故障域,数据一致性 / 备份 / 审计全是问题 |
 
-### 6.3 推荐做法
+### 6.3 推荐做法(扩展版:行为判定矩阵 + 4 条红线 + 流程图)
+
+> **本节是 §2.6 四个灰色地带 + §6.1 / §6.2 三档语义 + §6.3 推荐做法的整合版** —— 业务方在 review 中明确提出"挂 NAS 算不算存储用户数据"这一根本原则问题,需要用更结构化的方式回答。
+
+#### 6.3.1 三档原则详细定义(平台"不存储用户数据"原则的边界)
+
+| 档位 | 描述 | 平台层硬要求 | 例外 |
+|---|---|---|---|
+| **绝对档** | 平台持久层(PV / DB / Cache / GCS / BigQuery / Firestore 等)零用户数据 | 任何 GCP 服务都不能持久化 user-data | 无 — 这是底线 |
+| **观察档** | 平台不观察、不记录用户行为 | Pod log 不出现 "读了哪个文件 / 调了哪个 API";Metric 不暴露 user-facing event pattern | 业务方明确同意时可在 audit log 留 "操作类型"(不记录具体内容) |
+| **代理档** | 平台不做 user-data 的"中转 / 镜像 / 缓存 / 持久转发" | 内存级 read = 临时代理可接受;写回 = 长期代理需审批;持久化到 GCP = 违规 | 业务方明确要求 + PM 评估通过 + POC 验证 |
+
+#### 6.3.2 挂 NAS 行为判定矩阵(7 种行为 × 3 档)
+
+| 行为 | 档位影响 | 是否违反原则 | 处理 |
+|---|---|---|---|
+| Pod 内存里临时有 NAS 文件副本(用完即弃) | 档1 ✅ + 档2 ⚠ + 档3 临时 | ⚠ **不直接违反,需做档2 防护**(见 §6.3.3 红线 2) | 默认 ro 挂载即可 |
+| Pod 把 NAS 内容写到 **emptyDir / /tmp** | 档3 边界 — 跟着 Pod 生命周期 | ⚠ 小灰区 | 接受(假设 emptyDir 不写入 PV) |
+| Pod 把处理结果 **写回 NAS**(ro → rw 转换) | 档3 灰色 — 持久代理 | ⚠ **需 PM + Manager 评估 + POC** | 见 §8 决策树主路径 A 的 G1 治理问题 |
+| Pod log / metric 记录 "读了哪个 NAS 文件" | 档2 ❌ | ❌ **直接违反** | 应用层显式过滤 log 内容(红线 2) |
+| Pod 把 NAS 内容 **持久化**到 GCP PD / GCS / Firestore | 档1 ❌ + 档3 ❌ | ❌ **明确违反** | 红线 1 — 平台层不允许 |
+| Pod 写回 NAS + Cloud Audit Logs 留 trace | 档3 灰色 + 审计影响 | ⚠ 灰色,需评估 | 红线 3 — audit log 关联见 §2.5 |
+| Pod 在 user-facing 行为里暴露 NAS 内容 | 档2 ❌ + 观察档破坏 | ❌ **直接违反** | 红线 4 — 应用架构层禁止 |
+
+#### 6.3.3 4 条工程红线(强制,违反即驳回)
+
+**红线 1 — 不持久化到 GCP 服务**:
+- Pod **禁止** 把 NAS 内容写到 PD / GCS / Firestore / BigQuery / Cloud SQL
+- 任何"业务方要求持久化" 的场景,**先 PM → Manager 评估**,不能直接实现
+
+**红线 2 — 不写 log / metric 暴露用户数据**:
+- Pod log 不出现 `read(filename)`、`accessed NAS path`、`API call payload`
+- Metric 不暴露 user-facing event pattern(如 `user_xxx_triggered_xxx` 这种)
+- 应用层 owner 必须实现 log 过滤器,CI 阶段验证
+- 平台团队 review 时**强制 check**:`grep -rE "nas.*path|/mnt/nas" service.yaml log_schema.json` 应为空
+
+**红线 3 — 不主动观察用户行为**:
+- Cloud Audit Logs 留 trace **不可避免**,但**只记录操作类型**(如 `PVC accessed`),**不记录文件路径 / 内容**
+- Pod 通过 IAM 身份访问 NAS,身份链可追溯到 namespace + service account,但不追溯到具体用户行为
+
+**红线 4 — Pod lifecycle 与 NAS 内容解耦**:
+- Pod 重建 = 内存清空 = NAS 访问状态重新开始
+- 不允许 Pod 把 NAS 内容"打包"成 deployment artifact 或 initContainer 长存缓存
+- 不允许 Pod 通过 ConfigMap / Secret 把 NAS 内容二次持久化
+
+#### 6.3.4 合规判定流程图(挂 NAS 申请 review 步骤)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  业务方提交 NAS 挂载申请                                       │
+└─────────────────────────┬────────────────────────────────────┘
+                          │
+                          ▼
+┌──────────────────────────────────────────────────────────────┐
+│  Q1: Pod 是否会持久化 NAS 内容到 GCP 服务?                     │
+│      (PD / GCS / Firestore / BigQuery / Cloud SQL)            │
+└─────────────────────────┬────────────────────────────────────┘
+                          │
+                ┌─────────┴─────────┐
+               YES                  NO
+                │                    │
+                ▼                    ▼
+        ┌─────────────┐    ┌──────────────────────┐
+        │ ❌ 红线 1    │    │ Q2: Pod log 是否会暴露│
+        │ 驳回申请     │    │  NAS 文件路径/内容?  │
+        │ 告知 PM      │    └─────────┬────────────┘
+        └─────────────┘              │
+                          ┌──────────┴──────────┐
+                         YES                   NO
+                          │                      │
+                          ▼                      ▼
+                ┌──────────────┐    ┌────────────────────────┐
+                │ ❌ 红线 2   │    │ Q3: Pod 是否会写回 NAS? │
+                │ 应用层改造  │    │  (ro → rw 转换)         │
+                │ 或驳回     │    └─────────┬───────────────┘
+                └──────────────┘              │
+                          ┌──────────┴──────────┐
+                         YES                   NO
+                          │                      │
+                          ▼                      ▼
+              ┌─────────────────┐   ┌──────────────────────────┐
+              │ ⚠ 灰色地带      │   │ ✅ 通过初审(ro + 严格档2 防护)│
+              │ 需 PM + Manager │   │ 进 G7 / Q6 / G3 治理评估   │
+              │ 评估 + POC     │   │ 见 §8 决策树主路径 A        │
+              └─────────────────┘   └──────────────────────────┘
+                                          │
+                                          ▼
+                              ┌──────────────────────────┐
+                              │  7 治理问题(G1-G7)全 ✅  │
+                              │ → 生成 ADR-010 实施细节  │
+                              │ → infra-gcp 执行        │
+                              └──────────────────────────┘
+```
+
+#### 6.3.5 一句话给业务方的判定(可复制)
+
+> **挂 NAS 本身 ≠ 存储用户数据**,但**取决于 Pod 怎么用**:
+>
+> - ✅ Pod 只读 NAS 内容进内存、不持久化、不写 log、不暴露 user-facing 行为 → **不违反原则**
+> - ❌ Pod 把 NAS 内容写到 GCP 服务(PD / GCS / Firestore)→ **明确违反**
+> - ⚠ Pod 把处理结果写回 NAS → **需 PM + Manager 评估 + POC**
+
+---
+
+### 6.4 推荐做法(原 §6.3,保留)
 
 1. **默认 ro,除非业务方明确要求 rw + 给出业务理由**
 2. 若必须 rw,**额外引入一层抽象** —— 让 Pod 写 GCS bucket(走 IAM 鉴权),由同步任务把 GCS 镜像回 NAS;这样 NAS 是 "冷归档",不是 "热存储"

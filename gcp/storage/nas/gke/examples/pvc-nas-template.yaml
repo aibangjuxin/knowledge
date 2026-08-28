@@ -1,0 +1,19 @@
+# infra-gcp 专用:PVC 模板(绑到 PV-nas-app)
+# 创建后验证:kubectl get pvc pvc-nas-app -n api-ns -o jsonpath='{.status.phase}' → Bound
+# 架构师 lane:本文档只生成模板,不执行 apply
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-nas-app                  # ← 业务方引用
+  namespace: api-ns                  # ← 业务方 namespace
+  labels:
+    tenant: tnt-001                  # ← 与 PV 对齐
+spec:
+  volumeName: pv-nas-app             # ← 绑到 PV(必须精确匹配)
+  accessModes:
+  - ReadOnlyMany                     # ← 与 PV 一致
+  resources:
+    requests:
+      storage: 10Gi                 # ← 必须 ≤ PV capacity
+  storageClassName: ""               # ← 静态 PV,不用 SC

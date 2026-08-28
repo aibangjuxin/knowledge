@@ -1,0 +1,55 @@
+# infra-gcp 专用:Namespace 模板(带 tenant labels + PodSecurity)
+# 创建后 Pod 才能用此 namespace;PV/PVC/NetworkPolicy 都要跟 namespace 对齐
+# 架构师 lane:本文档只生成模板,不执行 apply
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: api-ns
+  labels:
+    tenant: tnt-001                 # ← 与 Tenant CRD 对齐,BigQuery 归因用
+    pod-security.kubernetes.io/enforce: baseline
+                                     # ← 强制 PodSecurity baseline(阻 privileged / hostPath)
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+                                     # ← audit 模式跑 restricted,提供升级信号
+    pod-security.kubernetes.io/warn: restricted
+    name: api-ns
+    # 可选:用于 Tenant CRD 关联
+    platform.example.com/managed-by: infra-gcp
+    platform.example.com/created-at: "2026-08-28"
+---
+# 同时创建业务方专用 ServiceAccount(配合 deployment-with-nas.yaml 的 serviceAccountName)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api-nas-consumer-sa
+  namespace: api-ns
+  labels:
+    tenant: tnt-001
+---
+# 同时给 SA 最小 RBAC 权限(只读自己 ns 的 Pod,不能改 PV/PVC/NetworkPolicy)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: api-nas-consumer-role
+  namespace: api-ns
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps"]
+  verbs: ["get", "list", "watch"]   # 只读
+# ⚠ 不要给 SA 任何 PV/PVC/NetworkPolicy/Secret 的写权限
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: api-nas-consumer-binding
+  namespace: api-ns
+subjects:
+- kind: ServiceAccount
+  name: api-nas-consumer-sa
+  namespace: api-ns
+roleRef:
+  kind: Role
+  name: api-nas-consumer-role
+  apiGroup: rbac.authorization.k8s.io
