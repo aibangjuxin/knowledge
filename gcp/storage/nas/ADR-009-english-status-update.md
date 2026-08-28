@@ -44,3 +44,8 @@ Our platform does **not currently support NAS mounting** for GKE workloads, and 
 - "There is no existing production setup, runbook, or validated pattern" makes the "not supported" claim concrete
 - "PM → Manager → alignment → POC" matches your org's decision flow
 - Length: ~100 words — short enough to skim, complete enough to act on
+
+简单理解，这不仅仅是一个网络可达的问题，因为应该是需要创建对应的 PVC 来支持，所以说这种场景在我们的环境里面也没有,
+另外这种方式是否得到了授权？是否允许？我们是不是要走流程？我也不是很清楚。所以说我理解需要我们的经理来介入
+
+Simply understand, this is not just a network accessibility issue, because it should be necessary to create corresponding PVC to support, so this scenario does not exist in our environment.
