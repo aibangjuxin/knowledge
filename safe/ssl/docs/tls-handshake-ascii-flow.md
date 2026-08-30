@@ -124,6 +124,198 @@ sequenceDiagram
     Note over Client,Server: ✅ 握手完成 — 后续走加密 Record 传输数据
 ```
 
+## PlantUML 版本(自动生成,可编辑)
+
+> 用 `plantuml-ascii` skill 生成。**目的不是替代前面的图**,而是给读者一份**机器可读、可一键编辑**的 `.puml` 源 —— 想改协议步骤、改 alert 名称、加新的失败分支,改 `.puml` 一行就行,不必像前面 ASCII 图那样手工算列宽。
+
+### PlantUML 源文件(完整版,含 5 个 fatal alert 标注 — 用于 SVG 输出)
+
+下面这份 `.puml` 源用 `note over ... end note` 标注了 5 个 fatal alert 锚点。**注意**:这份源**可以**用 `plantuml -tsvg` 导出 SVG;但**当前安装的 PlantUML 1.2026.7 在 `-txt / -utxt` 模式下会因 ASCII exporter 的 `NoteTile` 崩溃**(详见 plantuml-ascii skill 的 Pitfalls §6)。所以下面这份源是给 SVG 用,不是给 ASCII 用。
+
+```plantuml
+@startuml
+title TLS 1.2 Handshake: 9 steps, 5 fatal-alert points
+
+skinparam NoteBackgroundColor #FFE0E0
+skinparam NoteBorderColor #C33
+skinparam NoteFontColor #800
+
+actor Client
+participant Server
+
+== Phase 1: hello negotiation ==
+
+Client -> Server : 1. ClientHello (cipher suites, version, random)
+
+note over Server
+  FAIL if cipher set empty:
+  alert handshake_failure (40) [pod-curl]
+  alert insufficient_security (71)
+  ServerHello NOT sent -> TCP close
+end note
+
+Server --> Client : 2. ServerHello (chosen cipher)
+
+note over Server
+  FAIL if protocol rejected:
+  alert protocol_version (70)
+end note
+
+== Phase 2: server identity ==
+
+Server --> Client : 3. Certificate (X.509 chain)
+
+note over Client
+  FAIL client-side validation:
+  bad_certificate (42)
+  certificate_expired (45)
+  unknown_ca (48)
+  hostname mismatch ->
+  SSLPeerUnverifiedException [CVE-2026-50010]
+end note
+
+Server --> Client : 4. ServerKeyExchange (ECDHE pub)
+Server --> Client : 5. ServerHelloDone
+
+== Phase 3: client key material ==
+
+Client -> Server : 6. ClientKeyExchange (ECDHE pub)
+
+note over Server
+  FAIL bad EC/DHE params:
+  alert handshake_failure (40)
+end note
+
+== Phase 4: switch to encrypted ==
+
+Client -> Server : 7. ChangeCipherSpec
+Client -> Server : 8. Finished (encrypted MAC)
+Server --> Client : 9. ChangeCipherSpec (server side)
+
+note over Server
+  FAIL Finished MAC mismatch:
+  alert decrypt_error (51)
+end note
+
+Server --> Client : 10. Finished (server MAC, client verifies)
+
+note over Client, Server
+  SUCCESS handshake complete.
+  Subsequent traffic uses encrypted
+  Record layer (not shown here).
+end note
+@enduml
+```
+
+生成 SVG:
+
+```bash
+plantuml -tsvg tls-handshake.puml    # 输出 tls-handshake.svg (13 KB)
+plantuml -tpng tls-handshake.puml    # 输出 tls-handshake.png
+```
+
+### PlantUML ASCII 输出(`-utxt` 模式 —— 仅基础流程,**无** alert 标注)
+
+为了拿到 ASCII 输出,我们用一份**不带 `note` 块**的简化 `.puml`(PlantUML 1.2026.7 的 ASCII exporter 一碰到 `note` 就崩 —— 详见 plantuml-ascii skill §Pitfalls 6)。下面的 ASCII 是用这份简化源 `plantuml -utxt` 生成的:
+
+```plantuml
+@startuml
+title TLS 1.2 Handshake (9-step ASCII, PlantUML -utxt)
+
+actor Client
+participant Server
+
+Client -> Server : 1. ClientHello (cipher suites, version, random)
+Server --> Client : 2. ServerHello (chosen cipher)
+Server --> Client : 3. Certificate (X.509 chain)
+Server --> Client : 4. ServerKeyExchange (ECDHE pub)
+Server --> Client : 5. ServerHelloDone
+Client -> Server : 6. ClientKeyExchange (ECDHE pub)
+Client -> Server : 7. ChangeCipherSpec
+Client -> Server : 8. Finished (encrypted MAC)
+Server --> Client : 9. ChangeCipherSpec (server side)
+Server --> Client : 10. Finished (server MAC, client verifies)
+@enduml
+```
+
+`plantuml -utxt tls-ascii.puml` 的输出:
+
+```
+TLS 1.2 Handshake (9-step ASCII, PlantUML -utxt)
+
+              ┌──────┐                                           ┌──────┐
+              │Client│                                           │Server│
+              └───┬──┘                                           └───┬──┘
+                  │ 1. ClientHello (cipher suites, version, random)  │
+                  │─────────────────────────────────────────────────>│
+                  │                                                  │
+                  │         2. ServerHello (chosen cipher)           │
+                  │< ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │
+                  │                                                  │
+                  │          3. Certificate (X.509 chain)            │
+                  │< ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │
+                  │                                                  │
+                  │        4. ServerKeyExchange (ECDHE pub)          │
+                  │< ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │
+                  │                                                  │
+                  │               5. ServerHelloDone                 │
+                  │< ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │
+                  │                                                  │
+                  │        6. ClientKeyExchange (ECDHE pub)          │
+                  │─────────────────────────────────────────────────>│
+                  │                                                  │
+                  │               7. ChangeCipherSpec                │
+                  │─────────────────────────────────────────────────>│
+                  │                                                  │
+                  │           8. Finished (encrypted MAC)            │
+                  │─────────────────────────────────────────────────>│
+                  │                                                  │
+                  │        9. ChangeCipherSpec (server side)         │
+                  │< ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │
+                  │                                                  │
+                  │   10. Finished (server MAC, client verifies)     │
+                  │< ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │
+                  │                                                  │
+              ┌───┴──┐                                           ┌───┴──┐
+              │Client│                                           │Server│
+              └──────┘                                           └──────┘
+```
+
+### 三个版本的对比
+
+| 版本 | 怎么生成 | 包含 alert 标注? | 可编辑性 | 渲染在哪 |
+|------|---------|------------------|---------|---------|
+| **手画 ASCII**(§0,~60 行) | 手工对齐(CJK 视觉宽度正确) | ✅ 5 个 alert + ★ 引用 | 改一行要重算列宽 | 任何 monospace 终端 |
+| **Mermaid**(§补充,~30 行) | IDE / GitHub 原生渲染 | ✅ 5 个 alert | 编辑 `.md` 即时预览 | GitHub / VSCode / Obsidian |
+| **PlantUML ASCII**(本节,~15 行) | `plantuml -utxt file.puml` | ❌(1.2026.7 ASCII exporter bug) | 改 `.puml` 重跑命令 | 任何 monospace 终端 |
+
+**怎么选**:
+- 你要**马上看到图**、不想装工具 → 看上面手画版
+- 你在写 GitHub README / VSCode 文档 → 用 Mermaid 版(IDE 直接渲染)
+- 你要**经常改协议细节**(协议升级 / 加新 alert),想用版本控制管理 → 用 PlantUML 版(`.puml` 源进 git,改一行重新生成即可)
+- 你要可分享的**矢量图**(博客 / 幻灯片) → `plantuml -tsvg` 输出 SVG
+
+### PlantUML 1.2026.7 ASCII exporter 的限制(详细)
+
+实测发现,PlantUML 1.2026.7 的 `-txt / -utxt` 输出有以下 crash(全部抛 `java.lang.UnsupportedOperationException: NoteTile` / `DividerTile`):
+
+| 触发条件 | 现象 |
+|---------|------|
+| `note over X ... end note`(多行块) | **crash**(`AsciiBlock.asciiDimension` not implemented) |
+| `note left of X : text` / `note right of X : text` | **crash**(同上) |
+| `== Section ==` divider 在 sequence diagram 里 | **crash**(`DividerTile` not implemented) |
+| `rect rgb(...) ... end`(Mermaid 风格的彩色框) | **crash**(无 `rect` in sequence) |
+| 不带任何 `note` 的纯消息序列 | ✅ 正常 |
+
+**变通办法**:
+1. 用 SVG 输出代替 ASCII(`plantuml -tsvg`,13 KB,CJK 正确)
+2. 简化 `.puml` —— 把 alert 标注挪到箭头消息文本里(如上面简化版 ASCII 输出所示)
+3. **降级 PlantUML 到 1.2024.x 系列**(那时 ASCII exporter 还是正常的)—— `brew install plantuml@1.2024` 然后 `brew switch plantuml 1.2024.x`
+
+完整 pitfall 已记录在 plantuml-ascii skill 的 §Pitfalls。
+
+---
+
 ## 列宽速查表(给想自己改图的人)
 
 | 元素 | 起始列 | 结束列 | 宽度 |
