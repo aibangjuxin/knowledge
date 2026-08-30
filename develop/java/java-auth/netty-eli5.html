@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Netty — explained simply</title>
+<style>
+  :root {
+    --bg: #020617;
+    --fg: #e2e8f0;
+    --muted: #94a3b8;
+    --cyan: #22d3ee;
+    --emerald: #34d399;
+    --border: #1e293b;
+    --panel: #0f172a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 3rem 1.5rem 4rem;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  .container { max-width: 760px; margin: 0 auto; }
+  h1 {
+    font-size: 1.9rem;
+    margin: 0 0 0.4rem;
+    color: var(--cyan);
+    font-weight: 600;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-bottom: 2.5rem;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.6rem 1.4rem;
+    margin-bottom: 1.5rem;
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 1.2rem;
+    align-items: center;
+  }
+  .panel-icon {
+    width: 100px;
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .panel-icon svg { width: 100%; height: 100%; }
+  .panel-text h2 {
+    font-size: 1.1rem;
+    margin: 0 0 0.4rem;
+    color: var(--cyan);
+    font-weight: 600;
+  }
+  .panel-text p {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--fg);
+  }
+  .panel-emerald h2 { color: var(--emerald); }
+  .panel-muted h2 { color: var(--muted); }
+  .reverse { border-left: 3px solid var(--muted); }
+  .reverse h2 { color: var(--muted); }
+  @media (max-width: 520px) {
+    .panel { grid-template-columns: 1fr; }
+    .panel-icon { width: 80px; height: 80px; margin: 0 auto; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Netty is a smart post office for computer messages.</h1>
+<p class="subtitle">When programs on different computers want to talk, Netty helps them do it quickly.</p>
+
+<!-- Panel 1: The trigger -->
+<section class="panel">
+  <div class="panel-icon">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="20" width="80" height="55" rx="6" fill="none" stroke="#22d3ee" stroke-width="2.5"/>
+      <circle cx="50" cy="48" r="11" fill="none" stroke="#22d3ee" stroke-width="2.5"/>
+      <path d="M50 59 L50 70 M40 70 L60 70" stroke="#22d3ee" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="50" cy="48" r="3" fill="#22d3ee"/>
+    </svg>
+  </div>
+  <div class="panel-text">
+    <h2>The trigger: two programs want to talk</h2>
+    <p>Your app and another computer. They speak <strong>bytes</strong> — long rows of 0s and 1s. They need a helper to package, send, unpack, and reply — without your app doing the boring parts.</p>
+  </div>
+</section>
+
+<!-- Panel 2: The middle (mechanism 1 — the pipeline) -->
+<section class="panel">
+  <div class="panel-icon">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="22" width="22" height="22" rx="3" fill="none" stroke="#22d3ee" stroke-width="2"/>
+      <rect x="38" y="22" width="22" height="22" rx="3" fill="none" stroke="#22d3ee" stroke-width="2"/>
+      <rect x="68" y="22" width="22" height="22" rx="3" fill="#22d3ee"/>
+      <path d="M30 33 L38 33 M60 33 L68 33" stroke="#22d3ee" stroke-width="2"/>
+      <path d="M50 50 L50 70 M42 65 L50 73 L58 65" stroke="#34d399" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="50" y="86" text-anchor="middle" fill="#94a3b8" font-size="10">handler chain</text>
+    </svg>
+  </div>
+  <div class="panel-text">
+    <h2>The middle: a chain of small helpers</h2>
+    <p>Bytes go through a <strong>pipeline</strong> — a row of small helpers. Helper 1 checks security. Helper 2 unzips the message. Helper 3 turns bytes into your app's data type. Each helper does one tiny job.</p>
+  </div>
+</section>
+
+<!-- Panel 3: The middle (mechanism 2 — EventLoop) -->
+<section class="panel">
+  <div class="panel-icon">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="50" cy="50" r="32" fill="none" stroke="#22d3ee" stroke-width="2.5"/>
+      <circle cx="50" cy="50" r="6" fill="#22d3ee"/>
+      <circle cx="50" cy="18" r="3" fill="#34d399"/>
+      <circle cx="82" cy="50" r="3" fill="#34d399"/>
+      <circle cx="50" cy="82" r="3" fill="#34d399"/>
+      <circle cx="18" cy="50" r="3" fill="#34d399"/>
+      <path d="M50 24 L50 44 M76 50 L56 50 M50 76 L50 56 M24 50 L44 50" stroke="#94a3b8" stroke-width="1.5"/>
+    </svg>
+  </div>
+  <div class="panel-text">
+    <h2>The middle: one worker per conversation</h2>
+    <p>An <strong>EventLoop</strong> is a worker who watches many conversations. Each conversation stays with the same worker — messages never get jumbled. One worker handles thousands of chats at once.</p>
+  </div>
+</section>
+
+<!-- Panel 4: The middle (mechanism 3 — protocols) -->
+<section class="panel">
+  <div class="panel-icon">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <rect x="14" y="30" width="72" height="14" rx="3" fill="none" stroke="#22d3ee" stroke-width="2"/>
+      <rect x="14" y="50" width="72" height="14" rx="3" fill="none" stroke="#22d3ee" stroke-width="2"/>
+      <rect x="14" y="70" width="50" height="14" rx="3" fill="#22d3ee"/>
+      <text x="50" y="22" text-anchor="middle" fill="#94a3b8" font-size="9">HTTP / WebSocket / gRPC</text>
+    </svg>
+  </div>
+  <div class="panel-text">
+    <h2>The middle: speaks many languages</h2>
+    <p>Netty already knows how to chat in <strong>HTTP, WebSocket, gRPC</strong> (a way for programs to call each other), and more. You pick which language. You do not rewrite the rules.</p>
+  </div>
+</section>
+
+<!-- Panel 5: Outcome -->
+<section class="panel panel-emerald">
+  <div class="panel-icon">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="50" cy="50" r="34" fill="none" stroke="#34d399" stroke-width="2.5"/>
+      <path d="M32 52 L44 64 L68 38" stroke="#34d399" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <div class="panel-text">
+    <h2>The outcome: fast, clean, safe</h2>
+    <p>Your app talks to thousands of computers at once — quickly, without jumbled messages. Netty is the post office that never sleeps.</p>
+  </div>
+</section>
+
+<!-- Panel 6: Reverse direction (who controls / audits) -->
+<section class="panel reverse panel-muted">
+  <div class="panel-icon">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <rect x="25" y="38" width="50" height="38" rx="4" fill="none" stroke="#94a3b8" stroke-width="2"/>
+      <path d="M40 38 L40 28 Q60 28 60 38" stroke="#94a3b8" stroke-width="2" fill="none"/>
+      <circle cx="50" cy="55" r="5" fill="#94a3b8"/>
+      <rect x="48" y="58" width="4" height="10" fill="#94a3b8"/>
+    </svg>
+  </div>
+  <div class="panel-text">
+    <h2>Who controls it: the open-source community</h2>
+    <p>Netty is free, open-source software. The Netty project — run by volunteer maintainers — decides what it does. Anyone can read its code, propose changes, or report problems (called <strong>CVEs</strong>) when they find a security flaw.</p>
+  </div>
+</section>
+
+</div>
+</body>
+</html>
+
+<!-- cite: https://netty.io/ — Netty's official definition: "asynchronous event-driven network application framework" -->
+<!-- cite: https://github.com/netty/netty — Netty's GitHub: open-source, versioned, CVE-tracked -->
+<!-- cite: https://netty.io/3.9/guide/index.html — Three core components: buffer, channel, event model -->
+<!-- A simplified version of the §1-§6 content from netty.md in this directory -->
