@@ -75,6 +75,55 @@
    ───────────────────────────────────
 ```
 
+## 补充：Mermaid 矢量流程图（支持在 IDE / GitHub 中直接渲染）
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client
+    actor Server
+
+    Client->>Server: ClientHello (cipher suites, tls version, random, SNI)
+    
+    rect rgb(255, 230, 230)
+    Note over Server: 🚨 ALERT (fatal) → TCP Close<br/>交集 = ∅ → handshake_failure (40) / insufficient_security (71)
+    end
+
+    Server-->>Client: ServerHello (selected cipher & tls version)
+    
+    rect rgb(255, 230, 230)
+    Note over Server: 🚨 ALERT (fatal) → TCP Close<br/>协议版本被拒 → protocol_version (70)
+    end
+
+    Server-->>Client: Certificate (X.509 证书链)
+
+    rect rgb(255, 230, 230)
+    Note over Client: 🚨 Client 侧验证证书失败 (Alert / Exception):<br/>• 证书过期 → certificate_expired (45)<br/>• CA 不受信任 → unknown_ca (48)<br/>• 签名错误 → bad_certificate (42)<br/>• Hostname 不匹配 → SSLPeerUnverifiedException (★ CVE-2026-50010)
+    end
+
+    Server-->>Client: ServerKeyExchange (ECDHE 临时公钥)
+    Server-->>Client: ServerHelloDone ("Server 明文阶段结束")
+
+    Client->>Server: ClientKeyExchange (ECDHE 临时公钥)
+    
+    rect rgb(255, 230, 230)
+    Note over Server: 🚨 ALERT (fatal) → TCP Close<br/>(EC)DHE 参数无效 → handshake_failure (40)
+    end
+
+    Client->>Server: ChangeCipherSpec ("接下来用新 key 加密")
+    Client->>Server: Finished (encrypted MAC)
+
+    Server-->>Client: ChangeCipherSpec ("Server 同样切换加密")
+    
+    rect rgb(255, 230, 230)
+    Note over Server: 🚨 ALERT (fatal) → TCP Close<br/>Finished MAC 不匹配 → decrypt_error (51)
+    end
+
+    Server-->>Client: Finished (encrypted MAC, Client 校验)
+    
+    Note over Client,Server: ✅ 握手完成 — 后续走加密 Record 传输数据
+```
+
 ## 列宽速查表(给想自己改图的人)
 
 | 元素 | 起始列 | 结束列 | 宽度 |
