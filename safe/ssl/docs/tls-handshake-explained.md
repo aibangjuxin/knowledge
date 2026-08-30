@@ -160,6 +160,126 @@ Then split `key_block` into client_write_MAC_key,
 server_write_MAC_key, client_write_key, server_write_key, plus IVs.
 Every cipher suite specifies exactly how the split happens.
 
+### 2.5 What if ServerHello never comes? (the failure path)
+
+The previous sections all describe the **success** path: ClientHello → ServerHello
+→ Certificate → ... → Finished → application data. But the whole negotiation
+can fail before any of that, and the failure mode is precisely defined by
+RFC.
+
+The server picks the cipher suite in step ② by intersecting **its own enabled
+list** with the client's `cipher_suites` in ClientHello. If that intersection
+is empty — the server supports nothing the client offered — the server
+**never sends a ServerHello**. Instead it sends a **fatal Alert** and closes
+the TCP connection.
+
+The canonical wording is in RFC 5246 §7.4.1.3 (Server Hello):
+
+> "The server will send this message in response to a ClientHello message
+> **when it was able to find an acceptable set of algorithms. If it cannot
+> find such a match, it will respond with a handshake failure alert.**"[4]
+
+Two alert descriptions cover this case. From RFC 5246 §7.2.2:
+
+> **`handshake_failure`** (alert 40) — "Reception of a handshake_failure
+> alert message indicates that the sender was unable to negotiate an
+> acceptable set of security parameters given the options available.
+> **This is a fatal error.**"[4]
+
+> **`insufficient_security`** (alert 71) — "Returned instead of
+> handshake_failure **when a negotiation has failed specifically because
+> the server requires ciphers more secure than those supported by the
+> client.** This message is always fatal."[4]
+
+Both alerts are **fatal** (level 2): the sender must terminate the connection
+after sending them. There is no recovery, no retry with different parameters
+within the same TCP connection — the client must open a fresh connection
+with a different ClientHello (e.g. newer JRE, different cipher list, JCE
+Unlimited Strength installed).
+
+```
+Client                              Server
+   |-------- ClientHello ----------->|   ① client offers cipher list
+   |                                  |     [TLS_RSA_WITH_AES_128_CBC_SHA,
+   |                                  |      TLS_RSA_WITH_AES_256_CBC_SHA,
+   |                                  |      ... only legacy stuff]
+   |                                  |
+   |                                  |  server: intersect(client_list,
+   |                                  |                server_enabled_list)
+   |                                  |  → ∅ (no overlap)
+   |                                  |
+   |<------- Alert (level=fatal, -----|  ② ServerHello never sent.
+   |         description=             |     RFC 5246 §7.4.1.3:
+   |         handshake_failure 40     |     "respond with a handshake
+   |         OR                       |      failure alert"
+   |         insufficient_security 71)|
+   |<------- close_notify (optional)-|  ③ server closes TCP
+   X                                 X
+```
+
+**Three concrete things to notice**:
+
+1. **No ServerHello ever goes on the wire.** The client sees: ClientHello
+   out → Alert in → TCP close. No `Cipher is:` line in `openssl s_client`
+   output; the line is empty or absent.
+2. **The choice between alert 40 vs 71 is academic in practice.** Most
+   servers (Java JSSE, Nginx, Apache) send `handshake_failure` (40) for
+   both "no overlap" and "client ciphers too weak" — the dedicated
+   `insufficient_security` (71) alert is technically more precise for
+   the pod-curl case (server requires more secure ciphers than client
+   supports) but rarely used.
+3. **Application data never flows.** The whole 9-step handshake
+   diagram above (steps ①–⑨) collapses at step ②. No certificate, no
+   key exchange, no Finished, no HTTP request. This is why the log line
+   is `Received fatal alert: handshake_failure` (no JSON body, no HTTP
+   status) — the application layer was never reached.
+
+This is the **exact failure mode in `develop/java/java-auth/pod-curl.md` §4**:
+the Java client (running an old JRE with a legacy-only cipher list) sent
+ClientHello to a third-party server that had been hardened to require
+ECDHE/GCM/CBC-SHA256+. The intersection was empty, the server sent
+`handshake_failure`, and the Java client's `SSLSocket` raised
+`SSLHandshakeException: (handshake_failure) Received fatal alert:
+handshake_failure` at the application layer. See that doc for the
+specific Java / JRE / JCE Unlimited Strength remediation.
+
+#### How to confirm with `openssl s_client`
+
+Run a deliberately weak ClientHello against any server that supports only
+strong ciphers (the third-party's II1711-hardened endpoint, or any server
+running modern Nginx with `ssl_protocols TLSv1.2; ssl_ciphers
+ECDHE+AESGCM:...`):
+
+```bash
+# Force a ClientHello with ONLY legacy RSA-CBC ciphers — the modern server
+# will have nothing to pick from
+openssl s_client -connect <host>:443 -tls1_2 \
+    -cipher 'AES128-SHA:AES256-SHA:DES-CBC3-SHA' \
+    -servername <host> </dev/null 2>&1 | grep -E 'Cipher|alert|error|handshake'
+
+# Expected (failure-path):
+#   ---
+#   New, (NONE), Cipher is (NONE)
+#   ---
+#   4077xxx:error:...:ssl/.../statem_clnt.c:...
+#     tlsv1 alert handshake failure
+#   ---
+#   SSL handshake has read 7 bytes and written N bytes
+#     (read ≈ 7 = exactly one TLS Alert record = alert level(1) + desc(1)
+#      + back-reference 7 bytes; written = size of your ClientHello)
+#
+# Successful path would show:
+#   New, TLSv1.2, Cipher is ECDHE-RSA-AES128-GCM-SHA256
+#   SSL handshake has read ~3000 bytes and written ~200 bytes
+```
+
+The 7-byte read is the diagnostic smoking gun: a TLS Alert record is
+exactly 7 bytes (ContentType=21 alert + ProtocolVersion=0x0303 + length=2
++ AlertLevel=2 fatal + AlertDescription=40/71 handshake_failure /
+insufficient_security), so when you see `read 7 bytes and written
+ClientHello-size bytes`, the server told you "no overlap" without ever
+sending a ServerHello.
+
 ---
 
 ## 3. TLS 1.3 — what changed and why it is faster
@@ -399,3 +519,4 @@ chain — fix by adding the missing CA to the OS trust store or pointing
 [1] RFC 8446 - The Transport Layer Security (TLS) Protocol Version 1.3 — https://www.rfc-editor.org/rfc/rfc8446
 [2] MDN - Transport Layer Security (TLS) — https://developer.mozilla.org/en-US/docs/Web/Security/Transport_Layer_Security
 [3] Wikipedia - Transport Layer Security — https://en.wikipedia.org/wiki/Transport_Layer_Security
+[4] RFC 5246 - The Transport Layer Security (TLS) Protocol Version 1.2 — https://www.rfc-editor.org/rfc/rfc5246 (cited in §2.5 for the ServerHello rule "if it cannot find such a match, it will respond with a handshake failure alert" and the two alert descriptions `handshake_failure` 40 / `insufficient_security` 71)

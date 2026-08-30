@@ -157,6 +157,10 @@ TLSv1.2 only; 关闭 SSLv3 / TLSv1.0 / TLSv1.1;
 
 **所以"API 自己跑没事,API 主动调第三方就挂" = client 角色特有的问题,跟 server 配置无关。**
 
+#### 协议层精确定位(交叉引用)
+
+> 这一节只从 **Java / JRE 配置** 的角度说"cipher 不匹配导致 handshake_failure"。**协议层(RFC)的精确行为** ——server 是怎么发现自己 cipher 列表为空、fatal alert 是怎么发出去的、为什么 ServerHello 完全没出现 —— 在 `safe/ssl/docs/tls-handshake-explained.md` §2.5 "What if ServerHello never comes? (the failure path)" 里有逐字 RFC 引用 + 失败路径 ASCII 图 + 7-byte TLS Alert record 的诊断细节。**两篇是同一现象的两层视角**:本文件负责"Java 怎么修",那个文件负责"协议为什么这样"。
+
 ---
 
 ## §5 三种客户端 HTTP 库对应的 cipher 控制路径
