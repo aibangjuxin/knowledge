@@ -1,3 +1,28 @@
+- [TLS Handshake — Explained](#tls-handshake--explained)
+  - [1. Why a handshake at all](#1-why-a-handshake-at-all)
+  - [2. The classic TLS 1.2 handshake (the one most textbooks still draw)](#2-the-classic-tls-12-handshake-the-one-most-textbooks-still-draw)
+    - [① ClientHello](#-clienthello)
+    - [② ServerHello](#-serverhello)
+    - [③ Certificate](#-certificate)
+    - [④ ServerHelloDone](#-serverhellodone)
+    - [⑤ ClientKeyExchange — the actual key material](#-clientkeyexchange--the-actual-key-material)
+    - [⑥ / ⑧ ChangeCipherSpec](#---changecipherspec)
+    - [⑦ / ⑨ Finished (encrypted)](#---finished-encrypted)
+    - [Deriving traffic keys](#deriving-traffic-keys)
+    - [2.5 What if ServerHello never comes? (the failure path)](#25-what-if-serverhello-never-comes-the-failure-path)
+      - [How to confirm with `openssl s_client`](#how-to-confirm-with-openssl-s_client)
+  - [3. TLS 1.3 — what changed and why it is faster](#3-tls-13--what-changed-and-why-it-is-faster)
+    - [What the client sends upfront — the crucial change](#what-the-client-sends-upfront--the-crucial-change)
+    - [What is encrypted now](#what-is-encrypted-now)
+    - [Cipher suite reshuffle](#cipher-suite-reshuffle)
+  - [4. Resumption — PSK and 0-RTT](#4-resumption--psk-and-0-rtt)
+    - [4.1 PSK resumption (1-RTT)](#41-psk-resumption-1-rtt)
+    - [4.2 0-RTT — zero round-trips, weaker security](#42-0-rtt--zero-round-trips-weaker-security)
+  - [5. What `openssl s_client` shows you](#5-what-openssl-s_client-shows-you)
+  - [6. Cheat-sheet — message direction at a glance](#6-cheat-sheet--message-direction-at-a-glance)
+  - [7. Where to go next](#7-where-to-go-next)
+  - [Sources](#sources)
+
 # TLS Handshake — Explained
 
 > What actually happens in the few hundred milliseconds after your browser

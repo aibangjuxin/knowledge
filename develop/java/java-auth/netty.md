@@ -1,3 +1,23 @@
+- [Netty 探索笔记 — 抛开漏洞,这东西到底是什么?](#netty-探索笔记--抛开漏洞这东西到底是什么)
+  - [§1 一句话定义(从 Netty 官网)](#1-一句话定义从-netty-官网)
+  - [§2 Netty 实现的是什么 —— 三大核心组件](#2-netty-实现的是什么--三大核心组件)
+    - [2.1 Buffer — 自己的字节容器](#21-buffer--自己的字节容器)
+    - [2.2 Channel — 一个比 JDK Socket 更高层的抽象](#22-channel--一个比-jdk-socket-更高层的抽象)
+    - [2.3 Event Model — 事件驱动的 pipeline](#23-event-model--事件驱动的-pipeline)
+    - [2.4 跟 Nginx / HAProxy 的类比(Linux 管理员视角)](#24-跟-nginx--haproxy-的类比linux-管理员视角)
+      - [2.4.1 一句话类比](#241-一句话类比)
+      - [2.4.2 类比成立的部分 ✓](#242-类比成立的部分-)
+      - [2.4.3 类比**不**成立的部分 ✗(知道边界,避免误解)](#243-类比不成立的部分-知道边界避免误解)
+      - [2.4.4 一个临时起的 HTTPS 服务(跟 `python3 -m http.server` 同心智模型)](#244-一个临时起的-https-服务跟-python3--m-httpserver-同心智模型)
+  - [§3 Netty 的线程模型 — EventLoop](#3-netty-的线程模型--eventloop)
+  - [§4 Netty 在整个 Java 生态里的位置](#4-netty-在整个-java-生态里的位置)
+  - [§5 一个最小可跑的 Netty 例子 —— 直观理解](#5-一个最小可跑的-netty-例子--直观理解)
+  - [§6 关键设计哲学 —— 为什么 Netty 流行起来](#6-关键设计哲学--为什么-netty-流行起来)
+  - [§7 跟 java-auth 主题的相关性](#7-跟-java-auth-主题的相关性)
+  - [§8 我自己的探索结论(写给自己的)](#8-我自己的探索结论写给自己的)
+  - [Sources](#sources)
+    - [Related docs in this repo](#related-docs-in-this-repo)
+
 # Netty 探索笔记 — 抛开漏洞,这东西到底是什么?
 
 > **为什么写这个文档**:在看 `cve-2026-50010-netty-hostname-verification-bypass.md` 的过程中,我意识到自己对 Netty 的认知一直被"漏洞视角"框住——只知道 Netty 的某个具体 bug、某个 CVE。但 Netty 本身是一个独立的、有自己设计哲学的网络框架,值得作为一个**完整对象**来理解。这个文档就是我个人对 Netty 的探索记录。

@@ -16,6 +16,8 @@
 | 不能 exec,但有 keystore 文件(JAR / ConfigMap / PV) | 用 `keytool`/`openssl` 离线解析 | [02: 能拿到 keystore 文件](references/01-shell-access-strategies.md#场景-2-不能-exec-但能拿到-keystore-文件) |
 | 只能看到 Service 暴露的端口 | 从外部 dial 端口,验证书指纹 | [03: 只能从外部访问](references/01-shell-access-strategies.md#场景-3-只能从外部访问-看不到-pod-内部) |
 | 想搞清楚代码层到底是怎么挑证书的 | 看 `application.yml` 的 `server.ssl.*` + Java 代码 | [03: Spring Boot SSL 加载机制](references/03-spring-boot-yaml-ssl-anatomy.md) |
+| 客户端用域名访问 Pod 时报 `err 62` / hostname mismatch;绑 IP 通 | 看 Pod cert 的 SAN 跟客户端访问域名对不对得上 | [04: SAN 不匹配自检](references/04-san-mismatch-hostname-verify.md) |
+| **Java 应用出站调第三方 HTTPS 报 `handshake_failure`**(入站 8443 没事) | 看 JRE cipher 列表 ∩ 第三方 enabled cipher 列表 | [05: 出站 cipher 协商失败](references/05-outbound-https-cipher-mismatch.md) |
 
 ## 详细目录
 
@@ -34,6 +36,17 @@
    - 证书加载的代码路径:`TomcatServletWebServerFactory` → `SslConnectorFactory`
    - 自定义证书 vs Platform 默认证书的优先级
    - 跟 `../java-application-auth.md` 里 `team_a_env_server` 报错的根因复盘
+
+4. **[04 — 客户端用域名访问 Pod 时报证书错,但绑 IP 又能通 — SAN 不匹配自检](references/04-san-mismatch-hostname-verify.md)**
+   - 入站方向(客户端 → Pod)的 hostname 校验失败
+   - 跟 CVE-2026-50010 的精确区分(报 err 62 = 校验在工作 ≠ CVE)
+
+5. **[05 — Java 应用调第三方 HTTPS 报 `handshake_failure` — cipher 协商失败(出站方向)](references/05-outbound-https-cipher-mismatch.md)** *(2026-08-30 新增)*
+   - **方向**:出站(Java 应用作为 TLS Client 调第三方),跟前 4 篇(入站 Server 角色)**反方向**
+   - **现象**:Java 应用作 Server(8443)正常,但作 Client 出站调第三方时 `SSLHandshakeException: handshake_failure`
+   - **根因**:Java JRE 默认 cipher 列表 ∩ 第三方 enabled cipher 列表 = ∅(第三方按 II1711 等升级了安全配置)
+   - **修法**:升 JRE 到 8u401+ / 11+ / 17+,或装 JCE Unlimited Strength,或代码显式 `setEnabledCipherSuites(...)`
+   - **常见误判**:跟 CVE-2026-50010 无关、跟 reactor-netty race 无关 —— 升 Netty / Spring Boot 治不了本次问题
 
 ## 同目录相关资源
 

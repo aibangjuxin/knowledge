@@ -69,6 +69,7 @@ Simply understand, this is not just a network accessibility issue, because it sh
 └──────────────────────────────────────────────────┘
 
 你之前的疑问"挂 NAS 是不是存储用户数据",对照三档:
+挂 NAS 本身 ≠存储用户数据,但如果 Pod 把 NAS 内容持久化到 GCP 服务 / 写回 NAS / 记录到 log,就违反原则。所以挂载是技术行为,"怎么用"才是合规判定
 
 行为
 档位
