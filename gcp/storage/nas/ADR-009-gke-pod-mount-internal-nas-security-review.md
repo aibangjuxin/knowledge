@@ -1,5 +1,7 @@
 # ADR-009: GKE Pod 挂载公司内部 NAS 的安全与架构影响评估
 
+> 👉 **3 协议总览(SMB / NFS / Bucket)对比** 见 [`../STORAGE-3-PROTOCOLS-COMPARISON.md`](../STORAGE-3-PROTOCOLS-COMPARISON.md)
+>
 > Status: **Proposed** · Date: 2026-08-28 · Author: **architect-gcp** · Reviewers: **infra-gcp** / **devops-gcp** / **qa-gcp**
 >
 > 用户场景:把 `\\nas.address.aibang\hk\gsd\application\`(公司内部 NAS)挂载到 GKE API Pod,使其能读取远端文件。本 ADR 仅做"是否可行 + 风险面 + 加固建议"的架构评估,**不替业务方决定是否迁移存储**(用户的原始需求就是挂载访问)。

@@ -1,5 +1,7 @@
 # ADR-011: GKE Pod 跨项目访问 Cloud Storage Bucket 安全与架构影响评估
 
+> 👉 **3 协议总览(SMB / NFS / Bucket)对比** 见 [`../STORAGE-3-PROTOCOLS-COMPARISON.md`](../STORAGE-3-PROTOCOLS-COMPARISON.md)
+>
 > Status: **Proposed** · Date: 2026-08-31 · Author: **architect-gcp** · Reviewers: **infra-gcp** / **devops-gcp** / **qa-gcp**
 >
 > 用户场景:用户的 API Pod 部署在 master-project(平台项目)的 GKE 集群,需要把用户数据写到位于 **独立项目 user-bucket-project** 的 Cloud Storage Bucket 中。本 ADR 仅做"是否可行 + 风险面 + 加固建议"的架构评估,**不替业务方决定存储位置**。
