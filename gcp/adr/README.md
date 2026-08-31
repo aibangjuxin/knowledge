@@ -6,11 +6,82 @@
 
 ---
 
+## ADR 是什么?(给不熟悉术语的同事)
+
+> **ADR = Architecture Decision Record(架构决策记录)**
+
+### 一句话
+
+> ADR 是一种**轻量级文档模式**,记录"我们做了什么决定 + 为什么 + 拒绝什么方案 + 后果",目的是**防止未来重复讨论已决定的事**。
+
+### 解决什么问题?
+
+| 没有 ADR | 有 ADR |
+|---|---|
+| 工程师 A 做了"为什么用 X 而不是 Y"的决定 | 决定 + 理由 + 拒绝项全写在 ADR-009.md |
+| 6 个月后工程师 B 接手 | 工程师 B 看一眼 ADR 知道原因 |
+| 翻聊天记录 / git log 找不到,重新讨论 2 周 | **不用重新讨论**,直接基于现有决定继续推进 |
+
+### ADR 通常包含什么?
+
+| 章节 | 内容 |
+|---|---|
+| **状态** | Proposed / Accepted / Superseded / Deprecated |
+| **日期 + 作者 + Reviewers** | 谁拍板,谁评审 |
+| **背景** | 当时面对什么问题 |
+| **决策** | 最后选了什么 |
+| **理由** | 为什么选这个 |
+| **替代方案** | 考虑过但放弃的(对比表) — **最值钱的部分** |
+| **后果** | 好的 + 坏的影响(blessing + curse) |
+| **引用** | 关联 ADR / 文档 / 一手来源 |
+
+### ADR vs 普通设计文档
+
+| 维度 | 普通设计文档 | ADR |
+|---|---|---|
+| **目的** | 描述系统怎么设计 | 记录"为什么这么设计" |
+| **重点** | 怎么做 | 为什么 + 拒绝什么 + 后果 |
+| **生命周期** | 写一次,可能过时 | 永久保留,有新决策就开 ADR-N+1 |
+| **编号** | 任意 | 顺序编号,不可重命名 |
+| **状态** | 不变 | Proposed → Accepted → Superseded |
+| **读者** | 新人 onboarding | 新人 + **未来自己** |
+
+### ADR 的关键规则
+
+1. **编号顺序,不重命名** — ADR-009 永远是 ADR-009,即使决定错了也是新建 ADR-010 supersedes ADR-009
+2. **决策一旦写就锁定** — 不在原 ADR 里改,改了就开新 ADR(避免历史失真)
+3. **拒绝的方案也要写** — "我们排除了 A/B/C 因为 X/Y/Z",这是 ADR 最值钱的部分
+4. **一事一议** — 不是每个小决定都写 ADR,只看跨时间 + 跨人员影响力的"重要的"
+
+### 业务方视角的实操
+
+| 你在做 | 该做什么 |
+|---|---|
+| Review 同事的 ADR | 看 "决策 + 理由 + 拒绝项",判断是否同意 |
+| 跟 Manager 沟通决策 | 引用 ADR 编号 + 章节,不重新解释 |
+| 业务有变化需重新评估 | **开新 ADR**(010+),不修改旧 ADR |
+| 新人 onboarding | 先读 README(本文档),再看相关 ADR |
+
+### 一句话答复(可复制)
+
+> ADR = Architecture Decision Record,记录"我们做了什么决定 + 为什么 + 拒绝什么 + 后果",目的是防止未来重复讨论已决定的事。ADR-N 一旦写就锁定,变化开 ADR-N+1 supersedes 旧 ADR。
+
+### 延伸阅读
+
+- [Michael Nygard 原始 ADR 文章](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)
+- [GCP ADR 体系使用实践](https://cloud.google.com/architecture/devops/devops-tech-continuous-delivery)
+- [Kubernetes ADR 实践](https://github.com/kubernetes/kubernetes/tree/master/architecture-decisions)
+
+---
+
 ## 当前 ADR 索引
 
 | 编号 | 标题 | 状态 | 日期 |
 |------|------|------|------|
 | [008](./008-static-pod-no-secret-configmap-k8s-137.md) | 应对 Kubernetes v1.37 Static Pod 禁止引用 Secret/ConfigMap 的架构变更 | Proposed | 2026-08-25 |
+| 009 | GKE Pod 挂载公司 NAS 安全 + 架构影响评估 | Proposed | 2026-08-28 |
+
+> **ADR-009 主体不在本目录** — 它在 `gcp/storage/nas/ADR-009-gke-pod-mount-internal-nas-security-review.md`,配套 8 个衍生文档(架构图 / 决策树 / 概念澄清 / eli5 / 部署参考集等)。ADR-009 跨多个目录,因为涉及 storage / network / security / 多租户多个领域。
 
 ---
 
