@@ -80,8 +80,13 @@
 |------|------|------|------|
 | [008](./008-static-pod-no-secret-configmap-k8s-137.md) | 应对 Kubernetes v1.37 Static Pod 禁止引用 Secret/ConfigMap 的架构变更 | Proposed | 2026-08-25 |
 | 009 | GKE Pod 挂载公司 NAS 安全 + 架构影响评估 | Proposed | 2026-08-28 |
+| 011 | GKE Pod 跨项目访问 Cloud Storage Bucket 安全与架构影响评估 | Proposed | 2026-08-31 |
 
 > **ADR-009 主体不在本目录** — 它在 `gcp/storage/nas/ADR-009-gke-pod-mount-internal-nas-security-review.md`,配套 8 个衍生文档(架构图 / 决策树 / 概念澄清 / eli5 / 部署参考集等)。ADR-009 跨多个目录,因为涉及 storage / network / security / 多租户多个领域。
+>
+> **ADR-010 已预留给 NAS 实施细节**(等 infra-gcp 验证完后由 ADR-009 §10 触发),所以 bucket 场景直接跳到 **ADR-011**。
+>
+> **ADR-011 主体不在本目录** — 它在 `gcp/storage/buckets/ADR-011-gke-pod-cross-project-bucket-security-review.md`,配套 3 个衍生文档(决策树 / 概念澄清 / 架构图 / eli5 / 部署参考集等)。跨 project 访问是核心场景,涉及 IAM / WIF / 多租户 / 合规多个领域。
 
 ---
 

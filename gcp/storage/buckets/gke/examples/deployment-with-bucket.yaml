@@ -1,0 +1,62 @@
+# 业务方专用:API Deployment YAML(跨 project 写 Bucket)
+# ⚠ 必须先走 PM 评估(档 1 红线),见 ADR-011 §6
+# 架构师 lane:本文档只生成模板,不执行 apply
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-with-bucket                # ← 业务方命名
+  namespace: api-ns                    # ← 业务方指定 namespace
+  labels:
+    app: api
+    role: bucket-writer               # ← 必须有,审计用
+    tenant: tnt-001                    # ← 业务方 tenant ID
+spec:
+  replicas: 1                          # ← 默认 1,不要随便改
+  selector:
+    matchLabels:
+      app: api
+      role: bucket-writer
+  template:
+    metadata:
+      labels:
+        app: api
+        role: bucket-writer
+        tenant: tnt-001
+    spec:
+      # 关键:KSA 名字(infra-gcp 创建 KSA + 绑 WIF annotation)
+      serviceAccountName: api-bucket-writer
+      containers:
+      - name: api
+        image: <业务方镜像:tag>        # ← 业务方填,固定 tag,不能 latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: BUCKET_NAME
+          value: gs://user-data        # ← user-bucket-project 的 bucket
+        - name: OBJECT_PREFIX
+          value: api-data/             # ← 与 IAM condition 对齐
+        # ⚠ 红线 2:不要 hardcode user data / object name / file path
+        # ⚠ 红线 2:应用代码不能写 logger.info(f"uploaded {object_name}")
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      # ⚠ 关键:不需要挂 SA key / 不需要 GOOGLE_APPLICATION_CREDENTIALS
+      # 凭据由 WIF 自动通过 metadata server 注入
+      # ⚠ 红线 4:不要 configMapRef / secretRef 引用 Bucket 内容

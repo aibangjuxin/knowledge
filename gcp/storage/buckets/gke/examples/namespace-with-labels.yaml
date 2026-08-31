@@ -1,0 +1,72 @@
+# infra-gcp 专用:Namespace + SA + RBAC + PodSecurity 一站式模板
+# 应用后 Pod 才能跑,Policy 才能生效
+# 架构师 lane:本文档只生成模板,不执行 apply
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: api-ns
+  labels:
+    tenant: tnt-001
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+    name: api-ns
+    platform.example.com/managed-by: infra-gcp
+---
+# SA 留空:KSA 单独在 ksa-with-wif-annotation.yaml 创建(因为需要 WIF annotation)
+---
+# 给 SA 在 namespace 内最小 RBAC 权限
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: api-bucket-writer-role
+  namespace: api-ns
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps"]
+  verbs: ["get", "list", "watch"]
+# ⚠ 不要给 SA 任何 PV/PVC/NetworkPolicy/Secret 的写权限
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: api-bucket-writer-binding
+  namespace: api-ns
+subjects:
+- kind: ServiceAccount
+  name: api-bucket-writer
+  namespace: api-ns
+roleRef:
+  kind: Role
+  name: api-bucket-writer-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# NetworkPolicy(可选,GCS 走 GCP 内网,不严格需要)
+# 这里给个最小 Egress 模板供参考
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-only-bucket-writer-egress
+  namespace: api-ns
+spec:
+  podSelector:
+    matchLabels:
+      role: bucket-writer
+  policyTypes:
+  - Egress
+  egress:
+  # 允许到 GCP API(metadata server + GCS endpoint)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # 允许 DNS 解析
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      ports:
+    - protocol: UDP
+      port: 53
