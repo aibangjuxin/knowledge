@@ -12,3 +12,4 @@
 - `pipeline/`: 子目录: cd-pipeline, docs, release-dashboard
 - `python/`: 子目录: docs, examples, lex, nba, scripts
 - `vscode/`: 文件: README.md, plug.md, strings-antigravity.md
+- `dev-tools/`: 文件: orca.md — Worktree-Native IDE for parallel AI coding agents
