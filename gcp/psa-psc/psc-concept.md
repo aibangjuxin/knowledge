@@ -488,6 +488,153 @@ Consumer → PSC Endpoint → Single Service
 
 ---
 
+### 4.5 PSC Endpoint vs PSC NEG — Consumer 侧两种核心设计对比
+
+> **核心结论**:这是 PSC 设计中最常被混淆的两个概念。它们**不是同一个东西的两种叫法**,而是 Google Cloud 官方明确定义的**两种并列的 consumer 侧设计模式**。
+>
+> 权威出处:Google Cloud 官方博客 [Three Private Service Connect patterns (2023-07-19)](https://cloud.google.com/blog/products/networking/three-consumer-private-service-connect-designs) 明确把 consumer 设计分成三种:**Endpoint**、**Backend (= PSC NEG)**、**Hybrid (Global Access)**。
+
+#### 4.5.1 一句话区分
+
+| 概念 | 本质 | 一句话定义 |
+|------|------|-----------|
+| **PSC Endpoint** | 一个 **Forwarding Rule** | 在 Consumer VPC 里给你**一个内部 IP**,Client 直接用它访问 Producer 服务 |
+| **PSC NEG** | 一个 **NEG (Network Endpoint Group)** | 必须**挂在 Load Balancer 后面**,作为 LB 的 backend,然后通过 LB 的 VIP 访问 Producer |
+
+#### 4.5.2 架构差异(覆盖双向)
+
+```
+【模式 1: PSC Endpoint】
+Consumer Client
+    │
+    │  访问 10.0.1.100:443 (PSC Endpoint IP)
+    ▼
+PSC Endpoint (Forwarding Rule, Consumer VPC)
+    │
+    │  Google Backbone (PSC 连接)
+    ▼
+Service Attachment (Producer)
+    │
+    ▼
+Internal Load Balancer (Producer)
+    │
+    ▼
+Backend VMs / GKE Pods
+
+【模式 2: PSC NEG (Backend)】
+Consumer Client
+    │
+    │  访问 34.120.x.x:443 (External HTTPS LB VIP)
+    ▼
+External Application Load Balancer (Consumer 拥有)
+    │  ├─ URL Map
+    │  ├─ Cloud Armor Policy
+    │  ├─ SSL Certificate / Google-managed cert
+    │  └─ Backend Service
+    │       └─ PSC NEG ──► Service Attachment (Producer)
+    │                              │
+    │                              ▼
+    │                       Internal LB (Producer)
+    │                              │
+    │                              ▼
+    │                       Backend VMs / GKE Pods
+```
+
+**关键差异在"Consumer 端入口物"**:
+- Endpoint → 入口物是 **Forwarding Rule**,无 LB、无 URL map、无 cert 终止
+- NEG → 入口物是 **Load Balancer + Backend Service**,有完整的 L7 处理链
+
+#### 4.5.3 全维度对比表
+
+| 维度 | PSC Endpoint | PSC NEG (Backend) |
+|------|--------------|-------------------|
+| **底层对象** | Forwarding Rule | NEG (`NetworkEndpointType: PRIVATE_SERVICE_CONNECT`) |
+| **Consumer 端入口物** | 一个 VPC 内部 IP (RFC1918) | LB 的 VIP (内部 LB → RFC1918;外部 LB → 公开 IP) |
+| **流量方向** | Consumer → PSC → Producer (单方向入口) | Consumer → Consumer 自己的 LB → PSC NEG → Producer |
+| **谁来路由?** | VPC 路由表直接命中 Forwarding Rule IP | LB 的 URL Map → Backend Service → NEG |
+| **支持协议** | TCP / UDP (L4 透传,不解析应用层) | HTTP / HTTPS / HTTP2 (L7,可挂 URL map / header 路由) |
+| **HTTPS 终止** | ❌ Consumer 需自己终止或 Producer 终止 | ✅ LB 上挂 cert 统一终止 |
+| **Cloud Armor (WAF)** | ❌ 不能挂 | ✅ 挂 LB 即可启用 |
+| **SSL Policy** | ❌ 不适用 | ✅ LB 级别强制 TLS 版本/cipher |
+| **URL Map / Host/Path 路由** | ❌ 不能 | ✅ 可挂 URL map 做灰度、rewrite、route by host |
+| **IAP / Identity-Aware Proxy** | ❌ | ✅ LB 上可启用 |
+| **集中日志 / Metrics** | 仅 VPC Flow Logs | LB 访问日志 + Backend 日志 + Cloud Armor 日志 |
+| **支持的 LB 类型** | N/A (它本身就是个 FR) | Cross-region ILB / Regional ILB / Global External ALB / Regional External ALB / Global External Proxy NLB / Regional External Proxy NLB / Regional Internal Proxy NLB / Cross-region Internal Proxy NLB (**Classic ALB / Classic Proxy NLB 不支持**) |
+| **单 endpoint 容量** | 取决于 Producer 侧 ILB 的 backend 数(PSC 本身不做 LB) | 取决于 LB 自身容量 + 多个 PSC NEG 可挂同一 LB |
+| **跨 region (Hybrid)** | ✅ 用 `--allow-psc-global-access` 实现 global access | ❌ NEG 是 region-scoped,要跨 region 需要多 LB + 多 NEG |
+| **DNS / 域名** | 通常配 Private DNS zone 指向 endpoint IP | 通常把域名 CNAME 到 LB VIP(且 LB 终结 cert) |
+| **配置入口数** | 1 IP = 1 endpoint | 1 LB 可挂 N 个 PSC NEG,每个 NEG 指向不同 service attachment |
+| **改造现成 LB** | 不能复用 LB(它就是 LB 之前的入口) | ✅ 可以把 PSC NEG 作为新 backend 加到已有 LB 上,**复用现有 URL map / cert / WAF** |
+| **Producer 侧要求** | 完全一样 — 都是连 Producer 的 Service Attachment | 完全一样 |
+| **典型场景** | DB 直连 / RPC / gRPC / Cloud SQL via PSC / Memorystore via PSC / 内部微服务直调 | 多 producer 统一入口 / 需要 WAF 防护 / 需要 HTTPS 终结 / 需要 URL map 路由 / Apigee X |
+
+#### 4.5.4 什么时候选哪个?
+
+**选 PSC Endpoint(FR)**:
+- L4 流量,不需要 L7 处理(DB、gRPC、自定义 TCP)
+- 想避开 LB 的成本和复杂度
+- Producer 是单个 backend service,不需要路由
+- 想做"global access"让跨 region 客户端访问 — Endpoint 的 `--allow-psc-global-access` 是最简单路径
+- Producer 已经托管(Cloud SQL / Memorystore / AlloyDB),只需要一个内部 IP 直连
+
+**选 PSC NEG(Backend)**:
+- 需要在 Consumer 端做 HTTPS 终结、cert 管理
+- 需要 Cloud Armor / IAP / SSL Policy
+- 一个 LB 想统一接入多个 Producer,集中路由
+- 需要 URL Map 做 host/path 路由或灰度
+- 想复用已有的 Global External ALB / Regional ILB
+- 需要 Consumer 端集中访问日志
+
+#### 4.5.5 创建命令对比
+
+**PSC Endpoint(简版)**:
+
+```bash
+# Consumer 端
+gcloud compute addresses create psc-ep-ip --region=asia-northeast1 --subnet=consumer-subnet
+gcloud compute forwarding-rules create psc-ep \
+  --region=asia-northeast1 \
+  --network=consumer-vpc \
+  --address=psc-ep-ip \
+  --target-service-attachment=projects/PRODUCER/regions/asia-northeast1/serviceAttachments/SA_NAME \
+  --allow-psc-global-access   # 可选,做跨 region
+```
+
+**PSC NEG + LB(简版)**:
+
+```bash
+# 1. Consumer 端创建 PSC NEG
+gcloud compute network-endpoint-groups create psc-neg-backend \
+  --region=asia-northeast1 \
+  --network-endpoint-type=PRIVATE_SERVICE_CONNECT \
+  --psc-target-service=projects/PRODUCER/regions/asia-northeast1/serviceAttachments/SA_NAME
+
+# 2. 挂到 Backend Service
+gcloud compute backend-services add-backend my-backend-service \
+  --region=asia-northeast1 \
+  --network-endpoint-group=psc-neg-backend
+
+# 3. LB 上挂 URL map / cert / Cloud Armor (略,标准 LB 配置)
+```
+
+#### 4.5.6 常见误解澄清
+
+| 误解 | 事实 |
+|------|------|
+| "PSC NEG 是 PSC Endpoint 的升级版" | ❌ 不是。它们是两种**并列的** consumer 设计模式,各有适用场景 |
+| "PSC Endpoint 不能挂 Cloud Armor,所以不安全" | ⚠️ 半对。Endpoint 本身无 L7 处理,但你可以**在 Producer 的 ILB 上挂 Cloud Armor**;或者把 Producer 放在 VPC-SC 内,access 由 producer 端控制 |
+| "PSC NEG 必须新搭一套 LB" | ❌ 可以挂到已有 LB 的 backend service,复用 URL map / cert |
+| "选了 Endpoint 后面想升级到 NEG 要重做" | ⚠️ Client 端访问的入口 IP 会变(从 endpoint IP 变 LB VIP),需要改 DNS / 配置 |
+
+#### 4.5.7 权威证据
+
+- **Google Cloud 官方博客 — Three Private Service Connect patterns**: https://cloud.google.com/blog/products/networking/three-consumer-private-service-connect-designs(2023-07-19, 明确把 Endpoint 和 Backend(=PSC NEG)列为两种并列设计)
+- **Google Cloud Docs — About Private Service Connect backends**: https://docs.cloud.google.com/vpc/docs/private-service-connect-backends(原文:"You can access Google APIs and published services by creating a Private Service Connect endpoint (based on a forwarding rule) or a Private Service Connect backend (based on a load balancer).")
+- **Google Cloud Docs — Network endpoint groups overview (PSC NEG 行)**: https://docs.cloud.google.com/load-balancing/docs/negs(列出 PSC NEG 支持的所有 LB 类型 + "Private Service Connect NEGs are not supported by the classic Application Load Balancer / classic proxy Network Load Balancer" 的限制)
+- **Google Cloud Docs — Private Service Connect overview**: https://cloud.google.com/vpc/docs/private-service-connect("Backends are deployed by using network endpoint groups (NEGs) that let consumers direct traffic to their load balancer before reaching a Private Service Connect service.")
+
+---
+
 ## 5. PSC 使用场景
 
 ### 5.1 跨项目数据库访问
