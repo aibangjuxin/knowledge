@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>一张 API 一张 cert — 签发流程</title>
+<style>
+  :root {
+    --bg: #020617;
+    --fg: #e2e8f0;
+    --muted: #94a3b8;
+    --cyan: #22d3ee;
+    --green: #34d399;
+    --rose: #fb7185;
+    --card: #0f172a;
+    --border: #1e293b;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+  h1 {
+    font-size: 1.6rem; margin: 0 0 0.25rem;
+    color: var(--cyan); font-weight: 700;
+  }
+  .subtitle { color: var(--muted); margin: 0 0 2rem; font-size: 0.95rem; }
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin: 1.25rem 0;
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 1.25rem;
+    align-items: center;
+  }
+  .panel .icon { width: 110px; height: 110px; display: flex; align-items: center; justify-content: center; }
+  .panel .icon svg { width: 100%; height: 100%; }
+  .panel h2 { margin: 0 0 0.4rem; font-size: 1.05rem; color: var(--cyan); font-weight: 600; }
+  .panel p { margin: 0; color: var(--fg); font-size: 0.95rem; }
+  .panel .term { color: var(--green); font-weight: 600; }
+  .panel .warn { color: var(--rose); font-weight: 600; }
+  .arrow {
+    text-align: center;
+    color: var(--cyan);
+    font-size: 1.4rem;
+    margin: -0.4rem 0;
+    opacity: 0.6;
+  }
+  .meta {
+    margin-top: 2.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px dashed var(--border);
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  .meta code {
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--cyan);
+  }
+  @media (max-width: 560px) {
+    .panel { grid-template-columns: 1fr; }
+    .panel .icon { width: 80px; height: 80px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>一张 API 一张 cert — 怎么走完全程?</h1>
+  <p class="subtitle">给团队新 API 申请 client 证书,需要从"写好身份信息"走到"GLB 认这张证书"。</p>
+
+  <!-- Panel 1: Hero/Trigger — 起点 -->
+  <section class="panel">
+    <div class="icon">
+      <!-- 用户 + 身份证 比喻 -->
+      <svg viewBox="0 0 100 100" fill="none" stroke="#22d3ee" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="50" cy="32" r="16"/>
+        <path d="M22 80 C22 60 32 52 50 52 C68 52 78 60 78 80"/>
+        <rect x="62" y="58" width="28" height="20" rx="3" fill="#020617"/>
+        <line x1="66" y1="64" x2="86" y2="64"/>
+        <line x1="66" y1="70" x2="82" y2="70"/>
+      </svg>
+    </div>
+    <div>
+      <h2>1. 触发:用户说"我要给 apiname1 申请证书"</h2>
+      <p>用户是某个 Team 的开发者,要为<span class="term">新域名下的某一个 API</span>(例如 team-a 下的 apiname1)申请一张 <span class="term">client cert</span>(客户端证书)——这张 cert 就像通行证,GLB 看到它才知道"哦,这是 apiname1 的请求"。</p>
+    </div>
+  </section>
+
+  <div class="arrow">↓</div>
+
+  <!-- Panel 2: 机制-生成 CSR(包含 URI-SAN) -->
+  <section class="panel">
+    <div class="icon">
+      <!-- 表格+钥匙 比喻 -->
+      <svg viewBox="0 0 100 100" fill="none" stroke="#22d3ee" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="14" y="18" width="56" height="64" rx="4"/>
+        <line x1="22" y1="32" x2="62" y2="32"/>
+        <line x1="22" y1="44" x2="50" y2="44"/>
+        <line x1="22" y1="56" x2="46" y2="56"/>
+        <circle cx="74" cy="74" r="12" fill="#020617"/>
+        <line x1="82" y1="74" x2="92" y2="74"/>
+        <line x1="74" y1="66" x2="74" y2="60"/>
+      </svg>
+    </div>
+    <div>
+      <h2>2. 写好"我是谁":用 OpenSSL 生成 CSR</h2>
+      <p><span class="term">CSR</span> = 证书申请表——里头要填一张"扩展表",最关键一行: <code>URI:spiffe://caep.example/tenant/team-a/apiname1</code>。<span class="warn">URI 写错就等于通行证姓名写错</span>,GLB 后面无法识别。同 Team 不同 API 必须 URI 不同。</p>
+    </div>
+  </section>
+
+  <div class="arrow">↓</div>
+
+  <!-- Panel 3: Venafi 让 CA 签发 -->
+  <section class="panel">
+    <div class="icon">
+      <!-- 邮戳盖章 比喻 -->
+      <svg viewBox="0 0 100 100" fill="none" stroke="#34d399" stroke-width="3" stroke-linecap="round">
+        <rect x="22" y="28" width="56" height="44" rx="3"/>
+        <circle cx="50" cy="56" r="14"/>
+        <polyline points="42,56 48,62 60,50"/>
+        <path d="M22 78 L40 64 M78 78 L60 64"/>
+        <line x1="14" y1="84" x2="86" y2="84"/>
+      </svg>
+    </div>
+    <div>
+      <h2>3. Venafi 让 CA 盖章</h2>
+      <p>CSR 提交到 <span class="term">Venafi</span>(企业证书管家),它让 <span class="term">CA</span>(权威发证机构)在申请表上盖章。<span class="warn">私钥始终留在用户电脑里</span>不发出去——Venafi 只盖公开那部分。批准后,用户拿到 cert(公开)和 key(私有)两份文件。</p>
+    </div>
+  </section>
+
+  <div class="arrow">↓</div>
+
+  <!-- Panel 4: 配置 + 上线 -->
+  <section class="panel">
+    <div class="icon">
+      <!-- 钥匙+锁 比喻 -->
+      <svg viewBox="0 0 100 100" fill="none" stroke="#22d3ee" stroke-width="3" stroke-linecap="round">
+        <circle cx="32" cy="50" r="18"/>
+        <line x1="50" y1="50" x2="86" y2="50"/>
+        <line x1="72" y1="50" x2="72" y2="62"/>
+        <line x1="80" y1="50" x2="80" y2="58"/>
+      </svg>
+    </div>
+    <div>
+      <h2>4. 上线:配置 GLB TrustConfig 接住这张 cert</h2>
+      <p>CA 的<span class="term">根证书</span>必须先放进 GLB 的 <span class="term">TrustConfig</span>(信任仓库)。这样 GLB 看到任何"这张 CA 签过的 cert"都认。用户把 cert + key 配到自己的客户端(curl/SDK)里,正式发起 mTLS 请求。</p>
+    </div>
+  </section>
+
+  <div class="arrow">↓</div>
+
+  <!-- Panel 5: 结局 -->
+  <section class="panel">
+    <div class="icon">
+      <!-- 盾牌+绿勾 比喻 -->
+      <svg viewBox="0 0 100 100" fill="none" stroke="#34d399" stroke-width="3" stroke-linecap="round">
+        <path d="M50 12 L82 22 L82 52 C82 70 68 84 50 90 C32 84 18 70 18 52 L18 22 Z"/>
+        <polyline points="36,52 46,62 66,40"/>
+      </svg>
+    </div>
+    <div>
+      <h2>5. 结局:URI-SAN 对得上,API 拿到服务</h2>
+      <p>GLB 验 cert 链 → 把 URI 写到 <code>X-Client-Cert-URI-SANs</code> 头 → 转发到 GKE → <span class="term">HTTPRoute</span> 比对 URI 与路由声明。team-a/apiname1 的请求<span class="term">只进</span>team-a/apiname1 的服务。team-a 的另一个 API 用别的 cert 申,跨 cert 调用直接 404 漂移拒绝。</p>
+    </div>
+  </section>
+
+  <div class="arrow">↓</div>
+
+  <!-- Panel 6: Reverse / 谁控制 / 吊销 -->
+  <section class="panel">
+    <div class="icon">
+      <!-- 扳手+告警 比喻 -->
+      <svg viewBox="0 0 100 100" fill="none" stroke="#fb7185" stroke-width="3" stroke-linecap="round">
+        <circle cx="36" cy="36" r="14"/>
+        <path d="M46 46 L82 82"/>
+        <path d="M76 76 L88 64"/>
+        <path d="M64 88 L76 76"/>
+        <circle cx="72" cy="22" r="8"/>
+        <line x1="78" y1="22" x2="86" y2="22"/>
+      </svg>
+    </div>
+    <div>
+      <h2>6. 反向:谁能撤销?谁来审计?</h2>
+      <p>cert 不是永久的。<span class="warn">Venafi Admin</span> 可以在后台一键吊销,GLB 下次收到就拒。<span class="warn">CA 根证书</span>坏了也能批量废掉所有子 cert。所有签发/吊销动作都进 Venafi 审计日志——谁、什么时候、给哪个 API、签了/吊了哪张 cert,全程可追溯。</p>
+    </div>
+  </section>
+
+  <div class="meta">
+    <p><strong>配套文档</strong>:详细命令、Venafi policy 配置、URI 命名规范 → <code>venafi-team-cert-template.md</code></p>
+    <!-- cite: https://docs.cloud.google.com/load-balancing/docs/https/setting-up-mtls-ccm -->
+    <!-- cite: https://spiffe.io/docs/latest/spiffe-about/spiffe-concepts/#spiffe-id -->
+    <!-- cite: https://docs.cloud.google.com/certificate-manager/docs/trust-configs -->
+    <!-- cite: https://www.openssl.org/docs/ -->
+  </div>
+</div>
+</body>
+</html>

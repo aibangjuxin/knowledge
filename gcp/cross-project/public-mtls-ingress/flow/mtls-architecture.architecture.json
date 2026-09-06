@@ -1,0 +1,285 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Shared GLB + Multi-Team mTLS Topology",
+    "output": "mtls-architecture.html",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1250,
+      950
+    ]
+  },
+  "components": [
+    {
+      "id": "extclient",
+      "type": "external",
+      "label": "mTLS client",
+      "sublabel": "tenantmtls...",
+      "pos": [
+        30,
+        330
+      ],
+      "size": [
+        100,
+        60
+      ]
+    },
+    {
+      "id": "glb",
+      "type": "security",
+      "label": "GLB",
+      "sublabel": "TrustConfig verify",
+      "pos": [
+        190,
+        330
+      ],
+      "size": [
+        100,
+        60
+      ]
+    },
+    {
+      "id": "urlmap",
+      "type": "cloud",
+      "label": "GLB URL Map",
+      "sublabel": "3 path rules",
+      "pos": [
+        350,
+        330
+      ],
+      "size": [
+        100,
+        60
+      ]
+    },
+    {
+      "id": "bs1",
+      "type": "backend",
+      "label": "team1-bs",
+      "sublabel": "CA team1",
+      "pos": [
+        510,
+        170
+      ],
+      "size": [
+        100,
+        60
+      ]
+    },
+    {
+      "id": "bs2",
+      "type": "backend",
+      "label": "team2-bs",
+      "sublabel": "CA team2",
+      "pos": [
+        510,
+        470
+      ],
+      "size": [
+        100,
+        60
+      ]
+    },
+    {
+      "id": "psc",
+      "type": "cloud",
+      "label": "PSC NEG",
+      "sublabel": "single IP",
+      "pos": [
+        670,
+        330
+      ],
+      "size": [
+        100,
+        60
+      ]
+    },
+    {
+      "id": "route",
+      "type": "backend",
+      "label": "HTTPRoute",
+      "sublabel": "URI-SAN gate",
+      "pos": [
+        830,
+        330
+      ],
+      "size": [
+        100,
+        60
+      ]
+    },
+    {
+      "id": "team1svc",
+      "type": "backend",
+      "label": "team1-svc",
+      "sublabel": "no auth",
+      "pos": [
+        990,
+        170
+      ],
+      "size": [
+        100,
+        60
+      ]
+    },
+    {
+      "id": "team2svc",
+      "type": "backend",
+      "label": "team2-svc",
+      "sublabel": "no auth",
+      "pos": [
+        990,
+        470
+      ],
+      "size": [
+        100,
+        60
+      ]
+    },
+    {
+      "id": "drift",
+      "type": "security",
+      "label": "404 drift",
+      "sublabel": "mismatch → 404",
+      "pos": [
+        990,
+        560
+      ],
+      "size": [
+        100,
+        60
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Talent Project (Consumer)",
+      "wraps": [
+        "extclient",
+        "glb",
+        "urlmap",
+        "bs1",
+        "bs2",
+        "psc"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Master Project (Producer) - K8s Gateway",
+      "wraps": [
+        "route",
+        "team1svc",
+        "team2svc",
+        "drift"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "c1",
+      "from": "extclient",
+      "to": "glb",
+      "variant": "emphasis"
+    },
+    {
+      "id": "c2",
+      "from": "glb",
+      "to": "urlmap"
+    },
+    {
+      "id": "c3",
+      "from": "urlmap",
+      "to": "bs1",
+      "label": "team1 path",
+      "variant": "emphasis"
+    },
+    {
+      "id": "c4",
+      "from": "urlmap",
+      "to": "bs2",
+      "label": "team2 path",
+      "variant": "emphasis"
+    },
+    {
+      "id": "c5",
+      "from": "bs1",
+      "to": "psc"
+    },
+    {
+      "id": "c6",
+      "from": "bs2",
+      "to": "psc"
+    },
+    {
+      "id": "c7",
+      "from": "psc",
+      "to": "route",
+      "label": "PSC tunnel",
+      "variant": "emphasis"
+    },
+    {
+      "id": "c8",
+      "from": "route",
+      "to": "team1svc",
+      "label": "URI-SAN team-a",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "left"
+    },
+    {
+      "id": "c9",
+      "from": "route",
+      "to": "team2svc",
+      "label": "URI-SAN team-b",
+      "variant": "emphasis",
+      "labelAt": [
+        1100,
+        380
+      ]
+    },
+    {
+      "id": "c10",
+      "from": "route",
+      "to": "drift",
+      "label": "mismatch",
+      "variant": "security",
+      "labelAt": [
+        1100,
+        540
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Edge (Talent)",
+      "items": [
+        "GLB TrustConfig verifies client cert chain; REJECT_INVALID drops invalid",
+        "URL Map routes /team1apiname/* → team1-bs, /team2apiname/* → team2-bs",
+        "Each backend service binds its own Cloud Armor policy",
+        "All backend services inject 14 client-cert headers"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "K8s Gateway (Master)",
+      "items": [
+        "PSC NEG lands on single IP → Master K8s Gateway",
+        "ListenerSet per team exposes *.team-a.intra.domain / *.team-b.intra.domain",
+        "HTTPRoute matches path + x-client-cert-uri-sans"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Anti-drift",
+      "items": [
+        "URI-SAN match → correct team-svc (no auth code in backend)",
+        "Mismatch (Team 1 cert on /team2apiname) → 404 at gateway",
+        "Expired / Revoked certs rejected at the edge"
+      ]
+    }
+  ]
+}

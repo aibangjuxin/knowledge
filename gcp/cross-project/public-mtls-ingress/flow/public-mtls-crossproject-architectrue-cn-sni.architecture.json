@@ -1,0 +1,499 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Shared GLB + Master Nginx MIG + K8s Gateway — Team Level SNI Injection",
+    "output": "public-mtls-crossproject-architectrue-cn-sni.html",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1100,
+      1620
+    ]
+  },
+  "components": [
+    {
+      "id": "extclient",
+      "type": "external",
+      "label": "External mTLS Client",
+      "sublabel": "tenantmtls.taobao.caep.uk",
+      "pos": [
+        500,
+        60
+      ],
+      "size": [
+        160,
+        50
+      ]
+    },
+    {
+      "id": "glb",
+      "type": "cloud",
+      "label": "Global External HTTPS LB",
+      "sublabel": "TrustConfig + ServerTlsPolicy",
+      "pos": [
+        500,
+        200
+      ],
+      "size": [
+        170,
+        60
+      ]
+    },
+    {
+      "id": "urlmap",
+      "type": "cloud",
+      "label": "URL Map",
+      "sublabel": "3 path rules + 14 cert headers",
+      "pos": [
+        500,
+        340
+      ],
+      "size": [
+        170,
+        60
+      ]
+    },
+    {
+      "id": "bs1",
+      "type": "backend",
+      "label": "team1-bs",
+      "sublabel": "Cloud Armor team1",
+      "pos": [
+        220,
+        480
+      ],
+      "size": [
+        120,
+        50
+      ]
+    },
+    {
+      "id": "bs2",
+      "type": "backend",
+      "label": "team2-bs",
+      "sublabel": "Cloud Armor team2",
+      "pos": [
+        500,
+        480
+      ],
+      "size": [
+        120,
+        50
+      ]
+    },
+    {
+      "id": "psc-neg",
+      "type": "cloud",
+      "label": "PSC NEG",
+      "sublabel": "type: private-service-connect",
+      "tag": "single IP",
+      "pos": [
+        500,
+        620
+      ],
+      "size": [
+        170,
+        60
+      ]
+    },
+    {
+      "id": "psc-tunnel",
+      "type": "cloud",
+      "label": "PSC tunnel",
+      "sublabel": "no peering · SNAT · single private channel",
+      "pos": [
+        500,
+        760
+      ],
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "serviceattach",
+      "type": "security",
+      "label": "ServiceAttachment",
+      "sublabel": "ACCEPT_AUTOMATIC · NAT subnet",
+      "pos": [
+        500,
+        900
+      ],
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "nginxmig",
+      "type": "security",
+      "label": "Master Nginx MIG",
+      "sublabel": "SNI injection: *.teamX.intra.domain",
+      "pos": [
+        500,
+        1040
+      ],
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "gateway",
+      "type": "backend",
+      "label": "K8s Gateway",
+      "sublabel": "port 443 · TLS terminate",
+      "pos": [
+        500,
+        1180
+      ],
+      "size": [
+        160,
+        50
+      ]
+    },
+    {
+      "id": "ls1",
+      "type": "backend",
+      "label": "ListenerSet team1",
+      "sublabel": "*.team1.intra.domain",
+      "pos": [
+        180,
+        1300
+      ],
+      "size": [
+        120,
+        50
+      ]
+    },
+    {
+      "id": "ls2",
+      "type": "backend",
+      "label": "ListenerSet team2",
+      "sublabel": "*.team2.intra.domain",
+      "pos": [
+        180,
+        1400
+      ],
+      "size": [
+        120,
+        50
+      ]
+    },
+    {
+      "id": "httproute",
+      "type": "cloud",
+      "label": "HTTPRoute",
+      "sublabel": "URI-SAN header exact match (double safeguard)",
+      "pos": [
+        500,
+        1300
+      ],
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "team1svc",
+      "type": "backend",
+      "label": "team1-svc",
+      "sublabel": "no auth code",
+      "pos": [
+        820,
+        1300
+      ],
+      "size": [
+        120,
+        50
+      ]
+    },
+    {
+      "id": "team2svc",
+      "type": "backend",
+      "label": "team2-svc",
+      "sublabel": "no auth code",
+      "pos": [
+        820,
+        1400
+      ],
+      "size": [
+        120,
+        50
+      ]
+    },
+    {
+      "id": "drift",
+      "type": "security",
+      "label": "404 drift",
+      "sublabel": "URI-SAN mismatch",
+      "pos": [
+        500,
+        1520
+      ],
+      "size": [
+        160,
+        50
+      ]
+    },
+    {
+      "id": "bs_shared",
+      "type": "backend",
+      "label": "shared-bs",
+      "sublabel": "Cloud Armor shared",
+      "pos": [
+        780,
+        480
+      ],
+      "size": [
+        120,
+        50
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Talent Project (Consumer) — Shared VPC",
+      "wraps": [
+        "extclient",
+        "glb",
+        "urlmap",
+        "bs1",
+        "bs2",
+        "psc-neg"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Master Project (Producer) — Private VPC",
+      "wraps": [
+        "serviceattach",
+        "nginxmig",
+        "gateway",
+        "ls1",
+        "ls2",
+        "httproute",
+        "team1svc",
+        "team2svc",
+        "drift"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "PSC private channel — no public internet · no VPC peering",
+      "wraps": [
+        "psc-tunnel"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "c1",
+      "from": "extclient",
+      "to": "glb",
+      "label": "mTLS",
+      "labelDy": 20,
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "c2",
+      "from": "glb",
+      "to": "urlmap",
+      "label": "path rules",
+      "labelDy": 20,
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "c3",
+      "from": "urlmap",
+      "to": "bs1",
+      "fromSide": "left",
+      "toSide": "right",
+      "label": "team1",
+      "variant": "emphasis",
+      "labelDy": -10
+    },
+    {
+      "id": "c4",
+      "from": "urlmap",
+      "to": "bs2",
+      "fromSide": "left",
+      "toSide": "top",
+      "label": "team2",
+      "variant": "emphasis",
+      "labelDy": 20
+    },
+    {
+      "id": "c4b",
+      "from": "urlmap",
+      "to": "bs_shared",
+      "fromSide": "right",
+      "toSide": "left",
+      "label": "default",
+      "variant": "emphasis",
+      "labelDy": -10
+    },
+    {
+      "id": "c5",
+      "from": "bs1",
+      "to": "psc-neg",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": 0,
+      "label": "NEG"
+    },
+    {
+      "id": "c6",
+      "from": "bs2",
+      "to": "psc-neg",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "label": "NEG",
+      "labelDx": -30
+    },
+    {
+      "id": "c6b",
+      "from": "bs_shared",
+      "to": "psc-neg",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDx": 0,
+      "label": "NEG"
+    },
+    {
+      "id": "c7",
+      "from": "psc-neg",
+      "to": "psc-tunnel",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "label": "private IP",
+      "variant": "emphasis",
+      "labelDy": 20
+    },
+    {
+      "id": "c8",
+      "from": "psc-tunnel",
+      "to": "serviceattach",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "label": "SNAT",
+      "variant": "emphasis",
+      "labelDy": 20
+    },
+    {
+      "id": "c9",
+      "from": "serviceattach",
+      "to": "nginxmig",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "label": "TLS from GLB",
+      "labelDy": 20
+    },
+    {
+      "id": "c10",
+      "from": "nginxmig",
+      "to": "gateway",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "label": "SNI injected",
+      "variant": "emphasis",
+      "labelDy": 20
+    },
+    {
+      "id": "c11",
+      "from": "gateway",
+      "to": "ls1",
+      "fromSide": "left",
+      "toSide": "right",
+      "label": "*.team1",
+      "variant": "emphasis",
+      "labelDy": -10
+    },
+    {
+      "id": "c12",
+      "from": "gateway",
+      "to": "ls2",
+      "fromSide": "left",
+      "toSide": "bottom",
+      "label": "*.team2",
+      "variant": "emphasis",
+      "labelDx": -30,
+      "labelDy": 10
+    },
+    {
+      "id": "c13",
+      "from": "gateway",
+      "to": "httproute",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "label": "Envoy routes",
+      "labelDy": 20
+    },
+    {
+      "id": "c14",
+      "from": "httproute",
+      "to": "team1svc",
+      "fromSide": "right",
+      "toSide": "left",
+      "label": "team1",
+      "variant": "emphasis",
+      "labelDy": -10
+    },
+    {
+      "id": "c15",
+      "from": "httproute",
+      "to": "team2svc",
+      "fromSide": "right",
+      "toSide": "left",
+      "label": "team2",
+      "variant": "emphasis",
+      "labelDy": 10
+    },
+    {
+      "id": "c16",
+      "from": "httproute",
+      "to": "drift",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "label": "mismatch",
+      "variant": "security",
+      "labelDy": 20
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Edge (Talent)",
+      "items": [
+        "GLB TrustConfig verifies client cert chain",
+        "URL Map routes /team1apiname/*, /team2apiname/* per path rule",
+        "Each backend service binds its own Cloud Armor policy",
+        "14 client-cert headers injected to backend (incl. URI-SANs)"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Master Nginx MIG — SNI injection",
+      "items": [
+        "Terminates backend TLS from GLB (GLB does NOT pass original SNI)",
+        "Reissues TLS to K8s Gateway with proxy_ssl_name = teamX.intra.domain",
+        "Each Team location loads the same wildcard cert as Listenerset (option B)",
+        "8K Agent syncs nginx.conf + certs (no Secret Manager / CSI Driver)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "K8s Gateway + double-safeguard anti-drift",
+      "items": [
+        "Listenerset *.teamX.intra.domain matches Nginx-injected SNI",
+        "HTTPRoute matches path + X-Client-Cert-URI-SANs header (double safeguard)",
+        "Mismatch (Team 1 cert on /team2apiname) → 404 at gateway",
+        "Backend services have ZERO anti-drift code (K8s Gateway owns it)"
+      ]
+    }
+  ]
+}
