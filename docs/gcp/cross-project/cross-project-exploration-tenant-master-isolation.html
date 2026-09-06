@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cross-Project Architecture Exploration &mdash; Tenant Ingress + Master Backend</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+      line-height: 1.5;
+    }
+
+    .container { max-width: 1280px; margin: 0 auto; }
+
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px; background: #22d3ee; border-radius: 50%;
+      animation: pulse 2s infinite; flex-shrink: 0;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.82rem; margin-left: 1.75rem; max-width: 80ch; }
+    .subtitle .accent { color: #fb7185; }
+    .subtitle .good  { color: #34d399; }
+    .subtitle .warn  { color: #fbbf24; }
+
+    .premise-box {
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid #1e293b;
+      border-left: 3px solid #fbbf24;
+      border-radius: 0.5rem;
+      padding: 1rem 1.25rem;
+      margin-bottom: 2rem;
+      font-size: 0.78rem;
+      color: #cbd5e1;
+    }
+    .premise-box strong { color: white; }
+    .premise-box ul { margin-top: 0.5rem; list-style: none; }
+    .premise-box li { padding-left: 1.25rem; position: relative; margin-bottom: 0.25rem; }
+    .premise-box li::before {
+      content: '\203A'; position: absolute; left: 0; color: #fbbf24; font-weight: 600;
+    }
+
+    .section-tag {
+      display: inline-block;
+      color: #475569;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin: 2.5rem 0 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #1e293b;
+      width: 100%;
+    }
+
+    /* ===== Strategy grid ===== */
+    .strategy-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    @media (max-width: 980px) { .strategy-grid { grid-template-columns: 1fr; } }
+
+    .strategy {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .strategy-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.5rem;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 0.5rem;
+    }
+    .strategy-title {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: white;
+    }
+    .strategy-num {
+      font-size: 0.7rem;
+      color: #64748b;
+      font-weight: 600;
+    }
+    .strategy-tag {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      padding: 2px 8px;
+      border-radius: 3px;
+    }
+    .strategy-tag.verified { background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.4); }
+    .strategy-tag.recommended { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.4); }
+    .strategy-tag.special { background: rgba(167, 139, 250, 0.15); color: #a78bfa; border: 1px solid rgba(167, 139, 250, 0.4); }
+    .strategy-tag.scaling { background: rgba(251, 113, 133, 0.15); color: #fb7185; border: 1px solid rgba(251, 113, 133, 0.4); }
+    .strategy-tag.boundary { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.4); }
+    .strategy-tag.native { background: rgba(34, 211, 238, 0.15); color: #22d3ee; border: 1px solid rgba(34, 211, 238, 0.4); }
+
+    .strategy-diagram {
+      background: rgba(2, 6, 23, 0.6);
+      border-radius: 0.5rem;
+      border: 1px solid #1e293b;
+      padding: 0.5rem;
+      overflow: hidden;
+    }
+    .strategy-diagram svg { width: 100%; display: block; min-width: 380px; height: auto; }
+
+    .strategy-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      font-size: 0.72rem;
+    }
+    @media (max-width: 600px) { .strategy-body { grid-template-columns: 1fr; } }
+
+    .col-title {
+      font-size: 0.62rem;
+      letter-spacing: 0.16em;
+      color: #475569;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-bottom: 0.4rem;
+    }
+    .col-title.tenant { color: #22d3ee; }
+    .col-title.master { color: #a78bfa; }
+
+    .strategy-body ul {
+      list-style: none;
+      color: #94a3b8;
+    }
+    .strategy-body li {
+      padding-left: 0.85rem;
+      position: relative;
+      margin-bottom: 0.3rem;
+      line-height: 1.45;
+    }
+    .strategy-body li::before {
+      content: '\203A';
+      position: absolute; left: 0;
+      color: #475569;
+    }
+
+    .mechanism-row {
+      display: flex;
+      gap: 0.5rem;
+      font-size: 0.7rem;
+      flex-wrap: wrap;
+    }
+    .mechanism-chip {
+      background: rgba(251, 146, 60, 0.1);
+      border: 1px solid rgba(251, 146, 60, 0.4);
+      color: #fb923c;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-weight: 600;
+      font-size: 0.65rem;
+      letter-spacing: 0.06em;
+    }
+    .armor-chip {
+      background: rgba(251, 113, 133, 0.1);
+      border: 1px solid rgba(251, 113, 133, 0.4);
+      color: #fb7185;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-weight: 600;
+      font-size: 0.65rem;
+      letter-spacing: 0.06em;
+    }
+
+    .verdict {
+      font-size: 0.7rem;
+      color: #cbd5e1;
+      padding-top: 0.5rem;
+      border-top: 1px solid #1e293b;
+      line-height: 1.5;
+    }
+    .verdict .good { color: #34d399; }
+    .verdict .bad  { color: #fb7185; }
+    .verdict .neu  { color: #fbbf24; }
+
+    /* ===== Comparison matrix ===== */
+    .matrix-wrap {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1rem;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.7rem;
+    }
+    th, td {
+      padding: 0.55rem 0.65rem;
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid #1e293b;
+      color: #cbd5e1;
+      line-height: 1.4;
+    }
+    th {
+      background: rgba(2, 6, 23, 0.6);
+      color: white;
+      font-weight: 700;
+      font-size: 0.65rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    tr:last-child td { border-bottom: none; }
+    .cell-num { color: #475569; font-weight: 700; width: 36px; }
+    .cell-name { color: white; font-weight: 600; width: 200px; }
+    .pill { font-size: 0.6rem; padding: 1px 6px; border-radius: 3px; font-weight: 600; letter-spacing: 0.06em; }
+    .pill.ok { background: rgba(52, 211, 153, 0.15); color: #34d399; }
+    .pill.warn { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+    .pill.bad { background: rgba(251, 113, 133, 0.15); color: #fb7185; }
+    .pill.k8s { background: rgba(167, 139, 250, 0.15); color: #a78bfa; }
+
+    /* ===== Decision cards ===== */
+    .decision-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 980px) { .decision-row { grid-template-columns: 1fr; } }
+
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card h3 { font-size: 0.9rem; font-weight: 700; margin-bottom: 0.75rem; color: white; }
+    .card p { color: #94a3b8; font-size: 0.78rem; line-height: 1.55; margin-bottom: 0.6rem; }
+    .card p:last-child { margin-bottom: 0; }
+    .card p .good { color: #34d399; }
+    .card p .bad  { color: #fb7185; }
+    .card p .neu  { color: #fbbf24; }
+
+    .footer {
+      text-align: center;
+      margin-top: 2rem;
+      color: #475569;
+      font-size: 0.7rem;
+      letter-spacing: 0.06em;
+    }
+
+    .legend-row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      font-size: 0.65rem;
+      color: #94a3b8;
+      padding: 0.5rem 0;
+    }
+    .legend-row span { display: flex; align-items: center; gap: 0.4rem; }
+    .legend-row .swatch {
+      width: 10px; height: 10px; border-radius: 2px;
+      border: 1px solid;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- ============================================== -->
+    <!-- HEADER                                         -->
+    <!-- ============================================== -->
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Cross-Project Exploration &mdash; Tenant Ingress + Master Backend</h1>
+      </div>
+      <p class="subtitle">
+        Goal: keep user-facing ingress, certificate, URL map, and Cloud Armor in the
+        <span class="accent">Tenant project</span>; run real services in the
+        <span class="accent">Master project</span>; enforce <span class="good">tenant isolation</span>
+        at the LB chain boundary. 8 candidate architectures below &mdash; each is runnable, not just conceptual.
+      </p>
+    </div>
+
+    <div class="premise-box">
+      <strong>Hard constraints (from your requirement):</strong>
+      <ul>
+        <li>Tenant project holds: domain, public IP, TLS cert, External LB, <strong>Cloud Armor policy bound to Tenant Backend Service</strong></li>
+        <li>Master project holds: real workload (MIG / GKE / Cloud Run) + the LB that dispatches into it</li>
+        <li>Two projects, separate VPCs (or one VPC shared via Shared VPC); no Peering required but may be used</li>
+        <li>Tenant isolation = Tenant decides who reaches its own Backend Service; Master cannot bypass</li>
+      </ul>
+    </div>
+
+    <div class="legend-row">
+      <span><span class="swatch" style="background:rgba(34,211,238,0.4);border-color:#22d3ee"></span>Tenant project</span>
+      <span><span class="swatch" style="background:rgba(167,139,250,0.4);border-color:#a78bfa"></span>Master project</span>
+      <span><span class="swatch" style="background:rgba(251,146,60,0.3);border-color:#fb923c"></span>Cross-project bridge</span>
+      <span><span class="swatch" style="background:rgba(251,113,133,0.4);border-color:#fb7185"></span>Cloud Armor policy</span>
+      <span><span class="swatch" style="background:rgba(52,211,153,0.4);border-color:#34d399"></span>Backend Service</span>
+      <span><span class="swatch" style="background:rgba(251,191,36,0.4);border-color:#fbbf24"></span>Workload</span>
+    </div>
+
+    <p class="section-tag">Architectures &mdash; 8 runnable options</p>
+
+    <!-- ============================================== -->
+    <!-- STRATEGY GRID                                  -->
+    <!-- ============================================== -->
+    <div class="strategy-grid">
+
+      <!-- ============================================== -->
+      <!-- STRATEGY 1 — VPC Peering + Private LB          -->
+      <!-- ============================================== -->
+      <div class="strategy">
+        <div class="strategy-head">
+          <span class="strategy-num">#01</span>
+          <span class="strategy-title">VPC Peering + Private LB</span>
+          <span class="strategy-tag boundary">Classic</span>
+        </div>
+        <div class="strategy-diagram">
+          <svg viewBox="0 0 460 220" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="a01" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/>
+              </marker>
+              <marker id="a01c" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#22d3ee"/>
+              </marker>
+            </defs>
+            <rect width="100%" height="100%" fill="#0a0f1f"/>
+
+            <!-- Tenant -->
+            <rect x="10" y="20" width="200" height="180" rx="8" fill="rgba(34,211,238,0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="5,3"/>
+            <text x="22" y="38" fill="#22d3ee" font-size="9" font-weight="700">TENANT</text>
+            <rect x="22" y="50" width="176" height="28" rx="4" fill="rgba(34,211,238,0.2)" stroke="#22d3ee" stroke-width="1"/>
+            <text x="110" y="62" fill="white" font-size="9" font-weight="600" text-anchor="middle">External HTTPS LB</text>
+            <text x="110" y="72" fill="#94a3b8" font-size="7" text-anchor="middle">FR + Proxy + URL Map</text>
+
+            <rect x="22" y="86" width="176" height="28" rx="4" fill="rgba(251,113,133,0.2)" stroke="#fb7185" stroke-width="1"/>
+            <text x="110" y="98" fill="white" font-size="9" font-weight="600" text-anchor="middle">Backend Service</text>
+            <text x="110" y="108" fill="#fb7185" font-size="7" text-anchor="middle">+ Cloud Armor attached</text>
+
+            <rect x="22" y="122" width="176" height="28" rx="4" fill="rgba(34,211,238,0.1)" stroke="#22d3ee" stroke-width="1"/>
+            <text x="110" y="134" fill="white" font-size="9" font-weight="600" text-anchor="middle">Cross-VPC NEG</text>
+            <text x="110" y="144" fill="#94a3b8" font-size="7" text-anchor="middle">type=NON_GCP_PRIVATE_IP_PORT</text>
+            <text x="110" y="156" fill="#64748b" font-size="6" text-anchor="middle">→ Master ILB VIP</text>
+
+            <text x="110" y="178" fill="#64748b" font-size="7" text-anchor="middle">VPC: tenant-vpc</text>
+
+            <!-- Master -->
+            <rect x="250" y="20" width="200" height="180" rx="8" fill="rgba(167,139,250,0.05)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="5,3"/>
+            <text x="262" y="38" fill="#a78bfa" font-size="9" font-weight="700">MASTER</text>
+            <rect x="262" y="50" width="176" height="28" rx="4" fill="rgba(167,139,250,0.2)" stroke="#a78bfa" stroke-width="1"/>
+            <text x="350" y="62" fill="white" font-size="9" font-weight="600" text-anchor="middle">Internal LB (ILB)</text>
+            <text x="350" y="72" fill="#94a3b8" font-size="7" text-anchor="middle">private VIP</text>
+
+            <rect x="262" y="86" width="176" height="28" rx="4" fill="rgba(52,211,153,0.2)" stroke="#34d399" stroke-width="1"/>
+            <text x="350" y="98" fill="white" font-size="9" font-weight="600" text-anchor="middle">Backend Service</text>
+            <text x="350" y="108" fill="#94a3b8" font-size="7" text-anchor="middle">+ HC</text>
+
+            <rect x="262" y="122" width="176" height="28" rx="4" fill="rgba(251,191,36,0.3)" stroke="#fbbf24" stroke-width="1"/>
+            <text x="350" y="134" fill="white" font-size="9" font-weight="600" text-anchor="middle">MIG / GKE</text>
+            <text x="350" y="144" fill="#94a3b8" font-size="7" text-anchor="middle">real workload</text>
+
+            <text x="350" y="178" fill="#64748b" font-size="7" text-anchor="middle">VPC: master-vpc</text>
+
+            <!-- Peering bridge -->
+            <rect x="218" y="95" width="32" height="30" rx="3" fill="rgba(251,146,60,0.2)" stroke="#fb923c" stroke-width="1" stroke-dasharray="3,2"/>
+            <text x="234" y="108" fill="#fb923c" font-size="7" font-weight="600" text-anchor="middle">VPC</text>
+            <text x="234" y="118" fill="#fb923c" font-size="7" font-weight="600" text-anchor="middle">Peering</text>
+
+            <line x1="198" y1="135" x2="234" y2="115" stroke="#22d3ee" stroke-width="1.4" marker-end="url(#a01c)"/>
+            <line x1="266" y1="115" x2="262" y2="62" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#a01)"/>
+          </svg>
+        </div>
+        <div class="strategy-body">
+          <div>
+            <div class="col-title tenant">Talent needs</div>
+            <ul>
+              <li>Global Static IP / SSL Cert</li>
+              <li>External HTTPS LB chain</li>
+              <li>Backend Service <span style="color:#fb7185">+ Cloud Armor</span></li>
+              <li>ZONAL NEG (NON_GCP_PRIVATE_IP_PORT)</li>
+              <li>pointing to Master ILB VIP</li>
+            </ul>
+          </div>
+          <div>
+            <div class="col-title master">Master needs</div>
+            <ul>
+              <li>Internal LB (L4 or L7 ILB)</li>
+              <li>Backend Service + HC</li>
+              <li>MIG / GKE backend</li>
+              <li>Master VPC firewall: allow Tenant HC range</li>
+            </ul>
+          </div>
+        </div>
+        <div class="mechanism-row">
+          <span class="mechanism-chip">vpc-peering</span>
+          <span class="armor-chip">armor @ tenant</span>
+        </div>
+        <div class="verdict">
+          Same model as <span class="bad">cross-project-success-two.md</span> (you already validated it). <span class="neu">Caveat:</span> flat IP space, 25 peering limit per VPC, overlapping CIDRs impossible, source IP = Tenant ILB proxy IP.
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- STRATEGY 2 — PSC (verified baseline)           -->
+      <!-- ============================================== -->
+      <div class="strategy">
+        <div class="strategy-head">
+          <span class="strategy-num">#02</span>
+          <span class="strategy-title">PSC NEG + Service Attachment</span>
+          <span class="strategy-tag verified">Verified</span>
+        </div>
+        <div class="strategy-diagram">
+          <svg viewBox="0 0 460 220" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="a02" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/>
+              </marker>
+              <marker id="a02c" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#22d3ee"/>
+              </marker>
+              <marker id="a02o" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#fb923c"/>
+              </marker>
+            </defs>
+            <rect width="100%" height="100%" fill="#0a0f1f"/>
+
+            <rect x="10" y="20" width="200" height="180" rx="8" fill="rgba(34,211,238,0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="5,3"/>
+            <text x="22" y="38" fill="#22d3ee" font-size="9" font-weight="700">TENANT</text>
+            <rect x="22" y="50" width="176" height="28" rx="4" fill="rgba(34,211,238,0.2)" stroke="#22d3ee" stroke-width="1"/>
+            <text x="110" y="62" fill="white" font-size="9" font-weight="600" text-anchor="middle">External HTTPS LB</text>
+            <text x="110" y="72" fill="#94a3b8" font-size="7" text-anchor="middle">FR + Proxy + URL Map</text>
+
+            <rect x="22" y="86" width="176" height="28" rx="4" fill="rgba(251,113,133,0.2)" stroke="#fb7185" stroke-width="1"/>
+            <text x="110" y="98" fill="white" font-size="9" font-weight="600" text-anchor="middle">Backend Service</text>
+            <text x="110" y="108" fill="#fb7185" font-size="7" text-anchor="middle">+ Cloud Armor attached</text>
+
+            <rect x="22" y="122" width="176" height="28" rx="4" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1"/>
+            <text x="110" y="134" fill="white" font-size="9" font-weight="600" text-anchor="middle">PSC NEG</text>
+            <text x="110" y="144" fill="#fb923c" font-size="7" text-anchor="middle">type=PRIVATE_SERVICE_CONNECT</text>
+
+            <rect x="250" y="20" width="200" height="180" rx="8" fill="rgba(167,139,250,0.05)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="5,3"/>
+            <text x="262" y="38" fill="#a78bfa" font-size="9" font-weight="700">MASTER</text>
+            <rect x="262" y="50" width="176" height="28" rx="4" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1"/>
+            <text x="350" y="62" fill="white" font-size="9" font-weight="600" text-anchor="middle">Service Attachment</text>
+            <text x="350" y="72" fill="#fb923c" font-size="7" text-anchor="middle">ACCEPT_MANUAL + accept-list</text>
+
+            <rect x="262" y="86" width="176" height="28" rx="4" fill="rgba(167,139,250,0.2)" stroke="#a78bfa" stroke-width="1"/>
+            <text x="350" y="98" fill="white" font-size="9" font-weight="600" text-anchor="middle">Internal LB</text>
+            <text x="350" y="108" fill="#94a3b8" font-size="7" text-anchor="middle">ILB (L7)</text>
+
+            <rect x="262" y="122" width="176" height="28" rx="4" fill="rgba(52,211,153,0.2)" stroke="#34d399" stroke-width="1"/>
+            <text x="350" y="134" fill="white" font-size="9" font-weight="600" text-anchor="middle">Backend Service + MIG</text>
+
+            <!-- PSC tunnel -->
+            <rect x="218" y="92" width="32" height="40" rx="3" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1"/>
+            <text x="234" y="108" fill="#fb923c" font-size="7" font-weight="700" text-anchor="middle">PSC</text>
+            <text x="234" y="118" fill="#fb923c" font-size="7" font-weight="700" text-anchor="middle">Tunnel</text>
+
+            <line x1="198" y1="135" x2="218" y2="115" stroke="#fb923c" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#a02o)"/>
+            <line x1="250" y1="110" x2="262" y2="62" stroke="#fb923c" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#a02o)"/>
+          </svg>
+        </div>
+        <div class="strategy-body">
+          <div>
+            <div class="col-title tenant">Talent needs</div>
+            <ul>
+              <li>External HTTPS LB chain</li>
+              <li>Backend Service <span style="color:#fb7185">+ Cloud Armor</span></li>
+              <li><strong>PSC NEG</strong> (PRIVATE_SERVICE_CONNECT)</li>
+              <li>PSC NAT subnet (e.g. /27)</li>
+              <li>Org Policy: allow EXTERNAL_MANAGED</li>
+            </ul>
+          </div>
+          <div>
+            <div class="col-title master">Master needs</div>
+            <ul>
+              <li>ILB (L7) + Backend Service + MIG</li>
+              <li><strong>Service Attachment</strong> (ACCEPT_MANUAL)</li>
+              <li>consumer-accept-list = Tenant project</li>
+              <li>Producer forwarding rule: <code>--allow-global-access</code></li>
+            </ul>
+          </div>
+        </div>
+        <div class="mechanism-row">
+          <span class="mechanism-chip">psc</span>
+          <span class="armor-chip">armor @ tenant</span>
+        </div>
+        <div class="verdict">
+          <span class="good">Google's recommended model</span> (your <span class="bad">public-tls-cross-project-implementation.html</span> proves it). Overlapping IPs supported, no peering, clean isolation, no HC needed at Tenant side.
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- STRATEGY 3 — Serverless NEG (Cloud Run)        -->
+      <!-- ============================================== -->
+      <div class="strategy">
+        <div class="strategy-head">
+          <span class="strategy-num">#03</span>
+          <span class="strategy-title">Serverless NEG &rarr; Cloud Run in Master</span>
+          <span class="strategy-tag special">Cloud Run</span>
+        </div>
+        <div class="strategy-diagram">
+          <svg viewBox="0 0 460 220" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="a03" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/>
+              </marker>
+              <marker id="a03v" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#a78bfa"/>
+              </marker>
+            </defs>
+            <rect width="100%" height="100%" fill="#0a0f1f"/>
+
+            <rect x="10" y="20" width="200" height="180" rx="8" fill="rgba(34,211,238,0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="5,3"/>
+            <text x="22" y="38" fill="#22d3ee" font-size="9" font-weight="700">TENANT</text>
+            <rect x="22" y="50" width="176" height="28" rx="4" fill="rgba(34,211,238,0.2)" stroke="#22d3ee" stroke-width="1"/>
+            <text x="110" y="62" fill="white" font-size="9" font-weight="600" text-anchor="middle">External HTTPS LB</text>
+            <text x="110" y="72" fill="#94a3b8" font-size="7" text-anchor="middle">FR + Proxy + URL Map</text>
+
+            <rect x="22" y="86" width="176" height="28" rx="4" fill="rgba(251,113,133,0.2)" stroke="#fb7185" stroke-width="1"/>
+            <text x="110" y="98" fill="white" font-size="9" font-weight="600" text-anchor="middle">Backend Service</text>
+            <text x="110" y="108" fill="#fb7185" font-size="7" text-anchor="middle">+ Cloud Armor attached</text>
+
+            <rect x="22" y="122" width="176" height="28" rx="4" fill="rgba(167,139,250,0.3)" stroke="#a78bfa" stroke-width="1"/>
+            <text x="110" y="134" fill="white" font-size="9" font-weight="600" text-anchor="middle">Serverless NEG</text>
+            <text x="110" y="144" fill="#a78bfa" font-size="7" text-anchor="middle">type=SERVERLESS</text>
+
+            <rect x="250" y="20" width="200" height="180" rx="8" fill="rgba(167,139,250,0.05)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="5,3"/>
+            <text x="262" y="38" fill="#a78bfa" font-size="9" font-weight="700">MASTER</text>
+            <rect x="262" y="62" width="176" height="60" rx="6" fill="rgba(251,191,36,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+            <text x="350" y="82" fill="white" font-size="11" font-weight="700" text-anchor="middle">Cloud Run</text>
+            <text x="350" y="98" fill="#94a3b8" font-size="8" text-anchor="middle">serverless container</text>
+            <text x="350" y="112" fill="#94a3b8" font-size="7" text-anchor="middle">no LB needed in Master</text>
+
+            <text x="350" y="180" fill="#64748b" font-size="7" text-anchor="middle">Cloud Run IAM:</text>
+            <text x="350" y="192" fill="#64748b" font-size="7" text-anchor="middle">roles/run.invoker</text>
+
+            <!-- Bridge: Serverless NEG uses GCP internal — no peering -->
+            <rect x="218" y="92" width="32" height="40" rx="3" fill="rgba(167,139,250,0.3)" stroke="#a78bfa" stroke-width="1"/>
+            <text x="234" y="106" fill="#a78bfa" font-size="6" font-weight="700" text-anchor="middle">GCP</text>
+            <text x="234" y="116" fill="#a78bfa" font-size="6" font-weight="700" text-anchor="middle">internal</text>
+            <text x="234" y="126" fill="#a78bfa" font-size="6" font-weight="700" text-anchor="middle">route</text>
+
+            <line x1="198" y1="135" x2="218" y2="115" stroke="#a78bfa" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#a03v)"/>
+            <line x1="250" y1="115" x2="262" y2="92" stroke="#a78bfa" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#a03v)"/>
+          </svg>
+        </div>
+        <div class="strategy-body">
+          <div>
+            <div class="col-title tenant">Talent needs</div>
+            <ul>
+              <li>External HTTPS LB chain</li>
+              <li>Backend Service <span style="color:#fb7185">+ Cloud Armor</span></li>
+              <li><strong>Serverless NEG</strong></li>
+              <li>Serverless NEG &harr; Cloud Run ARN</li>
+            </ul>
+          </div>
+          <div>
+            <div class="col-title master">Master needs</div>
+            <ul>
+              <li>Cloud Run service</li>
+              <li><strong>IAM: roles/run.invoker</strong></li>
+              <li>granted to Tenant service account or allUsers</li>
+              <li>No LB, no VPC, no NEG</li>
+            </ul>
+          </div>
+        </div>
+        <div class="mechanism-row">
+          <span class="mechanism-chip">serverless-neg</span>
+          <span class="armor-chip">armor @ tenant</span>
+        </div>
+        <div class="verdict">
+          Only works if Master workload is <span class="good">Cloud Run / Cloud Functions / App Engine</span>. Cheapest, no infra in Master. <span class="bad">No MIG/GKE.</span>
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- STRATEGY 4 — Hybrid NEG                        -->
+      <!-- ============================================== -->
+      <div class="strategy">
+        <div class="strategy-head">
+          <span class="strategy-num">#04</span>
+          <span class="strategy-title">Hybrid NEG &rarr; On-prem / other cloud</span>
+          <span class="strategy-tag special">Hybrid</span>
+        </div>
+        <div class="strategy-diagram">
+          <svg viewBox="0 0 460 220" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="a04v" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#a78bfa"/>
+              </marker>
+            </defs>
+            <rect width="100%" height="100%" fill="#0a0f1f"/>
+
+            <rect x="10" y="20" width="200" height="180" rx="8" fill="rgba(34,211,238,0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="5,3"/>
+            <text x="22" y="38" fill="#22d3ee" font-size="9" font-weight="700">TENANT</text>
+            <rect x="22" y="50" width="176" height="28" rx="4" fill="rgba(34,211,238,0.2)" stroke="#22d3ee" stroke-width="1"/>
+            <text x="110" y="62" fill="white" font-size="9" font-weight="600" text-anchor="middle">External HTTPS LB</text>
+
+            <rect x="22" y="86" width="176" height="28" rx="4" fill="rgba(251,113,133,0.2)" stroke="#fb7185" stroke-width="1"/>
+            <text x="110" y="98" fill="white" font-size="9" font-weight="600" text-anchor="middle">Backend Service</text>
+            <text x="110" y="108" fill="#fb7185" font-size="7" text-anchor="middle">+ Cloud Armor attached</text>
+
+            <rect x="22" y="122" width="176" height="28" rx="4" fill="rgba(167,139,250,0.3)" stroke="#a78bfa" stroke-width="1"/>
+            <text x="110" y="134" fill="white" font-size="9" font-weight="600" text-anchor="middle">Hybrid NEG</text>
+            <text x="110" y="144" fill="#a78bfa" font-size="7" text-anchor="middle">NON_GCP_PRIVATE_IP_PORT</text>
+
+            <rect x="250" y="20" width="200" height="180" rx="8" fill="rgba(251,191,36,0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="5,3"/>
+            <text x="262" y="38" fill="#fbbf24" font-size="9" font-weight="700">MASTER</text>
+            <rect x="262" y="62" width="176" height="60" rx="6" fill="rgba(251,191,36,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+            <text x="350" y="82" fill="white" font-size="10" font-weight="700" text-anchor="middle">Cloud VPN / Interconnect</text>
+            <text x="350" y="98" fill="#94a3b8" font-size="7" text-anchor="middle">Cloud Router + BGP</text>
+
+            <rect x="262" y="132" width="176" height="32" rx="6" fill="rgba(251,191,36,0.2)" stroke="#fbbf24" stroke-width="1"/>
+            <text x="350" y="148" fill="white" font-size="9" font-weight="600" text-anchor="middle">On-prem / AWS / Azure</text>
+            <text x="350" y="158" fill="#94a3b8" font-size="7" text-anchor="middle">real workload</text>
+
+            <rect x="218" y="92" width="32" height="40" rx="3" fill="rgba(167,139,250,0.3)" stroke="#a78bfa" stroke-width="1"/>
+            <text x="234" y="108" fill="#a78bfa" font-size="6" font-weight="700" text-anchor="middle">VPN</text>
+            <text x="234" y="118" fill="#a78bfa" font-size="6" font-weight="700" text-anchor="middle">tunnel</text>
+
+            <line x1="198" y1="135" x2="218" y2="115" stroke="#a78bfa" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#a04v)"/>
+            <line x1="250" y1="115" x2="262" y2="148" stroke="#a78bfa" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#a04v)"/>
+          </svg>
+        </div>
+        <div class="strategy-body">
+          <div>
+            <div class="col-title tenant">Talent needs</div>
+            <ul>
+              <li>External HTTPS LB + Backend Service</li>
+              <li>Cloud Armor on Backend Service</li>
+              <li><strong>Hybrid NEG</strong> (zonal)</li>
+              <li>NEG endpoint = private IP of on-prem</li>
+            </ul>
+          </div>
+          <div>
+            <div class="col-title master">Master (or off-GCP)</div>
+            <ul>
+              <li>Cloud VPN / Cloud Interconnect</li>
+              <li>Cloud Router + BGP</li>
+              <li>On-prem / AWS / Azure workload</li>
+              <li>firewall: allow Tenant HC range</li>
+            </ul>
+          </div>
+        </div>
+        <div class="mechanism-row">
+          <span class="mechanism-chip">hybrid-neg + vpn</span>
+          <span class="armor-chip">armor @ tenant</span>
+        </div>
+        <div class="verdict">
+          Use case: <span class="neu">Master is actually on-prem or another cloud.</span> Listed for completeness &mdash; doesn't apply if Master is a GCP project with MIG/GKE.
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- STRATEGY 5 — Shared VPC + Internal LB          -->
+      <!-- ============================================== -->
+      <div class="strategy">
+        <div class="strategy-head">
+          <span class="strategy-num">#05</span>
+          <span class="strategy-title">Shared VPC + Cross-project Internal LB</span>
+          <span class="strategy-tag boundary">Shared VPC</span>
+        </div>
+        <div class="strategy-diagram">
+          <svg viewBox="0 0 460 220" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="a05v" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#a78bfa"/>
+              </marker>
+            </defs>
+            <rect width="100%" height="100%" fill="#0a0f1f"/>
+
+            <!-- Shared VPC host project (implicit) -->
+            <rect x="10" y="20" width="440" height="180" rx="8" fill="rgba(76,29,149,0.04)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="5,3"/>
+            <text x="22" y="38" fill="#a78bfa" font-size="9" font-weight="700">SHARED VPC (host project)</text>
+
+            <!-- Tenant side -->
+            <rect x="22" y="50" width="200" height="140" rx="6" fill="rgba(34,211,238,0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="4,2"/>
+            <text x="34" y="65" fill="#22d3ee" font-size="8" font-weight="700">TENANT (service project)</text>
+            <rect x="34" y="74" width="176" height="22" rx="4" fill="rgba(34,211,238,0.2)" stroke="#22d3ee" stroke-width="1"/>
+            <text x="122" y="89" fill="white" font-size="8" font-weight="600" text-anchor="middle">External HTTPS LB</text>
+            <rect x="34" y="100" width="176" height="22" rx="4" fill="rgba(251,113,133,0.2)" stroke="#fb7185" stroke-width="1"/>
+            <text x="122" y="115" fill="white" font-size="8" font-weight="600" text-anchor="middle">Backend Service + Armor</text>
+            <rect x="34" y="126" width="176" height="22" rx="4" fill="rgba(52,211,153,0.2)" stroke="#34d399" stroke-width="1"/>
+            <text x="122" y="141" fill="white" font-size="8" font-weight="600" text-anchor="middle">Zonal NEG (GCE)</text>
+            <text x="122" y="155" fill="#94a3b8" font-size="7" text-anchor="middle">→ Master VM in shared VPC</text>
+            <text x="122" y="172" fill="#64748b" font-size="6" text-anchor="middle">uses shared subnet</text>
+
+            <!-- Master side -->
+            <rect x="238" y="50" width="200" height="140" rx="6" fill="rgba(167,139,250,0.05)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,2"/>
+            <text x="250" y="65" fill="#a78bfa" font-size="8" font-weight="700">MASTER (service project)</text>
+            <rect x="250" y="74" width="176" height="22" rx="4" fill="rgba(251,191,36,0.3)" stroke="#fbbf24" stroke-width="1"/>
+            <text x="338" y="89" fill="white" font-size="8" font-weight="600" text-anchor="middle">MIG / GKE</text>
+            <rect x="250" y="100" width="176" height="22" rx="4" fill="rgba(94,234,212,0.2)" stroke="#22d3ee" stroke-width="1"/>
+            <text x="338" y="115" fill="white" font-size="8" font-weight="600" text-anchor="middle">In shared VPC subnet</text>
+            <text x="338" y="138" fill="#94a3b8" font-size="7" text-anchor="middle">Same VPC, same CIDR</text>
+            <text x="338" y="152" fill="#94a3b8" font-size="7" text-anchor="middle">IAM on host project:</text>
+            <text x="338" y="164" fill="#94a3b8" font-size="7" text-anchor="middle">compute.networkUser</text>
+
+            <!-- No bridge needed — same VPC -->
+            <text x="438" y="200" fill="#64748b" font-size="6" text-anchor="end">no Peering · no PSC · one VPC</text>
+          </svg>
+        </div>
+        <div class="strategy-body">
+          <div>
+            <div class="col-title tenant">Talent needs</div>
+            <ul>
+              <li>Service project role on host project</li>
+              <li>External HTTPS LB chain</li>
+              <li>Backend Service + Cloud Armor</li>
+              <li>Zonal NEG to Master VM IP</li>
+            </ul>
+          </div>
+          <div>
+            <div class="col-title master">Master needs</div>
+            <ul>
+              <li>Service project role on host project</li>
+              <li>MIG / GKE using shared subnet</li>
+              <li>HC source range allowed</li>
+              <li>No ILB needed if direct NEG works</li>
+            </ul>
+          </div>
+        </div>
+        <div class="mechanism-row">
+          <span class="mechanism-chip">shared-vpc</span>
+          <span class="armor-chip">armor @ tenant</span>
+        </div>
+        <div class="verdict">
+          <span class="good">Simplest if both projects are already service projects</span> of a host project. <span class="bad">Caveat:</span> Shared VPC admin (org-level) is required &mdash; not always available; isolation at L7 only via Cloud Armor + routing rules.
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- STRATEGY 6 — Multi-tenant PSC (N:1)            -->
+      <!-- ============================================== -->
+      <div class="strategy">
+        <div class="strategy-head">
+          <span class="strategy-num">#06</span>
+          <span class="strategy-title">Multi-tenant PSC (N Tenants &rarr; 1 Master)</span>
+          <span class="strategy-tag scaling">Multi-Tenant</span>
+        </div>
+        <div class="strategy-diagram">
+          <svg viewBox="0 0 460 220" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="a06v" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#fb923c"/>
+              </marker>
+            </defs>
+            <rect width="100%" height="100%" fill="#0a0f1f"/>
+
+            <!-- 3 Tenants on left -->
+            <rect x="10" y="20" width="100" height="55" rx="6" fill="rgba(34,211,238,0.1)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="4,2"/>
+            <text x="60" y="38" fill="#22d3ee" font-size="8" font-weight="700" text-anchor="middle">TENANT A</text>
+            <text x="60" y="50" fill="white" font-size="7" text-anchor="middle">Ext LB + Armor</text>
+            <text x="60" y="62" fill="#fb923c" font-size="7" text-anchor="middle">PSC NEG</text>
+
+            <rect x="10" y="82" width="100" height="55" rx="6" fill="rgba(34,211,238,0.1)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="4,2"/>
+            <text x="60" y="100" fill="#22d3ee" font-size="8" font-weight="700" text-anchor="middle">TENANT B</text>
+            <text x="60" y="112" fill="white" font-size="7" text-anchor="middle">Ext LB + Armor</text>
+            <text x="60" y="124" fill="#fb923c" font-size="7" text-anchor="middle">PSC NEG</text>
+
+            <rect x="10" y="144" width="100" height="55" rx="6" fill="rgba(34,211,238,0.1)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="4,2"/>
+            <text x="60" y="162" fill="#22d3ee" font-size="8" font-weight="700" text-anchor="middle">TENANT C</text>
+            <text x="60" y="174" fill="white" font-size="7" text-anchor="middle">Ext LB + Armor</text>
+            <text x="60" y="186" fill="#fb923c" font-size="7" text-anchor="middle">PSC NEG</text>
+
+            <!-- Center: Master Service Attachment -->
+            <rect x="170" y="60" width="120" height="100" rx="8" fill="rgba(167,139,250,0.15)" stroke="#a78bfa" stroke-width="1.5"/>
+            <text x="230" y="80" fill="#a78bfa" font-size="9" font-weight="700" text-anchor="middle">MASTER</text>
+            <text x="230" y="94" fill="white" font-size="8" font-weight="600" text-anchor="middle">Service Attachment</text>
+            <text x="230" y="106" fill="#fb923c" font-size="7" text-anchor="middle">consumer-accept-list =</text>
+            <text x="230" y="118" fill="#fb923c" font-size="7" text-anchor="middle">[A, B, C, ...]</text>
+            <rect x="180" y="128" width="100" height="22" rx="4" fill="rgba(167,139,250,0.3)" stroke="#a78bfa" stroke-width="1"/>
+            <text x="230" y="142" fill="white" font-size="8" font-weight="600" text-anchor="middle">ILB + MIG</text>
+
+            <!-- Right: legend / results -->
+            <rect x="340" y="40" width="110" height="160" rx="6" fill="rgba(2,6,23,0.6)" stroke="#1e293b" stroke-width="1"/>
+            <text x="395" y="58" fill="white" font-size="8" font-weight="700" text-anchor="middle">N:1 scaling</text>
+            <line x1="350" y1="70" x2="440" y2="70" stroke="#1e293b" stroke-width="0.5"/>
+            <text x="350" y="86" fill="#94a3b8" font-size="7">1 Master SA</text>
+            <text x="350" y="100" fill="#94a3b8" font-size="7">N Tenant NEGs</text>
+            <text x="350" y="114" fill="#94a3b8" font-size="7">per-tenant</text>
+            <text x="350" y="126" fill="#94a3b8" font-size="7">Cloud Armor</text>
+            <text x="350" y="138" fill="#94a3b8" font-size="7">per-tenant URL Map</text>
+            <text x="350" y="150" fill="#94a3b8" font-size="7">per-tenant Backend</text>
+            <text x="350" y="162" fill="#94a3b8" font-size="7">isolation: SA + URL</text>
+            <text x="350" y="174" fill="#fbbf24" font-size="7">quota ↑ per region</text>
+
+            <!-- Lines from 3 tenants to Master SA -->
+            <line x1="110" y1="48" x2="170" y2="100" stroke="#fb923c" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#a06v)"/>
+            <line x1="110" y1="110" x2="170" y2="110" stroke="#fb923c" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#a06v)"/>
+            <line x1="110" y1="172" x2="170" y2="120" stroke="#fb923c" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#a06v)"/>
+          </svg>
+        </div>
+        <div class="strategy-body">
+          <div>
+            <div class="col-title tenant">Per Tenant needs</div>
+            <ul>
+              <li>External HTTPS LB + Cert + Domain</li>
+              <li>Backend Service + <span style="color:#fb7185">Cloud Armor</span></li>
+              <li>PSC NEG pointing at shared SA</li>
+            </ul>
+          </div>
+          <div>
+            <div class="col-title master">Master needs (shared)</div>
+            <ul>
+              <li><strong>One</strong> Service Attachment</li>
+              <li>consumer-accept-list = all Tenant projects</li>
+              <li>ILB + Backend Service + MIG</li>
+              <li>Quota: PSC NEG per region</li>
+            </ul>
+          </div>
+        </div>
+        <div class="mechanism-row">
+          <span class="mechanism-chip">psc n:1</span>
+          <span class="armor-chip">armor @ tenant</span>
+        </div>
+        <div class="verdict">
+          <span class="good">True multi-tenant SaaS model.</span> Each tenant owns its own CA + domain; Master is a shared service. <span class="neu">Quota:</span> PSC endpoint per project per region (default 25, raise to 100+).
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- STRATEGY 7 — GKE Gateway API (K8s-native)      -->
+      <!-- ============================================== -->
+      <div class="strategy">
+        <div class="strategy-head">
+          <span class="strategy-num">#07</span>
+          <span class="strategy-title">GKE Gateway API &rarr; KSA &rarr; GSA &rarr; Master</span>
+          <span class="strategy-tag native">K8s Native</span>
+        </div>
+        <div class="strategy-diagram">
+          <svg viewBox="0 0 460 220" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="a07v" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#a78bfa"/>
+              </marker>
+            </defs>
+            <rect width="100%" height="100%" fill="#0a0f1f"/>
+
+            <rect x="10" y="20" width="200" height="180" rx="8" fill="rgba(34,211,238,0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="5,3"/>
+            <text x="22" y="38" fill="#22d3ee" font-size="9" font-weight="700">TENANT GKE</text>
+            <rect x="22" y="50" width="176" height="22" rx="4" fill="rgba(34,211,238,0.2)" stroke="#22d3ee" stroke-width="1"/>
+            <text x="110" y="64" fill="white" font-size="8" font-weight="600" text-anchor="middle">Gateway (GKE Gateway API)</text>
+
+            <rect x="22" y="76" width="176" height="22" rx="4" fill="rgba(251,113,133,0.2)" stroke="#fb7185" stroke-width="1"/>
+            <text x="110" y="90" fill="white" font-size="8" font-weight="600" text-anchor="middle">HTTPRoute + GCPBackendPolicy</text>
+            <text x="110" y="118" fill="#fb7185" font-size="6" text-anchor="middle">Cloud Armor attached</text>
+
+            <rect x="22" y="102" width="176" height="22" rx="4" fill="rgba(94,234,212,0.2)" stroke="#22d3ee" stroke-width="1"/>
+            <text x="110" y="116" fill="white" font-size="8" font-weight="600" text-anchor="middle">KSA: gateway-ksa</text>
+
+            <rect x="22" y="128" width="176" height="22" rx="4" fill="rgba(251,191,36,0.3)" stroke="#fbbf24" stroke-width="1"/>
+            <text x="110" y="142" fill="white" font-size="8" font-weight="600" text-anchor="middle">Workload Identity binding</text>
+
+            <rect x="22" y="154" width="176" height="22" rx="4" fill="rgba(94,234,212,0.2)" stroke="#22d3ee" stroke-width="1"/>
+            <text x="110" y="168" fill="white" font-size="8" font-weight="600" text-anchor="middle">→ GSA: tenant-cross-gsa</text>
+            <text x="110" y="180" fill="#94a3b8" font-size="6" text-anchor="middle">iam.workloadIdentityUser</text>
+
+            <rect x="250" y="20" width="200" height="180" rx="8" fill="rgba(167,139,250,0.05)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="5,3"/>
+            <text x="262" y="38" fill="#a78bfa" font-size="9" font-weight="700">MASTER GKE</text>
+            <rect x="262" y="50" width="176" height="36" rx="4" fill="rgba(251,191,36,0.3)" stroke="#fbbf24" stroke-width="1"/>
+            <text x="350" y="64" fill="white" font-size="8" font-weight="600" text-anchor="middle">Service (type=LoadBalancer)</text>
+            <text x="350" y="78" fill="#94a3b8" font-size="6" text-anchor="middle">or NEG annotation</text>
+
+            <rect x="262" y="94" width="176" height="22" rx="4" fill="rgba(52,211,153,0.2)" stroke="#34d399" stroke-width="1"/>
+            <text x="350" y="108" fill="white" font-size="8" font-weight="600" text-anchor="middle">Master Backend Service</text>
+
+            <text x="350" y="138" fill="#94a3b8" font-size="7" text-anchor="middle">Master GSA has roles/</text>
+            <text x="350" y="150" fill="#94a3b8" font-size="7" text-anchor="middle">compute.networkUser on</text>
+            <text x="350" y="162" fill="#94a3b8" font-size="7" text-anchor="middle">Tenant's shared subnet</text>
+
+            <text x="350" y="180" fill="#64748b" font-size="6" text-anchor="middle">service account impersonation</text>
+
+            <!-- Bridge -->
+            <rect x="218" y="92" width="32" height="40" rx="3" fill="rgba(251,191,36,0.3)" stroke="#fbbf24" stroke-width="1"/>
+            <text x="234" y="106" fill="#fbbf24" font-size="6" font-weight="700" text-anchor="middle">WIF</text>
+            <text x="234" y="118" fill="#fbbf24" font-size="6" font-weight="700" text-anchor="middle">IAM</text>
+
+            <line x1="198" y1="165" x2="218" y2="115" stroke="#fbbf24" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#a07v)"/>
+            <line x1="250" y1="115" x2="262" y2="108" stroke="#fbbf24" stroke-width="1.4" stroke-dasharray="3,2" marker-end="url(#a07v)"/>
+          </svg>
+        </div>
+        <div class="strategy-body">
+          <div>
+            <div class="col-title tenant">Talent GKE needs</div>
+            <ul>
+              <li>GKE cluster + Gateway CRD</li>
+              <li>GCPBackendPolicy (Cloud Armor)</li>
+              <li><strong>KSA &harr; GSA binding</strong></li>
+              <li>GSA: roles for Master's network</li>
+            </ul>
+          </div>
+          <div>
+            <div class="col-title master">Master GKE needs</div>
+            <ul>
+              <li>GKE Service + NEG annotation</li>
+              <li>(or standalone MIG + NEG)</li>
+              <li>Allow Tenant GSA in IAM</li>
+              <li>Master GSA: networkUser on Tenant subnet (if Shared VPC)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="mechanism-row">
+          <span class="mechanism-chip">gke-gateway-api</span>
+          <span class="armor-chip">armor @ tenant</span>
+        </div>
+        <div class="verdict">
+          <span class="good">K8s-native &mdash; no PSC, no Peering.</span> Cloud Armor attached via <code>GCPBackendPolicy</code>. <span class="neu">Caveat:</span> both sides must be GKE; combined with PSC (#2) for cross-region.
+        </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- STRATEGY 8 — Global LB + Multi-Region PSC      -->
+      <!-- ============================================== -->
+      <div class="strategy">
+        <div class="strategy-head">
+          <span class="strategy-num">#08</span>
+          <span class="strategy-title">Global Ext LB + Multi-Region PSC NEG</span>
+          <span class="strategy-tag scaling">Global</span>
+        </div>
+        <div class="strategy-diagram">
+          <svg viewBox="0 0 460 220" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="a08v" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#fb923c"/>
+              </marker>
+            </defs>
+            <rect width="100%" height="100%" fill="#0a0f1f"/>
+
+            <!-- Tenant Global LB -->
+            <rect x="10" y="20" width="200" height="180" rx="8" fill="rgba(34,211,238,0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="5,3"/>
+            <text x="22" y="38" fill="#22d3ee" font-size="9" font-weight="700">TENANT (global)</text>
+            <rect x="22" y="50" width="176" height="28" rx="4" fill="rgba(34,211,238,0.2)" stroke="#22d3ee" stroke-width="1"/>
+            <text x="110" y="62" fill="white" font-size="9" font-weight="600" text-anchor="middle">Global External HTTPS LB</text>
+            <text x="110" y="72" fill="#94a3b8" font-size="7" text-anchor="middle">EXTERNAL_MANAGED</text>
+
+            <rect x="22" y="86" width="176" height="28" rx="4" fill="rgba(251,113,133,0.2)" stroke="#fb7185" stroke-width="1"/>
+            <text x="110" y="98" fill="white" font-size="9" font-weight="600" text-anchor="middle">Backend Service</text>
+            <text x="110" y="108" fill="#fb7185" font-size="7" text-anchor="middle">+ Cloud Armor attached</text>
+
+            <!-- 2 PSC NEGs in different regions -->
+            <rect x="22" y="122" width="80" height="36" rx="4" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1"/>
+            <text x="62" y="136" fill="white" font-size="8" font-weight="600" text-anchor="middle">PSC NEG</text>
+            <text x="62" y="148" fill="#fb923c" font-size="7" text-anchor="middle">region=eu-w2</text>
+
+            <rect x="118" y="122" width="80" height="36" rx="4" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1"/>
+            <text x="158" y="136" fill="white" font-size="8" font-weight="600" text-anchor="middle">PSC NEG</text>
+            <text x="158" y="148" fill="#fb923c" font-size="7" text-anchor="middle">region=us-east4</text>
+
+            <text x="110" y="178" fill="#64748b" font-size="7" text-anchor="middle">2 regional NEGs, 1 BS</text>
+
+            <!-- Master: 2 regions -->
+            <rect x="250" y="20" width="100" height="180" rx="6" fill="rgba(167,139,250,0.05)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,2"/>
+            <text x="300" y="38" fill="#a78bfa" font-size="8" font-weight="700" text-anchor="middle">MASTER EU-W2</text>
+            <rect x="262" y="50" width="80" height="22" rx="3" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1"/>
+            <text x="302" y="64" fill="white" font-size="7" font-weight="600" text-anchor="middle">Service Attach</text>
+            <rect x="262" y="78" width="80" height="22" rx="3" fill="rgba(167,139,250,0.2)" stroke="#a78bfa" stroke-width="1"/>
+            <text x="302" y="92" fill="white" font-size="7" font-weight="600" text-anchor="middle">ILB + MIG</text>
+
+            <rect x="358" y="20" width="100" height="180" rx="6" fill="rgba(167,139,250,0.05)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,2"/>
+            <text x="408" y="38" fill="#a78bfa" font-size="8" font-weight="700" text-anchor="middle">MASTER US-E4</text>
+            <rect x="370" y="50" width="80" height="22" rx="3" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1"/>
+            <text x="410" y="64" fill="white" font-size="7" font-weight="600" text-anchor="middle">Service Attach</text>
+            <rect x="370" y="78" width="80" height="22" rx="3" fill="rgba(167,139,250,0.2)" stroke="#a78bfa" stroke-width="1"/>
+            <text x="410" y="92" fill="white" font-size="7" font-weight="600" text-anchor="middle">ILB + MIG</text>
+
+            <line x1="102" y1="140" x2="262" y2="100" stroke="#fb923c" stroke-width="1.2" stroke-dasharray="3,2" marker-end="url(#a08v)"/>
+            <line x1="198" y1="140" x2="370" y2="100" stroke="#fb923c" stroke-width="1.2" stroke-dasharray="3,2" marker-end="url(#a08v)"/>
+          </svg>
+        </div>
+        <div class="strategy-body">
+          <div>
+            <div class="col-title tenant">Talent needs</div>
+            <ul>
+              <li>Global Static IP + SSL Cert</li>
+              <li>Global Ext HTTPS LB (anycast)</li>
+              <li>Backend Service + Cloud Armor</li>
+              <li>1 PSC NEG per Master region</li>
+            </ul>
+          </div>
+          <div>
+            <div class="col-title master">Per region needs</div>
+            <ul>
+              <li>ILB + Backend Service + MIG</li>
+              <li>Service Attachment per region</li>
+              <li>Tenant project in accept-list</li>
+              <li>Regional SA → Tenant Backend</li>
+            </ul>
+          </div>
+        </div>
+        <div class="mechanism-row">
+          <span class="mechanism-chip">psc multi-region</span>
+          <span class="armor-chip">armor @ tenant</span>
+        </div>
+        <div class="verdict">
+          <span class="good">Production-grade HA.</span> Tenant LB does global anycast + region-aware routing; Master replicates. <span class="neu">Cost:</span> 2× ILB + 2× SA per region. Already proven in your existing PSC template.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============================================== -->
+    <!-- COMPARISON MATRIX                              -->
+    <!-- ============================================== -->
+    <p class="section-tag">Comparison matrix &mdash; side by side</p>
+    <div class="matrix-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Approach</th>
+            <th>Cross-project mechanism</th>
+            <th>Cloud Armor location</th>
+            <th>Tenant isolation</th>
+            <th>Scaling (N tenants)</th>
+            <th>MIG / GKE support</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="cell-num">01</td>
+            <td class="cell-name">VPC Peering + Private LB</td>
+            <td>VPC Peering</td>
+            <td>Tenant Backend Svc</td>
+            <td>L3 (firewall)</td>
+            <td>peering quota: 25</td>
+            <td><span class="pill ok">yes</span></td>
+            <td><span class="pill ok">validated</span></td>
+          </tr>
+          <tr>
+            <td class="cell-num">02</td>
+            <td class="cell-name">PSC NEG + Service Attachment</td>
+            <td>PSC</td>
+            <td>Tenant Backend Svc</td>
+            <td>L7 + IAM (accept-list)</td>
+            <td>PSC endpoint / region</td>
+            <td><span class="pill ok">yes</span></td>
+            <td><span class="pill ok">verified</span></td>
+          </tr>
+          <tr>
+            <td class="cell-num">03</td>
+            <td class="cell-name">Serverless NEG → Cloud Run</td>
+            <td>GCP internal route</td>
+            <td>Tenant Backend Svc</td>
+            <td>L7 + IAM</td>
+            <td>Serverless NEG quota</td>
+            <td><span class="pill bad">no (CR only)</span></td>
+            <td><span class="pill warn">if Cloud Run</span></td>
+          </tr>
+          <tr>
+            <td class="cell-num">04</td>
+            <td class="cell-name">Hybrid NEG + VPN</td>
+            <td>VPN / Interconnect</td>
+            <td>Tenant Backend Svc</td>
+            <td>L3 (VPN tunnel)</td>
+            <td>Hybrid NEG quota</td>
+            <td><span class="pill warn">on-prem only</span></td>
+            <td><span class="pill warn">off-GCP only</span></td>
+          </tr>
+          <tr>
+            <td class="cell-num">05</td>
+            <td class="cell-name">Shared VPC + ILB</td>
+            <td>Shared VPC</td>
+            <td>Tenant Backend Svc</td>
+            <td>L7 + IAM</td>
+            <td>service projects</td>
+            <td><span class="pill ok">yes</span></td>
+            <td><span class="pill warn">needs host project</span></td>
+          </tr>
+          <tr>
+            <td class="cell-num">06</td>
+            <td class="cell-name">Multi-tenant PSC (N:1)</td>
+            <td>PSC, per tenant</td>
+            <td>Per Tenant Backend</td>
+            <td>L7 + URL Map + IAM</td>
+            <td>N tenants × NEG</td>
+            <td><span class="pill ok">yes</span></td>
+            <td><span class="pill k8s">SaaS-grade</span></td>
+          </tr>
+          <tr>
+            <td class="cell-num">07</td>
+            <td class="cell-name">GKE Gateway API + WIF</td>
+            <td>KSA→GSA + IAM</td>
+            <td>Tenant GCPBackendPolicy</td>
+            <td>L7 + IAM</td>
+            <td>GKE-native</td>
+            <td><span class="pill ok">GKE only</span></td>
+            <td><span class="pill k8s">K8s-native</span></td>
+          </tr>
+          <tr>
+            <td class="cell-num">08</td>
+            <td class="cell-name">Global LB + Multi-Region PSC</td>
+            <td>PSC regional</td>
+            <td>Tenant Backend Svc</td>
+            <td>L7 + IAM (per region)</td>
+            <td>2× regional SAs</td>
+            <td><span class="pill ok">yes</span></td>
+            <td><span class="pill ok">production HA</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- DECISION CARDS                                 -->
+    <!-- ============================================== -->
+    <p class="section-tag">Decision &mdash; which to pick</p>
+    <div class="decision-row">
+      <div class="card">
+        <h3>If Master is single-region GCP (MIG/GKE)</h3>
+        <p><span class="good">Pick #02 (PSC).</span> Same pattern you already validated in <code>public-tls-cross-project-implementation.html</code>. Source-IP preserved end-to-end via PSC SNAT, Cloud Armor enforced at Tenant side, zero VPC Peering, overlapping CIDRs OK.</p>
+        <p><span class="neu">#01 fallback</span> if PSC quota is the blocker &mdash; your <code>cross-project-success-two.md</code> already shows it's runnable, just adds a Tenant-side HC and a Master firewall rule.</p>
+        <p><span class="bad">#05 only</span> if both projects are already service projects of a host project. Shared VPC makes isolation weaker (same VPC).</p>
+      </div>
+      <div class="card">
+        <h3>If multi-tenant SaaS (many Tenants &rarr; 1 Master)</h3>
+        <p><span class="good">Pick #06 (Multi-tenant PSC).</span> Each Tenant owns domain + cert + Cloud Armor + URL Map; Master has one Service Attachment with Tenant projects in <code>consumer-accept-list</code>. Best isolation, best scaling story.</p>
+        <p><span class="neu">#08 (multi-region PSC)</span> if Tenants must be served globally &mdash; it's #06 + regional replication.</p>
+        <p><span class="bad">Avoid #01</span> at scale: per-tenant VPC peering doesn't survive past ~10 tenants.</p>
+      </div>
+      <div class="card">
+        <h3>If Master is Cloud Run / serverless</h3>
+        <p><span class="good">Pick #03 (Serverless NEG).</span> No Master LB, no Master VPC, just IAM <code>roles/run.invoker</code>. Cheapest path.</p>
+        <p>For multi-tenant SaaS on Cloud Run, <span class="neu">stack with #06</span>: per-Tenant Serverless NEG + shared Cloud Run service + IAM allowlist per Tenant identity.</p>
+      </div>
+      <div class="card">
+        <h3>If both sides are GKE</h3>
+        <p><span class="good">Pick #07 (GKE Gateway API + WIF).</span> Everything stays in K8s manifests; Cloud Armor via <code>GCPBackendPolicy</code>. Workload Identity bridges KSA→GSA→Master IAM.</p>
+        <p>For cross-project Service exposure, <span class="neu">combine #07 + #02</span>: GKE Gateway at Tenant, PSC NEG pointing at Master Service.</p>
+      </div>
+    </div>
+
+    <p class="footer">
+      Cross-Project Architecture Exploration &middot; Tenant Ingress + Master Backend &middot; 8 candidate architectures &middot; companion to flow-fr-lb-mig.md
+    </p>
+  </div>
+</body>
+</html>

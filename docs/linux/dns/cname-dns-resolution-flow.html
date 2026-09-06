@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DNS Resolution Flow — caep.uk CNAME → A → Tenant Project ILB</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px;
+      background: #22d3ee;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+    .subtitle { color: #94a3b8; font-size: 0.85rem; margin-left: 1.75rem; }
+    .meta { color: #64748b; font-size: 0.75rem; margin-left: 1.75rem; margin-top: 0.25rem; }
+    .meta code { color: #94a3b8; }
+
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1200px; display: block; }
+
+    .legend-row {
+      display: flex;
+      gap: 1.5rem;
+      margin-top: 1.25rem;
+      flex-wrap: wrap;
+      font-size: 0.72rem;
+      color: #94a3b8;
+    }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+    .legend-sw {
+      width: 14px; height: 10px; border-radius: 2px;
+      display: inline-block;
+    }
+    .legend-line { width: 18px; height: 2px; display: inline-block; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.85rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.72rem; }
+    .card li { margin-bottom: 0.35rem; line-height: 1.5; }
+    .card li b { color: #cbd5e1; font-weight: 500; }
+    .card code {
+      background: rgba(30, 41, 59, 0.6);
+      padding: 0.05rem 0.35rem;
+      border-radius: 3px;
+      font-size: 0.7rem;
+      color: #e2e8f0;
+    }
+
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.7rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>DNS Resolution Flow — <code style="color:#22d3ee">*.team1.caep.uk</code> CNAME → A → Tenant Project ILB</h1>
+      </div>
+      <p class="subtitle">企业短域名 caep.uk  ·  Team-level 通配子域  ·  CNAME 链解耦 → A 记录指向 Tenant Project ILB 入口</p>
+      <p class="meta">本图只覆盖 <b>DNS 解析阶段</b>  ·  DNS 之后的 cross-project 链路见 <code>tenant-tls-setup-https-architecture.html</code></p>
+    </div>
+
+    <!-- Main Diagram -->
+    <div class="diagram-container">
+      <svg viewBox="0 0 1340 760">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+          </marker>
+          <marker id="arrowhead-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/>
+          </marker>
+          <marker id="arrowhead-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+          </marker>
+          <marker id="arrowhead-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <!-- Background Grid -->
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- =========================================================
+             ZONE 0: INTERNET (client)
+             ========================================================= -->
+        <rect x="30" y="30" width="1280" height="100" rx="10" fill="rgba(30, 41, 59, 0.15)" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="42" y="48" fill="#94a3b8" font-size="10" font-weight="600">ZONE 0  ·  INTERNET  (调用方)</text>
+
+        <!-- Client -->
+        <rect x="80" y="60" width="180" height="56" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="170" y="82" fill="white" font-size="11" font-weight="600" text-anchor="middle">End User / 业务方</text>
+        <text x="170" y="98" fill="#22d3ee" font-size="9" text-anchor="middle">api1.team1.caep.uk</text>
+        <text x="170" y="110" fill="#94a3b8" font-size="7" text-anchor="middle">Browser / curl / SDK</text>
+
+        <!-- Resolver note -->
+        <rect x="900" y="60" width="380" height="56" rx="6" fill="rgba(30, 41, 59, 0.4)" stroke="#64748b" stroke-width="1" stroke-dasharray="2,2"/>
+        <text x="1090" y="80" fill="#94a3b8" font-size="10" font-weight="600" text-anchor="middle">DNS Resolver (Local Cache)</text>
+        <text x="1090" y="96" fill="#64748b" font-size="8" text-anchor="middle">操作系统 / 公共 DNS (8.8.8.8 / 114.114.114.114)</text>
+        <text x="1090" y="109" fill="#64748b" font-size="7" text-anchor="middle">解析结果按 TTL 缓存 — 切换 IP 时只改 1 条 A 记录</text>
+
+        <!-- =========================================================
+             ZONE 1: PUBLIC DNS — caep.uk zone (Cloudflare)
+             ========================================================= -->
+        <rect x="30" y="155" width="1280" height="220" rx="10" fill="rgba(8, 51, 68, 0.08)" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="6,3"/>
+        <text x="42" y="173" fill="#22d3ee" font-size="11" font-weight="600">ZONE 1  ·  PUBLIC DNS  ·  caep.uk (Cloudflare-managed, 企业权威 zone)</text>
+        <text x="42" y="187" fill="#64748b" font-size="8">企业分配给平台的短域名 — 平台自治所有 *.teamN.caep.uk 子域</text>
+
+        <!-- Step A: Original query -->
+        <rect x="80" y="200" width="260" height="60" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="210" y="222" fill="white" font-size="10" font-weight="600" text-anchor="middle">① Query  ·  api1.team1.caep.uk</text>
+        <text x="210" y="238" fill="#94a3b8" font-size="8" text-anchor="middle">Client → Resolver → caep.uk NS</text>
+        <text x="210" y="252" fill="#22d3ee" font-size="7" text-anchor="middle">type=CNAME lookup</text>
+
+        <!-- Step B: CNAME record (wildcard) -->
+        <rect x="450" y="200" width="320" height="60" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="610" y="220" fill="white" font-size="10" font-weight="600" text-anchor="middle">② CNAME  ·  *.team1.caep.uk</text>
+        <text x="610" y="236" fill="#fbbf24" font-size="9" text-anchor="middle">→  tenant-lb.platform.caep.uk</text>
+        <text x="610" y="250" fill="#94a3b8" font-size="7" text-anchor="middle">Cloudflare wildcard  ·  平台统一别名 (解耦 IP)</text>
+
+        <!-- Step C: A record (stable alias) -->
+        <rect x="880" y="200" width="370" height="60" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="1065" y="220" fill="white" font-size="10" font-weight="600" text-anchor="middle">③ A Record  ·  tenant-lb.platform.caep.uk</text>
+        <text x="1065" y="236" fill="#fbbf24" font-size="9" text-anchor="middle">→  34.105.229.97  (Public Static IP)</text>
+        <text x="1065" y="250" fill="#94a3b8" font-size="7" text-anchor="middle">Tenant Project GLB 入口  ·  改 IP 只动这一条</text>
+
+        <!-- Resolver follow-up -->
+        <rect x="80" y="305" width="1170" height="48" rx="6" fill="rgba(6, 78, 59, 0.2)" stroke="#34d399" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="100" y="324" fill="#34d399" font-size="9" font-weight="600">④ Resolver 收到 CNAME → 自动递归查询 tenant-lb.platform.caep.uk → 返回 A 记录 IP</text>
+        <text x="100" y="340" fill="#94a3b8" font-size="8">↑ 注意: CNAME 不能与 A 记录共存, 所以 A 记录挂在别名 (target) 上, 原始域名 (api1.team1.caep.uk) 只挂 CNAME</text>
+
+        <!-- =========================================================
+             ZONE 2: PUBLIC INTERNET → Tenant Project Edge
+             ========================================================= -->
+        <rect x="30" y="400" width="1280" height="100" rx="10" fill="rgba(8, 51, 68, 0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="42" y="418" fill="#22d3ee" font-size="10" font-weight="600">ZONE 2  ·  PUBLIC INTERNET  ·  TCP 三次握手 + TLS SNI</text>
+
+        <rect x="80" y="430" width="180" height="50" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="170" y="452" fill="white" font-size="10" font-weight="600" text-anchor="middle">Client connect</text>
+        <text x="170" y="467" fill="#22d3ee" font-size="8" text-anchor="middle">→ 34.105.229.97:443</text>
+
+        <rect x="380" y="430" width="220" height="50" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="490" y="452" fill="white" font-size="10" font-weight="600" text-anchor="middle">TLS ClientHello</text>
+        <text x="490" y="467" fill="#fb7185" font-size="8" text-anchor="middle">SNI = api1.team1.caep.uk (原始域名)</text>
+
+        <rect x="720" y="430" width="220" height="50" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="830" y="452" fill="white" font-size="10" font-weight="600" text-anchor="middle">HTTP Host header</text>
+        <text x="830" y="467" fill="#fb7185" font-size="8" text-anchor="middle">Host: api1.team1.caep.uk</text>
+
+        <rect x="1060" y="430" width="220" height="50" rx="6" fill="rgba(76, 29, 149, 0.3)" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="3,2"/>
+        <text x="1170" y="452" fill="#a78bfa" font-size="10" font-weight="600" text-anchor="middle">↓ cross-project chain</text>
+        <text x="1170" y="467" fill="#94a3b8" font-size="7" text-anchor="middle">详见  public-tls-ingress/*.html</text>
+
+        <!-- =========================================================
+             ZONE 3: TENANT PROJECT (boundary marker)
+             ========================================================= -->
+        <rect x="30" y="525" width="1280" height="180" rx="12" fill="rgba(6, 78, 59, 0.04)" stroke="#34d399" stroke-width="1.2" stroke-dasharray="8,4"/>
+        <text x="42" y="543" fill="#34d399" font-size="11" font-weight="600">ZONE 3  ·  TENANT PROJECT  ·  aibang-12345678-ajbx-dev (Service Project)</text>
+        <text x="42" y="557" fill="#64748b" font-size="8">Public GLB (TLS terminate #1)  →  PSC NEG  →  Producer Project ILB  ·  跨 project 访问</text>
+
+        <!-- Public GLB -->
+        <rect x="80" y="575" width="240" height="100" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="200" y="597" fill="white" font-size="11" font-weight="600" text-anchor="middle">Public GLB (Regional)</text>
+        <text x="200" y="613" fill="#94a3b8" font-size="8" text-anchor="middle">ajbx-public-fr :443</text>
+        <text x="200" y="627" fill="#94a3b8" font-size="8" text-anchor="middle">EXTERNAL_MANAGED</text>
+        <text x="200" y="645" fill="#22d3ee" font-size="7" text-anchor="middle">cert SAN: *.caep.uk  ·  TLS #1</text>
+        <text x="200" y="660" fill="#22d3ee" font-size="7" text-anchor="middle">Cloud Armor (WAF + rate-limit)</text>
+
+        <!-- Backend Service -->
+        <rect x="400" y="575" width="240" height="100" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="520" y="597" fill="white" font-size="11" font-weight="600" text-anchor="middle">Backend Service</text>
+        <text x="520" y="613" fill="#94a3b8" font-size="8" text-anchor="middle">ajbx-public-bs</text>
+        <text x="520" y="627" fill="#94a3b8" font-size="8" text-anchor="middle">protocol=HTTPS (re-encrypt)</text>
+        <text x="520" y="645" fill="#34d399" font-size="7" text-anchor="middle">URL Map host rule:</text>
+        <text x="520" y="660" fill="#34d399" font-size="7" text-anchor="middle">api1.team1.caep.uk → NEG</text>
+
+        <!-- PSC NEG -->
+        <rect x="720" y="575" width="240" height="100" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="840" y="597" fill="white" font-size="11" font-weight="600" text-anchor="middle">PSC NEG</text>
+        <text x="840" y="613" fill="#94a3b8" font-size="8" text-anchor="middle">ajbx-public-neg</text>
+        <text x="840" y="627" fill="#94a3b8" font-size="8" text-anchor="middle">PRIVATE_SERVICE_CONNECT</text>
+        <text x="840" y="645" fill="#fbbf24" font-size="7" text-anchor="middle">pscConnectionId 158673…</text>
+        <text x="840" y="660" fill="#fbbf24" font-size="7" text-anchor="middle">→ Producer Service Attachment</text>
+
+        <!-- Cross-project boundary -->
+        <rect x="1040" y="575" width="240" height="100" rx="6" fill="rgba(76, 29, 149, 0.3)" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="3,2"/>
+        <text x="1160" y="597" fill="#a78bfa" font-size="10" font-weight="600" text-anchor="middle">Producer Project</text>
+        <text x="1160" y="613" fill="#94a3b8" font-size="8" text-anchor="middle">ajbx-tenant-vpc</text>
+        <text x="1160" y="627" fill="#94a3b8" font-size="8" text-anchor="middle">ILB  →  MIG / GKE</text>
+        <text x="1160" y="645" fill="#a78bfa" font-size="7" text-anchor="middle">Service Attachment 接受</text>
+        <text x="1160" y="660" fill="#a78bfa" font-size="7" text-anchor="middle">详见  architecture.html</text>
+
+        <!-- =========================================================
+             ZONE 4: SUMMARY — what this diagram covers vs. hands off
+             ========================================================= -->
+        <rect x="30" y="725" width="1280" height="22" rx="6" fill="rgba(15, 23, 42, 0.6)" stroke="#1e293b" stroke-width="1"/>
+        <text x="50" y="741" fill="#22d3ee" font-size="9" font-weight="600">SCOPE  ·</text>
+        <text x="115" y="741" fill="#94a3b8" font-size="9">本图覆盖 DNS 解析 (ZONE 0–2) + 入口到 PSC NEG 边界 (ZONE 3 浅色部分)  ·  ZONE 3 深色部分 (Producer 侧) 已在 public-tls-ingress 中实现, 本图不重复</text>
+
+        <!-- =========================================================
+             ARROWS — DNS resolution sequence (right then down then back)
+             ========================================================= -->
+
+        <!-- ① Client → Resolver -->
+        <path d="M 260 96 L 580 96 L 900 96" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="3,2" marker-end="url(#arrowhead-cyan)"/>
+        <text x="580" y="110" fill="#22d3ee" font-size="8" text-anchor="middle">DNS query: api1.team1.caep.uk (type=A)</text>
+
+        <!-- ② Resolver → caep.uk zone (drop down) — routed around the right edge -->
+        <path d="M 1280 100 L 1280 140 L 1260 140 L 1260 155" fill="none" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <text x="1235" y="148" fill="#22d3ee" font-size="7" text-anchor="end">→ caep.uk NS</text>
+
+        <!-- ③ zone internal: ① query → ② CNAME -->
+        <line x1="340" y1="230" x2="450" y2="230" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <text x="395" y="223" fill="#22d3ee" font-size="8" text-anchor="middle">matches</text>
+
+        <!-- ④ ② CNAME → ③ A record -->
+        <line x1="770" y1="230" x2="880" y2="230" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <text x="825" y="223" fill="#22d3ee" font-size="8" text-anchor="middle">resolve alias</text>
+
+        <!-- ⑤ ③ A → ④ Resolver (back up, retro-arrow to resolver area) -->
+        <line x1="1180" y1="260" x2="1180" y2="305" stroke="#34d399" stroke-width="1.5" stroke-dasharray="3,2" marker-end="url(#arrowhead-emerald)"/>
+        <text x="1190" y="285" fill="#34d399" font-size="7">34.105.229.97</text>
+
+        <!-- ⑥ Resolver → Client (answer) — routed above the zone, slightly higher to not collide -->
+        <path d="M 900 78 L 480 78 L 260 78" fill="none" stroke="#34d399" stroke-width="1.5" stroke-dasharray="3,2" marker-end="url(#arrowhead-emerald)"/>
+        <text x="580" y="72" fill="#34d399" font-size="8" text-anchor="middle">A 34.105.229.97  (CNAME chain: api1.team1.caep.uk → tenant-lb.platform.caep.uk → 34.105.229.97)</text>
+
+        <!-- ⑦ Client → Public IP (TCP/TLS) — routed right-side around the boxes -->
+        <path d="M 260 88 Q 320 88 320 230 Q 320 400 320 430" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="3,2" marker-end="url(#arrowhead-cyan)"/>
+        <text x="335" y="270" fill="#22d3ee" font-size="8">TCP + TLS</text>
+
+        <!-- ⑧ Inside ZONE 2: connect → ClientHello → Host header -->
+        <line x1="260" y1="455" x2="380" y2="455" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <line x1="600" y1="455" x2="720" y2="455" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <line x1="940" y1="455" x2="1060" y2="455" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+
+        <!-- ⑨ ZONE 2 → ZONE 3 (Public GLB entry) -->
+        <line x1="1170" y1="480" x2="1170" y2="525" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <text x="1180" y="510" fill="#22d3ee" font-size="7">HTTPS request</text>
+
+        <!-- ⑩ Inside ZONE 3: GLB → BS → NEG → Producer -->
+        <line x1="320" y1="625" x2="400" y2="625" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)"/>
+        <text x="360" y="618" fill="#34d399" font-size="7" text-anchor="middle">TLS #2</text>
+        <line x1="640" y1="625" x2="720" y2="625" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)"/>
+        <text x="680" y="618" fill="#34d399" font-size="7" text-anchor="middle">HTTPS</text>
+        <line x1="960" y1="625" x2="1040" y2="625" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#arrowhead-amber)"/>
+        <text x="1000" y="618" fill="#fbbf24" font-size="7" text-anchor="middle">PSC tunnel</text>
+      </svg>
+
+      <!-- Legend -->
+      <div class="legend-row">
+        <div class="legend-item">
+          <span class="legend-sw" style="background:rgba(8,51,68,0.4);border:1px solid #22d3ee"></span>
+          Public DNS  ·  Public GLB
+        </div>
+        <div class="legend-item">
+          <span class="legend-sw" style="background:rgba(6,78,59,0.4);border:1px solid #34d399"></span>
+          Backend Service  ·  PSC NEG
+        </div>
+        <div class="legend-item">
+          <span class="legend-sw" style="background:rgba(76,29,149,0.3);border:1px solid #a78bfa"></span>
+          Producer Project (cross-project)
+        </div>
+        <div class="legend-item">
+          <span class="legend-line" style="background:#22d3ee"></span>
+          DNS 解析 / TCP+TLS
+        </div>
+        <div class="legend-item">
+          <span class="legend-line" style="background:#34d399"></span>
+          HTTPS 流量 / DNS 答案
+        </div>
+        <div class="legend-item">
+          <span class="legend-line" style="background:#fbbf24"></span>
+          PSC tunnel (amber dashed)
+        </div>
+      </div>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>DNS 链 (3 步解析)</h3>
+        </div>
+        <ul>
+          <li>• <b>① Query</b> — Client ask <code>api1.team1.caep.uk</code> via Resolver</li>
+          <li>• <b>② CNAME</b> — Cloudflare wildcard: <code>*.team1.caep.uk → tenant-lb.platform.caep.uk</code></li>
+          <li>• <b>③ A</b> — <code>tenant-lb.platform.caep.uk → 34.105.229.97</code> (Tenant Project GLB 入口)</li>
+          <li>• <b>关键点</b>: CNAME 与 A 记录不能共存于同一 hostname, 所以 A 挂在别名上</li>
+          <li>• <b>解耦</b>: LB IP 改变只改 ③, 不动 ②; 新增 team / API 只加 ② 的一条 CNAME</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>SNI / Host header 透传</h3>
+        </div>
+        <ul>
+          <li>• <b>TLS SNI</b> = <code>api1.team1.caep.uk</code> (原始域名, 非 CNAME 别名)</li>
+          <li>• <b>HTTP Host</b> = <code>api1.team1.caep.uk</code> (原始域名)</li>
+          <li>• <b>证书</b>: GLB cert SAN 必须包含 <code>*.team1.caep.uk</code> 或更宽的 <code>*.caep.uk</code></li>
+          <li>• <b>Nginx / Kong</b>: 监听原始域名, 不是 CNAME 别名 — 详见 apply-cname.md §二.3</li>
+          <li>• <b>URL Map host rule</b>: GLB 用 <code>api1.team1.caep.uk</code> 匹配, 转发到对应 backend</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>职责分离 (本图 vs public-tls-ingress)</h3>
+        </div>
+        <ul>
+          <li>• <b>本图 (cname-dns-resolution)</b>: <code>ZONE 0–2</code> 完整 + <code>ZONE 3 浅色</code> 入口示意</li>
+          <li>• <b>public-tls-ingress</b>: <code>ZONE 3 深色</code> Producer 侧 (ILB → MIG 内部 TLS 链) 完整实现</li>
+          <li>• <b>DNS 修改最小化</b>: 切环境 / 迁移 LB / 灰度发布, 改 1 条 A 记录即可</li>
+          <li>• <b>跨 project 解耦</b>: caep.uk 域名不绑定到任何具体 project 的内部资源</li>
+          <li>• <b>本图前提</b>: Tenant Project GLB 已存在 (见 public-ingress-tenant-project-psc.md)</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      caep.uk DNS Resolution Flow  ·  CNAME 链解耦 → A 记录指向 Tenant Project GLB  ·  配合 public-tls-ingress 跨 project 链路
+    </p>
+  </div>
+</body>
+</html>

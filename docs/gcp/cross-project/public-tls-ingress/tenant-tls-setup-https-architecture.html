@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tenant ILB Full HTTPS Chain — tenant-tls-setup-https</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px;
+      background: #34d399;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
+    .subtitle { color: #94a3b8; font-size: 0.85rem; margin-left: 1.75rem; }
+    .meta { color: #64748b; font-size: 0.75rem; margin-left: 1.75rem; margin-top: 0.25rem; }
+
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1100px; display: block; }
+
+    .legend-row {
+      display: flex;
+      gap: 1.5rem;
+      margin-top: 1.25rem;
+      flex-wrap: wrap;
+      font-size: 0.72rem;
+      color: #94a3b8;
+    }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+    .legend-sw {
+      width: 14px; height: 10px; border-radius: 2px;
+      display: inline-block;
+    }
+    .legend-line {
+      width: 18px; height: 2px; display: inline-block;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.rose { background: #fb7185; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.orange { background: #fb923c; }
+    .card h3 { font-size: 0.85rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.72rem; }
+    .card li { margin-bottom: 0.35rem; line-height: 1.5; }
+    .card li b { color: #cbd5e1; font-weight: 500; }
+    .card code {
+      background: rgba(30, 41, 59, 0.6);
+      padding: 0.05rem 0.35rem;
+      border-radius: 3px;
+      font-size: 0.7rem;
+      color: #e2e8f0;
+    }
+
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.7rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Tenant ILB Full HTTPS Chain — Producer 二次终结 TLS</h1>
+      </div>
+      <p class="subtitle">GLB (TLS 1) → PSC NEG → cross-VPC tunnel → L7 HTTPS ILB (TLS 2) → MIG  ·  域名 <code style="color:#22d3ee">tenant.taobao.caep.uk</code></p>
+      <p class="meta">Project <code style="color:#94a3b8">aibang-12345678-ajbx-dev</code>  ·  Region <code style="color:#94a3b8">europe-west2</code>  ·  Source <code style="color:#94a3b8">tenant-tls-setup-https.md</code></p>
+    </div>
+
+    <!-- Main Diagram -->
+    <div class="diagram-container">
+      <svg viewBox="0 0 1340 560">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+          </marker>
+          <marker id="arrowhead-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/>
+          </marker>
+          <marker id="arrowhead-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+          </marker>
+          <marker id="arrowhead-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb923c"/>
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <!-- Background Grid -->
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- =========================================================
+             Region: europe-west2 (outer dashed amber)
+             ========================================================= -->
+        <rect x="20" y="60" width="1300" height="410" rx="14" fill="rgba(120, 53, 15, 0.04)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="32" y="78" fill="#fbbf24" font-size="10" font-weight="600">REGION  europe-west2</text>
+
+        <!-- =========================================================
+             Consumer VPC: cinternal-vpc1
+             ========================================================= -->
+        <rect x="50" y="100" width="680" height="340" rx="10" fill="rgba(6, 78, 59, 0.05)" stroke="#34d399" stroke-width="1.2" stroke-dasharray="6,3"/>
+        <text x="62" y="118" fill="#34d399" font-size="11" font-weight="600">Consumer VPC  ·  cinternal-vpc1</text>
+        <text x="62" y="132" fill="#64748b" font-size="8">aibang-12345678-ajbx-dev (Service Project)</text>
+
+        <!-- External IP (static) -->
+        <rect x="60" y="380" width="100" height="40" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="110" y="395" fill="#94a3b8" font-size="8" text-anchor="middle">External Static IP</text>
+        <text x="110" y="410" fill="white" font-size="9" font-weight="600" text-anchor="middle">34.105.229.97</text>
+
+        <!-- =========================================================
+             Producer VPC: ajbx-tenant-vpc
+             ========================================================= -->
+        <rect x="760" y="100" width="540" height="340" rx="10" fill="rgba(76, 29, 149, 0.06)" stroke="#a78bfa" stroke-width="1.2" stroke-dasharray="6,3"/>
+        <text x="772" y="118" fill="#a78bfa" font-size="11" font-weight="600">Producer VPC  ·  ajbx-tenant-vpc</text>
+        <text x="772" y="132" fill="#64748b" font-size="8">aibang-12345678-ajbx-dev (same project, different VPC)</text>
+
+        <!-- PSC NAT Subnet (Producer) -->
+        <rect x="1010" y="155" width="120" height="36" rx="5" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="1070" y="171" fill="#fbbf24" font-size="8" font-weight="600" text-anchor="middle">PSC NAT Subnet</text>
+        <text x="1070" y="184" fill="#94a3b8" font-size="7" text-anchor="middle">10.0.3.0/24</text>
+
+        <!-- Internal IP (Producer) -->
+        <rect x="1010" y="380" width="120" height="40" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="1070" y="395" fill="#94a3b8" font-size="8" text-anchor="middle">Internal IP (Producer ILB)</text>
+        <text x="1070" y="410" fill="white" font-size="9" font-weight="600" text-anchor="middle">10.0.1.4</text>
+
+        <!-- =========================================================
+             Opaque backplates to mask arrows behind translucent boxes
+             ========================================================= -->
+        <rect x="30" y="220" width="100" height="80" rx="6" fill="#0f172a"/>
+        <rect x="155" y="220" width="150" height="80" rx="6" fill="#0f172a"/>
+        <rect x="335" y="220" width="150" height="80" rx="6" fill="#0f172a"/>
+        <rect x="515" y="220" width="140" height="80" rx="6" fill="#0f172a"/>
+        <rect x="785" y="220" width="160" height="80" rx="6" fill="#0f172a"/>
+        <rect x="975" y="220" width="150" height="80" rx="6" fill="#0f172a"/>
+        <rect x="1160" y="220" width="120" height="80" rx="6" fill="#0f172a"/>
+
+        <!-- =========================================================
+             COMPONENTS
+             ========================================================= -->
+
+        <!-- 1. Internet Client -->
+        <rect x="30" y="220" width="100" height="80" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="80" y="248" fill="white" font-size="11" font-weight="600" text-anchor="middle">Internet</text>
+        <text x="80" y="263" fill="#94a3b8" font-size="8" text-anchor="middle">Browser / curl</text>
+        <text x="80" y="285" fill="#fb7185" font-size="7" text-anchor="middle">SNI=tenant.taobao</text>
+
+        <!-- 2. External GLB (FR + Proxy + URL Map) -->
+        <rect x="155" y="220" width="150" height="80" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="230" y="245" fill="white" font-size="11" font-weight="600" text-anchor="middle">External GLB</text>
+        <text x="230" y="260" fill="#94a3b8" font-size="8" text-anchor="middle">ajbx-public-fr :443</text>
+        <text x="230" y="274" fill="#94a3b8" font-size="8" text-anchor="middle">EXTERNAL MANAGED</text>
+        <text x="230" y="290" fill="#22d3ee" font-size="7" text-anchor="middle">TLS terminate #1</text>
+
+        <!-- 3. Backend Service (HTTPS) -->
+        <rect x="335" y="220" width="150" height="80" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="410" y="245" fill="white" font-size="11" font-weight="600" text-anchor="middle">Backend Service</text>
+        <text x="410" y="260" fill="#94a3b8" font-size="8" text-anchor="middle">ajbx-public-bs</text>
+        <text x="410" y="274" fill="#94a3b8" font-size="8" text-anchor="middle">protocol=HTTPS</text>
+        <text x="410" y="290" fill="#34d399" font-size="7" text-anchor="middle">+ Cloud Armor</text>
+
+        <!-- 4. PSC NEG -->
+        <rect x="515" y="220" width="140" height="80" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="585" y="245" fill="white" font-size="11" font-weight="600" text-anchor="middle">PSC NEG</text>
+        <text x="585" y="260" fill="#94a3b8" font-size="8" text-anchor="middle">ajbx-public-neg</text>
+        <text x="585" y="274" fill="#94a3b8" font-size="8" text-anchor="middle">PRIVATE_SERVICE_CONNECT</text>
+        <text x="585" y="290" fill="#fbbf24" font-size="7" text-anchor="middle">pscConnectionId 158673...</text>
+
+        <!-- 5. Service Attachment -->
+        <rect x="785" y="220" width="160" height="80" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="865" y="245" fill="white" font-size="11" font-weight="600" text-anchor="middle">Service Attachment</text>
+        <text x="865" y="260" fill="#94a3b8" font-size="8" text-anchor="middle">ajbx-tenant-vpc-internal-sa</text>
+        <text x="865" y="274" fill="#94a3b8" font-size="8" text-anchor="middle">ACCEPT_AUTOMATIC</text>
+        <text x="865" y="290" fill="#34d399" font-size="7" text-anchor="middle">connectedEndpoints: 1</text>
+
+        <!-- 6. ILB HTTPS (Target Proxy + FR port 443) -->
+        <rect x="975" y="220" width="150" height="80" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="1050" y="245" fill="white" font-size="11" font-weight="600" text-anchor="middle">L7 HTTPS ILB</text>
+        <text x="1050" y="260" fill="#94a3b8" font-size="8" text-anchor="middle">ajbx-tenant-vpc-internal-fr</text>
+        <text x="1050" y="274" fill="#94a3b8" font-size="8" text-anchor="middle">INTERNAL MANAGED :443</text>
+        <text x="1050" y="290" fill="#22d3ee" font-size="7" text-anchor="middle">TLS terminate #2</text>
+
+        <!-- 7. MIG Backend -->
+        <rect x="1160" y="220" width="120" height="80" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1220" y="245" fill="white" font-size="11" font-weight="600" text-anchor="middle">MIG Backend</text>
+        <text x="1220" y="260" fill="#94a3b8" font-size="8" text-anchor="middle">ajbx-tenant-vpc</text>
+        <text x="1220" y="274" fill="#94a3b8" font-size="8" text-anchor="middle">-backend-mig</text>
+        <text x="1220" y="290" fill="#a78bfa" font-size="7" text-anchor="middle">HTTPS :443 (TLS)</text>
+
+        <!-- =========================================================
+             ARROWS — flow direction (right = data path)
+             ========================================================= -->
+
+        <!-- Internet → GLB : TLS 1 (rose) -->
+        <line x1="130" y1="260" x2="151" y2="260" stroke="#fb7185" stroke-width="2" marker-end="url(#arrowhead-rose)"/>
+        <text x="140" y="206" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">TLS 1</text>
+        <text x="140" y="218" fill="#94a3b8" font-size="7" text-anchor="middle">TrustAsia</text>
+
+        <!-- GLB → BS : TLS 2 (rose, re-encrypted) -->
+        <line x1="305" y1="260" x2="331" y2="260" stroke="#fb7185" stroke-width="2" marker-end="url(#arrowhead-rose)"/>
+        <text x="318" y="206" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">TLS 2</text>
+        <text x="318" y="218" fill="#94a3b8" font-size="7" text-anchor="middle">re-encrypted</text>
+
+        <!-- BS → NEG : load balancing (slate) -->
+        <line x1="485" y1="260" x2="511" y2="260" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="498" y="252" fill="#94a3b8" font-size="7" text-anchor="middle">HTTPS</text>
+
+        <!-- NEG → SA : PSC tunnel (amber, cross-VPC, with VPC boundary crossing) -->
+        <line x1="655" y1="260" x2="781" y2="260" stroke="#fbbf24" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#arrowhead-amber)"/>
+        <text x="718" y="206" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">PSC Tunnel</text>
+        <text x="718" y="218" fill="#94a3b8" font-size="7" text-anchor="middle">cross-VPC, GCP-managed</text>
+        <text x="718" y="252" fill="#fbbf24" font-size="7" text-anchor="middle">⟵ Consumer VPC ⟶ Producer VPC ⟶</text>
+
+        <!-- SA → ILB : TLS 3 (rose, terminated by ILB) -->
+        <line x1="945" y1="260" x2="971" y2="260" stroke="#fb7185" stroke-width="2" marker-end="url(#arrowhead-rose)"/>
+        <text x="958" y="206" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">TLS 3</text>
+        <text x="958" y="218" fill="#94a3b8" font-size="7" text-anchor="middle">TrustAsia</text>
+
+        <!-- ILB → MIG : HTTPS :443 (rose dashed, all TLS — upgrade per bs-hc.md) -->
+        <line x1="1125" y1="260" x2="1156" y2="260" stroke="#fb7185" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrowhead-rose)"/>
+        <text x="1140" y="206" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">TLS 4</text>
+        <text x="1140" y="218" fill="#94a3b8" font-size="7" text-anchor="middle">HTTPS :443 (MIG cert)</text>
+
+        <!-- =========================================================
+             ENCRYPTION SUMMARY BAR (bottom)
+             ========================================================= -->
+        <rect x="30" y="470" width="1280" height="78" rx="6" fill="rgba(15, 23, 42, 0.6)" stroke="#1e293b" stroke-width="1"/>
+        <text x="50" y="490" fill="#fb7185" font-size="10" font-weight="600">ENCRYPTION SUMMARY</text>
+
+        <!-- Visual chips for each hop (y=502-518) -->
+        <rect x="50" y="502" width="100" height="16" rx="3" fill="rgba(251, 113, 133, 0.2)" stroke="#fb7185" stroke-width="0.5"/>
+        <text x="100" y="513" fill="#fb7185" font-size="8" text-anchor="middle">4× TLS hops</text>
+
+        <rect x="160" y="502" width="160" height="16" rx="3" fill="rgba(251, 191, 36, 0.2)" stroke="#fbbf24" stroke-width="0.5"/>
+        <text x="240" y="513" fill="#fbbf24" font-size="8" text-anchor="middle">1× PSC tunnel (GCP 内部)</text>
+
+        <text x="345" y="513" fill="#94a3b8" font-size="8">·  TLS 1/2/3/4 都用 TrustAsia cert (SAN: tenant.taobao.caep.uk) 或 MIG IP-SAN cert</text>
+
+        <!-- Italic note on its own line (y=536) -->
+        <text x="50" y="536" fill="#64748b" font-size="8" font-style="italic">全 4 跳 TLS — 链路无 plaintext hop; ILB→MIG (TLS 4) 用 MIG 自签 IP-SAN cert (10.0.1.2/3) — 按 bs-hc.md 配置</text>
+      </svg>
+
+      <!-- Legend -->
+      <div class="legend-row">
+        <div class="legend-item">
+          <span class="legend-sw" style="background:rgba(8,51,68,0.4);border:1px solid #22d3ee"></span>
+          Frontend / LB
+        </div>
+        <div class="legend-item">
+          <span class="legend-sw" style="background:rgba(6,78,59,0.4);border:1px solid #34d399"></span>
+          Backend Service / NEG / SA
+        </div>
+        <div class="legend-item">
+          <span class="legend-sw" style="background:rgba(76,29,149,0.4);border:1px solid #a78bfa"></span>
+          MIG / 内部资源
+        </div>
+        <div class="legend-item">
+          <span class="legend-line" style="background:#fb7185"></span>
+          TLS (rose) — 4 跳
+        </div>
+        <div class="legend-item">
+          <span class="legend-line" style="background:#fbbf24"></span>
+          PSC tunnel (amber dashed)
+        </div>
+      </div>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>4× TLS 终结点</h3>
+        </div>
+        <ul>
+          <li>• <b>TLS 1</b> — External GLB 终结，<code>ajbx-public-cert</code> (TrustAsia DV)</li>
+          <li>• <b>TLS 2</b> — GLB → Backend Service 内部 re-encrypt（仍用同一 cert）</li>
+          <li>• <b>TLS 3</b> — Producer ILB 终结，<code>ajbx-tenant-vpc-internal-cert</code> (同一 TrustAsia cert, regional)</li>
+          <li>• <b>TLS 4</b> — ILB → MIG 终结，MIG 自签 IP-SAN cert (SAN: IP:10.0.1.2, IP:10.0.1.3)，见 bs-hc.md</li>
+          <li>• cert SAN: TLS 1/2/3 用 TrustAsia <code>tenant.taobao.caep.uk</code>；TLS 4 用 IP-SAN</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>1× 内部 TLS hop (升级前是 HTTP)</h3>
+        </div>
+        <ul>
+          <li>• 位置: ILB → MIG (backend Python <code>https.server :443</code>)</li>
+          <li>• 协议: <code>HTTPS :443</code>，由 MIG 自签 IP-SAN cert 终结</li>
+          <li>• 范围: GCP 私有网络内 (10.0.1.4 → 10.0.1.2/3)</li>
+          <li>• 升级方法: BS <code>--protocol=HTTPS --port-name=https</code> + MIG 装 IP-SAN cert (详见 bs-hc.md)</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>跨 VPC PSC 桥接</h3>
+        </div>
+        <ul>
+          <li>• Consumer NEG → Producer SA 通过 GCP 内部 tunnel</li>
+          <li>• <b>不需要</b> VPC Peering，<b>不需要</b> Public IP</li>
+          <li>• Producer 端 IP 对 Consumer 不可见，反之亦然</li>
+          <li>• SA 用 <code>ACCEPT_AUTOMATIC</code> + PSC NAT subnet (<code>10.0.3.0/24</code>)</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      tenant-tls-setup-https.md  ·  Producer ILB 二次终结 TLS  ·  europe-west2  ·  Project aibang-12345678-ajbx-dev
+    </p>
+  </div>
+</body>
+</html>

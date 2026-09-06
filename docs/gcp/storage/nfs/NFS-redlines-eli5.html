@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ELI5: NFS 协议是什么 — 5岁也能懂</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #020617;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    .wrap { max-width: 880px; margin: 0 auto; }
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.01em;
+    }
+    .lede {
+      color: #94a3b8;
+      font-size: 0.95rem;
+      margin-bottom: 2rem;
+    }
+    .panel {
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid #1e293b;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .panel-num {
+      color: #22d3ee;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+    .panel h2 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: white;
+    }
+    .panel p {
+      color: #cbd5e1;
+      font-size: 0.92rem;
+      margin-bottom: 0.5rem;
+    }
+    .visual {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 1rem 0;
+    }
+    .key {
+      background: rgba(34, 211, 238, 0.12);
+      color: #67e8f9;
+      padding: 0.1rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.85em;
+    }
+    .ok { color: #34d399; font-weight: 600; }
+    .warn { color: #fbbf24; }
+    .aside {
+      background: rgba(52, 211, 153, 0.08);
+      border-left: 3px solid #34d399;
+      padding: 0.75rem 1rem;
+      margin-top: 1rem;
+      border-radius: 0 0.5rem 0.5rem 0;
+      font-size: 0.85rem;
+      color: #a7f3d0;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 2rem;
+      color: #475569;
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>🤔 NFS 是什么?为什么和 SMB 不一样?</h1>
+  <p class="lede">SMB 是 Windows 的话,NFS 就是 <strong>Linux 的话</strong>。两种都让程序"挂网络硬盘",只是说话方式不同。</p>
+
+  <!-- ============ Panel 1 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 1 · 起点</div>
+    <h2>两个不同的"网络硬盘"说话方式</h2>
+    <div class="visual">
+      <svg width="280" height="80" viewBox="0 0 280 80">
+        <rect x="20" y="20" width="100" height="40" rx="6" fill="rgba(34,211,238,0.15)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="70" y="40" fill="white" font-size="11" font-weight="600" text-anchor="middle">SMB</text>
+        <text x="70" y="54" fill="#67e8f9" font-size="8" text-anchor="middle">Windows 的话</text>
+        <text x="140" y="44" fill="#94a3b8" font-size="20" text-anchor="middle">vs</text>
+        <rect x="160" y="20" width="100" height="40" rx="6" fill="rgba(52,211,153,0.25)" stroke="#34d399" stroke-width="2"/>
+        <text x="210" y="40" fill="white" font-size="11" font-weight="600" text-anchor="middle">NFS</text>
+        <text x="210" y="54" fill="#a7f3d0" font-size="8" text-anchor="middle">Linux 的话</text>
+      </svg>
+    </div>
+    <p>SMB(Windows)和 NFS(Linux)都让 <span class="key">"网络上的硬盘"</span>看起来像程序自己电脑上的硬盘。</p>
+    <p>就像你会说中文或英文 — <strong>不同语言,同一件事</strong>。</p>
+  </section>
+
+  <!-- ============ Panel 2 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 2 · 端口</div>
+    <h2>它们各自听不同"频道"</h2>
+    <div class="visual">
+      <svg width="280" height="100" viewBox="0 0 280 100">
+        <rect x="20" y="20" width="100" height="60" rx="6" fill="rgba(34,211,238,0.15)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="70" y="40" fill="white" font-size="11" font-weight="600" text-anchor="middle">SMB</text>
+        <text x="70" y="58" fill="#67e8f9" font-size="10" text-anchor="middle">445 端口</text>
+        <text x="70" y="72" fill="#94a3b8" font-size="8" text-anchor="middle">(TCP)</text>
+        <rect x="160" y="20" width="100" height="60" rx="6" fill="rgba(52,211,153,0.25)" stroke="#34d399" stroke-width="2"/>
+        <text x="210" y="40" fill="white" font-size="11" font-weight="600" text-anchor="middle">NFS</text>
+        <text x="210" y="58" fill="#a7f3d0" font-size="10" text-anchor="middle">2049 端口</text>
+        <text x="210" y="72" fill="#a7f3d0" font-size="8" text-anchor="middle">(TCP/UDP)</text>
+      </svg>
+    </div>
+    <p>SMB 听 <span class="key">445</span>(像 FM 收音机 99.5)。NFS 听 <span class="key">2049</span>(像 102.4)。</p>
+    <p>网络管家用"<strong>端口号</strong>"区分两种语言,就像收音机频道。</p>
+  </section>
+
+  <!-- ============ Panel 3 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 3 · 鉴权(关键差异)</div>
+    <h2>SMB 要"工牌",NFS 看"脸"</h2>
+    <div class="visual">
+      <svg width="280" height="120" viewBox="0 0 280 120">
+        <rect x="20" y="20" width="100" height="80" rx="6" fill="rgba(34,211,238,0.15)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="70" y="38" fill="white" font-size="11" font-weight="600" text-anchor="middle">SMB</text>
+        <text x="70" y="56" fill="#67e8f9" font-size="9" text-anchor="middle">要工牌</text>
+        <text x="70" y="72" fill="#cbd5e1" font-size="8" text-anchor="middle">user/pass</text>
+        <text x="70" y="86" fill="#cbd5e1" font-size="8" text-anchor="middle">+ 签名</text>
+        <text x="70" y="98" fill="#94a3b8" font-size="7" text-anchor="middle">能加密</text>
+        <rect x="160" y="20" width="100" height="80" rx="6" fill="rgba(52,211,153,0.25)" stroke="#34d399" stroke-width="2"/>
+        <text x="210" y="38" fill="white" font-size="11" font-weight="600" text-anchor="middle">NFS</text>
+        <text x="210" y="56" fill="#a7f3d0" font-size="9" text-anchor="middle">看脸</text>
+        <text x="210" y="72" fill="#cbd5e1" font-size="8" text-anchor="middle">IP 地址</text>
+        <text x="210" y="86" fill="#cbd5e1" font-size="8" text-anchor="middle">+ UID</text>
+        <text x="210" y="98" fill="#fbbf24" font-size="7" text-anchor="middle">NFSv3 明文</text>
+      </svg>
+    </div>
+    <p><strong>SMB 严格</strong>:进门要<strong>工牌</strong>(user/pass),还有<strong>签名</strong>防伪造,能加密防偷听。</p>
+    <p><strong>NFS 宽松</strong>:进门看<strong>脸</strong>(IP + UID),不查工牌,看脸熟就放进去。NFSv3 <span class="warn">⚠ 明文传输</span>。</p>
+  </section>
+
+  <!-- ============ Panel 4 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 4 · 挂载</div>
+    <h2>对程序来说:看起来一样</h2>
+    <div class="visual">
+      <svg width="280" height="100" viewBox="0 0 280 100">
+        <rect x="20" y="20" width="240" height="60" rx="6" fill="rgba(34,211,238,0.15)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="140" y="40" fill="white" font-size="11" font-weight="600" text-anchor="middle">程序说"我要 /mnt/data"</text>
+        <text x="140" y="58" fill="#cbd5e1" font-size="9" text-anchor="middle">不管是 SMB 还是 NFS,我只看到文件夹</text>
+        <text x="140" y="74" fill="#67e8f9" font-size="8" text-anchor="middle">K8s 帮我翻译</text>
+      </svg>
+    </div>
+    <p>程序完全不在乎是 SMB 还是 NFS —— 它只说: <span class="key">"我要 /mnt/data"</span>。</p>
+    <p>管理员(K8s)帮它翻译: "哦,这是 SMB/NFS 硬盘,我去挂"。</p>
+  </section>
+
+  <!-- ============ Panel 5 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 5 · 什么时候用哪个</div>
+    <h2>看数据源说什么话</h2>
+    <div class="visual">
+      <svg width="280" height="120" viewBox="0 0 280 120">
+        <rect x="20" y="20" width="240" height="80" rx="6" fill="rgba(15,23,42,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="140" y="42" fill="white" font-size="11" font-weight="600" text-anchor="middle">问 IT 一个问题</text>
+        <text x="140" y="60" fill="#fbbf24" font-size="10" text-anchor="middle">"这个硬盘是什么系统?"</text>
+        <text x="140" y="78" fill="#cbd5e1" font-size="9" text-anchor="middle">Windows → SMB</text>
+        <text x="140" y="92" fill="#cbd5e1" font-size="9" text-anchor="middle">Linux / Unix → NFS</text>
+      </svg>
+    </div>
+    <p><strong>不要猜</strong>,问 IT: <span class="key">"这个文件服务器是什么系统?"</span></p>
+    <p class="ok">✓ 答对了,挂上去就成功。</p>
+    <p><span class="warn">⚠</span> 答错了,Pod 启动就 mount 失败。</p>
+  </section>
+
+  <!-- ============ Panel 6 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 6 · 谁管这件事?</div>
+    <h2>👤 谁配的?谁能改?audit 在哪?</h2>
+    <p><strong>谁配的</strong> —— 平台团队在 IT 配合下创建 PV / PVC / NetworkPolicy。</p>
+    <p><strong>谁能改</strong> —— 改 PV / 防火墙规则走平台团队审批。</p>
+    <p><strong>audit 在哪</strong> —— NFS 服务端有操作日志,平台侧有 K8s audit log,两边同样不自动拼接。</p>
+    <div class="aside">
+      关键提醒 — 跟 SMB 一样,<strong>4 条红线</strong>(不持久化 GCP / 不写 log / 不主动观察 / Pod lifecycle 解耦)都适用。NFS 还少一个凭据管理风险(没有 user/pass),但有<strong>IP 白名单</strong>风险 —— 防火墙配错 = 全员可见。
+    </div>
+  </section>
+
+  <p class="footer">ELI5 · NFS 协议 · 6 面板 · 配套 NFS-deployment-guide.md</p>
+
+  <!--
+    Citations (factual claims + sources):
+    1. NFS 协议默认端口 TCP/UDP 2049
+       cite: en.wikipedia.org/wiki/Network_File_System
+    2. SMB 协议默认端口 TCP 445
+       cite: learn.microsoft.com/en-us/windows-server/storage/file-server/smb-overview
+    3. NFS 没有 user/pass 鉴权,靠 IP + UID 鉴权
+       cite: docs.oracle.com/cd/E19683-01/816-4883/6mb4ipvq/index.html
+    4. NFS CSI driver (nfs.csi.k8s.io) 是 K8s 社区官方,GA,K8s 1.21+
+       cite: github.com/kubernetes-csi/csi-driver-nfs
+    5. NFSv3 明文传输(无加密),NFSv4.1+ 可加密
+       cite: datatracker.ietf.org/doc/html/rfc5661
+    Verified: 2026-08-31
+  -->
+
+</div>
+</body>
+</html>

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ELI5: GKE Pod 怎么跨项目存文件到 Bucket — 5岁也能懂</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #020617;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    .wrap { max-width: 880px; margin: 0 auto; }
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.01em;
+    }
+    .lede {
+      color: #94a3b8;
+      font-size: 0.95rem;
+      margin-bottom: 2rem;
+    }
+    .panel {
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid #1e293b;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .panel-num {
+      color: #22d3ee;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+    .panel h2 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: white;
+    }
+    .panel p {
+      color: #cbd5e1;
+      font-size: 0.92rem;
+      margin-bottom: 0.5rem;
+    }
+    .visual {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 1rem 0;
+    }
+    .key {
+      background: rgba(34, 211, 238, 0.12);
+      color: #67e8f9;
+      padding: 0.1rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.85em;
+    }
+    .ok { color: #34d399; font-weight: 600; }
+    .warn { color: #fbbf24; }
+    .aside {
+      background: rgba(52, 211, 153, 0.08);
+      border-left: 3px solid #34d399;
+      padding: 0.75rem 1rem;
+      margin-top: 1rem;
+      border-radius: 0 0.5rem 0.5rem 0;
+      font-size: 0.85rem;
+      color: #a7f3d0;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 2rem;
+      color: #475569;
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>🤔 一个程序想把文件存到另一个项目的柜子里</h1>
+  <p class="lede">柜子在另一个房间 —— 程序得拿着<strong>通行证</strong>(短期 token)才能进。</p>
+
+  <!-- ============ Panel 1 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 1 · 起点</div>
+    <h2>程序说: "我想存文件到 user-data"</h2>
+    <div class="visual">
+      <svg width="160" height="80" viewBox="0 0 160 80">
+        <rect x="20" y="20" width="120" height="40" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="80" y="44" fill="white" font-size="12" text-anchor="middle" font-weight="600">我的程序</text>
+      </svg>
+    </div>
+    <p>程序用 GCS SDK(像快递公司)寄件。它不知道柜子在哪个项目、谁有钥匙。</p>
+  </section>
+
+  <!-- ============ Panel 2 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 2 · 身份</div>
+    <h2>程序有一张 <span class="key">KSA</span> 工作证</h2>
+    <div class="visual">
+      <svg width="200" height="100" viewBox="0 0 200 100">
+        <rect x="20" y="10" width="160" height="80" rx="4" fill="rgba(167,139,250,0.20)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="100" y="32" fill="#a78bfa" font-size="10" font-weight="700" text-anchor="middle">工作证 (KSA)</text>
+        <text x="100" y="50" fill="#cbd5e1" font-size="9" text-anchor="middle">写一个名字</text>
+        <text x="100" y="66" fill="#cbd5e1" font-size="9">= 程序的"工号"</text>
+        <text x="100" y="82" fill="#94a3b8" font-size="9">K8s 给的,自动签发</text>
+      </svg>
+    </div>
+    <p><span class="key">KSA</span> 是程序的<strong>工号</strong>。写在一张卡上,K8s 给的。</p>
+    <p>工号 <span class="key">不能跨项目</span> —— 只在自己房间管用。</p>
+  </section>
+
+  <!-- ============ Panel 3 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 3 · 换通行证</div>
+    <h2>管家换一张<strong>临时通行证</strong>(1 小时)</h2>
+    <div class="visual">
+      <svg width="280" height="100" viewBox="0 0 280 100">
+        <rect x="20" y="20" width="60" height="60" rx="6" fill="rgba(34,211,238,0.15)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="50" y="44" fill="white" font-size="10" font-weight="600" text-anchor="middle">工号</text>
+        <text x="50" y="60" fill="#67e8f9" font-size="8" text-anchor="middle">KSA</text>
+        <rect x="200" y="20" width="60" height="60" rx="6" fill="rgba(52,211,153,0.25)" stroke="#34d399" stroke-width="2"/>
+        <text x="230" y="40" fill="white" font-size="10" font-weight="600" text-anchor="middle">通行证</text>
+        <text x="230" y="56" fill="#a7f3d0" font-size="9" font-weight="700" text-anchor="middle">1 小时</text>
+        <text x="86" y="56" fill="#94a3b8" font-size="9" text-anchor="middle">?</text>
+        <text x="176" y="56" fill="#94a3b8" font-size="9" text-anchor="middle">?</text>
+      </svg>
+    </div>
+    <p>管家叫 <span class="key">Workload Identity</span>。它拿工号去换一张<strong>临时通行证</strong>(1 小时过期)。</p>
+    <p><span class="ok">✓ 通行证每 1 小时自动换</span> —— 即使丢了也没人能用超过 1 小时。</p>
+  </section>
+
+  <!-- ============ Panel 4 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 4 · 跨项目敲门</div>
+    <h2>拿着通行证去<strong>另一个项目</strong>敲门</h2>
+    <div class="visual">
+      <svg width="280" height="80" viewBox="0 0 280 80">
+        <rect x="20" y="20" width="80" height="40" rx="6" fill="rgba(34,211,238,0.15)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="60" y="44" fill="white" font-size="10" font-weight="600" text-anchor="middle">程序</text>
+        <text x="140" y="35" fill="#cbd5e1" font-size="10" text-anchor="middle">+ 通行证</text>
+        <text x="140" y="55" fill="#34d399" font-size="9" text-anchor="middle">去 user-bucket-project</text>
+        <rect x="180" y="20" width="80" height="40" rx="6" fill="rgba(6,78,59,0.30)" stroke="#34d399" stroke-width="2"/>
+        <text x="220" y="44" fill="white" font-size="11" font-weight="700" text-anchor="middle">user-data 柜子</text>
+      </svg>
+    </div>
+    <p>柜子管家检查通行证: <span class="ok">✓ 这个工号在白名单上吗?✓ 能写文件吗?</span></p>
+    <p>通过了就把柜子打开,程序把文件放进去。</p>
+    <p><span class="warn">⚠</span> 每次都要带新通行证,旧的过期就进不去了。</p>
+  </section>
+
+  <!-- ============ Panel 5 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 5 · 拿到结果</div>
+    <h2>程序把文件存好啦 ✓</h2>
+    <div class="visual">
+      <svg width="240" height="80" viewBox="0 0 240 80">
+        <rect x="20" y="20" width="80" height="40" rx="6" fill="rgba(34,211,238,0.15)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="60" y="38" fill="white" font-size="10" font-weight="600" text-anchor="middle">程序</text>
+        <text x="60" y="52" fill="#67e8f9" font-size="8" text-anchor="middle">upload("foo")</text>
+        <text x="140" y="44" fill="#cbd5e1" font-size="11" text-anchor="middle">→</text>
+        <rect x="160" y="20" width="60" height="40" rx="6" fill="rgba(52,211,153,0.25)" stroke="#34d399" stroke-width="2"/>
+        <text x="190" y="44" fill="#a7f3d0" font-size="10" font-weight="700" text-anchor="middle">已存</text>
+      </svg>
+    </div>
+    <p>程序运行 <code>upload("api-data/foo")</code> —— 文件已经在 user-bucket-project 的 user-data 柜子里。</p>
+    <p class="ok">✓ 程序完全不知道柜子在哪个项目 / 谁有钥匙。</p>
+    <p><span class="warn">⚠</span> 文件物理位置在 <strong>GCP 内,跨项目</strong>(同 NAS 场景完全不一样)。</p>
+  </section>
+
+  <!-- ============ Panel 6 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 6 · 谁管这件事?</div>
+    <h2>👤 谁配的?谁能改?audit 在哪?</h2>
+    <p><strong>谁配的</strong> —— 平台团队创建 KSA + 在 user-bucket-project 配 IAM policy。</p>
+    <p><strong>谁能改</strong> —— 改 IAM / KSA 走平台团队审批。</p>
+    <p><strong>audit 在哪</strong> —— Cloud Audit Logs <strong>自动记录所有写操作</strong>(不可关闭),K8s + GCS 同 GCP 体系,关联查询方便。</p>
+    <div class="aside">
+      顺带澄清 — 这件事跟 <strong>挂 NAS</strong> 完全不一样:NAS 文件物理位置在公司内网(只是"挂过去"),Bucket 文件物理位置在 GCP 内(等于"持久化到 GCP 服务")。<strong>Bucket 触发更严格的合规要求</strong>(PM + Manager 评估 + POC)。
+    </div>
+  </section>
+
+  <p class="footer">ELI5 · GKE Pod 跨项目 Bucket · 6 面板 · 配套 ADR-011-pod-bucket-flow.md</p>
+
+  <!--
+    Citations (factual claims + sources):
+    1. K8s ServiceAccount 跨 project 通过 Workload Identity Federation 自动映射 IAM principal
+       cite: kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+    2. Workload Identity Federation 提供短期 token(默认 1 小时),无需静态凭据
+       cite: cloud.google.com/kubernetes-engine/docs/concepts/workload-identity
+    3. IAM policy 跨 project 通过 serviceAccount:PROJECT.svc.id.goog[NS/KSA] 绑定
+       cite: cloud.google.com/iam/docs/workload-identity-federation
+    4. Cloud Audit Logs 自动记录所有 object 读写操作(不可关闭)
+       cite: cloud.google.com/logging/docs/audit
+    5. SA key 不推荐(Google 自己说不推荐)
+       cite: cloud.google.com/kubernetes-engine/docs/concepts/workload-identity#alternatives_to
+    Verified: 2026-08-31
+  -->
+
+</div>
+</body>
+</html>

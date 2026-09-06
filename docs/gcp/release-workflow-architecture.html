@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>CAEP Infra GCP — Release Workflow Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #020617;
+    --card: #0f172a;
+    --card-border: #1e293b;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --dim: #64748b;
+    --cyan: #22d3ee;
+    --emerald: #34d399;
+    --violet: #a78bfa;
+    --amber: #fbbf24;
+    --rose: #fb7185;
+    --orange: #fb923c;
+    --slate: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 32px 24px 48px;
+    line-height: 1.5;
+  }
+  .container { max-width: 1440px; margin: 0 auto; }
+  .header { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+  .header-dot {
+    width: 12px; height: 12px; border-radius: 50%; background: var(--cyan);
+    box-shadow: 0 0 16px var(--cyan);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.55; transform: scale(0.85); }
+  }
+  h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+  .subtitle { color: var(--muted); font-size: 12px; margin-bottom: 28px; }
+
+  .diagram-card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 28px;
+    overflow: hidden;
+  }
+  .diagram-card svg { display: block; width: 100%; height: auto; }
+
+  .legend-row {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    margin: 16px 0 24px;
+    padding: 14px 16px;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+  }
+  .legend-row .item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+  .legend-swatch { width: 16px; height: 12px; border-radius: 3px; }
+
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    margin-bottom: 28px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .card-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .card h3 { font-size: 13px; font-weight: 600; color: var(--text); }
+  .card ul { list-style: none; }
+  .card li {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 4px 0 4px 12px;
+    position: relative;
+  }
+  .card li::before {
+    content: '▸';
+    position: absolute; left: 0; color: var(--cyan);
+  }
+  .card code {
+    background: var(--bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 10.5px;
+    color: var(--cyan);
+  }
+
+  .principles {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 18px 22px;
+  }
+  .principles h3 { font-size: 13px; margin-bottom: 12px; color: var(--text); }
+  .principle-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 24px;
+  }
+  .principle-grid div { font-size: 11px; color: var(--muted); }
+  .principle-grid strong { color: var(--amber); font-weight: 600; }
+
+  .footer {
+    margin-top: 28px;
+    text-align: center;
+    color: var(--dim);
+    font-size: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="header-dot"></div>
+    <h1>Release Workflow — CAEP Infra GCP</h1>
+  </div>
+  <div class="subtitle">
+    14 steps · 4 phase gates · 4-layer branch topology (main / release/* / dev / feature) · CR + jumpbox gates
+  </div>
+
+  <div class="legend-row">
+    <div class="item"><span class="legend-swatch" style="background:rgba(8,51,68,0.6);border:1.5px solid #22d3ee;"></span> Step</div>
+    <div class="item"><span class="legend-swatch" style="background:rgba(76,29,149,0.5);border:1.5px solid #a78bfa;"></span> Phase Gate</div>
+    <div class="item"><span class="legend-swatch" style="background:rgba(136,19,55,0.5);border:1.5px solid #fb7185;"></span> CR Action</div>
+    <div class="item"><span class="legend-swatch" style="background:rgba(124,45,18,0.5);border:1.5px solid #fb923c;"></span> Rollback</div>
+    <div class="item"><span class="legend-swatch" style="background:rgba(6,78,59,0.4);border:1.5px dashed #34d399;"></span> Phase 1</div>
+    <div class="item"><span class="legend-swatch" style="background:rgba(120,53,15,0.3);border:1.5px dashed #fbbf24;"></span> Phase 2</div>
+  </div>
+
+  <div class="diagram-card">
+    <svg viewBox="0 0 1440 1280" xmlns="http://www.w3.org/2000/svg" font-family="JetBrains Mono, monospace">
+
+      <!-- Background grid -->
+      <defs>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+        </pattern>
+        <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+        </marker>
+        <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+        </marker>
+        <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/>
+        </marker>
+        <marker id="arrow-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#fb923c"/>
+        </marker>
+      </defs>
+      <rect width="1440" height="1080" fill="url(#grid)"/>
+
+      <!-- ===== Phase backgrounds ===== -->
+      <rect x="40"  y="90"  width="340" height="930" rx="12"
+            fill="rgba(6,78,59,0.10)" stroke="#34d399" stroke-width="1.5" stroke-dasharray="6 4"/>
+      <rect x="395" y="90"  width="340" height="930" rx="12"
+            fill="rgba(8,51,68,0.10)" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="6 4"/>
+      <rect x="750" y="90"  width="290" height="930" rx="12"
+            fill="rgba(120,53,15,0.10)" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="6 4"/>
+      <rect x="1055" y="90" width="350" height="930" rx="12"
+            fill="rgba(76,29,149,0.10)" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="6 4"/>
+
+      <!-- Phase headers -->
+      <text x="210"  y="116" fill="#34d399" font-size="13" font-weight="700" text-anchor="middle">PHASE 1 · Plan &amp; Develop</text>
+      <text x="565"  y="116" fill="#22d3ee" font-size="13" font-weight="700" text-anchor="middle">PHASE 2 · Non-prod Execute</text>
+      <text x="895"  y="116" fill="#fbbf24" font-size="13" font-weight="700" text-anchor="middle">PHASE 3 · Notes &amp; PR Main</text>
+      <text x="1230" y="116" fill="#a78bfa" font-size="13" font-weight="700" text-anchor="middle">PHASE 4 · Prod Release &amp; Close</text>
+
+      <!-- ===== Step boxes ===== -->
+      <!-- Step 1 -->
+      <rect x="80" y="160" width="260" height="70" rx="6" fill="#0f172a"/>
+      <rect x="80" y="160" width="260" height="70" rx="6" fill="rgba(8,51,68,0.55)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="210" y="187" fill="#e2e8f0" font-size="13" font-weight="700" text-anchor="middle">1 · create release branch</text>
+      <text x="210" y="206" fill="#94a3b8" font-size="10" text-anchor="middle">main → release/vX.Y.Z</text>
+      <text x="210" y="220" fill="#64748b" font-size="9" text-anchor="middle">./scripts/new-release.sh</text>
+
+      <!-- Step 2 -->
+      <rect x="80" y="260" width="260" height="70" rx="6" fill="#0f172a"/>
+      <rect x="80" y="260" width="260" height="70" rx="6" fill="rgba(8,51,68,0.55)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="210" y="287" fill="#e2e8f0" font-size="13" font-weight="700" text-anchor="middle">2 · checkout dev &amp; merge release/*</text>
+      <text x="210" y="306" fill="#94a3b8" font-size="10" text-anchor="middle">dev ← release/vX.Y.Z</text>
+      <text x="210" y="320" fill="#64748b" font-size="9" text-anchor="middle">no conflicts</text>
+
+      <!-- Step 3 -->
+      <rect x="80" y="360" width="260" height="70" rx="6" fill="#0f172a"/>
+      <rect x="80" y="360" width="260" height="70" rx="6" fill="rgba(8,51,68,0.55)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="210" y="387" fill="#e2e8f0" font-size="13" font-weight="700" text-anchor="middle">3 · create feature branch</text>
+      <text x="210" y="406" fill="#94a3b8" font-size="10" text-anchor="middle">feature/CAEP-xxxx-*</text>
+      <text x="210" y="420" fill="#64748b" font-size="9" text-anchor="middle">≤ 1 ticket per branch</text>
+
+      <!-- Step 4 -->
+      <rect x="80" y="460" width="260" height="70" rx="6" fill="#0f172a"/>
+      <rect x="80" y="460" width="260" height="70" rx="6" fill="rgba(8,51,68,0.55)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="210" y="487" fill="#e2e8f0" font-size="13" font-weight="700" text-anchor="middle">4 · develop + commit</text>
+      <text x="210" y="506" fill="#94a3b8" font-size="10" text-anchor="middle">Conventional Commits</text>
+      <text x="210" y="520" fill="#64748b" font-size="9" text-anchor="middle">commit-msg hook enforced</text>
+
+      <!-- Step 5 -->
+      <rect x="80" y="560" width="260" height="70" rx="6" fill="#0f172a"/>
+      <rect x="80" y="560" width="260" height="70" rx="6" fill="rgba(8,51,68,0.55)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="210" y="587" fill="#e2e8f0" font-size="13" font-weight="700" text-anchor="middle">5 · self test (local)</text>
+      <text x="210" y="606" fill="#94a3b8" font-size="10" text-anchor="middle">unit + lint + dry-run</text>
+      <text x="210" y="620" fill="#64748b" font-size="9" text-anchor="middle">local CI ✓</text>
+
+      <!-- Step 6 -->
+      <rect x="80" y="660" width="260" height="70" rx="6" fill="#0f172a"/>
+      <rect x="80" y="660" width="260" height="70" rx="6" fill="rgba(8,51,68,0.55)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="210" y="687" fill="#e2e8f0" font-size="13" font-weight="700" text-anchor="middle">6 · push + open PR → dev</text>
+      <text x="210" y="706" fill="#94a3b8" font-size="10" text-anchor="middle">PR title: CAEP-xxxx</text>
+      <text x="210" y="720" fill="#64748b" font-size="9" text-anchor="middle">1 approver required</text>
+
+      <!-- Step 7 -->
+      <rect x="80" y="760" width="260" height="80" rx="6" fill="#0f172a"/>
+      <rect x="80" y="760" width="260" height="80" rx="6" fill="rgba(8,51,68,0.55)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="210" y="787" fill="#e2e8f0" font-size="13" font-weight="700" text-anchor="middle">7 · preflight on jumpbox</text>
+      <text x="210" y="806" fill="#94a3b8" font-size="10" text-anchor="middle">ssh jumpbox &amp;&amp;</text>
+      <text x="210" y="820" fill="#94a3b8" font-size="10" text-anchor="middle">./preflight.sh</text>
+      <text x="210" y="834" fill="#64748b" font-size="9" text-anchor="middle">all green = gate 1</text>
+
+      <!-- Phase 2 steps -->
+
+      <!-- Step 8 -->
+      <rect x="435" y="180" width="260" height="70" rx="6" fill="#0f172a"/>
+      <rect x="435" y="180" width="260" height="70" rx="6" fill="rgba(8,51,68,0.55)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="565" y="207" fill="#e2e8f0" font-size="13" font-weight="700" text-anchor="middle">8 · merge feature → dev</text>
+      <text x="565" y="226" fill="#94a3b8" font-size="10" text-anchor="middle">squash / merge commit</text>
+      <text x="565" y="240" fill="#64748b" font-size="9" text-anchor="middle">linear history</text>
+
+      <!-- Step 9 -->
+      <rect x="435" y="280" width="260" height="80" rx="6" fill="#0f172a"/>
+      <rect x="435" y="280" width="260" height="80" rx="6" fill="rgba(8,51,68,0.55)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="565" y="307" fill="#e2e8f0" font-size="13" font-weight="700" text-anchor="middle">9 · setup + verify (non-prod)</text>
+      <text x="565" y="326" fill="#94a3b8" font-size="10" text-anchor="middle">jumpbox setup-uk.sh</text>
+      <text x="565" y="340" fill="#94a3b8" font-size="10" text-anchor="middle">+ verify-uk.sh</text>
+      <text x="565" y="354" fill="#64748b" font-size="9" text-anchor="middle">artifacts → real output</text>
+
+      <!-- Step 10 fix-bugs loop -->
+      <rect x="435" y="390" width="260" height="70" rx="6" fill="#0f172a"/>
+      <rect x="435" y="390" width="260" height="70" rx="6"
+            fill="rgba(124,45,18,0.30)" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="565" y="416" fill="#fb923c" font-size="13" font-weight="700" text-anchor="middle">10 · fix-bugs loop</text>
+      <text x="565" y="435" fill="#94a3b8" font-size="10" text-anchor="middle">verify fail → back to step 4</text>
+      <text x="565" y="449" fill="#64748b" font-size="9" text-anchor="middle">re-run 5 → 9</text>
+
+      <!-- Step 11 raise CR -->
+      <rect x="435" y="490" width="260" height="80" rx="6" fill="#0f172a"/>
+      <rect x="435" y="490" width="260" height="80" rx="6"
+            fill="rgba(136,19,55,0.45)" stroke="#fb7185" stroke-width="1.5"/>
+      <text x="565" y="517" fill="#fb7185" font-size="13" font-weight="700" text-anchor="middle">11 · raise CR</text>
+      <text x="565" y="536" fill="#94a3b8" font-size="10" text-anchor="middle">link release/vX.Y.Z HEAD SHA</text>
+      <text x="565" y="550" fill="#94a3b8" font-size="10" text-anchor="middle">CR system submitted</text>
+      <text x="565" y="564" fill="#64748b" font-size="9" text-anchor="middle">parallel w/ dev — no wait</text>
+
+      <!-- Phase 3 steps -->
+
+      <!-- Step 12 -->
+      <rect x="790" y="180" width="210" height="90" rx="6" fill="#0f172a"/>
+      <rect x="790" y="180" width="210" height="90" rx="6" fill="rgba(8,51,68,0.55)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="895" y="206" fill="#e2e8f0" font-size="13" font-weight="700" text-anchor="middle">12 · write release notes</text>
+      <text x="895" y="226" fill="#94a3b8" font-size="10" text-anchor="middle">summary.md + artifacts</text>
+      <text x="895" y="240" fill="#94a3b8" font-size="10" text-anchor="middle">open PR release/* → main</text>
+      <text x="895" y="258" fill="#64748b" font-size="9" text-anchor="middle">1 approver on release/*</text>
+
+      <!-- Step 13 -->
+      <rect x="790" y="300" width="210" height="90" rx="6" fill="#0f172a"/>
+      <rect x="790" y="300" width="210" height="90" rx="6"
+            fill="rgba(136,19,55,0.45)" stroke="#fb7185" stroke-width="1.5"/>
+      <text x="895" y="326" fill="#fb7185" font-size="13" font-weight="700" text-anchor="middle">13 · wait for CR approval</text>
+      <text x="895" y="346" fill="#94a3b8" font-size="10" text-anchor="middle">final review on notes</text>
+      <text x="895" y="360" fill="#94a3b8" font-size="10" text-anchor="middle">CR approved = gate 3</text>
+      <text x="895" y="378" fill="#64748b" font-size="9" text-anchor="middle">reject → back to step 3</text>
+
+      <!-- Phase 4 step 14 — the main release box -->
+
+      <!-- Step 14 main release -->
+      <rect x="1090" y="160" width="290" height="240" rx="6" fill="#0f172a"/>
+      <rect x="1090" y="160" width="290" height="240" rx="6" fill="rgba(76,29,149,0.45)" stroke="#a78bfa" stroke-width="2"/>
+      <text x="1235" y="187" fill="#fff" font-size="13" font-weight="700" text-anchor="middle">14 · MERGE TO MAIN + TAG</text>
+
+      <!-- inner sub-steps -->
+      <line x1="1100" y1="200" x2="1370" y2="200" stroke="#a78bfa" stroke-width="0.5" opacity="0.5"/>
+
+      <rect x="1110" y="210" width="250" height="32" rx="3" fill="rgba(15,23,42,0.9)" stroke="#a78bfa" stroke-width="0.8"/>
+      <text x="1235" y="230" fill="#a78bfa" font-size="11" font-weight="600" text-anchor="middle">14a · squash merge PR → main</text>
+
+      <rect x="1110" y="250" width="250" height="32" rx="3" fill="rgba(15,23,42,0.9)" stroke="#a78bfa" stroke-width="0.8"/>
+      <text x="1235" y="270" fill="#a78bfa" font-size="11" font-weight="600" text-anchor="middle">14b · git tag -a vX.Y.Z (annotated)</text>
+
+      <rect x="1110" y="290" width="250" height="32" rx="3" fill="rgba(15,23,42,0.9)" stroke="#a78bfa" stroke-width="0.8"/>
+      <text x="1235" y="310" fill="#a78bfa" font-size="11" font-weight="600" text-anchor="middle">14c · prod release on jumpbox</text>
+
+      <rect x="1110" y="330" width="250" height="32" rx="3" fill="rgba(15,23,42,0.9)" stroke="#a78bfa" stroke-width="0.8"/>
+      <text x="1235" y="350" fill="#a78bfa" font-size="11" font-weight="600" text-anchor="middle">14d · close CR in CR system</text>
+
+      <rect x="1110" y="370" width="250" height="22" rx="3" fill="rgba(15,23,42,0.7)"/>
+      <text x="1235" y="385" fill="#64748b" font-size="9" font-style="italic" text-anchor="middle">14e · +7d retrospective → next release</text>
+
+      <!-- ===== Branch rails (top of each column = branch label) ===== -->
+
+
+      <!-- Phase 4 endpoint -->
+
+      <!-- End node -->
+      <rect x="1110" y="510" width="250" height="60" rx="6" fill="#0f172a"/>
+      <rect x="1110" y="510" width="250" height="60" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="1235" y="535" fill="#34d399" font-size="13" font-weight="700" text-anchor="middle">RELEASE CLOSED</text>
+      <text x="1235" y="552" fill="#94a3b8" font-size="10" text-anchor="middle">tag in main · CR closed</text>
+
+      <!-- Gate 3 (CR approved) -->
+      <rect x="790" y="430" width="210" height="50" rx="6" fill="#0f172a"/>
+      <rect x="790" y="430" width="210" height="50" rx="6" fill="rgba(76,29,149,0.40)" stroke="#a78bfa" stroke-width="1.8"/>
+      <text x="895" y="453" fill="#a78bfa" font-size="11" font-weight="700" text-anchor="middle">GATE 3 — CR APPROVED</text>
+      <text x="895" y="469" fill="#cbd5e1" font-size="9" text-anchor="middle">CR system = approved</text>
+
+      <!-- Hotfix path -->
+      <rect x="1090" y="620" width="290" height="80" rx="6" fill="#0f172a"/>
+      <rect x="1090" y="620" width="290" height="80" rx="6" fill="rgba(124,45,18,0.25)" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="1235" y="647" fill="#fb923c" font-size="12" font-weight="700" text-anchor="middle">HOTFIX / PATCH release</text>
+      <text x="1235" y="664" fill="#94a3b8" font-size="10" text-anchor="middle">hotfix/vX.Y.Z+1</text>
+      <text x="1235" y="680" fill="#94a3b8" font-size="10" text-anchor="middle">based on tag · same workflow</text>
+      <text x="1235" y="694" fill="#64748b" font-size="9" text-anchor="middle">+24h prod alert or PATCH bump</text>
+
+      <!-- ===== ARROWS ===== -->
+
+      <!-- Phase 1 vertical -->
+      <line x1="210" y1="230" x2="210" y2="260" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="210" y1="330" x2="210" y2="360" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="210" y1="430" x2="210" y2="460" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="210" y1="530" x2="210" y2="560" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="210" y1="630" x2="210" y2="660" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="210" y1="730" x2="210" y2="760" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- feature → dev merge direction shown in topology section below -->
+
+      <!-- Phase 2 internal flow -->
+      <line x1="565" y1="250" x2="565" y2="280" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="565" y1="360" x2="565" y2="390" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <!-- 9 back to 4 (loop back) -->
+      <path d="M 435 690 Q 350 690 300 690 Q 210 690 210 530"
+            fill="none" stroke="#fb923c" stroke-width="1.2" stroke-dasharray="4 3"
+            marker-end="url(#arrow-orange)"/>
+      <text x="280" y="680" fill="#fb923c" font-size="9" font-style="italic" text-anchor="middle">verify fail</text>
+
+      <line x1="565" y1="460" x2="565" y2="490" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- 7 to 8 (enter phase 2) -->
+      <path d="M 340 800 Q 390 800 435 215"
+            fill="none" stroke="#22d3ee" stroke-width="1.4"
+            marker-end="url(#arrow-green)"/>
+      <text x="370" y="500" fill="#22d3ee" font-size="9" font-style="italic" text-anchor="middle">gate 1 ✓</text>
+
+      <!-- Phase 2 to Phase 3: 11 → 12 -->
+      <path d="M 695 530 Q 740 530 790 225"
+            fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#arrow)"/>
+      <text x="740" y="380" fill="#94a3b8" font-size="9" font-style="italic" text-anchor="middle">gate 2 ✓</text>
+
+      <!-- 12 to 13 -->
+      <line x1="895" y1="270" x2="895" y2="300" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- 13 to Gate 3 -->
+      <line x1="895" y1="390" x2="895" y2="430" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- Gate 3 to 14 -->
+      <path d="M 1000 455 Q 1050 455 1090 280"
+            fill="none" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <text x="1050" y="385" fill="#a78bfa" font-size="9" font-style="italic" text-anchor="middle">gate 3 ✓</text>
+
+      <!-- 13 reject → back to step 3 (long loop) -->
+      <path d="M 790 345 Q 600 120 240 80 Q 210 80 210 150"
+            fill="none" stroke="#fb7185" stroke-width="1" stroke-dasharray="3 3"
+            marker-end="url(#arrow-rose)" opacity="0.6"/>
+      <text x="500" y="100" fill="#fb7185" font-size="9" font-style="italic" text-anchor="middle">CR rejected → restart from step 3</text>
+
+      <!-- 14 → release closed -->
+      <line x1="1235" y1="400" x2="1235" y2="510" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- Release closed → hotfix -->
+      <path d="M 1235 570 Q 1235 600 1235 620" stroke="#fb923c" stroke-width="1.5"
+            stroke-dasharray="4 3" fill="none" marker-end="url(#arrow-orange)"/>
+      <text x="1265" y="595" fill="#fb923c" font-size="9" font-style="italic" text-anchor="start">+24h alert</text>
+
+      <!-- Hotfix → back to step 5 -->
+      <path d="M 1090 660 Q 250 660 210 600"
+            fill="none" stroke="#fb923c" stroke-width="1.3" stroke-dasharray="4 3"
+            marker-end="url(#arrow-orange)"/>
+      <text x="700" y="650" fill="#fb923c" font-size="9" font-style="italic" text-anchor="middle">hotfix → loop from step 5 (local self-test)</text>
+
+      <!-- ===== Bottom bar: branch topology + constraints ===== -->
+
+      <rect x="40" y="860" width="1365" height="380" rx="10" fill="rgba(15,23,42,0.6)" stroke="#1e293b" stroke-width="1"/>
+
+      <text x="60" y="890" fill="#94a3b8" font-size="13" font-weight="700">Branch Topology (4 layers, top = protected):</text>
+
+      <!-- main -->
+      <rect x="60"  y="910" width="180" height="70" rx="6" fill="rgba(76,29,149,0.30)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="150" y="938" fill="#fff" font-size="13" font-weight="700" text-anchor="middle">main</text>
+      <text x="150" y="956" fill="#94a3b8" font-size="10" text-anchor="middle">production</text>
+      <text x="150" y="970" fill="#94a3b8" font-size="10" text-anchor="middle">(protected)</text>
+
+      <!-- release -->
+      <rect x="280" y="910" width="220" height="70" rx="6" fill="rgba(136,19,55,0.30)" stroke="#fb7185" stroke-width="1.5"/>
+      <text x="390" y="938" fill="#fff" font-size="13" font-weight="700" text-anchor="middle">release/vX.Y.Z</text>
+      <text x="390" y="956" fill="#94a3b8" font-size="10" text-anchor="middle">release aggregator</text>
+      <text x="390" y="970" fill="#94a3b8" font-size="10" text-anchor="middle">(protected)</text>
+
+      <!-- dev -->
+      <rect x="540" y="910" width="180" height="70" rx="6" fill="rgba(6,78,59,0.30)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="630" y="938" fill="#fff" font-size="13" font-weight="700" text-anchor="middle">dev</text>
+      <text x="630" y="956" fill="#94a3b8" font-size="10" text-anchor="middle">non-prod</text>
+      <text x="630" y="970" fill="#94a3b8" font-size="10" text-anchor="middle">(protected)</text>
+
+      <!-- feature -->
+      <rect x="760" y="910" width="220" height="70" rx="6" fill="rgba(8,51,68,0.40)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="870" y="936" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">feature/CAEP-xxxx-*</text>
+      <text x="870" y="956" fill="#94a3b8" font-size="10" text-anchor="middle">≤1 ticket</text>
+      <text x="870" y="970" fill="#94a3b8" font-size="10" text-anchor="middle">free push</text>
+
+      <!-- arrows between layers -->
+      <line x1="240" y1="945" x2="280" y2="945" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="500" y1="945" x2="540" y2="945" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="720" y1="945" x2="760" y2="945" stroke="#94a3b8" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <text x="60" y="1010" fill="#64748b" font-size="10" font-style="italic">merge direction: feature → dev → release/vX.Y.Z → main (only via PR with required approvers + CR approval on main path)</text>
+
+      <!-- strong-constraints header -->
+      <text x="60" y="1055" fill="#fb7185" font-size="13" font-weight="700">Strong Constraints (do NOT violate):</text>
+
+      <rect x="60"    y="1070" width="320" height="140" rx="6" fill="rgba(15,23,42,0.7)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3 3"/>
+      <text x="80"  y="1098" fill="#e2e8f0" font-size="11" font-weight="600">🚫 No gcloud/local (outside jumpbox)</text>
+      <text x="80"  y="1118" fill="#94a3b8" font-size="10">all gcloud / kubectl / terraform must run on jumpbox</text>
+      <text x="80"  y="1148" fill="#e2e8f0" font-size="11" font-weight="600">🚫 No secrets in commits</text>
+      <text x="80"  y="1168" fill="#94a3b8" font-size="10">use Secret Manager — .gitignore protects local</text>
+      <text x="80"  y="1192" fill="#64748b" font-size="9" font-style="italic">direct push to main must be blocked</text>
+
+      <rect x="395" y="1070" width="320" height="140" rx="6" fill="rgba(15,23,42,0.7)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3 3"/>
+      <text x="415" y="1098" fill="#e2e8f0" font-size="11" font-weight="600">🚫 No AI for CR submission</text>
+      <text x="415" y="1118" fill="#94a3b8" font-size="10">AI drafts; human signs &amp; submits</text>
+      <text x="415" y="1148" fill="#e2e8f0" font-size="11" font-weight="600">🚫 No release directory deletion</text>
+      <text x="415" y="1168" fill="#94a3b8" font-size="10">rollback → new vX.Y.Z-rollback/ dir</text>
+      <text x="415" y="1192" fill="#64748b" font-size="9" font-style="italic">original release is preserved as audit</text>
+
+      <rect x="730" y="1070" width="320" height="140" rx="6" fill="rgba(15,23,42,0.7)" stroke="#fb923c" stroke-width="1" stroke-dasharray="3 3"/>
+      <text x="750" y="1098" fill="#e2e8f0" font-size="11" font-weight="600">🚫 No fabricated numbers</text>
+      <text x="750" y="1118" fill="#94a3b8" font-size="10">report.html reads from artifacts/ only</text>
+      <text x="750" y="1148" fill="#e2e8f0" font-size="11" font-weight="600">✅ Annotated tag mandatory</text>
+      <text x="750" y="1168" fill="#94a3b8" font-size="10">git tag -a vX.Y.Z — never lightweight</text>
+      <text x="750" y="1192" fill="#64748b" font-size="9" font-style="italic">release-process §Phase 4</text>
+
+      <rect x="1065" y="1070" width="335" height="140" rx="6" fill="rgba(15,23,42,0.7)" stroke="#34d399" stroke-width="1" stroke-dasharray="3 3"/>
+      <text x="1085" y="1098" fill="#e2e8f0" font-size="11" font-weight="600">✅ Conventional Commits (enforced)</text>
+      <text x="1085" y="1118" fill="#94a3b8" font-size="10">feat/fix/chore(scope): CAEP-xxxx ...</text>
+      <text x="1085" y="1148" fill="#e2e8f0" font-size="11" font-weight="600">✅ 4 reviewer types layered</text>
+      <text x="1085" y="1168" fill="#94a3b8" font-size="10">code (1) + release owner (1) + CR (ext)</text>
+      <text x="1085" y="1192" fill="#64748b" font-size="9" font-style="italic">commits gated by commit-msg hook</text>
+
+    </svg>
+  </div>
+
+  <div class="cards-grid">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot" style="background: var(--cyan);"></div>
+        <h3>Phase 1 — Plan &amp; Develop</h3>
+      </div>
+      <ul>
+        <li>step 1-2: branch scaffolding on top of <code>main</code></li>
+        <li>step 3: cut <code>feature/CAEP-xxxx-*</code> off <code>dev</code></li>
+        <li>step 4-5: Conventional Commits + local self-test</li>
+        <li>step 6: PR to <code>dev</code> with 1 approver</li>
+        <li>step 7: <code>preflight.sh</code> on jumpbox (Gate 1)</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot" style="background: var(--emerald);"></div>
+        <h3>Phase 2 — Non-prod Execute</h3>
+      </div>
+      <ul>
+        <li>step 8: squash merge feature → dev</li>
+        <li>step 9: <code>setup-uk.sh</code> + <code>verify-uk.sh</code></li>
+        <li>step 10: fix-bugs loop (returns to step 4 by name)</li>
+        <li>step 11: raise CR linking <code>release/vX.Y.Z</code> SHA</li>
+        <li>Gate 2: verify-green + CR-submitted (parallel)</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot" style="background: var(--amber);"></div>
+        <h3>Phase 3 — Notes &amp; PR Main</h3>
+      </div>
+      <ul>
+        <li>step 12: <code>summary.md</code> from real artifacts</li>
+        <li>step 12 cont.: PR <code>release/vX.Y.Z</code> → <code>main</code></li>
+        <li>step 13: CR approval gate (external system)</li>
+        <li>final review by release owner on notes</li>
+        <li>CR-rejected → back to step 3 (loop red)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="cards-grid">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot" style="background: var(--violet);"></div>
+        <h3>Phase 4 — Prod Release &amp; Close</h3>
+      </div>
+      <ul>
+        <li>14a: squash merge PR → <code>main</code></li>
+        <li>14b: <code>git tag -a caep-infra-vX.Y.Z</code></li>
+        <li>14c: prod release on jumpbox</li>
+        <li>14d: close CR in CR system</li>
+        <li>14e: +7d retrospective → next release's README §7</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot" style="background: var(--orange);"></div>
+        <h3>Rollback &amp; Hotfix</h3>
+      </div>
+      <ul>
+        <li>verify fail → <code>rollback-&lt;region&gt;.sh</code> dry-run</li>
+        <li>new dir <code>releases/vX.Y.Z-rollback/</code> (never overwrite)</li>
+        <li>CR-rejected: close PR, split or fix</li>
+        <li>prod alert &gt; 24h → <code>hotfix/vX.Y.Z+1</code></li>
+        <li>hotfix: Conventional Commits + same workflow from step 5</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot" style="background: var(--rose);"></div>
+        <h3>Baseline Contract Preserved</h3>
+      </div>
+      <ul>
+        <li>✅ <code>main</code> = production change</li>
+        <li>✅ <code>dev</code> = non-prod change</li>
+        <li>✅ <code>feature</code> branch = development</li>
+        <li>✅ commit log rules (jira + PR-only)</li>
+        <li>✅ PR merge protection (approve group)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="principles">
+    <h3>Cross-Doc Consistency</h3>
+    <div class="principle-grid">
+      <div><strong>requirement.md</strong> § baseline → kept verbatim in §1 of requirements.md</div>
+      <div><strong>README.md §6</strong> → main / release/* / hotfix/* branch naming &amp; tag enforcement</div>
+      <div><strong>README.md §5</strong> → jumpbox-only gcloud constraint (boxed on diagram)</div>
+      <div><strong>release-process.md</strong> → 6-phase model reconciled to 4-phase here</div>
+      <div><strong>requirements.md §2</strong> → review notes (7 findings, 4 layers)</div>
+      <div><strong>requirements.md §3</strong> → corrected 14-step workflow with 4 phase gates</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    caep-infra-gcp-release · release-workflow-architecture.html · dark theme · 2026-07-02
+  </div>
+
+</div>
+</body>
+</html>

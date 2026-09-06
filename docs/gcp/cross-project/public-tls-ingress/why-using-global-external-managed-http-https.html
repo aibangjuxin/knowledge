@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS · 10 种 GCP LB 对比 + 决策树</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px; background: #22d3ee; border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.75rem; color: white; }
+    h3 { font-size: 0.875rem; font-weight: 600; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .section { margin-top: 2.5rem; }
+    .section-sub { color: #94a3b8; font-size: 0.8rem; margin-bottom: 1rem; }
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; display: block; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.orange { background: #fb923c; }
+    .card-dot.red { background: #f87171; }
+    .card-dot.yellow { background: #fbbf24; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS &middot; 4 视角架构图</h1>
+      </div>
+      <p class="subtitle">10 种 GCP LB 对比 &rarr; 决策树 &rarr; 业务方链路 &rarr; Org Policy 申请 &middot; 2026-09</p>
+    </div>
+
+    <div class="section">
+      <h2>① 10 种 GCP Load Balancing Scheme 全景</h2>
+      <p class="section-sub">业务方 4 个约束逐项排除 &rarr; 唯一剩下的就是 GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS</p>
+      <div class="diagram-container">
+        <svg viewBox="0 0 1400 880">
+          <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+            </marker>
+            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#grid)" />
+
+          <!-- 标题 4 维度 -->
+          <text x="20" y="22" fill="#22d3ee" font-size="11" font-weight="700">FILTER 1: 公网?</text>
+          <text x="370" y="22" fill="#22d3ee" font-size="11" font-weight="700">FILTER 2: 支持 PSC NEG?</text>
+          <text x="720" y="22" fill="#22d3ee" font-size="11" font-weight="700">FILTER 3: L7?</text>
+          <text x="1070" y="22" fill="#22d3ee" font-size="11" font-weight="700">FILTER 4: Global?</text>
+
+          <!-- ===== INTERNAL 系 (3 种,全排除) ===== -->
+          <rect x="20" y="50" width="320" height="200" rx="8" fill="rgba(248, 113, 113, 0.05)" stroke="#f87171" stroke-width="1" stroke-dasharray="4,2"/>
+          <text x="32" y="68" fill="#f87171" font-size="10" font-weight="700">❌ INTERNAL 系 (3 种,FILTER 1 排除)</text>
+
+          <rect x="35" y="80" width="290" height="48" rx="6" fill="rgba(248, 113, 113, 0.15)" stroke="#f87171" stroke-width="1"/>
+          <text x="180" y="98" fill="white" font-size="10" font-weight="600" text-anchor="middle">INTERNAL TCP/UDP (Regional)</text>
+          <text x="180" y="112" fill="#94a3b8" font-size="8" text-anchor="middle">L4 &middot; Regional &middot; 内网 IP &middot; 不支持 PSC NEG</text>
+
+          <rect x="35" y="138" width="290" height="48" rx="6" fill="rgba(248, 113, 113, 0.15)" stroke="#f87171" stroke-width="1"/>
+          <text x="180" y="156" fill="white" font-size="10" font-weight="600" text-anchor="middle">INTERNAL_MANAGED (Regional L7)</text>
+          <text x="180" y="170" fill="#94a3b8" font-size="8" text-anchor="middle">L7 &middot; Regional &middot; 内网 IP &middot; 不支持 PSC NEG</text>
+
+          <rect x="35" y="196" width="290" height="48" rx="6" fill="rgba(248, 113, 113, 0.15)" stroke="#f87171" stroke-width="1"/>
+          <text x="180" y="214" fill="white" font-size="10" font-weight="600" text-anchor="middle">INTERNAL_MANAGED (Global L7)</text>
+          <text x="180" y="228" fill="#94a3b8" font-size="8" text-anchor="middle">L7 &middot; Global &middot; 内网 IP &middot; 不支持 PSC NEG</text>
+
+          <!-- ===== 经典 EXTERNAL (2 种,FILTER 2 排除) ===== -->
+          <rect x="370" y="50" width="320" height="140" rx="8" fill="rgba(248, 113, 113, 0.05)" stroke="#f87171" stroke-width="1" stroke-dasharray="4,2"/>
+          <text x="382" y="68" fill="#f87171" font-size="10" font-weight="700">❌ 经典 EXTERNAL (2 种,FILTER 2 排除)</text>
+
+          <rect x="385" y="80" width="290" height="48" rx="6" fill="rgba(248, 113, 113, 0.15)" stroke="#f87171" stroke-width="1"/>
+          <text x="530" y="98" fill="white" font-size="10" font-weight="600" text-anchor="middle">EXTERNAL (Regional Classic)</text>
+          <text x="530" y="112" fill="#94a3b8" font-size="8" text-anchor="middle">L7 &middot; Regional &middot; 公网 &middot; legacy &middot; ❌ 不支持 NEG</text>
+
+          <rect x="385" y="138" width="290" height="48" rx="6" fill="rgba(248, 113, 113, 0.15)" stroke="#f87171" stroke-width="1"/>
+          <text x="530" y="156" fill="white" font-size="10" font-weight="600" text-anchor="middle">EXTERNAL (Global Classic)</text>
+          <text x="530" y="170" fill="#94a3b8" font-size="8" text-anchor="middle">L7 &middot; Global &middot; 公网 &middot; legacy &middot; ❌ 不支持 NEG</text>
+
+          <!-- ===== EXTERNAL_MANAGED TCP/SSL/UDP (3 种,FILTER 3 排除) ===== -->
+          <rect x="720" y="50" width="320" height="200" rx="8" fill="rgba(248, 113, 113, 0.05)" stroke="#f87171" stroke-width="1" stroke-dasharray="4,2"/>
+          <text x="732" y="68" fill="#f87171" font-size="10" font-weight="700">❌ EXTERNAL_MANAGED L4 (3 种,FILTER 3 排除)</text>
+
+          <rect x="735" y="80" width="290" height="48" rx="6" fill="rgba(248, 113, 113, 0.15)" stroke="#f87171" stroke-width="1"/>
+          <text x="880" y="98" fill="white" font-size="10" font-weight="600" text-anchor="middle">EXTERNAL_MANAGED Network TCP</text>
+          <text x="880" y="112" fill="#94a3b8" font-size="8" text-anchor="middle">L4 TCP &middot; Regional &middot; 公网 &middot; ❌ 无 URL Map</text>
+
+          <rect x="735" y="138" width="290" height="48" rx="6" fill="rgba(248, 113, 113, 0.15)" stroke="#f87171" stroke-width="1"/>
+          <text x="880" y="156" fill="white" font-size="10" font-weight="600" text-anchor="middle">EXTERNAL_MANAGED SSL Proxy</text>
+          <text x="880" y="170" fill="#94a3b8" font-size="8" text-anchor="middle">L4 SSL &middot; Global &middot; 公网 &middot; ❌ 无 Host 重写</text>
+
+          <rect x="735" y="196" width="290" height="48" rx="6" fill="rgba(248, 113, 113, 0.15)" stroke="#f87171" stroke-width="1"/>
+          <text x="880" y="214" fill="white" font-size="10" font-weight="600" text-anchor="middle">EXTERNAL_MANAGED TCP Proxy</text>
+          <text x="880" y="228" fill="#94a3b8" font-size="8" text-anchor="middle">L4 TCP &middot; Global &middot; 公网 &middot; ❌ 无 URL Map</text>
+
+          <!-- ===== Regional EXTERNAL_MANAGED L7 (FILTER 4 排除) ===== -->
+          <rect x="1070" y="50" width="320" height="90" rx="8" fill="rgba(251, 146, 60, 0.05)" stroke="#fb923c" stroke-width="1" stroke-dasharray="4,2"/>
+          <text x="1082" y="68" fill="#fb923c" font-size="10" font-weight="700">⚠ Regional EXTERNAL_MANAGED L7</text>
+
+          <rect x="1085" y="80" width="290" height="48" rx="6" fill="rgba(251, 146, 60, 0.15)" stroke="#fb923c" stroke-width="1"/>
+          <text x="1230" y="98" fill="white" font-size="10" font-weight="600" text-anchor="middle">EXTERNAL_MANAGED (Regional L7)</text>
+          <text x="1230" y="112" fill="#94a3b8" font-size="8" text-anchor="middle">L7 &middot; Regional &middot; 公网 &middot; ✅ PSC NEG &middot; ⚠ 单 region</text>
+
+          <!-- ===== 唯一胜出 ===== -->
+          <rect x="1070" y="155" width="320" height="100" rx="10" fill="rgba(52, 211, 153, 0.15)" stroke="#34d399" stroke-width="2.5"/>
+          <text x="1082" y="175" fill="#34d399" font-size="12" font-weight="700">✅ 唯一胜出 #7</text>
+
+          <rect x="1085" y="185" width="290" height="60" rx="6" fill="rgba(34, 211, 238, 0.25)" stroke="#22d3ee" stroke-width="2"/>
+          <text x="1230" y="205" fill="white" font-size="11" font-weight="700" text-anchor="middle">GLOBAL_EXTERNAL_MANAGED</text>
+          <text x="1230" y="220" fill="white" font-size="11" font-weight="700" text-anchor="middle">_HTTP_HTTPS</text>
+          <text x="1230" y="236" fill="#22d3ee" font-size="8" text-anchor="middle">L7 &middot; Global &middot; 公网 &middot; ✅ PSC NEG</text>
+
+          <!-- 决策箭头 -->
+          <text x="20" y="300" fill="#fbbf24" font-size="12" font-weight="700">决策路径:</text>
+          <text x="20" y="318" fill="#94a3b8" font-size="9">INTERNAL 系 (3) → 排除 [Filter 1: 公网?]</text>
+          <text x="20" y="336" fill="#94a3b8" font-size="9">经典 EXTERNAL (2) → 排除 [Filter 2: PSC NEG?]</text>
+          <text x="20" y="354" fill="#94a3b8" font-size="9">EXTERNAL_MANAGED L4 (3) → 排除 [Filter 3: L7?]</text>
+          <text x="20" y="372" fill="#94a3b8" font-size="9">EXTERNAL_MANAGED Regional L7 (1) → ⚠ 单 region 排除 [Filter 4: Global?]</text>
+          <text x="20" y="392" fill="#34d399" font-size="11" font-weight="700">→ 唯一胜出: GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS</text>
+
+          <!-- 底部说明 -->
+          <rect x="20" y="420" width="1360" height="80" rx="8" fill="rgba(8, 51, 68, 0.15)" stroke="#1e293b" stroke-width="1"/>
+          <text x="40" y="442" fill="#22d3ee" font-size="11" font-weight="700">GCP 官方文档原文 (cloud.google.com/load-balancing/docs/https):</text>
+          <text x="40" y="462" fill="#94a3b8" font-size="9">"An external Application Load Balancer is a proxy-based Layer 7 load balancer that enables you to run and scale</text>
+          <text x="40" y="476" fill="#94a3b8" font-size="9">your services behind a single external IP address. It supports Network Endpoint Groups (NEGs), including Private</text>
+          <text x="40" y="490" fill="#94a3b8" font-size="9">Service Connect (PSC) NEGs, as backends."</text>
+
+          <!-- 颜色图例 -->
+          <text x="20" y="540" fill="#22d3ee" font-size="11" font-weight="700">图例:</text>
+          <rect x="80" y="530" width="14" height="10" rx="2" fill="rgba(248, 113, 113, 0.15)" stroke="#f87171" stroke-width="1"/>
+          <text x="98" y="538" fill="#94a3b8" font-size="8">❌ 被排除</text>
+          <rect x="180" y="530" width="14" height="10" rx="2" fill="rgba(251, 146, 60, 0.15)" stroke="#fb923c" stroke-width="1"/>
+          <text x="198" y="538" fill="#94a3b8" font-size="8">⚠ 部分满足</text>
+          <rect x="290" y="530" width="14" height="10" rx="2" fill="rgba(52, 211, 153, 0.15)" stroke="#34d399" stroke-width="1"/>
+          <text x="308" y="538" fill="#94a3b8" font-size="8">✅ 唯一胜出</text>
+          <rect x="400" y="530" width="14" height="10" rx="2" fill="rgba(34, 211, 238, 0.25)" stroke="#22d3ee" stroke-width="1"/>
+          <text x="418" y="538" fill="#94a3b8" font-size="8">🌐 Internet 入口</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>② 决策树:4 维度逐层排除</h2>
+      <p class="section-sub">业务方场景约束 &rarr; 唯一选择路径</p>
+      <div class="diagram-container">
+        <svg viewBox="0 0 1400 600">
+          <defs>
+            <marker id="arrow2" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+            </marker>
+          </defs>
+
+          <!-- 起点 -->
+          <rect x="600" y="20" width="200" height="50" rx="8" fill="rgba(34, 211, 238, 0.25)" stroke="#22d3ee" stroke-width="2"/>
+          <text x="700" y="42" fill="white" font-size="11" font-weight="700" text-anchor="middle">业务方场景</text>
+          <text x="700" y="58" fill="#22d3ee" font-size="9" text-anchor="middle">公网客户端 → 跨 project → L7 路由</text>
+
+          <!-- Filter 1 -->
+          <rect x="600" y="110" width="200" height="50" rx="8" fill="rgba(8, 51, 68, 0.3)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text x="700" y="130" fill="white" font-size="10" font-weight="600" text-anchor="middle">Filter 1: 公网?</text>
+          <text x="700" y="146" fill="#22d3ee" font-size="8" text-anchor="middle">排除 INTERNAL 系 (3 种)</text>
+
+          <!-- Filter 2 -->
+          <rect x="600" y="200" width="200" height="50" rx="8" fill="rgba(8, 51, 68, 0.3)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text x="700" y="220" fill="white" font-size="10" font-weight="600" text-anchor="middle">Filter 2: 支持 PSC NEG?</text>
+          <text x="700" y="236" fill="#22d3ee" font-size="8" text-anchor="middle">排除经典 EXTERNAL (2 种)</text>
+
+          <!-- Filter 3 -->
+          <rect x="600" y="290" width="200" height="50" rx="8" fill="rgba(8, 51, 68, 0.3)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text x="700" y="310" fill="white" font-size="10" font-weight="600" text-anchor="middle">Filter 3: L7 (HTTP/HTTPS)?</text>
+          <text x="700" y="326" fill="#22d3ee" font-size="8" text-anchor="middle">排除 EXTERNAL_MANAGED L4 (3 种)</text>
+
+          <!-- Filter 4 -->
+          <rect x="600" y="380" width="200" height="50" rx="8" fill="rgba(8, 51, 68, 0.3)" stroke="#fb923c" stroke-width="1.5"/>
+          <text x="700" y="400" fill="white" font-size="10" font-weight="600" text-anchor="middle">Filter 4: Global?</text>
+          <text x="700" y="416" fill="#fb923c" font-size="8" text-anchor="middle">排除 Regional EXTERNAL_MANAGED L7</text>
+
+          <!-- 唯一胜出 -->
+          <rect x="500" y="470" width="400" height="80" rx="10" fill="rgba(52, 211, 153, 0.25)" stroke="#34d399" stroke-width="3"/>
+          <text x="700" y="500" fill="#34d399" font-size="13" font-weight="700" text-anchor="middle">✅ 唯一选择</text>
+          <text x="700" y="520" fill="white" font-size="11" font-weight="700" text-anchor="middle">GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS</text>
+          <text x="700" y="538" fill="#22d3ee" font-size="9" text-anchor="middle">公网 + Global + L7 + PSC NEG + URL Map + Host rewrite</text>
+
+          <!-- 箭头 -->
+          <line x1="700" y1="70" x2="700" y2="110" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow2)"/>
+          <line x1="700" y1="160" x2="700" y2="200" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow2)"/>
+          <line x1="700" y1="250" x2="700" y2="290" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow2)"/>
+          <line x1="700" y1="340" x2="700" y2="380" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow2)"/>
+          <line x1="700" y1="430" x2="700" y2="470" stroke="#34d399" stroke-width="2.5" marker-end="url(#arrow2)"/>
+
+          <!-- 左侧排除标签 -->
+          <rect x="20" y="115" width="180" height="40" rx="6" fill="rgba(248, 113, 113, 0.1)" stroke="#f87171" stroke-width="1"/>
+          <text x="110" y="132" fill="#f87171" font-size="9" font-weight="600" text-anchor="middle">排除 3 种</text>
+          <text x="110" y="146" fill="#94a3b8" font-size="8" text-anchor="middle">INTERNAL TCP/UDP</text>
+
+          <rect x="20" y="205" width="180" height="40" rx="6" fill="rgba(248, 113, 113, 0.1)" stroke="#f87171" stroke-width="1"/>
+          <text x="110" y="222" fill="#f87171" font-size="9" font-weight="600" text-anchor="middle">排除 2 种</text>
+          <text x="110" y="236" fill="#94a3b8" font-size="8" text-anchor="middle">经典 EXTERNAL (legacy)</text>
+
+          <rect x="20" y="295" width="180" height="40" rx="6" fill="rgba(248, 113, 113, 0.1)" stroke="#f87171" stroke-width="1"/>
+          <text x="110" y="312" fill="#f87171" font-size="9" font-weight="600" text-anchor="middle">排除 3 种</text>
+          <text x="110" y="326" fill="#94a3b8" font-size="8" text-anchor="middle">L4 TCP / SSL Proxy</text>
+
+          <rect x="20" y="385" width="180" height="40" rx="6" fill="rgba(251, 146, 60, 0.1)" stroke="#fb923c" stroke-width="1"/>
+          <text x="110" y="402" fill="#fb923c" font-size="9" font-weight="600" text-anchor="middle">⚠ 排除 1 种</text>
+          <text x="110" y="416" fill="#94a3b8" font-size="8" text-anchor="middle">Regional L7</text>
+
+          <!-- 右侧胜出标签 -->
+          <rect x="1200" y="485" width="180" height="50" rx="6" fill="rgba(52, 211, 153, 0.15)" stroke="#34d399" stroke-width="1"/>
+          <text x="1290" y="503" fill="#34d399" font-size="9" font-weight="700" text-anchor="middle">4 维度联合约束</text>
+          <text x="1290" y="517" fill="#94a3b8" font-size="8" text-anchor="middle">公网 + Global + L7</text>
+          <text x="1290" y="529" fill="#94a3b8" font-size="8" text-anchor="middle">+ PSC NEG</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>③ 业务方实际链路(已实现架构)</h2>
+      <p class="section-sub">GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS 在生产链路的真实位置</p>
+      <div class="diagram-container">
+        <svg viewBox="0 0 1400 500">
+          <defs>
+            <marker id="arrow3" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+            </marker>
+            <pattern id="grid2" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#grid2)" />
+
+          <!-- Internet -->
+          <rect x="50" y="100" width="120" height="60" rx="8" fill="rgba(30, 41, 59, 0.6)" stroke="#94a3b8" stroke-width="1.5"/>
+          <text x="110" y="125" fill="white" font-size="11" font-weight="700" text-anchor="middle">Internet 客户端</text>
+          <text x="110" y="142" fill="#94a3b8" font-size="9" text-anchor="middle">www.aibang.com</text>
+
+          <!-- Talent VPC box -->
+          <rect x="220" y="50" width="540" height="320" rx="12" fill="rgba(8, 51, 68, 0.15)" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="6,3"/>
+          <text x="234" y="70" fill="#22d3ee" font-size="11" font-weight="700">Talent Project (Consumer)</text>
+          <text x="234" y="84" fill="#64748b" font-size="9">公网 VPC + PSC NEG</text>
+
+          <!-- GLB (highlighted) -->
+          <rect x="240" y="110" width="500" height="200" rx="8" fill="rgba(34, 211, 238, 0.25)" stroke="#22d3ee" stroke-width="2.5"/>
+          <text x="490" y="130" fill="white" font-size="11" font-weight="700" text-anchor="middle">GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS ⭐</text>
+          <text x="490" y="144" fill="#22d3ee" font-size="8" text-anchor="middle">公网入口 (唯一支持 PSC NEG + L7 + Global)</text>
+
+          <!-- Global Static IP -->
+          <rect x="255" y="160" width="130" height="40" rx="6" fill="rgba(30, 41, 59, 0.6)" stroke="#94a3b8" stroke-width="1"/>
+          <text x="320" y="178" fill="white" font-size="9" font-weight="600" text-anchor="middle">Global Static IP</text>
+          <text x="320" y="190" fill="#94a3b8" font-size="7" text-anchor="middle">Anycast</text>
+
+          <!-- Target HTTPS Proxy -->
+          <rect x="395" y="160" width="160" height="40" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+          <text x="475" y="178" fill="white" font-size="9" font-weight="600" text-anchor="middle">Target HTTPS Proxy</text>
+          <text x="475" y="190" fill="#22d3ee" font-size="7" text-anchor="middle">cert + URL Map</text>
+
+          <!-- URL Map -->
+          <rect x="565" y="160" width="160" height="40" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+          <text x="645" y="178" fill="white" font-size="9" font-weight="600" text-anchor="middle">URL Map</text>
+          <text x="645" y="190" fill="#22d3ee" font-size="7" text-anchor="middle">path → Host rewrite</text>
+
+          <!-- Backend Service -->
+          <rect x="255" y="215" width="230" height="40" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+          <text x="370" y="233" fill="white" font-size="10" font-weight="600" text-anchor="middle">Backend Service</text>
+          <text x="370" y="246" fill="#34d399" font-size="8" text-anchor="middle">protocol=HTTPS · portName=https</text>
+
+          <!-- Cloud Armor -->
+          <rect x="495" y="215" width="230" height="40" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+          <text x="610" y="233" fill="white" font-size="10" font-weight="600" text-anchor="middle">Cloud Armor</text>
+          <text x="610" y="246" fill="#fb7185" font-size="8" text-anchor="middle">WAF · DDoS · Rate limit</text>
+
+          <!-- PSC NEG (highlighted) -->
+          <rect x="255" y="270" width="470" height="30" rx="6" fill="rgba(251, 146, 60, 0.25)" stroke="#fb923c" stroke-width="2"/>
+          <text x="490" y="290" fill="white" font-size="10" font-weight="700" text-anchor="middle">PSC NEG (type=PRIVATE_SERVICE_CONNECT) ⭐</text>
+
+          <!-- PSC Tunnel -->
+          <rect x="800" y="180" width="220" height="40" rx="8" fill="rgba(251, 146, 60, 0.08)" stroke="#fb923c" stroke-width="1" stroke-dasharray="5,3"/>
+          <text x="910" y="200" fill="#fb923c" font-size="10" font-weight="600" text-anchor="middle">PSC Tunnel</text>
+          <text x="910" y="212" fill="#94a3b8" font-size="7" text-anchor="middle">Google Backbone (跨 project)</text>
+
+          <!-- Master Project -->
+          <rect x="1060" y="50" width="290" height="320" rx="12" fill="rgba(76, 29, 149, 0.12)" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="6,3"/>
+          <text x="1074" y="70" fill="#a78bfa" font-size="11" font-weight="700">Master Project (Producer)</text>
+          <text x="1074" y="84" fill="#64748b" font-size="9">Service Attachment + ILB</text>
+
+          <!-- Service Attachment -->
+          <rect x="1075" y="120" width="260" height="55" rx="6" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1.5"/>
+          <text x="1205" y="140" fill="white" font-size="10" font-weight="600" text-anchor="middle">Service Attachment</text>
+          <text x="1205" y="155" fill="#fb923c" font-size="8" text-anchor="middle">ACCEPT_MANUAL · consumer allowlist</text>
+
+          <!-- Producer ILB -->
+          <rect x="1075" y="195" width="260" height="55" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+          <text x="1205" y="215" fill="white" font-size="10" font-weight="600" text-anchor="middle">Producer ILB (INTERNAL)</text>
+          <text x="1205" y="230" fill="#34d399" font-size="8" text-anchor="middle">TCP 443 · --allow-global-access</text>
+
+          <!-- Backend Service + MIG -->
+          <rect x="1075" y="270" width="260" height="50" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+          <text x="1205" y="288" fill="white" font-size="10" font-weight="600" text-anchor="middle">Backend Service + MIG</text>
+          <text x="1205" y="302" fill="#fbbf24" font-size="8" text-anchor="middle">HTTPS backend (e.g. python https.server)</text>
+
+          <!-- 箭头 -->
+          <line x1="170" y1="130" x2="220" y2="180" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow3)"/>
+          <line x1="385" y1="200" x2="320" y2="215" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow3)"/>
+          <line x1="555" y1="200" x2="490" y2="215" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow3)"/>
+          <line x1="725" y1="200" x2="755" y2="180" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow3)"/>
+          <line x1="725" y1="255" x2="490" y2="270" stroke="#fb923c" stroke-width="2" marker-end="url(#arrow3)"/>
+          <line x1="1020" y1="200" x2="1075" y2="148" stroke="#fb923c" stroke-width="2" marker-end="url(#arrow3)"/>
+          <line x1="1205" y1="175" x2="1205" y2="195" stroke="#34d399" stroke-width="2" marker-end="url(#arrow3)"/>
+          <line x1="1205" y1="250" x2="1205" y2="270" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow3)"/>
+
+          <!-- 关键标签 -->
+          <text x="60" y="430" fill="#22d3ee" font-size="10" font-weight="700">⭐ 关键: 这一节限定了唯一选择</text>
+          <text x="60" y="448" fill="#94a3b8" font-size="9">业务方架构 = 公网 + 跨 project(PSC NEG)+ L7 + (推荐) Global</text>
+          <text x="60" y="465" fill="#94a3b8" font-size="9">→ 唯一选择: GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>④ Org Policy 申请流程</h2>
+      <p class="section-sub">业务方需要 Security / Org Policy Owner 审批 &rarr; 解锁 EXTERNAL 系 LB</p>
+      <div class="diagram-container">
+        <svg viewBox="0 0 1400 280">
+          <defs>
+            <marker id="arrow4" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+            </marker>
+          </defs>
+
+          <!-- Step 1 -->
+          <rect x="20" y="60" width="220" height="120" rx="8" fill="rgba(8, 51, 68, 0.3)" stroke="#22d3ee" stroke-width="2"/>
+          <text x="130" y="85" fill="#22d3ee" font-size="10" font-weight="700" text-anchor="middle">Step 1: 业务方提申请</text>
+          <text x="130" y="108" fill="white" font-size="9" text-anchor="middle">提出 Org Policy 扩展请求</text>
+          <text x="130" y="124" fill="#94a3b8" font-size="8" text-anchor="middle">compute.loadBalancing</text>
+          <text x="130" y="138" fill="#94a3b8" font-size="8" text-anchor="middle">.allowedLoadBalancingScheme</text>
+          <text x="130" y="160" fill="#fbbf24" font-size="8" text-anchor="middle">+ GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS</text>
+
+          <!-- Step 2 -->
+          <rect x="280" y="60" width="220" height="120" rx="8" fill="rgba(8, 51, 68, 0.3)" stroke="#a78bfa" stroke-width="2"/>
+          <text x="390" y="85" fill="#a78bfa" font-size="10" font-weight="700" text-anchor="middle">Step 2: Security 审批</text>
+          <text x="390" y="108" fill="white" font-size="9" text-anchor="middle">检查合规 + 业务必要性</text>
+          <text x="390" y="124" fill="#94a3b8" font-size="8" text-anchor="middle">- Cloud Armor 是否启用?</text>
+          <text x="390" y="138" fill="#94a3b8" font-size="8" text-anchor="middle">- Org Policy 范围</text>
+          <text x="390" y="160" fill="#fbbf24" font-size="8" text-anchor="middle">通常是工作日 1-3 天</text>
+
+          <!-- Step 3 -->
+          <rect x="540" y="60" width="220" height="120" rx="8" fill="rgba(8, 51, 68, 0.3)" stroke="#fb923c" stroke-width="2"/>
+          <text x="650" y="85" fill="#fb923c" font-size="10" font-weight="700" text-anchor="middle">Step 3: Org Policy 扩展</text>
+          <text x="650" y="108" fill="white" font-size="9" text-anchor="middle">在指定 project 下允许</text>
+          <text x="650" y="124" fill="#94a3b8" font-size="8" text-anchor="middle">原来只允许 INTERNAL</text>
+          <text x="650" y="138" fill="#94a3b8" font-size="8" text-anchor="middle">扩展为 INTERNAL + EXTERNAL</text>
+          <text x="650" y="160" fill="#34d399" font-size="8" text-anchor="middle">+ GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS</text>
+
+          <!-- Step 4 -->
+          <rect x="800" y="60" width="220" height="120" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="2"/>
+          <text x="910" y="85" fill="#34d399" font-size="10" font-weight="700" text-anchor="middle">Step 4: infra-gcp 部署</text>
+          <text x="910" y="108" fill="white" font-size="9" text-anchor="middle">infra-gcp profile 跑:</text>
+          <text x="910" y="124" fill="#94a3b8" font-size="8" text-anchor="middle">- gcloud compute url-maps create</text>
+          <text x="910" y="138" fill="#94a3b8" font-size="8" text-anchor="middle">- backend-services create</text>
+          <text x="910" y="160" fill="#fb923c" font-size="8" text-anchor="middle">架构师不接此步 (lane 边界)</text>
+
+          <!-- 箭头 -->
+          <line x1="240" y1="120" x2="280" y2="120" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow4)"/>
+          <line x1="500" y1="120" x2="540" y2="120" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow4)"/>
+          <line x1="760" y1="120" x2="800" y2="120" stroke="#34d399" stroke-width="2" marker-end="url(#arrow4)"/>
+
+          <!-- 顶部注释 -->
+          <text x="20" y="35" fill="#fbbf24" font-size="11" font-weight="700">⚠ 业务方现状 (从 tenant-tls-setup-https.md 已知):</text>
+          <text x="20" y="50" fill="#94a3b8" font-size="9">Org Policy 默认只放行 INTERNAL,EXTERNAL 全系被拒 — 这是部署的第一道阻塞</text>
+
+          <!-- 底部注释 -->
+          <text x="20" y="225" fill="#22d3ee" font-size="10" font-weight="700">关联文档:</text>
+          <text x="20" y="242" fill="#94a3b8" font-size="9">- why-using-global-external-managed-http-https.md (本文档上游)</text>
+          <text x="20" y="258" fill="#94a3b8" font-size="9">- tenant-tls-setup-https.md §1 (业务方已知 Org Policy 警告)</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>4 维度约束(架构师核心)</h3>
+        </div>
+        <ul>
+          <li>&middot; 公网: EXTERNAL 系(排除 3 种 INTERNAL)</li>
+          <li>&middot; PSC NEG: MANAGED 系(排除 2 种经典 EXTERNAL)</li>
+          <li>&middot; L7: HTTP/HTTPS 协议(排除 3 种 L4)</li>
+          <li>&middot; Global: 跨 region(排除 1 种 Regional)</li>
+          <li>&middot; 4 维度联合 &rarr; 唯一 = GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>能力清单</h3>
+        </div>
+        <ul>
+          <li>&middot; L7 URL Map (path / host / header 路由)</li>
+          <li>&middot; Host rewrite (routeAction.urlRewrite.hostRewrite)</li>
+          <li>&middot; Path rewrite (pathPrefixRewrite / regexRewrite)</li>
+          <li>&middot; Cloud Armor (WAF / DDoS / Rate limit)</li>
+          <li>&middot; HTTP/2 + HTTP/3 (QUIC)</li>
+          <li>&middot; 任播静态 IP (Anycast)</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot orange"></div>
+          <h3>常见误解</h3>
+        </div>
+        <ul>
+          <li>&middot; ❌ "EXTERNAL 都支持 PSC NEG" — 仅 MANAGED</li>
+          <li>&middot; ❌ "Regional LB 也能跨 project" — 但单 region</li>
+          <li>&middot; ❌ "INTERNAL_MANAGED 也能跨 project" — 不支持 PSC NEG</li>
+          <li>&middot; ❌ "TCP/SSL Proxy 也能 L7 路由" — 仅 L4</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot yellow"></div>
+          <h3>Org Policy 阻塞项</h3>
+        </div>
+        <ul>
+          <li>&middot; 默认 allowedLoadBalancingScheme = [INTERNAL]</li>
+          <li>&middot; 需要申请扩展 EXTERNAL / GLOBAL_EXTERNAL_MANAGED</li>
+          <li>&middot; Security 审批: 1-3 工作日</li>
+          <li>&middot; 推荐显式列出 GLOBAL_EXTERNAL_MANAGED_HTTP_HTTPS</li>
+          <li>&middot; 配 Cloud Armor 才合规</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      why-using-global-external-managed-http-https.html &middot; 4 视角架构图 &middot; GCP Load Balancing Scheme 全景 &middot; 2026-09
+    </p>
+  </div>
+</body>
+</html>

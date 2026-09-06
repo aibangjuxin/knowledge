@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>BYOC Architecture &amp; Lifecycle</title>
+<style>
+  body {
+    margin: 0;
+    padding: 0;
+    background: #0a0e1a;
+    color: #e2e8f0;
+    font-family: -apple-system, "SF Pro Display", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+    min-height: 100vh;
+  }
+  .wrap {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 48px 32px;
+  }
+  h1 {
+    font-size: 28px;
+    font-weight: 600;
+    color: #f8fafc;
+    margin: 0 0 8px;
+    letter-spacing: -0.02em;
+  }
+  .subtitle {
+    color: #94a3b8;
+    font-size: 14px;
+    margin: 0 0 32px;
+  }
+  .diagram {
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  }
+  svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 32px;
+  }
+  .legend-item {
+    background: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .legend-item h3 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    color: #f8fafc;
+  }
+  .legend-item p {
+    font-size: 12px;
+    line-height: 1.5;
+    color: #94a3b8;
+    margin: 0;
+  }
+  .footer {
+    margin-top: 32px;
+    color: #64748b;
+    font-size: 12px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BYOC — Bring Your Own Container</h1>
+  <p class="subtitle">架构与生命周期 / Architecture &amp; Lifecycle</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 1200 680" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, 'SF Pro Display', sans-serif">
+      <defs>
+        <!-- gradients -->
+        <linearGradient id="gradSource" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0.25"/>
+          <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0.05"/>
+        </linearGradient>
+        <linearGradient id="gradBuild" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#a855f7" stop-opacity="0.25"/>
+          <stop offset="100%" stop-color="#a855f7" stop-opacity="0.05"/>
+        </linearGradient>
+        <linearGradient id="gradRegistry" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.25"/>
+          <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.05"/>
+        </linearGradient>
+        <linearGradient id="gradPlatform" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#10b981" stop-opacity="0.25"/>
+          <stop offset="100%" stop-color="#10b981" stop-opacity="0.05"/>
+        </linearGradient>
+        <linearGradient id="gradSandbox" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#ec4899" stop-opacity="0.25"/>
+          <stop offset="100%" stop-color="#ec4899" stop-opacity="0.05"/>
+        </linearGradient>
+        <!-- arrow marker -->
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+        </marker>
+        <marker id="arrowPromote" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#a855f7"/>
+        </marker>
+      </defs>
+
+      <!-- ─── TITLE BARS — group labels ─────────────────────── -->
+      <text x="120" y="40" fill="#64748b" font-size="11" font-weight="600" letter-spacing="2">DEVELOPER SIDE</text>
+      <line x1="120" y1="48" x2="500" y2="48" stroke="#1f2937" stroke-width="1"/>
+      <text x="700" y="40" fill="#64748b" font-size="11" font-weight="600" letter-spacing="2">PLATFORM SIDE</text>
+      <line x1="700" y1="48" x2="1080" y2="48" stroke="#1f2937" stroke-width="1"/>
+
+      <!-- ─── 1. Source ────────────────────────────────────── -->
+      <g>
+        <rect x="60" y="80" width="160" height="100" rx="10" fill="url(#gradSource)" stroke="#0ea5e9" stroke-width="1.5"/>
+        <text x="140" y="115" fill="#f8fafc" font-size="14" font-weight="600" text-anchor="middle">源代码</text>
+        <text x="140" y="135" fill="#94a3b8" font-size="11" text-anchor="middle">Source Code</text>
+        <text x="140" y="158" fill="#64748b" font-size="10" text-anchor="middle">app.py + Dockerfile</text>
+      </g>
+
+      <!-- ─── 2. CI Build ──────────────────────────────────── -->
+      <g>
+        <rect x="280" y="80" width="160" height="100" rx="10" fill="url(#gradBuild)" stroke="#a855f7" stroke-width="1.5"/>
+        <text x="360" y="115" fill="#f8fafc" font-size="14" font-weight="600" text-anchor="middle">CI 构建</text>
+        <text x="360" y="135" fill="#94a3b8" font-size="11" text-anchor="middle">CI Build</text>
+        <text x="360" y="158" fill="#64748b" font-size="10" text-anchor="middle">multi-stage + cache</text>
+      </g>
+
+      <!-- arrow 1→2 -->
+      <line x1="220" y1="130" x2="276" y2="130" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+      <!-- ─── 3. Image Registry ────────────────────────────── -->
+      <g>
+        <rect x="500" y="80" width="180" height="100" rx="10" fill="url(#gradRegistry)" stroke="#f59e0b" stroke-width="1.5"/>
+        <text x="590" y="115" fill="#f8fafc" font-size="14" font-weight="600" text-anchor="middle">镜像仓库</text>
+        <text x="590" y="135" fill="#94a3b8" font-size="11" text-anchor="middle">Image Registry</text>
+        <text x="590" y="158" fill="#64748b" font-size="10" text-anchor="middle">v1.2.3@sha256:...</text>
+      </g>
+
+      <!-- arrow 2→3 -->
+      <line x1="440" y1="130" x2="496" y2="130" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="468" y="123" fill="#64748b" font-size="9" text-anchor="middle">push</text>
+
+      <!-- ─── 4. Platform ──────────────────────────────────── -->
+      <g>
+        <rect x="760" y="80" width="180" height="100" rx="10" fill="url(#gradPlatform)" stroke="#10b981" stroke-width="1.5"/>
+        <text x="850" y="115" fill="#f8fafc" font-size="14" font-weight="600" text-anchor="middle">托管平台</text>
+        <text x="850" y="135" fill="#94a3b8" font-size="11" text-anchor="middle">Managed Platform</text>
+        <text x="850" y="158" fill="#64748b" font-size="10" text-anchor="middle">Vertex AI / Cloud Run / ...</text>
+      </g>
+
+      <!-- arrow 3→4 (crosses the "boundary") -->
+      <line x1="680" y1="130" x2="756" y2="130" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+      <text x="718" y="123" fill="#64748b" font-size="9" text-anchor="middle">pull</text>
+
+      <!-- ─── 5. Sandbox / Runtime ─────────────────────────── -->
+      <g>
+        <rect x="1000" y="80" width="180" height="100" rx="10" fill="url(#gradSandbox)" stroke="#ec4899" stroke-width="1.5"/>
+        <text x="1090" y="115" fill="#f8fafc" font-size="14" font-weight="600" text-anchor="middle">执行沙箱</text>
+        <text x="1090" y="135" fill="#94a3b8" font-size="11" text-anchor="middle">Sandbox / Runtime</text>
+        <text x="1090" y="158" fill="#64748b" font-size="10" text-anchor="middle">containerd / runc</text>
+      </g>
+
+      <!-- arrow 4→5 -->
+      <line x1="940" y1="130" x2="996" y2="130" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+      <!-- ─── Promotion row (digest) ───────────────────────── -->
+      <text x="600" y="260" fill="#a855f7" font-size="12" font-weight="600" text-anchor="middle" letter-spacing="1">SAME DIGEST — BUILD ONCE, PROMOTE EVERYWHERE</text>
+
+      <!-- 3 promotion boxes -->
+      <g>
+        <rect x="180" y="290" width="180" height="80" rx="8" fill="#1f2937" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="4,3"/>
+        <text x="270" y="320" fill="#f8fafc" font-size="13" font-weight="600" text-anchor="middle">DEV</text>
+        <text x="270" y="343" fill="#94a3b8" font-size="11" text-anchor="middle">auto-deploy</text>
+      </g>
+      <g>
+        <rect x="510" y="290" width="180" height="80" rx="8" fill="#1f2937" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="4,3"/>
+        <text x="600" y="320" fill="#f8fafc" font-size="13" font-weight="600" text-anchor="middle">STAGING</text>
+        <text x="600" y="343" fill="#94a3b8" font-size="11" text-anchor="middle">smoke + e2e</text>
+      </g>
+      <g>
+        <rect x="840" y="290" width="180" height="80" rx="8" fill="#1f2937" stroke="#a855f7" stroke-width="1.5" stroke-dasharray="4,3"/>
+        <text x="930" y="320" fill="#f8fafc" font-size="13" font-weight="600" text-anchor="middle">PROD</text>
+        <text x="930" y="343" fill="#94a3b8" font-size="11" text-anchor="middle">canary → 100%</text>
+      </g>
+
+      <!-- promotion arrows -->
+      <line x1="360" y1="330" x2="506" y2="330" stroke="#a855f7" stroke-width="2" marker-end="url(#arrowPromote)"/>
+      <line x1="690" y1="330" x2="836" y2="330" stroke="#a855f7" stroke-width="2" marker-end="url(#arrowPromote)"/>
+
+      <!-- ─── Security cross-cutting ──────────────────────── -->
+      <g>
+        <rect x="60" y="430" width="1080" height="100" rx="10" fill="#7f1d1d" fill-opacity="0.1" stroke="#ef4444" stroke-width="1" stroke-dasharray="6,3"/>
+        <text x="80" y="458" fill="#fca5a5" font-size="13" font-weight="600">🔒 SECURITY GATE（CI 必经）</text>
+
+        <text x="80"  y="490" fill="#cbd5e1" font-size="12" font-weight="600">Trivy 扫描</text>
+        <text x="80"  y="510" fill="#94a3b8" font-size="11">High/Critical 漏洞 = build 失败</text>
+
+        <text x="320" y="490" fill="#cbd5e1" font-size="12" font-weight="600">cosign 签名</text>
+        <text x="320" y="510" fill="#94a3b8" font-size="11">Keyless OIDC 或 KMS key</text>
+
+        <text x="560" y="490" fill="#cbd5e1" font-size="12" font-weight="600">SBOM 生成</text>
+        <text x="560" y="510" fill="#94a3b8" font-size="11">SPDX / CycloneDX 上传</text>
+
+        <text x="800" y="490" fill="#cbd5e1" font-size="12" font-weight="600">Secret 检测</text>
+        <text x="800" y="510" fill="#94a3b8" font-size="11">gitleaks / trufflehog</text>
+      </g>
+
+      <!-- ─── Observability row ───────────────────────────── -->
+      <g>
+        <rect x="60" y="555" width="1080" height="90" rx="10" fill="#1e3a8a" fill-opacity="0.15" stroke="#3b82f6" stroke-width="1" stroke-dasharray="6,3"/>
+        <text x="80" y="583" fill="#93c5fd" font-size="13" font-weight="600">📊 OBSERVABILITY（runtime 持续）</text>
+
+        <text x="80"  y="613" fill="#cbd5e1" font-size="12" font-weight="600">结构化日志</text>
+        <text x="80"  y="630" fill="#94a3b8" font-size="11">stdout/stderr JSON</text>
+
+        <text x="320" y="613" fill="#cbd5e1" font-size="12" font-weight="600">OTel traces</text>
+        <text x="320" y="630" fill="#94a3b8" font-size="11">Cloud Trace / X-Ray / Jaeger</text>
+
+        <text x="560" y="613" fill="#cbd5e1" font-size="12" font-weight="600">Prometheus</text>
+        <text x="560" y="630" fill="#94a3b8" font-size="11">/metrics 端点</text>
+
+        <text x="800" y="613" fill="#cbd5e1" font-size="12" font-weight="600">SLO 告警</text>
+        <text x="800" y="630" fill="#94a3b8" font-size="11">error budget / burn rate</text>
+      </g>
+
+      <!-- bottom note -->
+      <text x="600" y="670" fill="#475569" font-size="10" text-anchor="middle">同一 image digest 在 dev / staging / prod 三环境部署 — 行为可复现</text>
+    </svg>
+  </div>
+
+  <!-- ─── Legend ────────────────────────────────────────── -->
+  <div class="legend">
+    <div class="legend-item">
+      <h3 style="color:#0ea5e9">🔵 Source</h3>
+      <p>应用代码 + Dockerfile。决定 build 出什么。放 git，code review 必经。</p>
+    </div>
+    <div class="legend-item">
+      <h3 style="color:#a855f7">🟣 CI Build</h3>
+      <p>multi-stage + cache mount。产出 immutable image（tag + digest 双标）。</p>
+    </div>
+    <div class="legend-item">
+      <h3 style="color:#f59e0b">🟡 Registry</h3>
+      <p>artifact registry / ECR / ACR。lifecycle policy 自动清理 + 漏洞扫描。</p>
+    </div>
+    <div class="legend-item">
+      <h3 style="color:#10b981">🟢 Platform</h3>
+      <p>Vertex AI / Cloud Run / SageMaker / GitHub Actions。拉 image，注入 env，跑。</p>
+    </div>
+    <div class="legend-item">
+      <h3 style="color:#ec4899">🔴 Sandbox</h3>
+      <p>containerd 拉的容器。平台合约：$PORT / health endpoint / graceful shutdown。</p>
+    </div>
+    <div class="legend-item">
+      <h3 style="color:#a855f7">⚪ Promotion</h3>
+      <p>同一 digest 走 dev → staging → prod。staging 通过才推 prod。</p>
+    </div>
+  </div>
+
+  <p class="footer">
+    Knowledge · cloud/docker/byoc · Dark theme · SVG with xmlns
+  </p>
+</div>
+</body>
+</html>

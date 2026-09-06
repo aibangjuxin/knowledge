@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GCP Private Service Connect — ELI5</title>
+<style>
+  :root {
+    --bg: #020617;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #22d3ee;
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --border: #1e293b;
+    --card: #0f172a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.55;
+    padding: 2rem 1.25rem 4rem;
+    max-width: 880px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 1.75rem;
+    margin: 0 0 .25rem;
+    color: var(--accent);
+    letter-spacing: -.01em;
+  }
+  .subtitle {
+    color: var(--muted);
+    margin: 0 0 2.25rem;
+    font-size: .95rem;
+  }
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.5rem 1.5rem 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  .panel-hero {
+    border-color: var(--accent);
+    background: linear-gradient(180deg, rgba(34,211,238,.08), transparent);
+  }
+  .panel-hero h1 { color: var(--accent); }
+  .panel-outcome {
+    border-color: var(--ok);
+    background: linear-gradient(180deg, rgba(52,211,153,.08), transparent);
+  }
+  .panel-control { border-style: dashed; }
+  .panel h2 {
+    font-size: 1.05rem;
+    margin: 0 0 .9rem;
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+  }
+  .panel-outcome h2 { color: var(--ok); }
+  .panel-control h2 { color: var(--warn); }
+  .visual {
+    display: flex;
+    justify-content: center;
+    margin: 0 0 1rem;
+    padding: .5rem 0;
+  }
+  .caption {
+    font-size: 1rem;
+    color: var(--text);
+    text-align: center;
+    margin: 0;
+  }
+  .caption strong { color: var(--accent); font-weight: 600; }
+  .panel-outcome .caption strong { color: var(--ok); }
+  .aside {
+    margin-top: 1rem;
+    padding: .85rem 1rem;
+    background: rgba(251,191,36,.06);
+    border-left: 3px solid var(--warn);
+    border-radius: 6px;
+    font-size: .92rem;
+    color: var(--text);
+  }
+  .aside-label {
+    color: var(--warn);
+    font-weight: 600;
+    font-size: .8rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    display: block;
+    margin-bottom: .25rem;
+  }
+  .footer-note {
+    text-align: center;
+    color: var(--muted);
+    font-size: .8rem;
+    margin-top: 2rem;
+  }
+</style>
+</head>
+<body>
+
+<section class="panel panel-hero">
+  <div class="visual">
+    <svg width="220" height="90" viewBox="0 0 220 90" fill="none">
+      <!-- two buildings separated by a gap -->
+      <rect x="10" y="30" width="70" height="55" rx="4" fill="#0f172a" stroke="#22d3ee" stroke-width="2"/>
+      <rect x="140" y="30" width="70" height="55" rx="4" fill="#0f172a" stroke="#34d399" stroke-width="2"/>
+      <text x="45" y="62" text-anchor="middle" fill="#22d3ee" font-size="11" font-family="inherit">Your VPC</text>
+      <text x="175" y="62" text-anchor="middle" fill="#34d399" font-size="11" font-family="inherit">Their VPC</text>
+      <!-- bridge / tunnel -->
+      <path d="M 80 22 Q 110 -2 140 22" stroke="#fbbf24" stroke-width="2.5" stroke-dasharray="5,4" fill="none"/>
+      <circle cx="110" cy="6" r="4" fill="#fbbf24"/>
+      <text x="110" y="86" text-anchor="middle" fill="#fbbf24" font-size="10" font-family="inherit">private tunnel</text>
+    </svg>
+  </div>
+  <h1>How does GCP Private Service Connect work?</h1>
+  <p class="caption">Imagine two <strong>separate buildings</strong>. PSC is a <strong>private hallway</strong> between them — no public street needed.</p>
+</section>
+
+<section class="panel panel-trigger">
+  <h2>The trigger</h2>
+  <div class="visual">
+    <svg width="260" height="90" viewBox="0 0 260 90" fill="none">
+      <!-- server with question -->
+      <rect x="20" y="20" width="60" height="50" rx="4" fill="#0f172a" stroke="#22d3ee" stroke-width="2"/>
+      <circle cx="50" cy="40" r="3" fill="#22d3ee"/>
+      <rect x="38" y="50" width="24" height="2" fill="#22d3ee"/>
+      <rect x="38" y="56" width="16" height="2" fill="#22d3ee"/>
+      <text x="50" y="86" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="inherit">your app</text>
+      <!-- speech bubble -->
+      <path d="M 100 25 Q 100 10 120 10 L 220 10 Q 240 10 240 25 L 240 50 Q 240 65 220 65 L 140 65 L 125 78 L 128 65 L 120 65 Q 100 65 100 50 Z" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="170" y="35" text-anchor="middle" fill="#e2e8f0" font-size="10" font-family="inherit">"Hey, I want a private IP</text>
+      <text x="170" y="48" text-anchor="middle" fill="#e2e8f0" font-size="10" font-family="inherit">that points to your service."</text>
+    </svg>
+  </div>
+  <p class="caption">Your app needs to reach a <strong>managed service</strong> (Cloud SQL, Memorystore, a partner API) — and stay on <strong>Google's private wires</strong>, never the public internet.</p>
+</section>
+
+<section class="panel">
+  <h2>The middle</h2>
+  <div class="visual">
+    <svg width="320" height="110" viewBox="0 0 320 110" fill="none">
+      <!-- Producer side: Service Attachment (the door) -->
+      <rect x="10" y="20" width="90" height="70" rx="4" fill="#0f172a" stroke="#34d399" stroke-width="2"/>
+      <text x="55" y="42" text-anchor="middle" fill="#34d399" font-size="11" font-family="inherit" font-weight="600">Producer</text>
+      <text x="55" y="58" text-anchor="middle" fill="#e2e8f0" font-size="10" font-family="inherit">Service</text>
+      <text x="55" y="72" text-anchor="middle" fill="#e2e8f0" font-size="10" font-family="inherit">Attachment</text>
+      <text x="55" y="100" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="inherit">"the front door"</text>
+      <!-- Arrow with NEG -->
+      <line x1="100" y1="55" x2="180" y2="55" stroke="#22d3ee" stroke-width="2" stroke-dasharray="4,3"/>
+      <polygon points="180,55 173,51 173,59" fill="#22d3ee"/>
+      <text x="140" y="46" text-anchor="middle" fill="#22d3ee" font-size="10" font-family="inherit">accept</text>
+      <!-- Consumer side: PSC NEG + private IP -->
+      <rect x="180" y="20" width="130" height="70" rx="4" fill="#0f172a" stroke="#22d3ee" stroke-width="2"/>
+      <text x="245" y="42" text-anchor="middle" fill="#22d3ee" font-size="11" font-family="inherit" font-weight="600">Your VPC</text>
+      <text x="245" y="58" text-anchor="middle" fill="#e2e8f0" font-size="10" font-family="inherit">PSC NEG = 10.20.30.5</text>
+      <text x="245" y="72" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="inherit">a private IP in your subnet</text>
+      <text x="245" y="100" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="inherit">"your mailbox"</text>
+    </svg>
+  </div>
+  <p class="caption"><strong>Forward:</strong> The producer publishes a <strong>Service Attachment</strong> — a labeled front door. You make a <strong>PSC NEG</strong> (Network Endpoint Group — a private mailbox) in your VPC; a private IP from your subnet is its address. Traffic stays on <strong>Google's backbone</strong>.</p>
+</section>
+
+<section class="panel">
+  <h2>The reverse direction</h2>
+  <div class="visual">
+    <svg width="300" height="100" viewBox="0 0 300 100" fill="none">
+      <!-- key + lock -->
+      <circle cx="70" cy="50" r="22" fill="#0f172a" stroke="#fbbf24" stroke-width="2"/>
+      <text x="70" y="55" text-anchor="middle" fill="#fbbf24" font-size="14" font-family="inherit" font-weight="600">IAM</text>
+      <text x="70" y="92" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="inherit">accept list</text>
+      <!-- arrow -->
+      <line x1="100" y1="50" x2="200" y2="50" stroke="#fbbf24" stroke-width="2" stroke-dasharray="4,3"/>
+      <polygon points="200,50 193,46 193,54" fill="#fbbf24"/>
+      <!-- lock -->
+      <rect x="200" y="35" width="70" height="40" rx="4" fill="#0f172a" stroke="#fbbf24" stroke-width="2"/>
+      <text x="235" y="55" text-anchor="middle" fill="#fbbf24" font-size="11" font-family="inherit" font-weight="600">who?</text>
+      <text x="235" y="68" text-anchor="middle" fill="#e2e8f0" font-size="9" font-family="inherit">project / SA</text>
+      <text x="235" y="92" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="inherit">gates entry</text>
+    </svg>
+  </div>
+  <p class="caption"><strong>Who set this up?</strong> The producer's Service Attachment has an <strong>accept list</strong> — only listed <strong>projects or service accounts</strong> get in. Every connection is logged in <strong>VPC Flow Logs</strong> for audit.</p>
+</section>
+
+<section class="panel panel-outcome">
+  <h2>The outcome</h2>
+  <div class="visual">
+    <svg width="240" height="90" viewBox="0 0 240 90" fill="none">
+      <circle cx="120" cy="40" r="28" fill="none" stroke="#34d399" stroke-width="2.5"/>
+      <path d="M 108 40 L 117 49 L 134 30" stroke="#34d399" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="120" y="85" text-anchor="middle" fill="#34d399" font-size="11" font-family="inherit" font-weight="600">private &amp; approved</text>
+    </svg>
+  </div>
+  <p class="caption">Result: a <strong>private, approved, audited</strong> path between two VPCs. <strong>No public IPs</strong>, <strong>no peering</strong>, <strong>no shared CIDR</strong>. The producer's network stays invisible — only the single service is exposed.</p>
+</section>
+
+<section class="panel panel-control">
+  <h2>Who controls it</h2>
+  <div class="aside">
+    <span class="aside-label">Setup &amp; ownership</span>
+    <strong>Producer</strong> creates the Service Attachment and curates the accept list. <strong>Consumer</strong> creates the PSC NEG and binds it to a backend. Both sides use <strong>IAM</strong> (Google's permission system) to grant or revoke access. All traffic appears in <strong>VPC Flow Logs</strong>.
+  </div>
+</section>
+
+<p class="footer-note">ELI5 explainer · GCP Private Service Connect</p>
+
+<!-- cite: https://cloud.google.com/vpc/docs/private-service-connect -->
+<!-- cite: https://cloud.google.com/vpc/docs/configure-service-attachments -->
+<!-- cite: https://cloud.google.com/load-balancing/docs/negs/private-service-connect-neg -->
+<!-- cite: https://cloud.google.com/vpc/docs/about-vpc-flow-logs -->
+
+</body>
+</html>
