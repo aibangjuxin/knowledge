@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-preset="signal-flow">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dual GLB (mTLS + TLS) → IDMZ PSC NEG → Master Nginx MIG → K8s Gateway + ListenerSet → HTTPRoute (SAN header) → Kong → Runtime</title>
+  <style>
+    /* ==========================================================
+       Dark-themed signal-flow preset — self-contained, no archify
+       Mirrors reference (public-mtls-crossproject-architectrue-cn-sni.html)
+       palette + JetBrains Mono font, but inline so the file is portable.
+       ========================================================== */
+    :root,
+    [data-theme="dark"] {
+      --bg: #030711;
+      --grid: #15233a;
+      --text: #f5fbff;
+      --text-muted: #9eb0c7;
+      --text-dim: #52667f;
+      --text-faint: #7890ad;
+
+      --panel: rgba(6, 14, 28, 0.78);
+      --panel-border: #1d3350;
+      --lane-fill: rgba(9, 22, 40, 0.5);
+      --lane-stroke: #2c4564;
+
+      --frontend-fill: rgba(6, 182, 212, 0.14);
+      --frontend-stroke: #67e8f9;
+      --backend-fill: rgba(16, 185, 129, 0.14);
+      --backend-stroke: #5eead4;
+      --database-fill: rgba(139, 92, 246, 0.16);
+      --database-stroke: #c4b5fd;
+      --cloud-fill: rgba(245, 158, 11, 0.13);
+      --cloud-stroke: #fcd34d;
+      --security-fill: rgba(244, 63, 94, 0.13);
+      --security-stroke: #fda4af;
+      --messagebus-fill: rgba(249, 115, 22, 0.13);
+      --messagebus-stroke: #fdba74;
+      --external-fill: rgba(71, 85, 105, 0.24);
+      --external-stroke: #a5b4c7;
+
+      --arrow: #7890ad;
+      --arrow-emphasis: #2dd4bf;
+      --mask: #07101e;
+
+      --idmz-warn-stroke: #fb7185;
+      --idmz-warn-fill: rgba(251, 113, 133, 0.08);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      padding: 2rem;
+      min-height: 100vh;
+      background-image:
+        radial-gradient(circle at 18% -8%, rgba(34, 211, 238, 0.14), transparent 34rem),
+        radial-gradient(circle at 92% 18%, rgba(139, 92, 246, 0.12), transparent 30rem);
+      background-attachment: fixed;
+    }
+
+    .container { max-width: 1320px; margin: 0 auto; }
+
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px; background: var(--frontend-stroke);
+      border-radius: 50%; animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: var(--text-muted); font-size: 0.85rem; margin-left: 1.75rem; }
+
+    .diagram-container {
+      background: linear-gradient(180deg, rgba(8, 20, 38, 0.82), rgba(3, 8, 18, 0.94));
+      border: 1px solid var(--panel-border);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      overflow: hidden;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 28px 80px rgba(0, 0, 0, 0.34);
+    }
+
+    svg { width: 100%; min-width: 1100px; height: auto; display: block; }
+
+    /* Zone background panels */
+    .zone-bg { fill: var(--lane-fill); stroke: var(--lane-stroke); stroke-width: 1; }
+    .zone-label { fill: var(--text-faint); font-size: 11px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; }
+    .zone-tag { fill: var(--text-muted); font-size: 10px; font-weight: 600; }
+
+    /* Node base styles */
+    .node-rect { stroke-width: 1.5; }
+    .node-rect-frontend  { fill: var(--frontend-fill);  stroke: var(--frontend-stroke); }
+    .node-rect-backend   { fill: var(--backend-fill);   stroke: var(--backend-stroke); }
+    .node-rect-database  { fill: var(--database-fill);  stroke: var(--database-stroke); }
+    .node-rect-cloud     { fill: var(--cloud-fill);     stroke: var(--cloud-stroke); }
+    .node-rect-security  { fill: var(--security-fill);  stroke: var(--security-stroke); }
+    .node-rect-external  { fill: var(--external-fill);  stroke: var(--external-stroke); }
+    .node-rect-messagebus{ fill: var(--messagebus-fill);stroke: var(--messagebus-stroke); }
+
+    .node-title { fill: var(--text); font-size: 13px; font-weight: 700; }
+    .node-sub   { fill: var(--text-muted); font-size: 10px; font-weight: 500; }
+    .node-mono  { fill: var(--text); font-size: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    /* IDMZ warning highlight */
+    .idmz-rect { fill: var(--idmz-warn-fill); stroke: var(--idmz-warn-stroke); stroke-width: 2; stroke-dasharray: 6 4; }
+    .idmz-label { fill: var(--idmz-warn-stroke); font-size: 11px; font-weight: 800; letter-spacing: 0.08em; }
+
+    /* Edges */
+    .edge { fill: none; stroke: var(--arrow); stroke-width: 1.6; opacity: 0.85; }
+    .edge-emphasis { fill: none; stroke: var(--arrow-emphasis); stroke-width: 2; opacity: 0.95; }
+    .edge-mtls { fill: none; stroke: #c4b5fd; stroke-width: 1.8; opacity: 0.85; stroke-dasharray: 4 3; }
+    .edge-tls  { fill: none; stroke: #5eead4; stroke-width: 1.8; opacity: 0.85; }
+
+    .edge-label { fill: var(--text-faint); font-size: 9.5px; font-weight: 600; }
+    .edge-label-emphasis { fill: var(--arrow-emphasis); font-size: 10px; font-weight: 700; }
+
+    /* Dotted divider lines (column boundaries) */
+    .col-divider { stroke: var(--lane-stroke); stroke-width: 1; stroke-dasharray: 3 4; opacity: 0.5; }
+
+    /* Code block in nginx.conf / HTTPRoute */
+    .code-bg { fill: rgba(8, 14, 28, 0.65); stroke: var(--panel-border); stroke-width: 1; }
+    .code-text { fill: var(--text); font-size: 9.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .code-comment { fill: #64748b; font-style: italic; font-size: 9.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .code-key { fill: #5eead4; font-size: 9.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .code-string { fill: #fcd34d; font-size: 9.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .code-flag { fill: var(--idmz-warn-stroke); font-size: 9.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; }
+
+    .legend-card {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+    }
+    .legend-item {
+      border: 1px solid var(--panel-border);
+      background: var(--panel);
+      border-radius: 0.65rem;
+      padding: 0.75rem 0.9rem;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+    .legend-item strong { color: var(--text); display: block; margin-bottom: 0.25rem; font-size: 0.78rem; }
+    .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 0.4rem; }
+
+    /* arrowhead */
+    .arrow-head { fill: var(--arrow); }
+    .arrow-head-emphasis { fill: var(--arrow-emphasis); }
+    .arrow-head-mtls { fill: #c4b5fd; }
+    .arrow-head-tls  { fill: #5eead4; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-row">
+        <span class="pulse-dot"></span>
+        <h1>Dual GLB → IDMZ PSC NEG → Master Nginx MIG → K8s Gateway (ListenerSet) → HTTPRoute (SAN header) → Kong → Runtime</h1>
+      </div>
+      <div class="subtitle">mTLS path: mtls.caep.uk · TLS path: tls.caep.uk · both share one IDMZ-hosted PSC NEG · Header-based client-cert SAN verification gates the mTLS path only</div>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1320 2060" role="img" aria-labelledby="diagram-title">
+        <title id="diagram-title">Dual mTLS + TLS GLB architecture sharing a single IDMZ-hosted PSC NEG, terminating at Master Nginx MIG, then K8s Gateway with two ListenerSets and SAN-header-matching HTTPRoutes feeding Kong Gateway into tenant runtime Services.</title>
+
+        <defs>
+          <marker id="ah-default" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="arrow-head"/>
+          </marker>
+          <marker id="ah-emphasis" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="arrow-head-emphasis"/>
+          </marker>
+          <marker id="ah-mtls" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="arrow-head-mtls"/>
+          </marker>
+          <marker id="ah-tls" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="arrow-head-tls"/>
+          </marker>
+        </defs>
+
+        <!-- ============================================================
+             ZONE BACKGROUND PANELS (left column = legend label,
+             right side = zone rectangle)
+             ============================================================ -->
+
+        <!-- Zone 1: External Clients -->
+        <rect x="20"  y="40"   width="1280" height="100" rx="8" class="zone-bg"/>
+        <text x="40"  y="62"   class="zone-label">ZONE 1 · EXTERNAL CLIENTS</text>
+        <text x="40"  y="78"   class="zone-tag">Internet — public clients reaching Tenant Project GLB endpoints (mtls uses client cert; tls does not)</text>
+
+        <!-- Zone 2: GCP Dual GLB (4-column layout: mtls-GLB | mtls-BS×3 | tls-GLB | tls-BS×3) -->
+        <rect x="20"  y="140"  width="1280" height="320" rx="8" class="zone-bg"/>
+        <text x="40"  y="162"  class="zone-label">ZONE 2 · GCP DUAL GLB → 6 BACKEND SERVICES (TENANT PROJECT)</text>
+        <text x="40"  y="185"  class="zone-tag">Two EXTERNAL_MANAGED HTTPS LBs · distinct IPs · distinct certs · distinct URL maps (no path rules, cert header preserved) · 6 BS each scoped to one team's Cloud Armor policy</text>
+
+        <!-- Column dividers in Zone 2 (visual separators) -->
+        <line x1="20"   y1="220" x2="20"   y2="460" class="col-divider"/>
+        <line x1="340"  y1="220" x2="340"  y2="460" class="col-divider"/>
+        <line x1="660"  y1="220" x2="660"  y2="460" class="col-divider"/>
+        <line x1="980"  y1="220" x2="980"  y2="460" class="col-divider"/>
+        <line x1="1300" y1="220" x2="1300" y2="460" class="col-divider"/>
+
+        <!-- Zone 3: IDMZ PSC NEG (warning) -->
+        <rect x="20"  y="490"  width="1280" height="240" rx="8" class="zone-bg"/>
+        <text x="40"  y="542"  class="zone-label">ZONE 3 · IDMZ CROSS-PROJECT BRIDGE</text>
+        <text x="40"  y="558"  class="zone-tag">Shared NEG · one PSC Service Attachment · encrypted via Google backbone · bridges IDMZ VPC → Master project</text>
+
+        <!-- Zone 4: Master Nginx MIG -->
+        <rect x="20"  y="760"  width="1280" height="260" rx="8" class="zone-bg"/>
+        <text x="40"  y="782"  class="zone-label">ZONE 4 · MASTER PROJECT — NGINX MIG</text>
+        <text x="40"  y="798"  class="zone-tag">VM-based nginx fleet · two server{} blocks (tls + mtls FQDNs) · proxy_pass to K8s Gateway VIP</text>
+
+        <!-- Zone 5: K8s Gateway + ListenerSet -->
+        <rect x="20"  y="1080" width="1280" height="220" rx="8" class="zone-bg"/>
+        <text x="40"  y="1102" class="zone-label">ZONE 5 · K8s GATEWAY + LISTENERSET</text>
+        <text x="40"  y="1125" class="zone-tag">Two ListenerSets, one hostname each · same Gateway · routes into Zone 6</text>
+
+        <!-- Zone 6: HTTPRoute fork -->
+        <rect x="20"  y="1290" width="1280" height="300" rx="8" class="zone-bg"/>
+        <text x="40"  y="1312" class="zone-label">ZONE 6 · HTTPROUTE FORK (mTLS vs TLS)</text>
+        <text x="40"  y="1328" class="zone-tag">Same Kong backend · mtls-route enforces SAN header match (X-Client-Cert-Chain-Verified + X-Client-Cert-DNSName-SANs)</text>
+
+        <!-- Zone 7: Kong → Runtime -->
+        <rect x="20"  y="1620" width="1280" height="220" rx="8" class="zone-bg"/>
+        <text x="40"  y="1642" class="zone-label">ZONE 7 · KONG GATEWAY → RUNTIME</text>
+        <text x="40"  y="1658" class="zone-tag">Public HTTPS, whether TLS or mTLS, must traverse Kong · tenant runtime NS isolation</text>
+
+        <!-- Column dividers (visual hint: client column / GLB column / BS column / bridge / MIG / K8s / Route) -->
+        <line x1="20"   y1="1620" x2="20"   y2="1840" class="col-divider"/>
+        <line x1="320"  y1="1620" x2="320"  y2="1840" class="col-divider"/>
+        <line x1="640"  y1="1620" x2="640"  y2="1840" class="col-divider"/>
+        <line x1="960"  y1="1620" x2="960"  y2="1840" class="col-divider"/>
+        <line x1="1300" y1="1620" x2="1300" y2="1840" class="col-divider"/>
+
+
+        <!-- ============================================================
+             ZONE 1 · EXTERNAL CLIENTS
+             ============================================================ -->
+
+        <!-- mTLS Client -->
+        <g data-node-id="ext-mtls-client">
+          <rect x="280" y="80" width="320" height="50" rx="6" class="node-rect node-rect-security"/>
+          <text x="295" y="100" class="node-title">mTLS Client</text>
+          <text x="295" y="118" class="node-sub">client cert in TLS handshake → mtls.caep.uk</text>
+        </g>
+
+        <!-- TLS Client -->
+                <!-- TLS Client -->
+        <g data-node-id="ext-tls-client">
+          <rect x="720" y="80" width="320" height="50" rx="6" class="node-rect node-rect-external"/>
+          <text x="735" y="100" class="node-title">TLS Client</text>
+          <text x="735" y="118" class="node-sub">no client cert → tls.caep.uk</text>
+        </g>
+
+        <!-- Zone 1 → Zone 2 arrows (client → GLB) -->
+        <!-- mTLS Client (x=280-600) → mtls-GLB (x=40-320, y=230) -->
+        <path d="M 380 130 Q 380 165 180 165 L 180 230" class="edge-mtls" marker-end="url(#ah-mtls)"/>
+        <text x="570" y="155" class="edge-label" fill="#c4b5fd">cert handshake</text>
+        <!-- TLS Client (x=720-1040) → tls-GLB (x=680-960, y=230) -->
+        <path d="M 820 130 Q 820 165 820 165 L 820 230" class="edge-tls" marker-end="url(#ah-tls)"/>
+        <text x="825" y="155" class="edge-label" fill="#5eead4">TCP/443</text>
+
+
+        <!-- ============================================================
+             ZONE 2 · GCP DUAL GLB (Tenant Project)
+             ============================================================ -->
+
+        <!-- mtls-GLB -->
+        <g data-node-id="glb-mtls">
+          <rect x="40"  y="230" width="280" height="180" rx="6" class="node-rect node-rect-security"/>
+          <text x="56"  y="252" class="node-title">mtls-GLB</text>
+          <text x="56"  y="274" class="node-mono">cert: mtls.caep.uk</text>
+          <text x="56"  y="292" class="node-mono">urlmap: cert header</text>
+          <text x="56"  y="307" class="node-mono">preserved</text>
+          <text x="56"  y="325" class="node-mono">path rules: none</text>
+          <text x="56"  y="340" class="node-mono">(3 rules removed)</text>
+          <text x="56"  y="362" class="node-mono" style="fill: var(--idmz-warn-stroke); font-weight: 700;">⚠ mTLS termination</text>
+          <text x="56"  y="377" class="node-mono" style="fill: var(--idmz-warn-stroke); font-weight: 700;">+ client cert</text>
+          <text x="56"  y="397" class="node-sub" style="font-size: 9px;">cert header injection</text>
+        </g>
+
+        <!-- tls-GLB -->
+        <g data-node-id="glb-tls">
+          <rect x="680" y="230" width="280" height="180" rx="6" class="node-rect node-rect-frontend"/>
+          <text x="696" y="252" class="node-title">tls-GLB</text>
+          <text x="696" y="274" class="node-mono">cert: tls.caep.uk</text>
+          <text x="696" y="292" class="node-mono">urlmap: cert header</text>
+          <text x="696" y="307" class="node-mono">preserved</text>
+          <text x="696" y="325" class="node-mono">path rules: none</text>
+          <text x="696" y="340" class="node-mono">(3 rules removed)</text>
+          <text x="696" y="362" class="node-mono" style="fill: var(--frontend-stroke); font-weight: 700;">TLS termination</text>
+          <text x="696" y="377" class="node-mono" style="fill: var(--frontend-stroke); font-weight: 700;">only (no client cert)</text>
+          <text x="696" y="397" class="node-sub" style="font-size: 9px;">no header injection</text>
+        </g>
+
+        <!-- mtls-BS × 3 (column 2) -->
+        <g data-node-id="bs-mtls-team1">
+          <rect x="360" y="250" width="280" height="40" rx="5" class="node-rect node-rect-cloud"/>
+          <text x="372" y="270" class="node-title" style="font-size: 12px;">mtls-team1-bs</text>
+          <text x="372" y="284" class="node-sub">→ cloudarmor-team1 policy</text>
+        </g>
+
+        <g data-node-id="bs-mtls-team2">
+          <rect x="360" y="300" width="280" height="40" rx="5" class="node-rect node-rect-cloud"/>
+          <text x="372" y="320" class="node-title" style="font-size: 12px;">mtls-team2-bs</text>
+          <text x="372" y="334" class="node-sub">→ cloudarmor-team2 policy</text>
+        </g>
+
+        <g data-node-id="bs-mtls-team3">
+          <rect x="360" y="350" width="280" height="40" rx="5" class="node-rect node-rect-cloud"/>
+          <text x="372" y="370" class="node-title" style="font-size: 12px;">mtls-team3-bs</text>
+          <text x="372" y="384" class="node-sub">→ cloudarmor-team3 policy</text>
+        </g>
+
+        <!-- tls-BS × 3 (column 4) -->
+        <g data-node-id="bs-tls-team1">
+          <rect x="1000" y="250" width="280" height="40" rx="5" class="node-rect node-rect-cloud"/>
+          <text x="1012" y="270" class="node-title" style="font-size: 12px;">tls-team1-bs</text>
+          <text x="1012" y="284" class="node-sub">→ cloudarmor-team1 policy</text>
+        </g>
+
+        <g data-node-id="bs-tls-team2">
+          <rect x="1000" y="300" width="280" height="40" rx="5" class="node-rect node-rect-cloud"/>
+          <text x="1012" y="320" class="node-title" style="font-size: 12px;">tls-team2-bs</text>
+          <text x="1012" y="334" class="node-sub">→ cloudarmor-team2 policy</text>
+        </g>
+
+        <g data-node-id="bs-tls-team3">
+          <rect x="1000" y="350" width="280" height="40" rx="5" class="node-rect node-rect-cloud"/>
+          <text x="1012" y="370" class="node-title" style="font-size: 12px;">tls-team3-bs</text>
+          <text x="1012" y="384" class="node-sub">→ cloudarmor-team3 policy</text>
+        </g>
+
+        <!-- Horizontal arrows: mtls-GLB → mtls-BS × 3 (right-pointing) -->
+        <path d="M 320 310 L 360 270" class="edge-mtls" marker-end="url(#ah-mtls)"/>
+        <path d="M 320 320 L 360 320" class="edge-mtls" marker-end="url(#ah-mtls)"/>
+        <path d="M 320 330 L 360 370" class="edge-mtls" marker-end="url(#ah-mtls)"/>
+
+        <!-- Horizontal arrows: tls-GLB → tls-BS × 3 (right-pointing) -->
+        <path d="M 960 310 L 1000 270" class="edge-tls" marker-end="url(#ah-tls)"/>
+        <path d="M 960 320 L 1000 320" class="edge-tls" marker-end="url(#ah-tls)"/>
+        <path d="M 960 330 L 1000 370" class="edge-tls" marker-end="url(#ah-tls)"/>
+
+
+        <!-- ============================================================
+             ZONE 3 · IDMZ PSC NEG (warning frame)
+             ============================================================ -->
+
+
+        <!-- IDMZ PSC NEG — warning highlighted -->
+        <g data-node-id="idmz-psc-neg">
+          <rect x="80"  y="580" width="1160" height="120" rx="8" class="idmz-rect"/>
+          <text x="100" y="605" class="idmz-label">⚠ idmz-psc-neg (created in IDMZ VPC, targets Master Service Attachment)</text>
+
+          <text x="100" y="628" class="node-sub">Shared NEG — one resource, attached to all 6 BS (3 mtls + 3 tls) · balancingMode UTILIZATION · capacityScaler 1.0</text>
+          <text x="100" y="646" class="node-sub">PSC Tunnel: encrypted, Google backbone · IDMZ → Master project boundary</text>
+          <text x="100" y="664" class="node-sub" style="fill: var(--idmz-warn-stroke); font-weight: 700;">Why IDMZ: central egress from Tenant/Producer networks; sits in IDMZ VPC, not Tenant VPC, not Master VPC.</text>
+
+          <!-- PSC Tunnel arrow into Service Attachment -->
+          <path d="M 1240 610 L 1240 680" class="edge-emphasis" marker-end="url(#ah-emphasis)"/>
+          <text x="1180" y="698" class="edge-label-emphasis" text-anchor="end">encrypted tunnel</text>
+        </g>
+
+        <!-- All 6 BS converge arrows into PSC NEG (stopping at top border y=580 to avoid text overlap) -->
+        <!-- mtls-BS column (x=360-640): each BS has its own origin point on bottom-edge -->
+        <path d="M 380 390 Q 380 510 460 580" class="edge-mtls" marker-end="url(#ah-mtls)"/>
+        <path d="M 500 390 Q 500 510 540 580" class="edge-mtls" marker-end="url(#ah-mtls)"/>
+        <path d="M 620 390 Q 620 510 620 580" class="edge-mtls" marker-end="url(#ah-mtls)"/>
+        <!-- tls-BS column (x=1000-1280): mirror, fanned-out origins converging into NEG top-side -->
+        <path d="M 1020 390 Q 1020 510 740 580" class="edge-tls" marker-end="url(#ah-tls)"/>
+        <path d="M 1140 390 Q 1140 510 760 580" class="edge-tls" marker-end="url(#ah-tls)"/>
+        <path d="M 1260 390 Q 1260 510 780 580" class="edge-tls" marker-end="url(#ah-tls)"/>
+
+        <!-- Connection from Zone 3 (PSC NEG) down to Zone 4 (Service Attachment) -->
+        <path d="M 660 700 L 660 745 Q 660 765 220 765 L 220 810" class="edge-emphasis" marker-end="url(#ah-emphasis)"/>
+        <text x="450" y="757" class="edge-label-emphasis">PSC Tunnel Bridge (IDMZ → Master)</text>
+
+
+        <!-- ============================================================
+             ZONE 4 · MASTER NGINX MIG
+             ============================================================ -->
+
+        <!-- Service Attachment + nginx MIG group -->
+        <g data-node-id="service-attach">
+          <rect x="80"  y="810" width="280" height="60" rx="6" class="node-rect node-rect-backend"/>
+          <text x="96"  y="832" class="node-title">Service Attachment</text>
+          <text x="96"  y="850" class="node-sub">IDMZ ↔ Master project boundary</text>
+          <text x="96"  y="865" class="node-sub">approval list: Tenant project SA</text>
+        </g>
+
+        <g data-node-id="nginx-mig">
+          <rect x="400" y="810" width="240" height="60" rx="6" class="node-rect node-rect-backend"/>
+          <text x="416" y="832" class="node-title">Master Nginx MIG</text>
+          <text x="416" y="850" class="node-sub">VM fleet · nginx.conf below</text>
+        </g>
+
+        <!-- nginx.conf code block -->
+        <g data-node-id="nginx-conf">
+          <rect x="680" y="810" width="620" height="205" rx="6" class="code-bg"/>
+          <text x="696" y="830" class="code-key">server {</text>
+          <text x="712" y="847" class="code-key">listen</text>
+          <text x="754" y="847" class="code-string">443 ssl;</text>
+          <text x="816" y="847" class="code-key">server_name</text>
+          <text x="892" y="847" class="code-string">tls.caep.uk</text>
+          <text x="965" y="847" class="code-comment"># default_server</text>
+
+          <text x="712" y="864" class="code-key">proxy_pass</text>
+          <text x="788" y="864" class="code-string">https://&lt;K8S_GW_VIP&gt;:443;</text>
+          <text x="712" y="881" class="code-key">proxy_ssl_server_name</text>
+          <text x="838" y="881" class="code-string">on;</text>
+
+          <text x="696" y="902" class="code-key">}</text>
+          <text x="696" y="919" class="code-comment"># ────────────────────────────────────────</text>
+          <text x="696" y="936" class="code-key">server {</text>
+          <text x="712" y="953" class="code-key">listen</text>
+          <text x="754" y="953" class="code-string">443 ssl;</text>
+          <text x="816" y="953" class="code-key">server_name</text>
+          <text x="892" y="953" class="code-string">mtls.caep.uk</text>
+
+          <text x="712" y="970" class="code-key">proxy_pass</text>
+          <text x="788" y="970" class="code-string">https://&lt;K8S_GW_VIP&gt;:443;</text>
+          <text x="712" y="987" class="code-key">proxy_ssl_server_name</text>
+          <text x="838" y="987" class="code-string">on;</text>
+          <text x="696" y="1004" class="code-key">}</text>
+        </g>
+
+        <!-- arrow from service-attach to nginx-mig -->
+        <path d="M 360 840 L 400 840" class="edge-emphasis" marker-end="url(#ah-emphasis)"/>
+
+
+        <!-- ============================================================
+             ZONE 5 · K8s GATEWAY + LISTENERSET
+             ============================================================ -->
+
+        <g data-node-id="k8s-gateway">
+          <rect x="80"  y="1140" width="280" height="60" rx="6" class="node-rect node-rect-frontend"/>
+          <text x="96"  y="1162" class="node-title">K8s Gateway (Istio)</text>
+          <text x="96"  y="1180" class="node-sub">gateway.networking.k8s.io/v1</text>
+          <text x="96"  y="1195" class="node-sub">VIP = &lt;K8S_GW_VIP&gt;</text>
+        </g>
+
+        <!-- ListenerSet A: tls -->
+        <g data-node-id="ls-tls">
+          <rect x="440" y="1140" width="280" height="60" rx="6" class="node-rect node-rect-frontend"/>
+          <text x="456" y="1162" class="node-title">ListenerSet A</text>
+          <text x="456" y="1180" class="node-sub">hostname: tls.caep.uk</text>
+          <text x="456" y="1195" class="node-sub">port: 443 · tls{} termination</text>
+        </g>
+
+        <!-- ListenerSet B: mtls -->
+        <g data-node-id="ls-mtls">
+          <rect x="760" y="1140" width="280" height="60" rx="6" class="node-rect node-rect-frontend"/>
+          <text x="776" y="1162" class="node-title">ListenerSet B</text>
+          <text x="776" y="1180" class="node-sub">hostname: mtls.caep.uk</text>
+          <text x="776" y="1195" class="node-sub">port: 443 · tls{} termination</text>
+        </g>
+
+        <!-- K8s Gateway data-plane note -->
+        <g data-node-id="gw-note">
+          <rect x="1080" y="1140" width="220" height="60" rx="4" class="code-bg"/>
+          <text x="1096" y="1160" class="code-comment">nginx proxy_pass →</text>
+          <text x="1096" y="1177" class="code-comment">K8s GW data-plane (Envoy)</text>
+          <text x="1096" y="1192" class="code-comment">→ ListenerSet host match</text>
+        </g>
+
+        <!-- nginx MIG → K8s Gateway (this crosses zone 4 → 5 boundary) -->
+        <path d="M 520 870 L 520 1050 Q 520 1080 220 1080 L 220 1140" class="edge-emphasis" marker-end="url(#ah-emphasis)"/>
+        <text x="430" y="990" class="edge-label-emphasis">tls &amp; mtls SNI → K8s Gateway VIP</text>
+
+        <!-- K8s Gateway → ListenerSet A -->
+        <path d="M 360 1170 L 440 1170" class="edge-tls" marker-end="url(#ah-tls)"/>
+        <text x="371" y="1162" class="edge-label" fill="#5eead4">tls.caep.uk</text>
+
+        <!-- K8s Gateway → ListenerSet B (routed above ListenerSet A to avoid crossing) -->
+        <path d="M 220 1140 L 220 1118 Q 220 1112 230 1112 L 890 1112 Q 900 1112 900 1125 L 900 1140" class="edge-mtls" marker-end="url(#ah-mtls)"/>
+        <text x="560" y="1106" class="edge-label" fill="#c4b5fd">mtls.caep.uk</text>
+
+
+        <!-- ============================================================
+             ZONE 6 · HTTPROUTE FORK
+             ============================================================ -->
+
+        <!-- HTTPRoute TLS path (3 routes for 3 teams, parent = ListenerSet A) -->
+               <g data-node-id="httproute-tls-team1">
+                 <rect x="80"  y="1350" width="280" height="50" rx="6" class="node-rect node-rect-frontend"/>
+                 <text x="96"  y="1372" class="node-title" style="font-size: 12px;">HTTPRoute: tls-team1</text>
+                 <text x="96"  y="1388" class="node-sub">parentRef: ListenerSet A · matches: path only</text>
+                 <text x="96"  y="1402" class="node-sub" style="fill: var(--frontend-stroke);">no header validation</text>
+               </g>
+
+               <g data-node-id="httproute-tls-team2">
+                 <rect x="80"  y="1410" width="280" height="50" rx="6" class="node-rect node-rect-frontend"/>
+                 <text x="96"  y="1432" class="node-title" style="font-size: 12px;">HTTPRoute: tls-team2</text>
+                 <text x="96"  y="1448" class="node-sub">parentRef: ListenerSet A · matches: path only</text>
+                 <text x="96"  y="1462" class="node-sub" style="fill: var(--frontend-stroke);">no header validation</text>
+               </g>
+
+               <g data-node-id="httproute-tls-team3">
+                 <rect x="80"  y="1470" width="280" height="50" rx="6" class="node-rect node-rect-frontend"/>
+                 <text x="96"  y="1492" class="node-title" style="font-size: 12px;">HTTPRoute: tls-team3</text>
+                 <text x="96"  y="1508" class="node-sub">parentRef: ListenerSet A · matches: path only</text>
+                 <text x="96"  y="1522" class="node-sub" style="fill: var(--frontend-stroke);">no header validation</text>
+               </g>
+
+               <!-- HTTPRoute mTLS path (3 routes for 3 teams, parent = ListenerSet B, each with SAN match) -->
+               <g data-node-id="httproute-mtls-team1">
+                 <rect x="400" y="1350" width="440" height="80" rx="6" class="node-rect node-rect-security"/>
+                 <text x="416" y="1372" class="node-title" style="font-size: 12px;">HTTPRoute: mtls-team1</text>
+                 <text x="416" y="1388" class="node-sub">parentRef: ListenerSet B</text>
+                 <text x="416" y="1406" class="code-key" style="font-size: 10px;">headers:</text>
+                 <text x="470" y="1406" class="code-comment" style="font-size: 10px;"># SAN header gated by GLB</text>
+                 <text x="436" y="1422" class="code-text" style="font-size: 10px;">- Exact X-Client-Cert-Chain-Verified = "true"</text>
+                 <text x="436" y="1438" class="code-text" style="font-size: 10px;">- Exact X-Client-Cert-DNSName-SANs = "&lt;team1-SAN-base64&gt;"</text>
+                 <text x="575" y="1456" class="code-flag" style="font-size: 10px;">⚠ rejects on mismatch</text>
+               </g>
+
+               <g data-node-id="httproute-mtls-team2">
+                 <rect x="400" y="1440" width="440" height="60" rx="6" class="node-rect node-rect-security"/>
+                 <text x="416" y="1462" class="node-title" style="font-size: 12px;">HTTPRoute: mtls-team2</text>
+                 <text x="416" y="1478" class="code-text" style="font-size: 10px;">headers: Exact X-Client-Cert-Chain-Verified = "true"</text>
+                 <text x="416" y="1494" class="code-text" style="font-size: 10px;">         Exact X-Client-Cert-DNSName-SANs = "&lt;team2-SAN-base64&gt;"</text>
+               </g>
+
+               <g data-node-id="httproute-mtls-team3">
+                 <rect x="400" y="1510" width="440" height="50" rx="6" class="node-rect node-rect-security"/>
+                 <text x="416" y="1532" class="node-title" style="font-size: 12px;">HTTPRoute: mtls-team3</text>
+                 <text x="416" y="1548" class="code-text" style="font-size: 10px;">headers: ... X-Client-Cert-DNSName-SANs = "&lt;team3-SAN-base64&gt;"</text>
+               </g>
+
+               <!-- "Why GLB adds header" annotation -->
+               <g data-node-id="header-rationale">
+                 <rect x="880" y="1350" width="400" height="210" rx="6" class="code-bg"/>
+                 <text x="896" y="1372" class="code-key" style="font-size: 11px;"># Why mTLS HTTPRoute can match SAN</text>
+                 <text x="896" y="1390" class="code-text" style="font-size: 10px;">1. mTLS-GLB terminates TLS, holds the</text>
+                 <text x="912" y="1405" class="code-text" style="font-size: 10px;">client cert (presented by client).</text>
+                 <text x="896" y="1424" class="code-text" style="font-size: 10px;">2. GLB injects client cert into request:</text>
+                 <text x="912" y="1439" class="code-text" style="font-size: 10px;">X-Client-Cert-Chain-Verified = "true"</text>
+                 <text x="912" y="1454" class="code-text" style="font-size: 10px;">X-Client-Cert-DNSName-SANs = base64(SAN)</text>
+                 <text x="896" y="1473" class="code-text" style="font-size: 10px;">3. HTTPRoute uses RequestHeader match</text>
+                 <text x="912" y="1488" class="code-text" style="font-size: 10px;">to allow/deny per-team SAN.</text>
+                 <text x="896" y="1509" class="code-comment" style="font-size: 10px;">TLS path has no client cert → no header</text>
+                 <text x="912" y="1524" class="code-comment" style="font-size: 10px;">injection → no header validation.</text>
+                 <text x="896" y="1543" class="code-flag" style="font-size: 10px;">GLB header injection IS the enabler.</text>
+               </g>
+
+               <!-- arrows from ListenerSet A → HTTPRoute tls (vertical stack) -->
+               <path d="M 580 1200 L 580 1330 Q 580 1335 370 1335 L 370 1375 L 360 1375" class="edge-tls" marker-end="url(#ah-tls)"/>
+               <path d="M 580 1200 L 580 1330 Q 580 1335 370 1335 L 370 1435 L 360 1435" class="edge-tls" marker-end="url(#ah-tls)"/>
+               <path d="M 580 1200 L 580 1330 Q 580 1335 370 1335 L 370 1495 L 360 1495" class="edge-tls" marker-end="url(#ah-tls)"/>
+
+               <!-- arrows from ListenerSet B → HTTPRoute mtls -->
+               <path d="M 900 1200 L 900 1330 Q 900 1335 860 1335 L 860 1390 L 840 1390" class="edge-mtls" marker-end="url(#ah-mtls)"/>
+               <path d="M 900 1200 L 900 1330 Q 900 1335 860 1335 L 860 1470 L 840 1470" class="edge-mtls" marker-end="url(#ah-mtls)"/>
+               <path d="M 900 1200 L 900 1330 Q 900 1335 860 1335 L 860 1535 L 840 1535" class="edge-mtls" marker-end="url(#ah-mtls)"/>
+
+
+        <!-- ============================================================
+             ZONE 7 · KONG → RUNTIME
+             ============================================================ -->
+
+        <!-- All 6 HTTPRoutes converge into Kong DP -->
+        <g data-node-id="kong-dp">
+          <rect x="80"  y="1690" width="280" height="60" rx="6" class="node-rect node-rect-messagebus"/>
+          <text x="96"  y="1712" class="node-title">Kong DP</text>
+          <text x="96"  y="1730" class="node-sub">Data-plane · single backendRef for all 6 routes</text>
+          <text x="96"  y="1745" class="node-sub" style="fill: var(--messagebus-stroke); font-weight: 700;">Mandatory for all public HTTPS traffic</text>
+        </g>
+
+        <!-- Runtime NS box -->
+        <g data-node-id="runtime-ns">
+          <rect x="400" y="1690" width="900" height="100" rx="8" class="zone-bg"/>
+          <text x="416" y="1710" class="zone-label">RUNTIME NS (tenant-isolated)</text>
+
+          <!-- 3 runtime service-pod pairs -->
+          <g data-node-id="runtime-team1">
+            <rect x="420" y="1725" width="270" height="50" rx="5" class="node-rect node-rect-frontend"/>
+            <text x="436" y="1745" class="node-title" style="font-size: 12px;">team1-runtime Service</text>
+            <text x="436" y="1762" class="node-sub">→ team1-runtime Pod(s)</text>
+          </g>
+
+          <g data-node-id="runtime-team2">
+            <rect x="715" y="1725" width="270" height="50" rx="5" class="node-rect node-rect-frontend"/>
+            <text x="731" y="1745" class="node-title" style="font-size: 12px;">team2-runtime Service</text>
+            <text x="731" y="1762" class="node-sub">→ team2-runtime Pod(s)</text>
+          </g>
+
+          <g data-node-id="runtime-team3">
+            <rect x="1010" y="1725" width="270" height="50" rx="5" class="node-rect node-rect-frontend"/>
+            <text x="1026" y="1745" class="node-title" style="font-size: 12px;">team3-runtime Service</text>
+            <text x="1026" y="1762" class="node-sub">→ team3-runtime Pod(s)</text>
+          </g>
+        </g>
+
+        <!-- Kong → all 6 routes converge (both tls and mtls feed the same Kong DP, offset for clarity) -->
+        <path d="M 200 1590 L 200 1690" class="edge-tls" marker-end="url(#ah-tls)"/>
+        <path d="M 240 1590 L 240 1690" class="edge-mtls" marker-end="url(#ah-mtls)"/>
+
+        <!-- Kong → runtime (3 arrows to 3 team services) -->
+        <path d="M 360 1720 L 420 1745" class="edge-emphasis" marker-end="url(#ah-emphasis)"/>
+        <path d="M 360 1720 L 715 1750" class="edge-emphasis" marker-end="url(#ah-emphasis)"/>
+        <path d="M 360 1720 L 1010 1750" class="edge-emphasis" marker-end="url(#ah-emphasis)"/>
+        <text x="380" y="1675" class="edge-label-emphasis">all public HTTPS → Kong → tenant runtime NS</text>
+
+
+        <!-- ============================================================
+             FOOTER NOTE: legend of edge colors
+             ============================================================ -->
+
+        <g data-node-id="legend">
+          <rect x="20"  y="1900" width="1280" height="140" rx="8" class="zone-bg"/>
+          <text x="40"  y="1922" class="zone-label">LEGEND · EDGE COLORS + SEMANTICS</text>
+
+          <!-- legend items -->
+          <line x1="40"   y1="1950" x2="100"  y2="1950" class="edge-mtls" marker-end="url(#ah-mtls)"/>
+          <text x="115"  y="1954" class="node-sub">mtls path — purple dashed (mtls.caep.uk route)</text>
+
+          <line x1="40"   y1="1975" x2="100"  y2="1975" class="edge-tls" marker-end="url(#ah-tls)"/>
+          <text x="115"  y="1979" class="node-sub">tls path — teal solid (tls.caep.uk route)</text>
+
+          <line x1="40"   y1="2000" x2="100"  y2="2000" class="edge-emphasis" marker-end="url(#ah-emphasis)"/>
+          <text x="115"  y="2004" class="node-sub">primary data plane — emphasized (Kong → runtime, GLB → PSCEP tunnel)</text>
+
+          <line x1="600"  y1="1950" x2="660"  y2="1950" class="edge" marker-end="url(#ah-default)"/>
+          <text x="675"  y="1954" class="node-sub">secondary data flow — neutral (e.g.nginx MIG → K8s Gateway)</text>
+
+          <rect x="600"  y="1967" width="22" height="14" class="idmz-rect"/>
+          <text x="635"  y="1979" class="node-sub">IDMZ-warning border (Zone 3 only) — pink dashed</text>
+
+          <rect x="600"  y="1992" width="22" height="14" class="node-rect node-rect-security"/>
+          <text x="635"  y="2004" class="node-sub">security-tagged node (mTLS, Cloud Armor, mTLS-HTTPRoute)</text>
+
+          <text x="40"   y="2030" class="zone-tag">Source: extension of public-mtls-crossproject-architectrue-cn-sni.html (single mTLS GLB → dual mTLS+TLS GLB, both share one IDMZ-hosted PSC NEG)</text>
+          <text x="40"   y="2044" class="zone-tag">Rendered as: self-contained HTML/SVG, dark signal-flow preset, no archify runtime dependency.</text>
+        </g>
+
+      </svg>
+    </div>
+
+    <div class="legend-card">
+      <div class="legend-item">
+        <strong><span class="swatch" style="background: #fda4af"></span>mTLS path</strong>
+        Client presents cert → mtls-GLB terminates, injects SAN as HTTP header → HTTPRoute enforces per-team SAN match → reject on mismatch.
+      </div>
+      <div class="legend-item">
+        <strong><span class="swatch" style="background: #5eead4"></span>TLS path</strong>
+        Client sends no cert → tls-GLB terminates → HTTPRoute matches path only → no header validation, all teams allowed by default ACL.
+      </div>
+      <div class="legend-item">
+        <strong><span class="swatch" style="background: #fb7185"></span>IDMZ-hosted PSC NEG</strong>
+        One PSC NEG lives in IDMZ VPC, attached to all 6 BS (3 mtls + 3 tls), bridges IDMZ → Master project via one Service Attachment.
+      </div>
+      <div class="legend-item">
+        <strong><span class="swatch" style="background: #fdba74"></span>Kong → Runtime (mandatory)</strong>
+        All public HTTPS — TLS or mTLS — must traverse Kong DP. Tenant runtime NS isolation is per-team (Service + Pod in team-owned NS).
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
