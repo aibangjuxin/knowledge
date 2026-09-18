@@ -1,0 +1,7 @@
+# base.yaml — Istio 全局基础资源(CRD / ClusterRole 等)
+# 对应 chart: oci://gcr.io/istio-release/charts/base
+# 详见 02-install-ambient-helm.md §4.1
+
+# 默认 revision 命名空间(空字符串 = 不打 revision label)
+# 02 章跑通后,稳定了再考虑在升级章节改这个值
+defaultRevision: ""
