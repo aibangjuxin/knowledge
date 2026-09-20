@@ -54,6 +54,9 @@
 | `16-revision-like-patterns-cloud-native.md` | **云原生生态 revision 横向对比**(resourceVersion / generation / Deployment / Helm / ArgoCD / Istio / OCI 共 6+ 种)| 全局 | **概念澄清** |
 | `17-istio-image-tag-automation-sre-workflow.md` | **Istio image tag 自动化升级方案**(ArgoCD Image Updater / Flux Image Automation,patch tag → SRE 常规任务)| 第二阶段 | **深度探测** |
 | `18-solo-distribution-vs-upstream-istio-comparison.md` | **Solo 分发 vs 上游 Istio 版本选型评估**(社区方案落地:Solo Standard 镜像 + 无 license + Helm 拆分)| 全局 | **版本评估** |
+| `19-solo-agentgateway-ambient-install.md` + `19-solo-agentgateway-ambient-architecture.html` | Solo agentgateway + ambient install runbook + archify 架构图 | 全局 | **实操 + 架构图** |
+| `20-solo-ambient-kong.md` | **Istio Gateway + KongDP + Ambient Runtime** 闭环(Ambient 模式下 Kong 在 Mesh 外)| 全局 | **场景化** |
+| `21-solo-ambient-egress.md` + `21-solo-ambient-egress-architecture.html` | **Ambient 模式下 GKE Pod Egress**(Internal NHF 兼容 + Public L7 waypoint 迁移 + Namespace-level 出网白名单) + archify 架构图 | 全局 | **场景化 + 架构图** |
 | `ADR-LOCAL-001-migrate-minimal-to-ambient.md` | 从 minimal 迁 ambient 的架构决策记录 | 全局 | **ADR 草稿** |
 | `PERSONAL-FOCUS-LIST.md` | **Lex 个人关注清单**(本目录所有"个人关切"的集中追踪) | 全局 | **关注追踪** |
 | `values/` | 02 文涉及的 4 个 Helm values 文件 | 配套 | 配置 |
