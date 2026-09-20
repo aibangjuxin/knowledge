@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ztunnel L4 mTLS 工作机制与证书轮转深度解析</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #020617;
+    --bg-card: #0f172a;
+    --border: #1e293b;
+    --foreground: #f1f5f9;
+    --muted-foreground: #94a3b8;
+    --accent: #22d3ee;
+    --foreground-rgb: 241, 245, 249;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg-primary);
+    color: var(--foreground);
+    line-height: 1.6;
+    min-height: 100vh;
+    padding: 0;
+  }
+  .container {
+    max-width: 1800px;
+    margin: 0;
+    padding: 24px 32px;
+  }
+  header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px;
+    margin-bottom: 28px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .pulse-dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.2); }
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--foreground);
+  }
+  .subtitle {
+    font-size: 12px;
+    color: var(--muted-foreground);
+    margin-top: 4px;
+  }
+  .diagram-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 28px;
+    overflow-x: auto;
+  }
+  svg { display: block; max-width: 100%; height: auto; }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .card-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .card-dot.cyan { background: #22d3ee; }
+  .card-dot.rose { background: #fb7185; }
+  .card-dot.amber { background: #fbbf24; }
+  .card-dot.emerald { background: #34d399; }
+  .card-dot.violet { background: #a78bfa; }
+  .card-dot.orange { background: #fb923c; }
+  .card h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--foreground);
+  }
+  .card ul {
+    list-style: none;
+    font-size: 11px;
+    color: var(--muted-foreground);
+  }
+  .card ul li {
+    margin-bottom: 6px;
+    padding-left: 14px;
+    position: relative;
+    line-height: 1.5;
+  }
+  .card ul li::before {
+    content: "▸";
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+  }
+  .card ul li b { color: var(--foreground); font-weight: 500; }
+  footer {
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    font-size: 10px;
+    color: var(--muted-foreground);
+    text-align: center;
+  }
+  text { font-family: 'JetBrains Mono', monospace; fill: var(--foreground); }
+  .label-12 { font-size: 12px; font-weight: 500; }
+  .label-11 { font-size: 11px; }
+  .label-10 { font-size: 10px; }
+  .label-9  { font-size: 9px;  fill: #94a3b8; }
+  .label-8  { font-size: 8px;  fill: #94a3b8; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="pulse-dot"></div>
+  <div>
+    <h1>ztunnel L4 mTLS 工作机制与证书轮转深度解析</h1>
+    <div class="subtitle">Istio 1.30.3 ambient · in-pod netns · HBONE tunnel · SecretManager · Background rotation @ 50% TTL</div>
+  </div>
+</header>
+
+<!-- ================================================================ -->
+<!-- Diagram 1: Two-node topology + ztunnel internals + mTLS handshake  -->
+<!-- ================================================================ -->
+<div class="diagram-card">
+<svg viewBox="0 0 1700 1450" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrow-rose" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#fb7185"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#fbbf24"/>
+    </marker>
+    <marker id="arrow-emerald" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-violet" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#a78bfa"/>
+    </marker>
+  </defs>
+
+  <rect width="1700" height="1450" fill="url(#grid)"/>
+
+  <!-- ============================================================ -->
+  <!-- Cluster boundary (dashed amber) -->
+  <!-- ============================================================ -->
+  <rect x="40" y="60" width="1620" height="1000" rx="12" fill="none"
+        stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4" opacity="0.6"/>
+  <text x="60" y="48" class="label-10" fill="#fbbf24">GKE Cluster (asia-east1)</text>
+
+  <!-- ============================================================ -->
+  <!-- Title -->
+  <!-- ============================================================ -->
+  <text x="850" y="92" class="label-12" text-anchor="middle" fill="#22d3ee" font-weight="600">
+    双节点 HBONE mTLS + ZDS 握手 + 客户端反向验证服务端 SAN 全景
+  </text>
+
+  <!-- ============================================================ -->
+  <!-- Node A -->
+  <!-- ============================================================ -->
+  <rect x="80" y="130" width="540" height="900" rx="10"
+        fill="rgba(30,41,59,0.4)" stroke="#94a3b8" stroke-width="1.2"/>
+  <text x="100" y="155" class="label-11" fill="#94a3b8" font-weight="600">Node A (europe-west2-b)</text>
+
+  <!-- Pod A -->
+  <g>
+    <rect x="110" y="190" width="220" height="100" rx="6"
+          fill="#0f172a" stroke="#0f172a" stroke-width="1.5"/>
+    <rect x="110" y="190" width="220" height="100" rx="6"
+          fill="rgba(8,51,68,0.5)" stroke="#22d3ee" stroke-width="1.5"/>
+    <text x="220" y="220" class="label-12" text-anchor="middle">Pod A (workload api-A)</text>
+    <text x="220" y="240" class="label-9" text-anchor="middle">app port: 8080 (plaintext)</text>
+    <text x="220" y="256" class="label-9" text-anchor="middle">SA: sa/api-A</text>
+    <text x="220" y="272" class="label-9" text-anchor="middle">ns: ns/payments</text>
+  </g>
+
+  <!-- ztunnel A (DaemonSet) -->
+  <g>
+    <rect x="380" y="190" width="220" height="100" rx="6"
+          fill="#0f172a" stroke="#0f172a" stroke-width="1.5"/>
+    <rect x="380" y="190" width="220" height="100" rx="6"
+          fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+    <text x="490" y="220" class="label-12" text-anchor="middle">ztunnel DaemonSet (Node A)</text>
+    <text x="490" y="240" class="label-9" text-anchor="middle">Rust · tokio · rustls</text>
+    <text x="490" y="256" class="label-9" text-anchor="middle">listen: 15001 / 15006 / 15008</text>
+    <text x="490" y="272" class="label-9" text-anchor="middle">shared proxy mode</text>
+  </g>
+
+  <!-- iptables redirect visual between Pod A and ztunnel -->
+  <path d="M 330 240 L 380 240" stroke="#fb923c" stroke-width="2"
+        marker-end="url(#arrow-orange)"/>
+  <text x="355" y="232" class="label-8" text-anchor="middle" fill="#fb923c">iptables REDIRECT</text>
+
+  <!-- iptables redirect (15006) back -->
+  <path d="M 380 252 L 330 252" stroke="#fb923c" stroke-width="2"
+        marker-end="url(#arrow-orange)"/>
+  <text x="355" y="280" class="label-8" text-anchor="middle" fill="#fb923c">in-pod netns redirect</text>
+
+  <!-- In-pod netns connector visual (curved, dashed) -->
+  <path d="M 220 295 Q 220 330 490 330 Q 490 330 490 295"
+        fill="none" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="3,3" opacity="0.7"/>
+  <text x="355" y="346" class="label-9" text-anchor="middle" fill="#fb923c">in-pod netns listener (建立 socket 在 pod netns 内)</text>
+
+  <!-- SecretManager inside ztunnel A -->
+  <g>
+    <rect x="380" y="370" width="220" height="170" rx="6"
+          fill="#0f172a" stroke="#0f172a" stroke-width="1.5"/>
+    <rect x="380" y="370" width="220" height="170" rx="6"
+          fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+    <text x="490" y="395" class="label-11" text-anchor="middle" fill="#fb7185" font-weight="600">SecretManager (内存)</text>
+
+    <!-- Cert cache -->
+    <rect x="395" y="410" width="100" height="55" rx="4"
+          fill="#020617" stroke="#a78bfa" stroke-width="1" opacity="0.9"/>
+    <text x="445" y="428" class="label-9" text-anchor="middle" fill="#a78bfa">Cert #1</text>
+    <text x="445" y="442" class="label-8" text-anchor="middle">SAN=...sa/api-A</text>
+    <text x="445" y="455" class="label-8" text-anchor="middle">TTL 24h · rotate @12h</text>
+
+    <rect x="505" y="410" width="85" height="55" rx="4"
+          fill="#020617" stroke="#a78bfa" stroke-width="1" opacity="0.9"/>
+    <text x="548" y="428" class="label-9" text-anchor="middle" fill="#a78bfa">Cert #2</text>
+    <text x="548" y="442" class="label-8" text-anchor="middle">SAN=...sa/api-X</text>
+    <text x="548" y="455" class="label-8" text-anchor="middle">(node 内其他 SA)</text>
+
+    <!-- Worker -->
+    <rect x="395" y="475" width="195" height="50" rx="4"
+          fill="#020617" stroke="#34d399" stroke-width="1"/>
+    <text x="492" y="493" class="label-9" text-anchor="middle" fill="#34d399">Worker (background task)</text>
+    <text x="492" y="508" class="label-8" text-anchor="middle">RealTime · Warmup · Background</text>
+    <text x="492" y="520" class="label-8" text-anchor="middle">per-identity exp backoff</text>
+  </g>
+
+  <!-- Arrow: SecretManager ← xDS -->
+  <text x="380" y="358" class="label-9" fill="#94a3b8" text-anchor="end">xDS WorkloadInfo ↓</text>
+
+  <!-- CertFetcher box -->
+  <g>
+    <rect x="110" y="370" width="220" height="170" rx="6"
+          fill="#0f172a" stroke="#0f172a" stroke-width="1.5"/>
+    <rect x="110" y="370" width="220" height="170" rx="6"
+          fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+    <text x="220" y="395" class="label-11" text-anchor="middle" fill="#fbbf24" font-weight="600">CertFetcher (per-workload)</text>
+
+    <text x="130" y="420" class="label-9" fill="#f1f5f9">should_prefetch:</text>
+    <text x="130" y="438" class="label-9">  ☑ shared mode</text>
+    <text x="130" y="453" class="label-9">  ☑ workload.node == local_node</text>
+    <text x="130" y="468" class="label-9">  ☑ protocol == HBONE</text>
+
+    <text x="130" y="492" class="label-9" fill="#fb923c">→ Request::Fetch(id, Warmup)</text>
+    <text x="130" y="508" class="label-9" fill="#fb923c">→ Request::Forget(id) on remove</text>
+    <text x="130" y="525" class="label-9" fill="#34d399">→ channel: mpsc(256)</text>
+  </g>
+
+  <!-- arrow from CertFetcher to SecretManager -->
+  <path d="M 330 440 L 380 440" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+
+  <!-- ============================================================ -->
+  <!-- ZDS handshake region (Node A) - new in v2 -->
+  <!-- ============================================================ -->
+  <rect x="110" y="570" width="490" height="180" rx="6"
+        fill="#0f172a" stroke="#0f172a" stroke-width="1.5"/>
+  <rect x="110" y="570" width="490" height="180" rx="6"
+        fill="rgba(251,146,60,0.15)" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="355" y="592" class="label-11" text-anchor="middle" fill="#fb923c" font-weight="600">ZDS Handshake (istio-cni ⇄ ztunnel)</text>
+
+  <!-- Steps -->
+  <text x="125" y="615" class="label-9" fill="#f1f5f9">1. CNI ADD → 检查 ns label <tspan fill="#fb923c">istio.io/dataplane-mode=ambient</tspan></text>
+  <text x="125" y="632" class="label-9">2. CNI <tspan fill="#fbbf24">enter pod netns + install iptables</tspan> (in-pod rules)</text>
+  <text x="125" y="649" class="label-9">3. CNI → UDS <tspan fill="#fb7185">/var/run/ztunnel/ztunnel.sock</tspan>:</text>
+  <text x="135" y="664" class="label-9" fill="#fb7185">   ADD + netns fd via <tspan font-weight="600">SCM_RIGHTS</tspan> ⭐ Linux FD passing</text>
+  <text x="125" y="682" class="label-9">4. ztunnel → <tspan fill="#34d399">setns()</tspan> 进入 pod netns → bind 15008/15006/15001/15053</text>
+  <text x="125" y="699" class="label-9">5. ztunnel → ZDS ACK → CNI ADD success → Pod Ready</text>
+  <text x="125" y="722" class="label-8" fill="#fb923c">⚠ ZDS 失败 → Pod 内 iptables 存在但无 ztunnel socket = 流量黑洞</text>
+  <text x="125" y="738" class="label-8" fill="#fb923c">  排查:nsenter -t &lt;pid&gt; -n ss -tlnp | grep -E '1500[168]' (空=失败)</text>
+
+  <!-- Arrow from ZDS region up to ztunnel box -->
+  <path d="M 355 570 Q 355 540 490 295" fill="none" stroke="#fb923c"
+        stroke-width="1.5" stroke-dasharray="3,3" opacity="0.6"/>
+
+  <!-- ============================================================ -->
+  <!-- Node B -->
+  <!-- ============================================================ -->
+  <rect x="1080" y="130" width="540" height="900" rx="10"
+        fill="rgba(30,41,59,0.4)" stroke="#94a3b8" stroke-width="1.2"/>
+  <text x="1100" y="155" class="label-11" fill="#94a3b8" font-weight="600">Node B (europe-west2-c)</text>
+
+  <!-- Pod B -->
+  <g>
+    <rect x="1110" y="190" width="220" height="100" rx="6"
+          fill="#0f172a" stroke="#0f172a" stroke-width="1.5"/>
+    <rect x="1110" y="190" width="220" height="100" rx="6"
+          fill="rgba(8,51,68,0.5)" stroke="#22d3ee" stroke-width="1.5"/>
+    <text x="1220" y="220" class="label-12" text-anchor="middle">Pod B (workload api-B)</text>
+    <text x="1220" y="240" class="label-9" text-anchor="middle">app port: 8080 (plaintext)</text>
+    <text x="1220" y="256" class="label-9" text-anchor="middle">SA: sa/api-B</text>
+    <text x="1220" y="272" class="label-9" text-anchor="middle">ns: ns/orders</text>
+  </g>
+
+  <!-- ztunnel B -->
+  <g>
+    <rect x="1380" y="190" width="220" height="100" rx="6"
+          fill="#0f172a" stroke="#0f172a" stroke-width="1.5"/>
+    <rect x="1380" y="190" width="220" height="100" rx="6"
+          fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+    <text x="1490" y="220" class="label-12" text-anchor="middle">ztunnel DaemonSet (Node B)</text>
+    <text x="1490" y="240" class="label-9" text-anchor="middle">Rust · tokio · rustls</text>
+    <text x="1490" y="256" class="label-9" text-anchor="middle">listen: 15001 / 15006 / 15008</text>
+    <text x="1490" y="272" class="label-9" text-anchor="middle">shared proxy mode</text>
+  </g>
+
+  <path d="M 1330 240 L 1380 240" stroke="#fb923c" stroke-width="2" marker-end="url(#arrow-orange)"/>
+  <text x="1355" y="232" class="label-8" text-anchor="middle" fill="#fb923c">iptables REDIRECT</text>
+  <path d="M 1380 252 L 1330 252" stroke="#fb923c" stroke-width="2" marker-end="url(#arrow-orange)"/>
+
+  <path d="M 1220 295 Q 1220 330 1490 330 Q 1490 330 1490 295"
+        fill="none" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="3,3" opacity="0.7"/>
+  <text x="1355" y="346" class="label-9" text-anchor="middle" fill="#fb923c">in-pod netns listener (建立 socket 在 pod netns 内)</text>
+
+  <!-- SecretManager B -->
+  <g>
+    <rect x="1380" y="370" width="220" height="170" rx="6"
+          fill="#0f172a" stroke="#0f172a" stroke-width="1.5"/>
+    <rect x="1380" y="370" width="220" height="170" rx="6"
+          fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+    <text x="1490" y="395" class="label-11" text-anchor="middle" fill="#fb7185" font-weight="600">SecretManager (内存)</text>
+
+    <rect x="1395" y="410" width="100" height="55" rx="4"
+          fill="#020617" stroke="#a78bfa" stroke-width="1" opacity="0.9"/>
+    <text x="1445" y="428" class="label-9" text-anchor="middle" fill="#a78bfa">Cert #1</text>
+    <text x="1445" y="442" class="label-8" text-anchor="middle">SAN=...sa/api-B</text>
+    <text x="1445" y="455" class="label-8" text-anchor="middle">TTL 24h · rotate @12h</text>
+
+    <rect x="1505" y="410" width="85" height="55" rx="4"
+          fill="#020617" stroke="#a78bfa" stroke-width="1" opacity="0.9"/>
+    <text x="1548" y="428" class="label-9" text-anchor="middle" fill="#a78bfa">Cert #2</text>
+    <text x="1548" y="442" class="label-8" text-anchor="middle">SAN=...sa/api-Y</text>
+    <text x="1548" y="455" class="label-8" text-anchor="middle">(node 内其他 SA)</text>
+
+    <rect x="1395" y="475" width="195" height="50" rx="4"
+          fill="#020617" stroke="#34d399" stroke-width="1"/>
+    <text x="1492" y="493" class="label-9" text-anchor="middle" fill="#34d399">Worker (background task)</text>
+    <text x="1492" y="508" class="label-8" text-anchor="middle">RealTime · Warmup · Background</text>
+    <text x="1492" y="520" class="label-8" text-anchor="middle">per-identity exp backoff</text>
+  </g>
+
+  <!-- CertFetcher B -->
+  <g>
+    <rect x="1110" y="370" width="220" height="170" rx="6"
+          fill="#0f172a" stroke="#0f172a" stroke-width="1.5"/>
+    <rect x="1110" y="370" width="220" height="170" rx="6"
+          fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+    <text x="1220" y="395" class="label-11" text-anchor="middle" fill="#fbbf24" font-weight="600">CertFetcher (per-workload)</text>
+    <text x="1130" y="420" class="label-9">should_prefetch:</text>
+    <text x="1130" y="438" class="label-9">  ☑ shared mode</text>
+    <text x="1130" y="453" class="label-9">  ☑ workload.node == local_node</text>
+    <text x="1130" y="468" class="label-9">  ☑ protocol == HBONE</text>
+    <text x="1130" y="492" class="label-9" fill="#fb923c">→ Request::Fetch(id, Warmup)</text>
+    <text x="1130" y="508" class="label-9" fill="#fb923c">→ Request::Forget(id) on remove</text>
+    <text x="1130" y="525" class="label-9" fill="#34d399">→ channel: mpsc(256)</text>
+  </g>
+
+  <path d="M 1330 440 L 1380 440" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+
+  <!-- ============================================================ -->
+  <!-- ZDS handshake region (Node B) - new in v2 -->
+  <!-- ============================================================ -->
+  <rect x="1110" y="570" width="490" height="180" rx="6"
+        fill="#0f172a" stroke="#0f172a" stroke-width="1.5"/>
+  <rect x="1110" y="570" width="490" height="180" rx="6"
+        fill="rgba(251,146,60,0.15)" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="1355" y="592" class="label-11" text-anchor="middle" fill="#fb923c" font-weight="600">ZDS Handshake (istio-cni ⇄ ztunnel)</text>
+
+  <text x="1125" y="615" class="label-9" fill="#f1f5f9">1. CNI ADD → 检查 ns label <tspan fill="#fb923c">istio.io/dataplane-mode=ambient</tspan></text>
+  <text x="1125" y="632" class="label-9">2. CNI <tspan fill="#fbbf24">enter pod netns + install iptables</tspan></text>
+  <text x="1125" y="649" class="label-9">3. CNI → UDS <tspan fill="#fb7185">/var/run/ztunnel/ztunnel.sock</tspan>:</text>
+  <text x="1135" y="664" class="label-9" fill="#fb7185">   ADD + netns fd via <tspan font-weight="600">SCM_RIGHTS</tspan></text>
+  <text x="1125" y="682" class="label-9">4. ztunnel → <tspan fill="#34d399">setns()</tspan> + bind 15008/15006/15001/15053</text>
+  <text x="1125" y="699" class="label-9">5. ztunnel → ACK → Pod Ready</text>
+  <text x="1125" y="722" class="label-8" fill="#fb923c">⚠ Node B 的 Pod 同样需要这套握手,每个 pod 独立 netns</text>
+
+  <path d="M 1355 570 Q 1355 540 1490 295" fill="none" stroke="#fb923c"
+        stroke-width="1.5" stroke-dasharray="3,3" opacity="0.6"/>
+
+  <!-- ============================================================ -->
+  <!-- HBONE tunnel between ztunnel A and ztunnel B (mTLS 1.3 over HTTP/2) -->
+  <!-- ============================================================ -->
+  <!-- Big arc with mTLS annotations -->
+  <path d="M 600 220 Q 850 80 1380 220" fill="none"
+        stroke="#fb7185" stroke-width="2.5" marker-end="url(#arrow-rose)"/>
+  <path d="M 1380 240 Q 850 120 600 240" fill="none"
+        stroke="#fb7185" stroke-width="2.5" marker-end="url(#arrow-rose)"/>
+
+  <!-- HBONE label box -->
+  <g>
+    <rect x="730" y="100" width="240" height="60" rx="6"
+          fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
+    <text x="850" y="124" class="label-12" text-anchor="middle" fill="#fb7185" font-weight="600">HBONE Tunnel (port 15008)</text>
+    <text x="850" y="142" class="label-9" text-anchor="middle">HTTP/2 + CONNECT + mTLS 1.3</text>
+    <text x="850" y="155" class="label-9" text-anchor="middle">:authority = dst IP:port</text>
+  </g>
+
+  <!-- Annotations along tunnel -->
+  <text x="700" y="200" class="label-9" fill="#fb7185">TLS 1.3 ClientHello</text>
+  <text x="700" y="212" class="label-9" fill="#fb7185">client cert: spiffe://...sa/api-A</text>
+  <text x="980" y="200" class="label-9" fill="#fb7185">server cert: spiffe://...sa/api-B</text>
+  <text x="980" y="212" class="label-9" fill="#fb7185">(基于 dst IP 选)</text>
+
+  <!-- ============================================================ -->
+  <!-- istiod (control plane) - moved down in v2 to leave room for ZDS -->
+  <!-- ============================================================ -->
+  <rect x="700" y="880" width="320" height="140" rx="8"
+        fill="#0f172a" stroke="#0f172a" stroke-width="1.5"/>
+  <rect x="700" y="880" width="320" height="140" rx="8"
+        fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="860" y="910" class="label-12" text-anchor="middle" fill="#a78bfa" font-weight="600">istiod (control plane)</text>
+
+  <rect x="715" y="925" width="135" height="80" rx="4"
+        fill="#020617" stroke="#22d3ee" stroke-width="1"/>
+  <text x="782" y="945" class="label-9" text-anchor="middle" fill="#22d3ee">CA module :15012</text>
+  <text x="782" y="960" class="label-8" text-anchor="middle">impersonation</text>
+  <text x="782" y="973" class="label-8" text-anchor="middle">SAN 重写(忽略 CSR)</text>
+  <text x="782" y="987" class="label-8" text-anchor="middle">SAN = SPIFFE</text>
+  <text x="782" y="1000" class="label-8" text-anchor="middle">TTL 24h default</text>
+
+  <rect x="860" y="925" width="145" height="80" rx="4"
+        fill="#020617" stroke="#fbbf24" stroke-width="1"/>
+  <text x="932" y="945" class="label-9" text-anchor="middle" fill="#fbbf24">Workload xDS (WDS)</text>
+  <text x="932" y="960" class="label-8" text-anchor="middle">推送 WorkloadInfo</text>
+  <text x="932" y="973" class="label-8" text-anchor="middle">到本节点 ztunnel</text>
+  <text x="932" y="987" class="label-8" text-anchor="middle">(含 WDS 预期 identity</text>
+  <text x="932" y="1000" class="label-8" text-anchor="middle">用于客户端验 SAN)</text>
+
+  <!-- ztunnel A → istiod (CSR + xDS) -->
+  <path d="M 490 540 Q 490 880 760 880" fill="none" stroke="#a78bfa"
+        stroke-width="2" marker-end="url(#arrow-violet)"/>
+  <text x="570" y="820" class="label-9" fill="#a78bfa" font-weight="600">IstioCertificateRequest</text>
+  <text x="570" y="833" class="label-9" fill="#a78bfa">gRPC CreateCertificate + JWT</text>
+
+  <path d="M 760 900 Q 600 900 490 555" fill="none" stroke="#fbbf24"
+        stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrow-amber)"/>
+  <text x="565" y="868" class="label-9" fill="#fbbf24" font-weight="600">xDS WorkloadInfo (下推)</text>
+
+  <!-- ztunnel B → istiod -->
+  <path d="M 1490 540 Q 1490 880 940 880" fill="none" stroke="#a78bfa"
+        stroke-width="2" marker-end="url(#arrow-violet)"/>
+  <text x="1290" y="820" class="label-9" fill="#a78bfa" font-weight="600">IstioCertificateRequest</text>
+  <text x="1290" y="833" class="label-9" fill="#a78bfa">gRPC CreateCertificate + JWT</text>
+
+  <path d="M 940 900 Q 1280 900 1490 555" fill="none" stroke="#fbbf24"
+        stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arrow-amber)"/>
+  <text x="1290" y="868" class="label-9" fill="#fbbf24" font-weight="600">xDS WorkloadInfo (下推)</text>
+
+  <!-- ============================================================ -->
+  <!-- TokenRequest API flow (ztunnel → kube-apiserver) - new in v2 -->
+  <!-- ============================================================ -->
+  <rect x="700" y="1030" width="320" height="120" rx="6"
+        fill="#0f172a" stroke="#0f172a" stroke-width="1.5"/>
+  <rect x="700" y="1030" width="320" height="120" rx="6"
+        fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="860" y="1055" class="label-11" text-anchor="middle" fill="#fbbf24" font-weight="600">TokenRequest API (ztunnel → K8s)</text>
+  <text x="715" y="1080" class="label-9" fill="#f1f5f9">ztunnel 用自己的 SA → API server 申请</text>
+  <text x="715" y="1095" class="label-9">SA token of <tspan fill="#22d3ee">runtime-sa@bbuk-runtime</tspan></text>
+  <text x="715" y="1110" class="label-9">audience: <tspan fill="#fb7185">istio-ca</tspan> · exp 43200s</text>
+  <text x="715" y="1130" class="label-8" fill="#fbbf24">⚠ 需 RBAC: <tspan font-weight="600">serviceaccounts/token: create</tspan></text>
+  <text x="715" y="1145" class="label-8" fill="#fb923c">   cluster-scoped → ztunnel 被攻破 = 可冒充任意 SA</text>
+
+  <!-- Kubernetes TokenReview -->
+  <g>
+    <rect x="730" y="1180" width="260" height="60" rx="6"
+          fill="#0f172a" stroke="#0f172a" stroke-width="1.5"/>
+    <rect x="730" y="1180" width="260" height="60" rx="6"
+          fill="rgba(251,146,60,0.2)" stroke="#fb923c" stroke-width="1.5"/>
+    <text x="860" y="1202" class="label-10" text-anchor="middle" fill="#fb923c" font-weight="600">Kubernetes API · TokenReview</text>
+    <text x="860" y="1218" class="label-9" text-anchor="middle">验证 ztunnel-sa JWT (audience=istio-ca)</text>
+    <text x="860" y="1232" class="label-9" text-anchor="middle">(返回 SA 真实身份用于 istiod 重写 SAN)</text>
+  </g>
+
+  <path d="M 800 1020 L 800 1030" stroke="#fbbf24" stroke-width="1.5"/>
+  <path d="M 800 1150 L 800 1180" stroke="#fb923c" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+  <path d="M 920 1020 L 920 1030" stroke="#fbbf24" stroke-width="1.5"/>
+  <path d="M 920 1150 L 920 1180" stroke="#fb923c" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+
+  <!-- ============================================================ -->
+  <!-- Bottom: Timeline of cert lifecycle (compact) - moved down in v2 -->
+  <!-- ============================================================ -->
+  <text x="850" y="1300" class="label-12" text-anchor="middle" fill="#22d3ee" font-weight="600">
+    证书轮转时序(单 identity, TTL = 24h, grace = 50%)
+  </text>
+
+  <!-- timeline base -->
+  <line x1="200" y1="1340" x2="1500" y2="1340" stroke="#94a3b8" stroke-width="1"/>
+  <text x="200" y="1360" class="label-9" text-anchor="middle">T0 启动</text>
+  <text x="500" y="1360" class="label-9" text-anchor="middle">T1 预取</text>
+  <text x="850" y="1360" class="label-9" text-anchor="middle">T2 业务期 (≈12h, 无 rotate)</text>
+  <text x="1180" y="1360" class="label-9" text-anchor="middle">T3 续期触发</text>
+  <text x="1500" y="1360" class="label-9" text-anchor="middle">T4 TTL 到期</text>
+
+  <!-- markers -->
+  <line x1="200" y1="1332" x2="200" y2="1348" stroke="#fbbf24" stroke-width="2"/>
+  <line x1="500" y1="1332" x2="500" y2="1348" stroke="#fbbf24" stroke-width="2"/>
+  <line x1="1180" y1="1332" x2="1180" y2="1348" stroke="#a78bfa" stroke-width="2"/>
+  <line x1="1500" y1="1332" x2="1500" y2="1348" stroke="#fb7185" stroke-width="2"/>
+
+  <!-- rotation zone -->
+  <rect x="1100" y="1320" width="160" height="20" rx="3"
+        fill="rgba(167,139,250,0.2)" stroke="#a78bfa" stroke-width="1"/>
+  <text x="1180" y="1334" class="label-8" text-anchor="middle" fill="#a78bfa">Background refresh</text>
+
+  <!-- cert valid zone -->
+  <rect x="280" y="1320" width="820" height="20" rx="3"
+        fill="rgba(52,211,153,0.15)" stroke="#34d399" stroke-width="1"/>
+  <text x="690" y="1334" class="label-8" text-anchor="middle" fill="#34d399">Cert #1 valid · HBONE tunnels stable</text>
+
+  <!-- rotation text -->
+  <text x="1180" y="1380" class="label-9" text-anchor="middle" fill="#a78bfa">Worker background task → CA → new cert in cache</text>
+  <text x="1180" y="1392" class="label-9" text-anchor="middle" fill="#a78bfa">tokio::watch swap · no connection drain · no pod restart</text>
+
+  <!-- Sub-line: traffic continuity -->
+  <text x="850" y="1410" class="label-11" text-anchor="middle" fill="#22d3ee">
+    业务流量全程不断 · 同一 HBONE HTTP/2 连接复用 · 旧 cert 自然过期 · 无 Envoy reload · 无 SDS push
+  </text>
+  <text x="850" y="1432" class="label-9" text-anchor="middle" fill="#94a3b8">
+    与 sidecar 时代的本质区别:ambient 下没有 SDS,pilot-agent 也不再替每个 pod 申请证书 — ztunnel 替整个节点的所有 pod 做这件事
+  </text>
+
+  <!-- Legend (outside cluster boundary, bottom-left of cluster) -->
+  <!-- legend removed — handled in summary cards below -->
+</svg>
+</div>
+
+<!-- ================================================================ -->
+<!-- Summary cards -->
+<!-- ================================================================ -->
+<div class="summary-grid">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot cyan"></div>
+      <h3>HBONE 协议栈</h3>
+    </div>
+    <ul>
+      <li><b>HTTP/2</b> — 多路复用业务流,一条隧道承载多 conn</li>
+      <li><b>CONNECT method</b> — RFC 7231 标准隧道,`:authority` = dst Service IP:port</li>
+      <li><b>mTLS 1.3</b> — AES-256-GCM / AES-128-GCM,双向 SPIFFE 身份验证</li>
+      <li><b>SNI 不带</b> — 用 dst IP 选 server cert(由 iptables redirect 保留原 IP)</li>
+      <li><b>listen port 15008</b> — Istio convention,任何 HBONE-aware 代理都监听此端口</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot rose"></div>
+      <h3>证书轮转三件套</h3>
+    </div>
+    <ul>
+      <li><b>SecretManager</b> — ztunnel 进程内的公开 API,提供 `fetch_certificate_pri(id, pri)`</li>
+      <li><b>Worker (后台 task)</b> — 真正做 CSR + 续期 + cache swap</li>
+      <li><b>CertFetcher</b> — workload 出现就 Warmup prefetch,workload 离开就 Forget</li>
+      <li><b>3 优先级</b>:RealTime(阻塞)/ Warmup(预取)/ Background(50% TTL 续期)</li>
+      <li><b>per-identity 指数退避</b> — 一个 cert 失败不影响其他</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot amber"></div>
+      <h3>可调旋钮(istiod side)</h3>
+    </div>
+    <ul>
+      <li><b>DEFAULT_WORKLOAD_CERT_TTL</b> = 24h(默认)</li>
+      <li><b>MAX_WORKLOAD_CERT_TTL</b> = 48h(istiod 接受上限)</li>
+      <li><b>TTL 上限硬约束</b> = 90d(FQ 文档明确)</li>
+      <li><b>per-workload</b>: proxyMetadata.<b>SECRET_TTL</b> override</li>
+      <li><b>SECRET_GRACE_PERIOD_RATIO</b> = 0.5(寿命过半触发)</li>
+      <li><b>SECRET_GRACE_PERIOD_RATIO_JITTER</b> = 0.01(防雪崩抖动)</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot emerald"></div>
+      <h3>关键不变量(invariant)</h3>
+    </div>
+    <ul>
+      <li><b>istiod 强制</b>:ztunnel 只能替<b>运行在自己 node 上的 workload</b> 申请证书(impersonation check)</li>
+      <li><b>SAN ≠ IP</b>:SAN 是 SPIFFE URI,IP 变了 pod 重启不影响身份</li>
+      <li><b>业务无感</b>:HBONE 连接复用,cert 轮转期间无 drain、无 reload</li>
+      <li><b>Pod 内网 plaintext</b>:应用进程始终发明文,mTLS 只在 ztunnel↔ztunnel 之间</li>
+      <li><b>PEERAUTHN 不作用于 waypoint</b>:waypoint 上 PeerAuthn 是 no-op</li>
+    </ul>
+  </div>
+
+<div class="card">
+    <div class="card-header">
+      <div class="card-dot orange"></div>
+      <h3>ZDS 握手 (v2 新增)</h3>
+    </div>
+    <ul>
+      <li><b>istio-cni ⇄ ztunnel</b> 通过 UDS `/var/run/ztunnel/ztunnel.sock` 通信</li>
+      <li><b>SCM_RIGHTS</b> — Linux 跨进程传递打开的文件描述符的机制,直接把 Pod netns fd 递给 ztunnel</li>
+      <li><b>setns()</b> — ztunnel 拿到 fd 后切换进去,绑 15008/15006/15001/15053</li>
+      <li><b>失败症状</b>:Pod 内 iptables 已加,但无 ztunnel socket → 流量黑洞(应用 connect 立即 reset)</li>
+      <li><b>排查命令</b>:<code>nsenter -t &lt;pid&gt; -n ss -tlnp \| grep -E '1500[168]'</code>(空 = ZDS 失败)</li>
+      <li><b>RBAC 关键</b>:<code>serviceaccounts/token: create</code>(ztunnel 默认有,验证:<code>kubectl auth can-i</code>)</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot cyan"></div>
+      <h3>ztunnel vs Waypoint 能力分工 (v2 新增)</h3>
+    </div>
+    <ul>
+      <li><b>ztunnel 设计哲学</b>:<i>"aggressively small feature set is the key feature"</i> — 只做 L4</li>
+      <li><b>ztunnel 能</b>:mTLS / SPIFFE principal / L4 AuthZ (namespace+ipBlocks+ports) / TCP metrics</li>
+      <li><b>ztunnel 不能</b>:HTTP method/path/header / JWT 校验 / 重试超时 / Header 改写 / Body 限制 / L7 metrics / WASM</li>
+      <li><b>以上全部归 waypoint</b>(Envoy / agentgateway)。HBONE 隧道建立后是裸 TCP 字节流</li>
+      <li><b>业务含义</b>:File upload / Header filter / Kong→Runtime L7 鉴权 —— 全都强制经过 waypoint(或 Kong),不能依赖 ztunnel</li>
+      <li><b>机制根据</b>:ztunnel 的 Rust 进程不解析 L7,L7 是 waypoint Envoy 的领地</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot rose"></div>
+      <h3>CSR SAN 不被信任 + RBAC 边界 (v2 新增)</h3>
+    </div>
+    <ul>
+      <li><b>CSR 里写的 SAN</b>:istiod <b>不信任</b>,完全依据 TokenReview 拿到的 JWT sub 重写 URI SAN</li>
+      <li><b>私钥</b>:ztunnel 内存生成 ECDSA P-256,<b>不落盘、不进 Secret、不挂 hostPath</b></li>
+      <li><b>RBAC 关键权限</b>:<code>serviceaccounts/token: create</code>(<b>cluster-scoped</b>,ztunnel 被攻破 = 可冒充任意 SA)</li>
+      <li><b>撤销机制</b>:<b>无 CRL/OCSP</b>,靠短 TTL(默认 24h)自然过期</li>
+      <li><b>Root CA</b>:每次 <code>CreateCertificate</code> 响应附带完整 bundle,ztunnel 内存信任库自动更新</li>
+      <li><b>STRICT = 关 15006</b>:ztunnel 拒绝明文入,只接受 15008 HBONE。**部署时必须先把 mesh 内所有调用方纳管再开 STRICT**</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot amber"></div>
+      <h3>完整端口表 (v2 扩展)</h3>
+    </div>
+    <ul>
+      <li><b>15001</b>:出站 — Pod 出站流量入口,iptables redirect 到此</li>
+      <li><b>15006</b>:入站 plaintext — 非 HBONE 的入站(STRICT 模式下拒绝)</li>
+      <li><b>15008</b>:入站 HBONE — mTLS over HTTP/2 CONNECT 隧道终点</li>
+      <li><b>15053</b>:出站 DNS 捕获 — <code>ISTIO_META_DNS_CAPTURE=true</code> 时启用</li>
+      <li><b>15020</b>:metrics — Prometheus scrape 端点 (<code>/stats</code>)</li>
+      <li><b>15021</b>:readiness probe — K8s 探活</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot emerald"></div>
+      <h3>Sidecar vs Ambient 关键差异 (v2 强化)</h3>
+    </div>
+    <ul>
+      <li><b>sidecar 时代</b>:每个 pod 有 pilot-agent → Envoy SDS 推 cert</li>
+      <li><b>ambient 时代</b>:每个节点一个 ztunnel → 自管多 cert(替本节点所有 pod)</li>
+      <li><b>sidecar 时代</b>:Pod 内有 sidecar container 容器化</li>
+      <li><b>ambient 时代</b>:Pod 无注入,in-pod netns listener(由 istio-cni 建 via ZDS)</li>
+      <li><b>三种代理证书路径</b>:Sidecar Envoy (istio-agent SDS) / waypoint Envoy (istio-agent SDS) / <b>ztunnel (直连 gRPC 到 istiod CA :15012)</b></li>
+      <li><b>15006 / 15001 / 15090 在 sidecar 内</b>;15006 / 15001 / 15008 / 15053 / 15020 在 ztunnel pod 内 + pod netns 镜像</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot violet"></div>
+      <h3>高频 Pitfall</h3>
+    </div>
+    <ul>
+      <li><b>impersonation 失败</b>:自定义 SA 替换 ztunnel-sa → 所有 mTLS 失败</li>
+      <li><b>CSR 风暴</b>:pod 抖动 → 大量新 cert 预取 → istiod CA 压力峰值</li>
+      <li><b>TTL 太短</b>:分钟级轮转 → istiod + Prometheus 双倍压力</li>
+      <li><b>ZDS 失败黑洞</b>:CNI/ztunnel 启动顺序错 → Pod 内有 iptables 但无 socket</li>
+      <li><b>STRICT 提前开</b>:mesh 外的调用方被拒 → 业务断线(先纳管再开 STRICT)</li>
+      <li><b>NetworkPolicy 误配</b>:15008 被挡 → ztunnel 报错带 "maybe a NetworkPolicy is blocking HBONE port 15008"</li>
+    </ul>
+  </div>
+</div>
+
+<footer>
+  Companion doc to <code>22-ztunnel-mtls-and-cert-rotation.md</code> · v2 (ZDS + TokenRequest + 客户端反向验证) · Istio 1.30.3 ambient · Solo Standard
+</footer>
+
+</div>
+</body>
+</html>

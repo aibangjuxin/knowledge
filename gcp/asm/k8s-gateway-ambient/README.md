@@ -57,6 +57,8 @@
 | `19-solo-agentgateway-ambient-install.md` + `19-solo-agentgateway-ambient-architecture.html` | Solo agentgateway + ambient install runbook + archify 架构图 | 全局 | **实操 + 架构图** |
 | `20-solo-ambient-kong.md` | **Istio Gateway + KongDP + Ambient Runtime** 闭环(Ambient 模式下 Kong 在 Mesh 外)| 全局 | **场景化** |
 | `21-solo-ambient-egress.md` + `21-solo-ambient-egress-architecture.html` | **Ambient 模式下 GKE Pod Egress**(Internal NHF 兼容 + Public L7 waypoint 迁移 + Namespace-level 出网白名单) + archify 架构图 | 全局 | **场景化 + 架构图** |
+| `22-ztunnel-mtls-and-cert-rotation.md` + `22-ztunnel-mtls-and-cert-rotation.html` | **ztunnel L4 mTLS 工作机制与证书轮转深度探索**(HBONE 协议 + SecretManager 三优先级 + Background 50% TTL 续期 + impersonation 检查 + 与 sidecar SDS 的本质差异) + 架构图。**已合并** `ztunnel-l4-mtls.md` 草稿的:SCM_RIGHTS/ZDS、TokenRequest API、CSR SAN 不被信任、RBAC ClusterRole、客户端反向验证服务端 SAN、15053/15020 端口、HBONE 报文示例、ztunnel/waypoint 能力分工、TTL 撤销 = 短 TTL、Root CA 自动分发、故障速查表、Prometheus 监控、一页速记 | 全局 | **深度探测 + 架构图** |
+| `ztunnel-l4-mtls.md` | **ztunnel L4 mTLS 内部机制详解**(setns / ZDS / TokenRequest / 双向验证 / 轮转时序 + 故障对照表,与你们链路 Kong → Runtime 段的加密归属)。**内容已合并到 22-**,本文档保留作为早期草稿(包含未正式归档的本地视角),可作快速 reference | 全局 | **深度探测(草稿,内容已并入 22-)** |
 | `ADR-LOCAL-001-migrate-minimal-to-ambient.md` | 从 minimal 迁 ambient 的架构决策记录 | 全局 | **ADR 草稿** |
 | `PERSONAL-FOCUS-LIST.md` | **Lex 个人关注清单**(本目录所有"个人关切"的集中追踪) | 全局 | **关注追踪** |
 | `values/` | 02 文涉及的 4 个 Helm values 文件 | 配套 | 配置 |
