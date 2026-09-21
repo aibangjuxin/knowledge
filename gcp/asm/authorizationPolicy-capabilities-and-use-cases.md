@@ -2,6 +2,11 @@
 
 > 适用环境:GKE / Google Cloud Service Mesh(ASM)/ Upstream Istio · sidecar 模式 · `security.istio.io/v1`
 >
+> 姊妹文档:
+> - [`authorizationPolicy-and-Peerauthentication.md`](./authorizationPolicy-and-Peerauthentication.md) — 概念、与 `PeerAuthentication` 的分工和模板化(讲"分工")
+> - [`peerAuthentication-capabilities-and-use-cases.md`](./peerAuthentication-capabilities-and-use-cases.md) — PeerAuthentication 的能力矩阵(讲"准入加密")
+> - [`serviceEntry-capabilities-and-use-cases.md`](./serviceEntry-capabilities-and-use-cases.md) — ServiceEntry 的能力矩阵(讲"出向流量怎么把外部服务接入治理",ambient 模式差异 / DNS auto-allocate / wildcard 限制 / serviceEntryVisibility 都有专门章节)
+>
 > 与 `authorizationPolicy-and-Peerauthentication.md` 配套 — 那篇讲概念、与 `PeerAuthentication` 的分工和模板化;**这篇专门回答「它到底能控制什么、能用在哪」**。
 
 ---

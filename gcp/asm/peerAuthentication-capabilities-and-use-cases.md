@@ -5,6 +5,7 @@
 > 姊妹文档:
 > - [`authorizationPolicy-and-Peerauthentication.md`](./authorizationPolicy-and-Peerauthentication.md) — 概念、分工、分层模型
 > - [`authorizationPolicy-capabilities-and-use-cases.md`](./authorizationPolicy-capabilities-and-use-cases.md) — AuthorizationPolicy 的能力矩阵
+> - [`serviceEntry-capabilities-and-use-cases.md`](./serviceEntry-capabilities-and-use-cases.md) — ServiceEntry 的能力矩阵(出向流量怎么把外部服务接入治理;ambient 模式 DNS auto-allocate / wildcard 限制 / serviceEntryVisibility 都有专门章节)
 >
 > 本篇专门回答:**PeerAuthentication 到底能管控什么、典型场景、跟 AuthorizationPolicy 的边界。**
 
