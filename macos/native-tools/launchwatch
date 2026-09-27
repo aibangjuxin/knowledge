@@ -1,0 +1,247 @@
+#!/usr/bin/env zsh
+# launchwatch — LaunchAgents / LaunchDaemons 自启动项观察器 (合规与启动速度)
+#
+# 设计目标:
+#   - 公司配 MacBook Pro,无 brew / 无 python,只 zsh + launchctl / plutil / cat
+#   - 显示:
+#       ① 用户级 LaunchAgents: ~/Library/LaunchAgents
+#       ② 系统级 LaunchAgents: /Library/LaunchAgents (需要 sudo 才看得到 — 脚本可看但标 [?] 缺详情)
+#       ③ 系统级 LaunchDaemons: /Library/LaunchDaemons
+#       ④ macOS 自带 Daemons: /System/Library/LaunchDaemons
+#       ⑤ 当前 launchd 正在跑的 jobs (status / PID / 上次退出码)
+#       ⑥ Run on demand / KeepAlive / RunAtLoad 等关键 plist 字段
+#   - 默认单次 (启动项变化慢,不需要高频刷新)
+#
+# 用法:
+#   launchwatch                       # 单次全量
+#   launchwatch --scope user          # 只看用户级
+#   launchwatch --scope system        # 只看系统级
+#   launchwatch --scope all           # 全看 (默认)
+#   launchwatch --running             # 只看 launchctl 当前在跑的
+#   launchwatch --label foo.bar       # 按 label 过滤
+#   launchwatch --category login      # 按 category 过滤
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset SCOPE='all' RUNNING_ONLY=false
+typeset LABEL_FILTER="" CATEGORY_FILTER=""
+
+while (( $# > 0 )); do
+  case $1 in
+    --scope)      SCOPE=$2;        shift 2 ;;
+    --running)    RUNNING_ONLY=true; shift ;;
+    --label)      LABEL_FILTER=$2; shift 2 ;;
+    --category)   CATEGORY_FILTER=$2; shift 2 ;;
+    --version)    echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--scope user|system|all] [--running] [--label PATTERN] [--category PATTERN]"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+# 解析 plist 文件,提取关键字段
+# 输出 TSV: label<TAB>program<TAB>runatload<TAB>keepalive<TAB>runatloadonce<TAB>user<TAB>category<TAB>disabled<TAB>path
+_parse_plist() {
+  local plist=$1
+  local label program runatload keepalive user category runatloadonce disabled
+  # plutil -extract 失败时返回非 0 + 输出到 stderr,2>/dev/null 吃错;但 key 不存在时 exit=1
+  # zsh errexit 下会让脚本退出 — 加 `|| echo ""` 让赋值永远成功
+  label=$(plutil -extract Label raw -o - "$plist" 2>/dev/null || echo "")
+  program=$(plutil -extract ProgramArguments.0 raw -o - "$plist" 2>/dev/null \
+            || plutil -extract Program raw -o - "$plist" 2>/dev/null || echo "")
+  runatload=$(plutil -extract RunAtLoad raw -o - "$plist" 2>/dev/null || echo "")
+  keepalive=$(plutil -extract KeepAlive raw -o - "$plist" 2>/dev/null || echo "")
+  runatloadonce=$(plutil -extract RunAtLoadOnce raw -o - "$plist" 2>/dev/null || echo "")
+  user=$(plutil -extract UserName raw -o - "$plist" 2>/dev/null || echo "")
+  category=$(plutil -extract LimitLoadToSessionType raw -o - "$plist" 2>/dev/null || echo "")
+
+  # disabled 状态: launchctl print-disabled <domain> 给出;我们先不查,只是列文件
+  # 9 个字段(8 个 \t 分隔),path 是第 9 个字段
+  printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+    "${label:-?}" "${program:-?}" "${runatload:-no}" "${keepalive:-no}" \
+    "${runatloadonce:-no}" "${user:-root}" "${category:-any}" "no" "$plist"
+}
+
+# 收集所有 plist
+_collect() {
+  local domain=$1   # user | system_local | system_apple
+  local dir=$2
+  [[ -d $dir ]] || return
+  # 用 glob (N) 防止无匹配时返回错误
+  for plist in "$dir"/*.plist(.N); do
+    [[ -f $plist ]] || continue
+    local row
+    row=$(_parse_plist "$plist")
+    [[ -z $row ]] && continue
+    # 字段 1 = label
+    local lbl
+    lbl=$(echo "$row" | awk -F'\t' '{print $1}')
+    if [[ -n $LABEL_FILTER ]] && [[ $lbl != *"$LABEL_FILTER"* ]]; then
+      continue
+    fi
+    if [[ -n $CATEGORY_FILTER ]]; then
+      local cat
+      cat=$(echo "$row" | awk -F'\t' '{print $7}')
+      [[ $cat != *"$CATEGORY_FILTER"* ]] && continue
+    fi
+    echo "${domain}|${row}"
+  done
+}
+
+# launchctl 当前在跑的 jobs
+# 输出: label<TAB>pid<TAB>last_exit
+_running_jobs() {
+  launchctl list 2>/dev/null | awk '
+    NR > 1 {
+      pid = $1; status = $2; label = $3
+      if (pid == "-") pid = ""
+      printf "%s\t%s\t%s\n", label, pid, status
+    }
+  '
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_render() {
+  printf '\033[?25l\033[2J\033[H'
+
+  echo "${C_BOLD}${C_CYAN}═══ LaunchAgents / Daemons 观察器 ═══${C_RESET}"
+  echo "${C_DIM}本机器上的所有 launchd 自启动项 — 影响启动速度和合规审计${C_RESET}"
+  [[ -n $LABEL_FILTER ]]  && echo "${C_DIM}过滤 label: $LABEL_FILTER${C_RESET}"
+  [[ -n $CATEGORY_FILTER ]] && echo "${C_DIM}过滤 category: $CATEGORY_FILTER${C_RESET}"
+  echo
+
+  # ① 当前 launchctl 在跑的 jobs
+  if $RUNNING_ONLY || [[ $SCOPE == all ]]; then
+    echo "${C_BOLD}  当前 launchctl 在跑的 jobs${C_RESET} ${C_DIM}(launchctl list)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    local rj
+    rj=$(_running_jobs)
+    if [[ -z $rj ]]; then
+      echo "  ${C_DIM}(无 — 系统刚启动?)${C_RESET}"
+    else
+      printf "  ${C_DIM}%-8s  %-8s  %s${C_RESET}\n" 'PID' 'STATUS' 'LABEL'
+      while IFS=$'\t' read -r lbl proc_pid proc_status; do 2>/dev/null
+        # proc_status: 0 = 正常;-9/-15 = 异常退出;负数 = signal
+        local c=$C_GREEN
+        [[ $proc_status == -* ]] && c=$C_RED
+        [[ $proc_status != 0 && $proc_status != -* ]] && c=$C_YELLOW
+        printf "  %-8s  ${c}%-8s${C_RESET}  %s\n" "${proc_pid:--}" "$proc_status" "$lbl"
+      done <<<"$rj" | head -30 || true   # head 关 stdin 让 while 循环 SIGPIPE
+      local total
+      total=$(echo "$rj" | wc -l | tr -d ' ')
+      echo "  ${C_DIM}... 共 ${total} 个 jobs (只显示前 30)${C_RESET}"
+    fi
+  fi
+
+  if $RUNNING_ONLY; then
+    echo
+    echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: launchctl list${C_RESET}"
+    return
+  fi
+
+  # ② 各目录 plist
+  echo
+  echo "${C_BOLD}  用户级 LaunchAgents${C_RESET} ${C_DIM}(~/Library/LaunchAgents)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  local ua
+  ua=$(_collect 'user' "$HOME/Library/LaunchAgents")
+  if [[ -z $ua ]]; then
+    echo "  ${C_DIM}(无 — 公司电脑常见情况,IT 锁了用户级自启动)${C_RESET}"
+  else
+    printf "  ${C_DIM}%-40s  %-25s  %-5s  %-5s  %-10s  %s${C_RESET}\n" \
+      'LABEL' 'PROGRAM' 'RAL' 'KAL' 'USER' 'CATEGORY'
+    while IFS='|' read -r domain row; do 2>/dev/null
+      IFS=$'\t' read -r lbl prg ral kal u cat <<<"$row"
+      c=$C_GREEN
+      [[ $ral == true ]] && c=$C_YELLOW   # RunAtLoad 影响启动时间
+      [[ $kal == true ]] && c=$C_RED      # KeepAlive 永远后台跑
+      printf "  ${c}%-40s${C_RESET}  %-25s  %-5s  %-5s  %-10s  %s\n" \
+        "$(printf '%.40s' "$lbl")" \
+        "$(printf '%.25s' "$(basename "$prg" 2>/dev/null || echo "$prg")")" \
+        "$ral" "$kal" "$u" "$cat"
+    done <<<"$ua"
+  fi
+
+  echo
+  echo "${C_BOLD}  系统级 LaunchAgents${C_RESET} ${C_DIM}(/Library/LaunchAgents)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  local sa
+  sa=$(_collect 'system' '/Library/LaunchAgents')
+  if [[ -z $sa ]]; then
+    echo "  ${C_DIM}(无 — 公司电脑常见)${C_RESET}"
+  else
+    printf "  ${C_DIM}%-40s  %-25s  %-5s  %-5s  %-10s  %s${C_RESET}\n" \
+      'LABEL' 'PROGRAM' 'RAL' 'KAL' 'USER' 'CATEGORY'
+    while IFS='|' read -r domain row; do 2>/dev/null
+      IFS=$'\t' read -r lbl prg ral kal u cat <<<"$row"
+      c=$C_GREEN
+      [[ $ral == true ]] && c=$C_YELLOW
+      [[ $kal == true ]] && c=$C_RED
+      printf "  ${c}%-40s${C_RESET}  %-25s  %-5s  %-5s  %-10s  %s\n" \
+        "$(printf '%.40s' "$lbl")" \
+        "$(printf '%.25s' "$(basename "$prg" 2>/dev/null || echo "$prg")")" \
+        "$ral" "$kal" "$u" "$cat"
+    done <<<"$sa"
+  fi
+
+  echo
+  echo "${C_BOLD}  系统级 LaunchDaemons${C_RESET} ${C_DIM}(/Library/LaunchDaemons)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  local sd
+  sd=$(_collect 'daemon' '/Library/LaunchDaemons')
+  if [[ -z $sd ]]; then
+    echo "  ${C_DIM}(无 — 第三方 Daemons,公司 Mac 通常被 MDM 锁)${C_RESET}"
+  else
+    printf "  ${C_DIM}%-40s  %-25s  %-5s  %-5s  %-10s  %s${C_RESET}\n" \
+      'LABEL' 'PROGRAM' 'RAL' 'KAL' 'USER' 'CATEGORY'
+    while IFS='|' read -r domain row; do 2>/dev/null
+      IFS=$'\t' read -r lbl prg ral kal u cat <<<"$row"
+      c=$C_GREEN
+      [[ $ral == true ]] && c=$C_YELLOW
+      [[ $kal == true ]] && c=$C_RED
+      printf "  ${c}%-40s${C_RESET}  %-25s  %-5s  %-5s  %-10s  %s\n" \
+        "$(printf '%.40s' "$lbl")" \
+        "$(printf '%.25s' "$(basename "$prg" 2>/dev/null || echo "$prg")")" \
+        "$ral" "$kal" "$u" "$cat"
+    done <<<"$sd"
+  fi
+
+  echo
+  echo "${C_BOLD}  macOS 自带 Daemons${C_RESET} ${C_DIM}(/System/Library/LaunchDaemons — 不要动)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  local apple
+  apple=$(_collect 'apple' '/System/Library/LaunchDaemons')
+  if [[ -z $apple ]]; then
+    echo "  ${C_DIM}(目录不可读 — 罕见)${C_RESET}"
+  else
+    local total
+    total=$(echo "$apple" | wc -l | tr -d ' ')
+    local ral_count kal_count
+    ral_count=$(echo "$apple" | awk -F'\t' '$3=="true"' | wc -l | tr -d ' ')
+    kal_count=$(echo "$apple" | awk -F'\t' '$4=="true"' | wc -l | tr -d ' ')
+    printf "  ${C_BOLD}%d${C_RESET} 个 daemon, ${C_BOLD}%d${C_RESET} RunAtLoad, ${C_BOLD}%d${C_RESET} KeepAlive\n" \
+      "$total" "$ral_count" "$kal_count"
+    echo "  ${C_DIM}(用 --label <name> 查看具体某个)${C_RESET}"
+  fi
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: plutil, launchctl list${C_RESET}"
+  echo "${C_DIM}  RAL=RunAtLoad  KAL=KeepAlive  颜色:绿=一次性 / 黄=启动时跑 / 红=一直后台保活${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+_render

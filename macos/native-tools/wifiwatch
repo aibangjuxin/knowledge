@@ -1,0 +1,328 @@
+#!/usr/bin/env zsh
+# wifiwatch — Wi-Fi 信号 / SSID / 信道 / 历史网络观察器
+#
+# 设计目标:
+#   - 公司配 MacBook Pro,无 brew / 无 python,只 zsh + system_profiler / networksetup / scutil
+#   - macOS 14+ 已经移除了 /System/Library/PrivateFrameworks/.../airport
+#     wdutil info 又必须 sudo — 唯一不需 sudo 的实时 WiFi 源是 system_profiler SPAirPortDataType
+#   - 显示:
+#       ① 当前连接:SSID / PHY / 信道 / 频段 / RSSI / Noise / SNR / Tx Rate / MCS / 安全
+#       ② 信号质量条 (基于 RSSI -30..-90 dBm 映射到 0-100%)
+#       ③ 周围其他可见网络 (Top 5 by signal)
+#       ④ 已保存的网络 (Preferred) 列表
+#       ⑤ Wi-Fi 接口电源 / MAC 地址
+#   - 默认 5s 刷新
+#
+# 用法:
+#   wifiwatch                       # 持续观察
+#   wifiwatch --once                # 单次
+#   wifiwatch --no-scan             # 跳过扫描周围网络 (省 1s)
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i INTERVAL=5
+typeset ONCE=false DO_SCAN=true
+
+while (( $# > 0 )); do
+  case $1 in
+    --interval|-i) INTERVAL=$2; shift 2 ;;
+    --once)        ONCE=true;    shift ;;
+    --no-scan)     DO_SCAN=false; shift ;;
+    --version)     echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--interval N] [--once] [--no-scan]"
+      echo "  --no-scan  跳过扫描周围 Wi-Fi (省 1s)"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+# ---- 工具函数 --------------------------------------------------------------
+# 检测 Wi-Fi 接口 (不固定 en0 — 可能是 en1 / en2 ...)
+_detect_wifi_iface() {
+  local iface
+  iface=$(system_profiler SPAirPortDataType 2>/dev/null | awk '
+    /^Wi-Fi:/ { in_wifi = 1; next }
+    in_wifi && /^[A-Za-z][A-Za-z]+:/ && !/^Wi-Fi:/ { exit }
+    in_wifi && /^[[:space:]]+Interfaces:/ { in_if = 1; next }
+    in_wifi && in_if && /^[[:space:]]+[a-z][a-z0-9]+:/ {
+      gsub(/^[[:space:]]+/, ""); gsub(/:$/, "")
+      print $0; exit
+    }
+  ')
+  print -- "${iface:-en1}"
+}
+
+# 解析当前连接 (system_profiler SPAirPortDataType)
+# 层级 (空格数):
+#   "Wi-Fi:"                                                  0
+#     "      Interfaces:"                                      6
+#       "        en1:"                                         8
+#         "          Current Network Information:"            10
+#           "            <SSID>:"                             12   ← SSID
+#             "              PHY Mode: 802.11ax"             14
+#             "              Channel: 40 (5GHz, 160MHz)"     14
+#             "              Signal / Noise: -47 dBm / -85 dBm" 14
+#             "              Transmit Rate: 1729"             14
+#             "              MCS Index: 7"                    14
+# 注: macOS 14+ system_profiler 不再打印 BSSID (隐私)
+# 输出 TSV: SSID <TAB> phy <TAB> chan <TAB> band <TAB> width <TAB> sec <TAB> rssi <TAB> noise <TAB> tx <TAB> mcs
+_parse_current() {
+  local iface=$1
+  system_profiler SPAirPortDataType 2>/dev/null | awk -v iface="$iface" '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    BEGIN { in_wifi = 0; in_iface = 0; in_cur = 0 }
+    /^Wi-Fi:/ { in_wifi = 1; next }
+    in_wifi && /^[A-Za-z][A-Za-z]+:/ && !/^Wi-Fi:/ { in_wifi = 0; in_iface = 0; in_cur = 0; next }
+
+    in_wifi && /^[[:space:]]+Interfaces:/ { in_interfaces = 1; next }
+
+    in_wifi && in_interfaces && /^[[:space:]]+[a-z][a-z0-9]+:/ {
+      iface_name = trim($0); sub(/:$/, "", iface_name)
+      if (iface_name == iface) { in_iface = 1 } else { in_iface = 0 }
+      next
+    }
+
+    in_iface && /^[[:space:]]+Current Network Information:/ { in_cur = 1; ssid = "?"; next }
+    in_iface && /^[[:space:]]+Other Local/                    { in_cur = 0; next }
+    in_iface && /^[[:space:]]+Status:/ && $0 !~ /Connected/   { in_cur = 0 }
+
+    # SSID 行 (12 spaces, 以 : 结尾)
+    in_cur && /^[[:space:]]{12,}[^[:space:]].*:$/ {
+      ssid = trim($0); sub(/:$/, "", ssid); next
+    }
+
+    # 14-space key/value
+    in_cur && /PHY Mode:/ {
+      phy = trim($0); sub(/^PHY Mode:[[:space:]]*/, "", phy); next
+    }
+    in_cur && /Channel:/ {
+      chan = $2; band = $3; width = $4
+      gsub(/[(),]/, "", band); gsub(/[(),]/, "", width); next
+    }
+    in_cur && /Security:/ {
+      sec = trim($0); sub(/^Security:[[:space:]]*/, "", sec); next
+    }
+    in_cur && /Signal \/ Noise:/ {
+      # "Signal / Noise: -47 dBm / -85 dBm"
+      # 字段拆分: $1=Signal $2=/ $3=Noise: $4=-47 $5=dBm $6=/ $7=-85 $8=dBm
+      rssi = $4; noise = $7; next
+    }
+    in_cur && /Transmit Rate:/ {
+      tx = trim($0); sub(/^Transmit Rate:[[:space:]]*/, "", tx); next
+    }
+    in_cur && /MCS Index:/ {
+      mcs = trim($0); sub(/^MCS Index:[[:space:]]*/, "", mcs); next
+    }
+
+    END {
+      printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+        (ssid ? ssid : "?"),
+        (phy ? phy : "?"),
+        (chan ? chan : "?"),
+        (band ? band : "?"),
+        (width ? width : "?"),
+        (sec ? sec : "?"),
+        (rssi ? rssi : "?"),
+        (noise ? noise : "?"),
+        (tx ? tx : "?"),
+        (mcs ? mcs : "?")
+    }
+  '
+}
+
+# RSSI → 0-100 质量百分比
+_rssi_pct() {
+  awk -v r="$1" 'BEGIN{
+    if (r == "" || r == "?") { print 0; exit }
+    pct = (r - (-90)) / (-30 - (-90)) * 100
+    if (pct < 0) pct = 0
+    if (pct > 100) pct = 100
+    printf "%d", pct
+  }'
+}
+
+_bar() {
+  awk -v p="$1" -v w="${2:-30}" 'BEGIN{
+    filled = int(p/100 * w); if (filled > w) filled = w
+    for (i=0;i<filled;i++) printf "%s", "█"
+    for (i=0;i<w-filled;i++) printf "%s", "░"
+    printf " %5.1f%%\n", p
+  }'
+}
+
+# RSSI → 颜色阈值: ≥ -55 绿, ≥ -70 黄, 否则红
+_rssi_color() {
+  awk -v r="$1" 'BEGIN{
+    if (r == "" || r == "?") { print "\033[33m"; exit }
+    if (r >= -55) printf "\033[32m"
+    else if (r >= -70) printf "\033[33m"
+    else printf "\033[31m"
+  }'
+}
+
+# 解析周围可见网络 (Other Local Wi-Fi Networks)
+# 输出: SSID <TAB> PHY <TAB> channel <TAB> signal <TAB> sec
+_parse_neighbors() {
+  system_profiler SPAirPortDataType 2>/dev/null | awk '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    /^[[:space:]]+Other Local Wi-Fi Networks:/ { in_nb = 1; next }
+    in_nb && /^[[:space:]]{12,}[^[:space:]].*:$/ {
+      # 上一组 SSID 输出 (如果有数据)
+      if (ssid != "" && sig != "") printf "%s\t%s\t%s\t%s\t%s\n", ssid, phy, chan, sig, sec
+      ssid = trim($0); sub(/:$/, "", ssid)
+      phy = "?"; chan = "?"; sig = "?"; sec = "?"
+      next
+    }
+    in_nb && /PHY Mode:/        { phy = $3; next }
+    in_nb && /Channel:/         { chan = $2; next }
+    in_nb && /Signal \/ Noise:/ { sig = $4; next }
+    in_nb && /Security:/        { sec = $2 " " $3; next }
+    END {
+      if (in_nb && ssid != "" && sig != "") printf "%s\t%s\t%s\t%s\t%s\n", ssid, phy, chan, sig, sec
+    }
+  ' | sort -t$'\t' -k4 -nr 2>/dev/null | head -5
+}
+
+# Preferred (已保存) 网络
+_parse_preferred() {
+  local iface=$1
+  networksetup -listpreferredwirelessnetworks "$iface" 2>/dev/null \
+    | tail -n +2 \
+    | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
+    | awk '{ if ($0 != "") print NR". "$0 }'
+}
+
+# 接口状态 (mac / 电源)
+_iface_state() {
+  local iface=$1
+  local power mac
+  power=$(networksetup -getairportpower "$iface" 2>/dev/null | awk '{print $NF}')
+  mac=$(system_profiler SPAirPortDataType 2>/dev/null | awk -v iface="$iface" '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    /^Wi-Fi:/ { in_wifi = 1; next }
+    in_wifi && /^[A-Za-z][A-Za-z]+:/ && !/^Wi-Fi:/ { in_wifi = 0 }
+    in_wifi && /^[[:space:]]+Interfaces:/ { in_interfaces = 1; next }
+    in_wifi && in_interfaces && /^[[:space:]]+[a-z][a-z0-9]+:/ {
+      n = trim($0); sub(/:$/, "", n)
+      if (n == iface) { f = 1 } else { f = 0 }
+      next
+    }
+    f && /MAC Address:/ { print $3; exit }
+  ')
+  printf "  电源: ${C_BOLD}%s${C_RESET}  MAC: ${C_BOLD}%s${C_RESET}\n" "${power:-?}" "${mac:-?}"
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_render() {
+  printf '\033[?25l\033[2J\033[H'
+
+  local iface
+  iface=$(_detect_wifi_iface)
+
+  echo "${C_BOLD}${C_CYAN}═══ Wi-Fi 观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  接口 ${iface}  ·  刷新 ${INTERVAL}s  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  _iface_state "$iface"
+  echo
+
+  # 当前连接
+  local cur
+  cur=$(_parse_current "$iface")
+  if [[ -z $cur ]]; then
+    echo "  ${C_DIM}(未连接 Wi-Fi)${C_RESET}"
+  else
+    local ssid phy chan band width sec rssi noise tx mcs
+    # 10 字段 TSV (BSSID 已在 macOS 14+ system_profiler 里被去掉)
+    IFS=$'\t' read -r ssid phy chan band width sec rssi noise tx mcs <<<"$cur"
+
+    echo "${C_BOLD}  当前连接${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    printf '  SSID:     ${C_BOLD}%s${C_RESET}\n' "$ssid"
+    printf '  PHY:      %s\n' "$phy"
+    printf '  Channel:  %s (%s, %s)\n' "$chan" "${band:-?}" "${width:-?}"
+    printf '  Security: %s\n' "$sec"
+    printf '  Tx Rate:  %s Mbps  (MCS %s)\n' "$tx" "$mcs"
+
+    local pct color snr
+    pct=$(_rssi_pct "$rssi")
+    color=$(_rssi_color "$rssi")
+    # SNR = RSSI - Noise (单位 dB;两者都是负值,差为正值)
+    snr=$(awk -v n="${noise:-0}" -v r="${rssi:--90}" 'BEGIN{
+      v = r - n
+      if (v < 0) v = 0
+      printf "%d", v
+    }')
+    echo
+    printf '  信号:  RSSI=${C_BOLD}%s dBm${C_RESET}  Noise=${C_BOLD}%s dBm${C_RESET}  SNR=${C_BOLD}%s dB${C_RESET}\n' \
+      "${rssi:-?}" "${noise:-?}" "$snr"
+    printf "  质量: %s%s%s\n" "$color" "$(_bar "$pct" 30)" "${C_RESET}"
+
+    local rating
+    rating=$(awk -v r="$rssi" 'BEGIN{
+      if (r == "" || r == "?")        print "(未知)"
+      else if (r >= -50)               print "极佳 (5G 满格)"
+      else if (r >= -60)               print "良好"
+      else if (r >= -70)               print "可用 — 视频会议勉强"
+      else if (r >= -80)               print "弱 — 会出现掉线"
+      else                              print "极弱 — 不可用"
+    }')
+    printf '  评价:  ${C_DIM}%s${C_RESET}\n' "$rating"
+  fi
+
+  # 周围网络 (可选)
+  if $DO_SCAN; then
+    echo
+    echo "${C_BOLD}  周围可见网络 (Top 5)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    local nbs
+    nbs=$(_parse_neighbors)
+    if [[ -z $nbs ]]; then
+      echo "  ${C_DIM}(无 — macOS 14+ 默认对周围网络做隐私过滤)${C_RESET}"
+    else
+      printf "  ${C_DIM}%-4s  %-25s  %-12s  %8s  %-15s${C_RESET}\n" '#' 'SSID' 'PHY' 'RSSI' 'SEC'
+      local n=0
+      # 用 nb_color 避免与上面 current connection 块的 color 变量同名(zsh 重声明 local 会回显旧值)
+      local nb_color
+      while IFS=$'\t' read -r n_ssid n_phy n_chan n_sig n_sec; do
+        ((n += 1))
+        nb_color=$(_rssi_color "$n_sig")
+        printf "  %-4d  ${C_DIM}%-25s${C_RESET}  %-12s  ${nb_color}%s dBm${C_RESET}  %-15s\n" \
+          "$n" "$(printf '%.25s' "$n_ssid")" "$n_phy" "$n_sig" "$n_sec"
+      done <<<"$nbs"
+    fi
+  fi
+
+  # Preferred 网络
+  echo
+  echo "${C_BOLD}  已保存的网络 (Preferred)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  local pref
+  pref=$(_parse_preferred "$iface")
+  if [[ -z $pref ]]; then
+    echo "  ${C_DIM}(无)${C_RESET}"
+  else
+    echo "$pref" | head -10
+  fi
+  echo "  ${C_DIM}(共 $(networksetup -listpreferredwirelessnetworks "$iface" 2>/dev/null | tail -n +2 | grep -c .) 个,system_profiler 不暴露 BSSID 等详细字段)${C_RESET}"
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: system_profiler SPAirPortDataType, networksetup${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+if $ONCE; then _render; else while true; do _render; sleep $INTERVAL; done; fi

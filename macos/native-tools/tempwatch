@@ -1,0 +1,291 @@
+#!/usr/bin/env zsh
+# tempwatch — 芯片温度 / 散热压力 / 风扇 / 性能档观察器
+#
+# 设计目标:
+#   - 公司配 MacBook Pro,无 brew / 无 sudo / 无 python,只 zsh + sysctl / system_profiler / ioreg / ps
+#   - macOS 没有无需 sudo 就能拿到的"CPU 温度 °C"统一 API:
+#       - Apple Silicon (M 系列):真正温度藏在 SMC,需要 sudo powermetrics
+#       - Intel: sysctl machdep.xcpm.cpu_thermal_level 有信号
+#       - 新版 macOS: sysctl kern.thermal_state 有 thermal pressure
+#   - 退而求其次,我们用"间接信号"判断散热压力:
+#       ① 芯片型号 + 性能档 (P-core / E-core 数)
+#       ② 当前 CPU 频率 vs 最大频率 (持续低 = 散热降频)
+#       ③ Top CPU 占用进程 (高占用 = 热源)
+#       ④ 系统进程 QoS 类分布 (后台 vs 用户交互 = 调度压力)
+#       ⑤ 风扇 RPM (如有;Apple Silicon 一般没有)
+#       ⑥ Battery 温度 / thermal log (pmset)
+#       ⑦ thermal pressure (如可用)
+#   - 默认 5s 刷新
+#
+# 用法:
+#   tempwatch                   # 持续观察
+#   tempwatch --once            # 单次
+#   tempwatch --top 10          # Top 10 热源进程
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i INTERVAL=5 TOP_N=10
+typeset ONCE=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --interval|-i) INTERVAL=$2; shift 2 ;;
+    --top|-n)      TOP_N=$2;     shift 2 ;;
+    --once)        ONCE=true;    shift ;;
+    --version)     echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--interval N] [--top N] [--once]"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+# ---- 芯片 + 性能档 ---------------------------------------------------------
+_chip_info() {
+  local brand p_cores e_cores g_cores cpu_max
+  brand=$(sysctl -n machdep.cpu.brand_string)
+  # 频率:Apple Silicon 没有 hw.cpufrequency_max,只有 Intel 才有
+  cpu_max=$(sysctl -n hw.cpufrequency_max 2>/dev/null || echo 0)
+  if [[ $cpu_max == 0 ]] || [[ -z $cpu_max ]]; then
+    cpu_max="N/A (Apple Silicon — 调度器控制)"
+  else
+    cpu_max=$(awk -v hz="$cpu_max" 'BEGIN{printf "%.2f GHz", hz/1000000000}')
+  fi
+
+  # P-core / E-core 拆分 (perflevel0 = 高性能 / perflevel1 = 高能效)
+  local p_phys p_log e_phys e_log
+  if sysctl hw.perflevel0.physicalcpu >/dev/null 2>&1; then
+    p_phys=$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || echo 0)
+    p_log=$(sysctl -n hw.perflevel0.logicalcpu 2>/dev/null || echo 0)
+    e_phys=$(sysctl -n hw.perflevel1.physicalcpu 2>/dev/null || echo 0)
+    e_log=$(sysctl -n hw.perflevel1.logicalcpu 2>/dev/null || echo 0)
+  else
+    p_phys=$(sysctl -n hw.physicalcpu)
+    p_log=$(sysctl -n hw.logicalcpu)
+    e_phys=0; e_log=0
+  fi
+
+  printf "  芯片:     ${C_BOLD}%s${C_RESET}\n" "$brand"
+  if (( e_phys > 0 )); then
+    printf "  P-core:   ${C_BOLD}%d 物理 / %d 逻辑${C_RESET}  ${C_DIM}(高性能核)${C_RESET}\n" "$p_phys" "$p_log"
+    printf "  E-core:   ${C_BOLD}%d 物理 / %d 逻辑${C_RESET}  ${C_DIM}(高能效核)${C_RESET}\n" "$e_phys" "$e_log"
+  else
+    printf "  CPU:      ${C_BOLD}%d 物理 / %d 逻辑${C_RESET}  ${C_DIM}(无 P/E 拆分 — Intel)${C_RESET}\n" "$p_phys" "$p_log"
+  fi
+  printf "  最大频率: ${C_BOLD}%s${C_RESET}\n" "$cpu_max"
+}
+
+# ---- 当前 CPU 频率 (用于降频检测) -------------------------------------------
+# Apple Silicon 没有 — 用 sysctl machdep.cpu.max_basic / powermetrics 替代
+# Intel: hw.cpufrequency 是当前频率
+_current_freq_ghz() {
+  local cur
+  cur=$(sysctl -n hw.cpufrequency 2>/dev/null) || cur=0
+  if [[ -z $cur ]] || (( cur == 0 )); then
+    echo "N/A (Apple Silicon)"
+    return
+  fi
+  awk -v hz="$cur" 'BEGIN{printf "%.2f GHz", hz/1000000000}'
+}
+
+_freq_throttle_pct() {
+  # 返回当前频率占最大频率的百分比 (Intel 才能算)
+  local cur max
+  cur=$(sysctl -n hw.cpufrequency 2>/dev/null || echo 0)
+  max=$(sysctl -n hw.cpufrequency_max 2>/dev/null || echo 0)
+  if (( cur == 0 || max == 0 )); then
+    echo "N/A"; return
+  fi
+  awk -v c="$cur" -v m="$max" 'BEGIN{
+    p = c / m * 100
+    printf "%d", p
+  }'
+}
+
+# ---- Thermal pressure ------------------------------------------------------
+# 新 macOS: sysctl kern.thermal_state  → 0 Nominal / 1 Fair / 2 Serious / 3 Critical
+# 老 macOS: machdep.xcpm.cpu_thermal_level (Intel)
+# 没有时:返回 "UNKNOWN"
+_thermal_pressure() {
+  local state label color
+  if state=$(sysctl -n kern.thermal_state 2>/dev/null) && [[ -n $state && $state != 0 ]]; then
+    case $state in
+      0) label='Nominal (正常)';      color=$C_GREEN ;;
+      1) label='Fair (轻度压力)';      color=$C_GREEN ;;
+      2) label='Serious (明显压力)';   color=$C_YELLOW ;;
+      3) label='Critical (临界降频)';  color=$C_RED ;;
+      *) label="Level $state";         color=$C_YELLOW ;;
+    esac
+  elif state=$(sysctl -n machdep.xcpm.cpu_thermal_level 2>/dev/null) && [[ -n $state ]]; then
+    case $state in
+      0) label='Nominal';  color=$C_GREEN ;;
+      1) label='Light';    color=$C_GREEN ;;
+      *) label="Level $state"; color=$C_YELLOW ;;
+    esac
+  else
+    label='UNKNOWN (kern.thermal_state 不可用)'
+    color=$C_DIM
+  fi
+  printf "${color}${C_BOLD}%-20s${C_RESET}" "$label"
+}
+
+# ---- 风扇 RPM (从 system_profiler) -----------------------------------------
+# 输出: 每行 "Fan Name <TAB> RPM"
+_fan_rpm() {
+  system_profiler SPPowerDataType 2>/dev/null | awk '
+    /Fan:/ && /RPM/ {
+      for (i=1;i<=NF;i++) {
+        if ($i == "RPM:") { rpm = $(i+1); break }
+        if ($i == "rpm:") { rpm = $(i+1); break }
+        if ($i == "Speed:") { rpm = $(i+1); break }
+      }
+      # Fan: Left Side  RPM: 1500
+      # 找上下文
+      print "Fan " NR ":\t" rpm
+    }
+  '
+}
+
+# 注意: Apple Silicon 大多数没风扇,会输出空 — 脚本要兜底
+_has_fan() {
+  [[ -n $(_fan_rpm) ]]
+}
+
+# ---- Battery 温度 (如果本子是 Intel + 有电池) -----------------------------
+_battery_temp() {
+  system_profiler SPPowerDataType 2>/dev/null | awk -F': *' '
+    /Temperature/ { gsub(/[^0-9.]/, "", $2); if ($2 != "") print $2; exit }
+  '
+}
+
+# ---- 当前最耗 CPU 的进程 (热源) --------------------------------------------
+_top_heat() {
+  ps -Ao %cpu,pid,user,command 2>/dev/null | awk '
+    NR > 1 && $1 ~ /^[0-9.]+$/ && $1+0 > 1.0 {
+      cpu = $1; pid = $2; user = $3
+      cmd = ""
+      for (j=4;j<=NF;j++) cmd = cmd (j==4?"":" ") $j
+      # 简化 app 名
+      n = split(cmd, parts, "/"); app = parts[n]
+      if (app ~ /\.app/) sub(/\.app.*/, ".app", app)
+      # 去路径
+      printf "%.1f\t%d\t%s\t%s\n", cpu, pid, user, app
+    }
+  ' | sort -nr | head -n $TOP_N
+}
+
+# ---- QoS 类分布 (调度压力) ------------------------------------------------
+_qos_distribution() {
+  # macOS ps 没有 -o qos,改用 ps -o rusage + 输出 / 调度类别
+  # 简化:用 ps -axo %cpu,%mem,command 收集 + 用 ps -o flags 拿到调度 hint
+  # 实际上 macOS 的 ps 支持 -o policy 显示调度策略,但 verbose
+  # 用 sysctl 拿到 machdep.cpu 的活跃核数 vs 物理核数作参考
+  local runq_blocked=0 total_procs=0
+  total_procs=$(ps -A | wc -l | tr -d ' ')
+  runq_blocked=$(ps -A -o state 2>/dev/null | grep -c '^[RUTW]' || echo 0)
+  printf "  总进程数: ${C_BOLD}%d${C_RESET}  活跃/等待: ${C_BOLD}%d${C_RESET}  ${C_DIM}(R=运行 U=不可中断 T=停止 W=分页)${C_RESET}\n" \
+    "$total_procs" "$runq_blocked"
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_render() {
+  printf '\033[?25l\033[2J\033[H'
+
+  echo "${C_BOLD}${C_CYAN}═══ 散热 / 性能档 观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  刷新 ${INTERVAL}s  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  # ① 芯片
+  echo "${C_BOLD}  芯片 / 性能档${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  _chip_info
+
+  # ② 当前频率 (降频指标)
+  printf '  当前频率: ${C_BOLD}%s${C_RESET}\n' "$(_current_freq_ghz)"
+  local pct
+  pct=$(_freq_throttle_pct)
+  if [[ $pct == N/A* ]]; then
+    printf '  频率利用率: ${C_DIM}%s${C_RESET} ${C_DIM}(Apple Silicon 由性能调度器控制)${C_RESET}\n' "$pct"
+  else
+    local bar_color=$C_GREEN
+    (( pct < 80 )) && bar_color=$C_YELLOW
+    (( pct < 60 )) && bar_color=$C_RED
+    printf '  频率利用率: %s%3d%%%s ${C_DIM}(持续 < 80% 表明散热降频)${C_RESET}\n' \
+      "$bar_color" "$pct" "${C_RESET}"
+  fi
+
+  # ③ Thermal pressure
+  echo
+  echo "${C_BOLD}  散热压力${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  printf "  sysctl thermal state: "
+  _thermal_pressure
+  printf "\n"
+
+  # ④ 风扇
+  echo
+  echo "${C_BOLD}  风扇${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  if _has_fan; then
+    _fan_rpm | while IFS=$'\t' read -r fan_name rpm; do
+      # RPM 颜色: > 4000 警戒 / > 2500 忙 / 否则安静
+      local c=$C_GREEN
+      (( rpm > 4000 )) && c=$C_RED
+      (( rpm > 2500 && rpm <= 4000 )) && c=$C_YELLOW
+      printf "  %-10s  ${c}%s${C_RESET} RPM\n" "$fan_name" "$rpm"
+    done
+  else
+    echo "  ${C_DIM}(无风扇 — Apple Silicon / 无风扇机型)${C_RESET}"
+  fi
+
+  # ⑤ 电池温度
+  local btemp
+  btemp=$(_battery_temp)
+  if [[ -n $btemp ]]; then
+    printf "  电池温度: ${C_BOLD}%s °C${C_RESET}  ${C_DIM}(MacBook 安全阈值 < 45 °C)${C_RESET}\n" "$btemp"
+  fi
+
+  # ⑥ 调度压力
+  echo
+  echo "${C_BOLD}  调度压力${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  _qos_distribution
+
+  # ⑦ Top 热源
+  echo
+  echo "${C_BOLD}  Top ${TOP_N} 热源进程${C_RESET} ${C_DIM}(CPU 占用高 = 发热多)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  printf "  ${C_DIM}%6s  %6s  %-8s  %s${C_RESET}\n" 'CPU%' 'PID' 'USER' 'APP'
+  local procs
+  procs=$(_top_heat)
+  if [[ -z $procs ]]; then
+    echo "  ${C_DIM}(当前 CPU 占用低)${C_RESET}"
+  else
+    while IFS=$'\t' read -r cpu pid user app; do
+      local c=$C_GREEN
+      (( cpu + 0 >= 50 )) && c=$C_RED
+      (( cpu + 0 >= 20 && cpu + 0 < 50 )) && c=$C_YELLOW
+      printf "  ${c}%6.1f${C_RESET}  %6d  %-8s  %s\n" "$cpu" "$pid" "$user" "$(printf '%.40s' "$app")"
+    done <<<"$procs"
+  fi
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: sysctl, system_profiler SPPowerDataType, ps -Ao${C_RESET}"
+  echo "${C_DIM}  注:真正的 °C 温度需要 sudo powermetrics — samplers smc (脚本不可用)${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+if $ONCE; then _render; else while true; do _render; sleep $INTERVAL; done; fi

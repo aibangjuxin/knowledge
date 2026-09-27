@@ -1,0 +1,293 @@
+#!/usr/bin/env zsh
+# findbig — 大文件 / 大目录扫描器 (清理助手,只读不删)
+#
+# 设计目标:
+#   - 公司配 MacBook Pro,无 brew / 无 python,只 zsh + du / find / mdfind / mdls
+#   - 显示:
+#       ① Top N 大目录 (默认在当前目录扫描)
+#       ② Top N 大文件
+#       ③ 按类型聚合:视频 / 音频 / 压缩包 / 镜像 / 缓存
+#       ④ 常见可清理目录提示 (~/Library/Caches, ~/Downloads, Xcode DerivedData 等)
+#       ⑤ 时间分布:多大占比 > 1 年没动
+#   - 安全: 只列,从不删除;给清理建议时给出 rm 命令但不自动执行
+#
+# 用法:
+#   findbig                          # 扫描当前目录
+#   findbig ~/Downloads              # 扫描指定目录
+#   findbig --depth 3                # du 深度 (默认 2)
+#   findbig --top 30                 # Top N (默认 20)
+#   findbig --min-size 100M          # 只看 ≥ 100M 的
+#   findbig --categories             # 按类型聚合 (视频/音频/压缩包等)
+#   findbig --clean-hints            # 只输出常见可清理目录
+#
+# 单位: du 输出 KB (macOS 默认),1M = 1024K
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i TOP_N=20 MAX_DEPTH=2
+typeset TARGET="${PWD}"
+typeset DO_CATEGORIES=false DO_CLEAN_HINTS=false
+typeset -i MIN_SIZE_KB=1024    # 默认只看 ≥ 1M
+
+# 大小字符串解析: "100M" / "1G" → KB
+_parse_size() {
+  awk -v s="$1" 'BEGIN{
+    n = s; sub(/[kKmMgG]$/, "", n); m = 1
+    if (s ~ /[gG]$/) m = 1024*1024
+    else if (s ~ /mM]$/) m = 1024
+    printf "%d", n * m
+  }'
+}
+
+while (( $# > 0 )); do
+  case $1 in
+    --depth|-d)     MAX_DEPTH=$2;     shift 2 ;;
+    --top|-n)       TOP_N=$2;         shift 2 ;;
+    --min-size)     MIN_SIZE_KB=$(_parse_size "$2"); shift 2 ;;
+    --categories)   DO_CATEGORIES=true; shift ;;
+    --clean-hints)  DO_CLEAN_HINTS=true; shift ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [DIR] [--depth N] [--top N] [--min-size 100M] [--categories] [--clean-hints]"
+      echo "  DIR           扫描目录 (默认当前目录)"
+      echo "  --depth N     du 深度 (默认 2)"
+      echo "  --top N       显示 Top N (默认 20)"
+      echo "  --min-size X  最小大小 (1M / 100M / 1G)"
+      echo "  --categories  按文件类型聚合 (视频/音频/压缩包等)"
+      echo "  --clean-hints 输出常见可清理目录"
+      exit 0
+      ;;
+    --version)  echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    -*) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+    *)  TARGET=$1; shift ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+# 把 KB 数字变成 human-readable (1.2G / 234M / 56K)
+_human_kb() {
+  awk -v kb="$1" 'BEGIN{
+    if (kb >= 1048576) printf "%.2fG", kb/1048576
+    else if (kb >= 1024) printf "%dM", kb/1024
+    else printf "%dK", kb
+  }'
+}
+
+# ---- 大目录 Top N --------------------------------------------------------
+# du -d N -k 把当前 TARGET 下子目录按 KB 排序
+_big_dirs() {
+  local target=$1
+  [[ -d $target ]] || { echo "  ${C_DIM}(目录不存在: $target)${C_RESET}"; return; }
+  # du -d 2 -k 在 macOS 是 -d 不支持,要用 -N (depth, GNU 风格,macOS 10.13+ 也支持 BSD flag)
+  # macOS du 支持 -d N
+  du -d $MAX_DEPTH -k "$target" 2>/dev/null \
+    | awk -v min_kb="$MIN_SIZE_KB" -v target="$target" '
+      {
+        kb = $1; $1 = ""; sub(/^[[:space:]]+/, ""); path = $0
+        # 跳过 TARGET 本身 (通常最大,排第一是它自己)
+        if (path == target) next
+        if (kb + 0 < min_kb) next
+        printf "%d\t%s\n", kb, path
+      }
+    ' | sort -nr | head -$TOP_N
+}
+
+# ---- 大文件 Top N ---------------------------------------------------------
+# find -size +Nk 找大文件
+_big_files() {
+  local target=$1
+  [[ -d $target ]] || return
+  find "$target" -type f -size +${MIN_SIZE_KB}k 2>/dev/null \
+    | xargs -I{} stat -f '%z %N' '{}' 2>/dev/null \
+    | awk -v min_kb="$MIN_SIZE_KB" '
+      {
+        size = $1; $1 = ""; $2 = ""
+        sub(/^[[:space:]]+/, ""); sub(/^[[:space:]]+/, "")
+        if (size / 1024 < min_kb) next
+        printf "%d\t%s\n", size/1024, $0
+      }
+    ' | sort -nr | head -$TOP_N
+}
+
+# ---- 按文件类型聚合 -------------------------------------------------------
+# 视频/音频/压缩包/镜像/源码/缓存
+_categorize() {
+  local target=$1
+  [[ -d $target ]] || return
+  find "$target" -type f 2>/dev/null \
+    | awk -F. '
+      {
+        ext = tolower($NF)
+        if (ext ~ /(mp4|mov|mkv|avi|webm|m4v|wmv|flv)$/) cat = "video"
+        else if (ext ~ /(mp3|m4a|aac|flac|ogg|wav|alac)$/) cat = "audio"
+        else if (ext ~ /(zip|tar|gz|bz2|xz|7z|rar|zst)$/) cat = "archive"
+        else if (ext ~ /(dmg|iso|img|pkg)$/) cat = "image"
+        else if (ext ~ /(log|tmp|bak|swp)$/) cat = "log"
+        else if (ext ~ /(o|a|so|dylib)$/) cat = "binary"
+        else cat = "other"
+        size[cat]++
+      }
+      END {
+        for (c in size) printf "%s\t%d\n", c, size[c]
+      }
+    ' | sort -t$'\t' -k2 -nr
+}
+
+# 按大小聚合 (前 10 类别)
+_categorize_by_size() {
+  local target=$1
+  [[ -d $target ]] || return
+  find "$target" -type f -size +${MIN_SIZE_KB}k 2>/dev/null \
+    | while IFS= read -r f; do
+        # stat size in bytes, awk aggregate
+        sz=$(stat -f %z "$f" 2>/dev/null)
+        [[ -z $sz ]] && continue
+        ext="${f##*.}"
+        ext=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+        case $ext in
+            mp4|mov|mkv|avi|webm|m4v|wmv|flv) cat="video" ;;
+            mp3|m4a|aac|flac|ogg|wav|alac)    cat="audio" ;;
+            zip|tar|gz|bz2|xz|7z|rar|zst)     cat="archive" ;;
+            dmg|iso|img|pkg)                   cat="image" ;;
+            log|tmp|bak|swp)                   cat="log" ;;
+            o|a|so|dylib)                      cat="binary" ;;
+            *) cat="other" ;;
+          esac
+          echo "$sz $cat"
+      done \
+    | awk '
+        { sz[$2] += $1 }
+        END { for (c in sz) printf "%d\t%s\n", sz[c], c }
+      ' | sort -nr | head -10
+}
+
+# ---- 常见可清理目录 ------------------------------------------------------
+# 输出 ~ 形式路径 + KB 大小
+_clean_hints() {
+  local -a hints=(
+    "$HOME/Library/Caches"
+    "$HOME/Library/Developer/Xcode/DerivedData"
+    "$HOME/Library/Developer/Xcode/Archives"
+    "$HOME/Library/Developer/CoreSimulator/Caches"
+    "$HOME/.gradle"
+    "$HOME/.npm"
+    "$HOME/.cache"
+    "$HOME/.cargo"
+    "$HOME/.rustup"
+    "$HOME/Library/Application Support/Code/Cache"
+    "$HOME/Library/Application Support/Slack/Cache"
+    "$HOME/Library/Containers/com.docker.docker"
+    "$HOME/Downloads"
+    "/private/var/folders"     # macOS 临时文件夹顶层
+  )
+  for d in $hints; do
+    [[ -d $d ]] || continue
+    local kb
+    kb=$(du -sk "$d" 2>/dev/null | awk '{print $1}')
+    [[ -z $kb ]] && continue
+    # 把 $HOME 替换成 ~
+    local pretty=${d/$HOME/~}
+    printf "%s\t%s\n" "$kb" "$pretty"
+  done | sort -nr | head -15
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_render() {
+  printf '\033[?25l\033[2J\033[H'
+  echo "${C_BOLD}${C_CYAN}═══ 大文件 / 大目录扫描器 ═══${C_RESET}"
+  echo "${C_DIM}扫描目录: ${TARGET}  ·  深度: ${MAX_DEPTH}  ·  最小大小: $(_human_kb $MIN_SIZE_KB)  ·  Ctrl-C 退出${C_RESET}"
+  echo "${C_DIM}提示:本脚本只读,从不删除;清理建议给出 rm 命令但不执行${C_RESET}"
+  echo
+
+  # ① 大目录
+  echo "${C_BOLD}  Top ${TOP_N} 大目录${C_RESET} ${C_DIM}(du -d ${MAX_DEPTH} -k)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  local dirs
+  dirs=$(_big_dirs "$TARGET")
+  if [[ -z $dirs ]]; then
+    echo "  ${C_DIM}(没有 ≥ $(_human_kb $MIN_SIZE_KB) 的子目录)${C_RESET}"
+  else
+    printf "  ${C_DIM}%8s  %s${C_RESET}\n" 'SIZE' 'PATH'
+    while IFS=$'\t' read -r kb path; do
+      # 颜色:> 1G 红, > 100M 黄, 否则绿
+      local c=$C_GREEN
+      (( kb >= 1048576 )) && c=$C_RED
+      (( kb >= 102400 && kb < 1048576 )) && c=$C_YELLOW
+      printf "  ${c}%8s${C_RESET}  %s\n" "$(_human_kb $kb)" "$path"
+    done <<<"$dirs"
+  fi
+
+  # ② 大文件
+  echo
+  echo "${C_BOLD}  Top ${TOP_N} 大文件${C_RESET} ${C_DIM}(find -size +$MIN_SIZE_KB k)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  local files
+  files=$(_big_files "$TARGET")
+  if [[ -z $files ]]; then
+    echo "  ${C_DIM}(没有 ≥ $(_human_kb $MIN_SIZE_KB) 的文件)${C_RESET}"
+  else
+    printf "  ${C_DIM}%8s  %s${C_RESET}\n" 'SIZE' 'PATH'
+    while IFS=$'\t' read -r kb path; do
+      local c=$C_GREEN
+      (( kb >= 1048576 )) && c=$C_RED
+      (( kb >= 102400 && kb < 1048576 )) && c=$C_YELLOW
+      printf "  ${c}%8s${C_RESET}  %s\n" "$(_human_kb $kb)" "$path"
+    done <<<"$files"
+  fi
+
+  # ③ 类型聚合
+  if $DO_CATEGORIES; then
+    echo
+    echo "${C_BOLD}  文件类型聚合 (按大小)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    local cats
+    cats=$(_categorize_by_size "$TARGET")
+    if [[ -z $cats ]]; then
+      echo "  ${C_DIM}(无 ≥ $(_human_kb $MIN_SIZE_KB) 的文件可分类)${C_RESET}"
+    else
+      while IFS=$'\t' read -r bytes cat; do
+        local kb=$((bytes / 1024))
+        printf "  %10s  %s\n" "$(_human_kb $kb)" "$cat"
+      done <<<"$cats"
+    fi
+  fi
+
+  # ④ 常见清理建议
+  echo
+  echo "${C_BOLD}  常见可清理目录 (系统级提示)${C_RESET} ${C_DIM}(只读 — rm 命令需要你确认执行)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  local hints
+  hints=$(_clean_hints)
+  if [[ -z $hints ]]; then
+    echo "  ${C_DIM}(没有匹配项)${C_RESET}"
+  else
+    printf "  ${C_DIM}%8s  %s${C_RESET}\n" 'SIZE' 'PATH'
+    while IFS=$'\t' read -r kb path; do
+      printf "  %8s  %s\n" "$(_human_kb $kb)" "$path"
+    done <<<"$hints"
+    echo
+    echo "  ${C_DIM}清理示例 (执行前确认):"
+    local top3
+    top3=$(echo "$hints" | head -3 | awk -F'\t' '{print $2}')
+    while IFS= read -r p; do
+      [[ -z $p ]] && continue
+      echo "    rm -rf '$p'    # ${C_DIM}# 删除前 du -sh '$p' 确认大小${C_RESET}"
+    done <<<"$top3"
+  fi
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: du, find, stat, awk${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+_render
