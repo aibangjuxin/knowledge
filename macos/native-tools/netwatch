@@ -1,0 +1,273 @@
+#!/usr/bin/env zsh
+# netwatch — 网络接口 / 实时吞吐 / 活跃连接观察器
+#
+# 设计目标:
+#   - 公司配 MacBook Pro,无 brew / 无 python,只 zsh + ifconfig / netstat / lsof / route / scutil
+#   - 显示:
+#       ① 所有网络接口 (en0/en1/awdl0/utun0/lo0 ...) + IP/MAC/MTU
+#       ② 默认路由 + DNS + 代理配置 (scutil)
+#       ③ 实时吞吐 (netstat -ib 两次采样算差值)
+#       ④ 当前活跃 TCP 连接 (lsof -iTCP -sTCP:ESTABLISHED, 取前 10)
+#       ⑤ 公网 IP (curl -s ifconfig.me, 可选)
+#   - 3s 刷新
+#
+# 用法:
+#   netwatch                # 持续观察
+#   netwatch --once         # 单次
+#   netwatch --with-public  # 同时获取公网 IP (需要网络)
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i INTERVAL=3
+typeset ONCE=false WITH_PUBLIC=false
+
+# 存储上一次 netstat 采样,用于计算差值
+typeset -A LAST_BYTES_IN LAST_BYTES_OUT LAST_TS
+
+while (( $# > 0 )); do
+  case $1 in
+    --interval|-i) INTERVAL=$2; shift 2 ;;
+    --once)        ONCE=true;    shift ;;
+    --with-public) WITH_PUBLIC=true; shift ;;
+    --version)     echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--interval N] [--once] [--with-public]"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+# ---- 接口清单 --------------------------------------------------------------
+# ifconfig 输出解析
+#   en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+#       options=6463<RXCSUM,TXCSUM,TSO4,TSO6,CHANNEL_IO,PARTIAL_CSUM,ZEROINVERT_CSUM>
+#       ether 9c:64:5b:01:02:03
+#       inet6 fe80::...%en0 prefixlen 64 secured
+#       inet 192.168.1.100 netmask 0xffffff00 broadcast 192.168.1.255
+#       nd6 options=201<PERFORMNUD,DAD>
+#       media: autoselect
+#       status: active
+_parse_ifconfig() {
+  ifconfig 2>/dev/null | awk '
+    /^[a-z0-9]+:/ {
+      # 新的接口块
+      iface = $1; sub(/:$/, "", iface)
+      # 跳过 loopback 不跳过,保留
+      print ""
+      printf "  \033[1m%s\033[0m\n", iface
+      next
+    }
+    /^[[:space:]]*ether[[:space:]]/ {
+      mac = $2
+      printf "    MAC:    %s\n", mac
+      next
+    }
+    /^[[:space:]]*inet[[:space:]]/ && !/fe80/ {
+      ip = $2
+      printf "    IPv4:      %s\n", ip
+      next
+    }
+    /^[[:space:]]*inet6[[:space:]]/ && !/fe80/ {
+      ip = $2
+      # 去掉 %scope_id 后缀
+      sub(/%.*/, "", ip)
+      printf "    IPv6:      %s\n", ip
+      next
+    }
+    /^[[:space:]]*inet6[[:space:]]fe80/ {
+      next  # 跳过 link-local
+    }
+    /^[[:space:]]*status:[[:space:]]/ {
+      st = $2
+      color = "\033[32m"
+      if (st != "active") color = "\033[33m"
+      printf "    Status: %s%s\033[0m\n", color, st
+      next
+    }
+    /^[[:space:]]*mtu[[:space:]]/ {
+      printf "    MTU:    %s\n", $2
+      next
+    }
+  '
+}
+
+# ---- 默认路由 + DNS -------------------------------------------------------
+_network_config() {
+  echo "${C_BOLD}  网络配置${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  # macOS BSD route 输出格式: "  gateway: 192.168.1.1" (可能在 VPN 后空)
+  local gateway
+  gateway=$(route -n get default 2>/dev/null | awk '/^[[:space:]]*gateway:/ {print $2; exit}')
+  local iface
+  iface=$(route -n get default 2>/dev/null | awk '/^[[:space:]]*interface:/ {print $2; exit}')
+  local dns
+  dns=$(scutil --dns 2>/dev/null | awk '/nameserver\[0\]/ {print $3; exit}')
+  local proxy
+  proxy=$(scutil --proxy 2>/dev/null | awk '/HTTPSProxy :/ {print $3}')
+  [[ -z $proxy ]] && proxy='(none)'
+  [[ -z $gateway ]] && gateway='(none — 直连 / VPN 后)'
+
+  printf "  Gateway:  ${C_BOLD}%s${C_RESET}  via ${C_BOLD}%s${C_RESET}\n" "$gateway" "${iface:-?}"
+  printf "  DNS:      ${C_BOLD}%s${C_RESET}\n" "${dns:-?}"
+  printf "  Proxy:    ${C_BOLD}%s${C_RESET}\n" "$proxy"
+}
+
+# ---- 实时吞吐 --------------------------------------------------------------
+# netstat -ib 输出格式:
+#   Name  Mtu   Network       Address            Ipkts Ierrs Ibytes    Opkts Oerrs Obytes  Coll
+#   en0   1500  <Link#4>      9c:64:5b:01:02:03 12345  0     1234567  6789   0     987654  0
+# 取 Ibytes/Obytes 第二次采样,算差值
+_throughput() {
+  local now
+  now=$(date +%s)
+
+  # 当前采样 (TSV: iface <TAB> ibytes <TAB> obytes)
+  local -A current_bytes_in current_bytes_out
+  while IFS= read -r line; do
+    local -a parts
+    parts=(${=line})
+    local iface=${parts[1]} ibytes=${parts[2]} obytes=${parts[3]}
+    # 只关心 en* (物理接口) 和 bridge*
+    case $iface in
+      en*|bridge*)
+        current_bytes_in[$iface]=$ibytes
+        current_bytes_out[$iface]=$obytes
+        ;;
+    esac
+  done < <(netstat -ib 2>/dev/null | awk '
+    /<Link#[0-9]+>/ && ($1 ~ /^en/ || $1 ~ /^bridge/) {
+      printf "%s\t%s\t%s\n", $1, $7, $10
+    }
+  ')
+
+  echo "${C_BOLD}  实时吞吐${C_RESET} ${C_DIM}(delta / sec)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  printf "  %s%-10s  %12s  %12s  %12s%s\n" "${C_DIM}" '接口' '下行' '上行' '总数' "${C_RESET}"
+
+  for iface in ${(k)current_bytes_in}; do
+    local ib=${current_bytes_in[$iface]:-0}
+    local ob=${current_bytes_out[$iface]:-0}
+    local lib=${LAST_BYTES_IN[$iface]:-0}
+    local lob=${LAST_BYTES_OUT[$iface]:-0}
+    local lts=${LAST_TS[$iface]:-$now}
+
+    local dt=$((now - lts))
+    if (( dt == 0 )); then dt=1; fi
+    local dib=$(( (ib - lib) / dt ))
+    local dob=$(( (ob - lob) / dt ))
+    local dtotal=$((dib + dob))
+
+    # 把 dib + dob + dtotal 三个数字组合成一个 awk 调用,避免 zsh 5.9 bug
+    # 注意: BSD awk (macOS 默认) 不支持 BEGIN 块里的 function 定义,放外面
+    # 重要: zsh 5.9 函数体内 `local VAR=$(...)` 模式会输出 VAR 的赋值到 stdout
+    # 修法:完全不存到 local,直接调用 awk 三次,每次只输出一个值
+    #       或者用 printf + format 串拼接
+    printf "  %-10s  %12s/s  %12s/s  %12s/s\n" \
+      "$iface" \
+      "$(_human_bytes_inline $dib)" \
+      "$(_human_bytes_inline $dob)" \
+      "$(_human_bytes_inline $dtotal)"
+
+    LAST_BYTES_IN[$iface]=$ib
+    LAST_BYTES_OUT[$iface]=$ob
+    LAST_TS[$iface]=$now
+  done
+}
+
+# (旧的 _human_bytes 函数被上面的 awk 替换, 保留 _human_bytes_inline 兼容未来用)
+_human_bytes_inline() {
+  local bytes=$1
+  awk -v b="$bytes" 'BEGIN{
+    if (b >= 1048576) printf "%.2f MB", b/1048576
+    else if (b >= 1024) printf "%.1f KB", b/1024
+    else printf "%d B", b
+  }'
+}
+
+# ---- 活跃 TCP 连接 ---------------------------------------------------------
+_active_conns() {
+  echo
+  echo "${C_BOLD}  活跃 TCP 连接 (Top 10)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  printf '  ${C_DIM}%-7s  %-22s  %-22s  %s${C_RESET}\n' 'PROTO' '本地' '远程' '状态'
+  # lsof -nP 是 no DNS + no port name lookup (快)
+  # 注意: lsof 默认会显示很多进程,过滤
+  lsof -nP -iTCP -sTCP:ESTABLISHED 2>/dev/null | awk '
+    NR > 1 && $5 != "launchd" {
+      # lsof 输出列: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+      # NAME 是 "192.168.1.10:54321->203.0.113.5:443"
+      split($9, parts, "->")
+      local_addr = parts[1]; remote_addr = parts[2]
+      printf "  TCP     %-22s  %-22s  ESTABLISHED\n", local_addr, remote_addr
+    }
+  ' | head -10
+
+  # 总连接数
+  local total
+  total=$(lsof -nP -iTCP 2>/dev/null | wc -l | tr -d ' ')
+  echo "  ${C_DIM}(系统总 TCP 连接数: ~$((total - 1)))${C_RESET}"
+}
+
+# ---- 公网 IP (可选) --------------------------------------------------------
+_public_ip() {
+  echo
+  echo "${C_BOLD}  公网 IP${C_RESET} ${C_DIM}(ifconfig.me,2s 超时)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  # 不阻塞主循环:用 zsh & 后台跑,主渲染继续
+  local ip
+  ip=$(curl -sS --max-time 2 https://ifconfig.me 2>/dev/null) || ip='(timeout)'
+  printf '  ${C_BOLD}%s${C_RESET}\n' "${ip:-?}"
+}
+
+_render() {
+  printf '\033[?25l\033[2J\033[H'
+
+  echo "${C_BOLD}${C_CYAN}═══ 网络观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  刷新间隔 ${INTERVAL}s  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  echo "${C_BOLD}  网络接口${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  _parse_ifconfig
+
+  echo
+  _network_config
+  _throughput
+  _active_conns
+
+  if $WITH_PUBLIC; then _public_ip; fi
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: ifconfig, route, scutil, netstat, lsof${C_RESET}"
+}
+
+_cleanup() {
+  printf '\033[?25h\033[0m'; echo
+}
+trap _cleanup EXIT INT TERM
+
+if $ONCE; then
+  _render
+else
+  # 第一次跑先取基线采样
+  netstat -ib 2>/dev/null | awk '/<Link#[0-9]+>/ && ($1 ~ /^en/ || $1 ~ /^bridge/) {
+    print $1, $7, $10
+  }' | while read iface ib ob; do
+    LAST_BYTES_IN[$iface]=$ib
+    LAST_BYTES_OUT[$iface]=$ob
+    LAST_TS[$iface]=$(date +%s)
+  done
+  sleep $INTERVAL
+  while true; do _render; sleep $INTERVAL; done
+fi

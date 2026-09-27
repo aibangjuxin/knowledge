@@ -1,0 +1,249 @@
+#!/usr/bin/env zsh
+# cpuwatch — CPU + Top 进程实时观察器 (类 htop 但 zsh-only)
+#
+# 设计目标:
+#   - 公司配 MacBook Pro,无 brew / 无 python,只 zsh + ps / top / sysctl
+#   - 每 N 秒刷新,展示:
+#       ① 总 CPU user/sys/idle + 1/5/15 min load
+#       ② Top 10 进程 (按 CPU 排序,聚合相同应用)
+#       ③ 当前每个核心负载 (M 系列芯片 P-core / E-core 拆分)
+#   - 默认 2s 刷新一次,Ctrl-C 退出
+#
+# 用法:
+#   cpuwatch                  # 2s 刷新,持续观察
+#   cpuwatch --interval 1     # 1s 刷新
+#   cpuwatch --top 20         # 显示 top 20
+#   cpuwatch --once           # 只输出一次不刷新 (适合脚本消费)
+#   cpuwatch --no-aggregate   # 不聚合同名应用
+#
+# 退格/清屏控制: zsh 内建 echoti / printf '\e[2J\e[H' 即可,不依赖 tput
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i INTERVAL=2 TOP_N=10
+typeset ONCE=false AGGREGATE=true
+
+zmodload zsh/zutil 2>/dev/null || true
+zmodload zsh/terminfo 2>/dev/null || true
+
+# ---- 参数解析 --------------------------------------------------------------
+while (( $# > 0 )); do
+  case $1 in
+    --interval|-i) INTERVAL=$2; shift 2 ;;
+    --top|-n)      TOP_N=$2;     shift 2 ;;
+    --once)        ONCE=true;    shift ;;
+    --no-aggregate) AGGREGATE=false; shift ;;
+    --version)     echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--interval N] [--top N] [--once] [--no-aggregate]"
+      echo "  --interval N   刷新间隔秒数 (默认 2)"
+      echo "  --top N        显示 top N 进程 (默认 10)"
+      echo "  --once         只输出一次退出"
+      echo "  --no-aggregate 不聚合同名应用"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+# ---- 颜色 (只在 TTY 启用) --------------------------------------------------
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'
+  C_BOLD=$'\033[1m'
+  C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'
+  C_GREEN=$'\033[32m'
+  C_YELLOW=$'\033[33m'
+  C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+# 进度条字符
+typeset -r BAR_FILLED='█'
+typeset -r BAR_EMPTY='░'
+
+# ---- 数据采集 --------------------------------------------------------------
+# 解析 top -l 1 输出第一段(总 CPU + 内存概况)
+# 输出格式见系统采样:
+#   CPU usage: 32.51% user, 26.50% sys, 40.97% idle
+#   Load Avg: 2.22, 2.55, 2.86
+_parse_top_summary() {
+  local top_out=$1
+  local cpu_user cpu_sys cpu_idle
+  local la1 la5 la15
+
+  local line
+  for line in ${(f)top_out}; do
+    if [[ $line == 'CPU usage:'* ]]; then
+      # 用 awk 单行解析,比 zsh 参数扩展可靠
+      cpu_user=$(awk -F'[, %]+' '{for(i=1;i<=NF;i++){if($i=="user")print $(i-1);if($i=="sys")print $(i-1);if($i=="idle")print $(i-1)}}' <<<"$line" | sed -n '1p')
+      cpu_sys=$(awk -F'[, %]+' '{for(i=1;i<=NF;i++){if($i=="user")print $(i-1);if($i=="sys")print $(i-1);if($i=="idle")print $(i-1)}}' <<<"$line" | sed -n '2p')
+      cpu_idle=$(awk -F'[, %]+' '{for(i=1;i<=NF;i++){if($i=="user")print $(i-1);if($i=="sys")print $(i-1);if($i=="idle")print $(i-1)}}' <<<"$line" | sed -n '3p')
+    fi
+    if [[ $line == 'Load Avg:'* ]]; then
+      # Load Avg: 2.22, 2.55, 2.86  (字段: $1=Load, $2=Avg:, $3=2.22,, $4=2.55,, $5=2.86)
+      la1=$(awk '{gsub(/,/,""); print $3}' <<<"$line")
+      la5=$(awk '{gsub(/,/,""); print $4}' <<<"$line")
+      la15=$(awk '{gsub(/,/,""); print $5}' <<<"$line")
+    fi
+  done
+
+  : ${cpu_user:=0} ${cpu_sys:=0} ${cpu_idle:=0}
+  : ${la1:=0} ${la5:=0} ${la15:=0}
+  # 全局输出 (zsh dynamic assign via typeset -g)
+  typeset -g G_CPU_USER=$cpu_user G_CPU_SYS=$cpu_sys G_CPU_IDLE=$cpu_idle
+  typeset -g G_LA1=$la1 G_LA5=$la5 G_LA15=$la15
+}
+
+# 进程采样: 输出 "CPU PID COMM" 三列
+_sample_procs() {
+  # 注意: ps rss 输出 KB(macOS),rss / 1024 = MB
+  ps -Ao %cpu,pid,rss,comm 2>/dev/null | awk '
+    NR > 1 && $1 ~ /^[0-9.]+$/ && $1+0 > 0 {
+      cpu=$1; pid=$2; rss=$3; comm=$4
+      # 简化 app 名
+      n = split(comm, parts, "/")
+      app = parts[n]
+      if (app ~ /\.app/) sub(/\.app.*/, ".app", app)
+      printf "%.1f %d %.0f %s\n", cpu, pid, rss/1024, app
+    }
+  '
+}
+
+# 聚合 (按应用名合并 CPU 和 MEM)
+_aggregate_procs() {
+  _sample_procs | awk '
+    {
+      cpu=$1; pid=$2; mem=$3; app=$4
+      cpu_total[app] += cpu
+      mem_total[app] += mem
+      cnt[app]++
+      if (cpu > max_cpu[app]) max_cpu[app] = cpu
+    }
+    END {
+      for (app in cpu_total) {
+        if (cpu_total[app] > 0.5) {
+          # TSV 输出,字段顺序: cpu <TAB> cnt <TAB> mem <TAB> app
+          printf "%s\t%s\t%s\t%s\n", cpu_total[app], cnt[app], mem_total[app], app
+        }
+      }
+    }
+  ' | sort -nr | head -n $TOP_N
+}
+
+# 核心负载: macOS 没有 /proc/stat,但可以用 `top -l 1 -F` 的 CPU 拆分
+# 简化: 用 sysctl 看每个核心的频率 (M 系列 P/E 核无法直接区分,但能看到活跃度)
+_per_core_load() {
+  local ncpu=$(sysctl -n hw.ncpu)
+  local p_ncpu=0 e_ncpu=0
+  # hw.perflevel0.physicalcpu = P-core 物理核,hw.perflevel0.logicalcpu = 逻辑核
+  if sysctl hw.perflevel0.physicalcpu >/dev/null 2>&1; then
+    p_ncpu=$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || echo 0)
+    e_ncpu=$(sysctl -n hw.perflevel1.physicalcpu 2>/dev/null || echo 0)
+  fi
+  echo "  PerfLevel-0 (P): ${p_ncpu} 核 / PerfLevel-1 (E): ${e_ncpu} 核 (总逻辑核: ${ncpu})"
+}
+
+# 渲染进度条 (传入 0-100 百分比,返回 unicode bar)
+_bar() {
+  local pct=$1 width=${2:-30}
+  # awk 计算 filled = pct / 100 * width
+  awk -v p="$pct" -v w="$width" 'BEGIN{
+    filled = int(p/100 * w)
+    if (filled > w) filled = w
+    empty = w - filled
+    for (i=0; i<filled; i++) printf "%s", "█"
+    for (i=0; i<empty; i++) printf "%s", "░"
+    printf " %5.1f%%\n", p
+  }'
+}
+
+# 颜色阈值: 80% 红,50% 黄, 否则绿
+_color_for_pct() {
+  local pct=$1
+  awk -v p="$pct" 'BEGIN{
+    if (p >= 80) printf "\033[31m"  # red
+    else if (p >= 50) printf "\033[33m"  # yellow
+    else printf "\033[32m"  # green
+  }'
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_render() {
+  # 隐藏光标 + 移到顶部
+  printf '\033[?25l\033[2J\033[H'
+
+  local top_out
+  top_out=$(top -l 1 -n 0 -s 0 2>/dev/null)
+  _parse_top_summary "$top_out"
+
+  echo "${C_BOLD}${C_CYAN}═══ CPU 实时观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  刷新间隔 ${INTERVAL}s  ·  Top ${TOP_N}  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  # 总 CPU
+  local used
+  used=$(awk -v u="$G_CPU_USER" -v s="$G_CPU_SYS" 'BEGIN{printf "%.1f", u+s}')
+  local bar_color
+  bar_color=$(_color_for_pct $used)
+  # 双引号格式串 + 单独传变量 (zsh 单引号 printf 不展开 ${VAR})
+  printf "  CPU 总使用:%s %s%s  user=%.1f%%  sys=%.1f%%  idle=%.1f%%%s\n" \
+    "${C_RESET}" "$bar_color" "$(_bar $used 30)" \
+    "$G_CPU_USER" "$G_CPU_SYS" "$G_CPU_IDLE" "${C_RESET}"
+  printf "  负载 (1m/5m/15m): %s%s%s / %s%s%s / %s%s%s\n" \
+    "${C_BOLD}" "$G_LA1" "${C_RESET}" \
+    "${C_BOLD}" "$G_LA5" "${C_RESET}" \
+    "${C_BOLD}" "$G_LA15" "${C_RESET}"
+  _per_core_load
+  echo
+
+  # Top 进程
+  echo "${C_BOLD}  Top ${TOP_N} 进程${C_RESET} ${C_DIM}(按应用聚合 CPU)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  printf "  %s%8s  %8s  %8s  %s%s\n" "${C_DIM}" 'CPU%' 'PROCS' 'MEM_MB' '应用' "${C_RESET}"
+
+  local procs
+  if $AGGREGATE; then
+    procs=$(_aggregate_procs)
+  else
+    procs=$(_sample_procs | sort -nr | head -n $TOP_N)
+  fi
+
+  if [[ -z $procs ]]; then
+    echo "  ${C_DIM}(无 CPU 占用 > 0% 的进程)${C_RESET}"
+  else
+    while IFS= read -r line; do
+      # zsh 5.9 函数体内 `local VAR; read VAR <<<` 多变量模式有 bug (输出 trace)
+      # 改用 zsh 原生 SH_WORD_SPLIT: ${=line}
+      local -a fields
+      fields=(${=line})
+      local cpu=${fields[1]} n_procs=${fields[2]} mem=${fields[3]} app=${fields[4]}
+      local color=$(_color_for_pct $cpu)
+      printf "  %s%8.1f%s  %8d  %8.0f  %s\n" \
+        "$color" "$cpu" "${C_RESET}" "${n_procs:-1}" "$mem" "$app"
+    done <<<"$procs"
+  fi
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: top -l 1, ps -Ao${C_RESET}"
+}
+
+_cleanup() {
+  printf '\033[?25h\033[0m'  # 恢复光标
+  echo
+}
+trap _cleanup EXIT INT TERM
+
+# ---- 主循环 ----------------------------------------------------------------
+if $ONCE; then
+  _render
+else
+  while true; do
+    _render
+    sleep $INTERVAL
+  done
+fi

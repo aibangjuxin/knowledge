@@ -1,0 +1,261 @@
+#!/usr/bin/env zsh
+# appmenu — 用户安装的 app 清单 (/Applications + ~/Applications)
+#
+# 设计目标:
+#   - 公司配 MacBook Pro,无 brew / 无 python,只 zsh + ls / plutil / defaults
+#   - 显示:
+#       ① /Applications /Applications/Utilities /System/Applications 数量
+#       ② ~/Applications 个人 app
+#       ③ 用户安装的所有 .app 的: 名称 + Bundle ID + 版本 + 大小 + 架构
+#       ④ 排序: 按大小 / 按字母 / 按安装时间 (--sort)
+#       ⑤ 标记:Universal(arm64+x86) / Apple Silicon Only / Intel Only
+#   - 用 mdfind 替代品: 直接扫 Info.plist (避免公司电脑 Spotlight 索引问题)
+#
+# 用法:
+#   appmenu                    # 按大小排序,前 30
+#   appmenu --all              # 显示全部 (不只前 30)
+#   appmenu --sort name        # 按字母排序
+#   appmenu --sort size        # 按大小排序 (默认)
+#   appmenu --sort mtime       # 按修改时间
+#   appmenu --only-universal   # 只显示通用二进制
+#   appmenu --only-apple-silicon # 只显示 arm64
+#   appmenu --only-intel       # 只显示 x86_64
+#   appmenu --system           # 包含 /System/Applications
+#   appmenu --json             # 输出 JSON 列表
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i TOP_N=30
+typeset SORT_BY='size'
+typeset FILTER=''  # '', 'universal', 'applesilicon', 'intel'
+typeset SHOW_SYSTEM=false
+typeset SHOW_ALL=false
+typeset OUTPUT_JSON=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --all)              SHOW_ALL=true;    shift ;;
+    --sort)             SORT_BY=$2;       shift 2 ;;
+    --only-universal)   FILTER=universal; shift ;;
+    --only-apple-silicon) FILTER=applesilicon; shift ;;
+    --only-intel)       FILTER=intel;     shift ;;
+    --system)           SHOW_SYSTEM=true; shift ;;
+    --json)             OUTPUT_JSON=true; shift ;;
+    --version)          echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--all] [--sort name|size|mtime] [--only-universal|--only-apple-silicon|--only-intel] [--system] [--json]"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 && $OUTPUT_JSON != true ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_CYAN=$'\033[36m'; C_GREEN=$'\033[32m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_CYAN='' C_GREEN=''
+fi
+
+# ---- 扫描 .app -------------------------------------------------------------
+# 路径: /Applications + /Applications/Utilities + ~/Applications + 可选 /System/Applications
+# 提取: name + bundle id + version + size + arch
+_scan_app() {
+  local app_path=$1
+  local info_plist="$app_path/Contents/Info.plist"
+
+  [[ -f $info_plist ]] || return 1
+
+  local name bundle_id version size_bytes mtime archs
+
+  name=$(plutil -extract CFBundleDisplayName raw "$info_plist" 2>/dev/null \
+         || plutil -extract CFBundleName raw "$info_plist" 2>/dev/null \
+         || basename "$app_path" .app)
+  bundle_id=$(plutil -extract CFBundleIdentifier raw "$info_plist" 2>/dev/null)
+  version=$(plutil -extract CFBundleShortVersionString raw "$info_plist" 2>/dev/null)
+  [[ -z $version ]] && version=$(plutil -extract CFBundleVersion raw "$info_plist" 2>/dev/null)
+
+  # size (du -sb 在 macOS 是 -sk 以 KB 计算)
+  size_bytes=$(du -sk "$app_path" 2>/dev/null | awk '{print $1 * 1024}')
+
+  # mtime (epoch)
+  mtime=$(stat -f %m "$app_path" 2>/dev/null)
+
+  # 架构: 用 lipo 检查主可执行文件
+  local exec_file
+  exec_file=$(plutil -extract CFBundleExecutable raw "$info_plist" 2>/dev/null)
+  if [[ -n $exec_file ]] && [[ -f "$app_path/Contents/MacOS/$exec_file" ]]; then
+    local lipo_out
+    lipo_out=$(lipo -archs "$app_path/Contents/MacOS/$exec_file" 2>/dev/null)
+    archs=$lipo_out
+  else
+    archs='?'
+  fi
+
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$app_path" "$name" "$bundle_id" "${version:-?}" "${size_bytes:-0}" "${mtime:-0}" "${archs:-?}"
+}
+
+# ---- 主扫描 ----------------------------------------------------------------
+# 输出 TSV: path name bundle_id version size_bytes mtime archs
+_scan_all() {
+  local -a paths
+  paths=(/Applications "$HOME/Applications")
+  if $SHOW_SYSTEM; then
+    paths+=(/System/Applications /System/Applications/Utilities)
+  fi
+
+  for p in $paths; do
+    [[ -d $p ]] || continue
+    # 用 glob 收集 .app,深度 1
+    for app in "$p"/*.app(N); do
+      # || true: _scan_app 返回 1 表示 "无 Info.plist,跳过" — 不是错误
+      # 不要让 errexit 把整个脚本中止
+      _scan_app "$app" || true
+    done
+  done | sort -t$'\t' -k5 -nr  # 默认按 size 降序,后续再按参数排
+}
+
+# ---- 过滤 + 排序 -----------------------------------------------------------
+_format_size() {
+  local bytes=$1
+  awk -v b="$bytes" 'BEGIN{
+    if (b >= 1073741824) printf "%.2f GB", b/1073741824
+    else if (b >= 1048576) printf "%.1f MB", b/1048576
+    else if (b >= 1024) printf "%.0f KB", b/1024
+    else printf "%d B", b
+  }'
+}
+
+_format_mtime() {
+  local epoch=$1
+  # macOS date -r 支持 epoch
+  date -r "$epoch" '+%Y-%m-%d' 2>/dev/null
+}
+
+_arch_icon() {
+  local archs=$1
+  case $archs in
+    *arm64*x86_64*|*x86_64*arm64*) echo '🟢 U' ;;  # Universal
+    *arm64*) echo '🟢 A' ;;                       # Apple Silicon
+    *x86_64*) echo '🟡 I' ;;                      # Intel
+    *) echo '⚪ ?' ;;
+  esac
+}
+
+_filter_sort() {
+  # 接收 stdin (避免 zsh 5.9 `local X=$1` leak)
+  case $FILTER in
+    universal)    awk -F'\t' '$7 ~ /arm64/ && $7 ~ /x86_64/' ;;
+    applesilicon) awk -F'\t' '$7 ~ /arm64/ && $7 !~ /x86_64/' ;;
+    intel)        awk -F'\t' '$7 !~ /arm64/ && $7 ~ /x86_64/' ;;
+    *)            cat ;;
+  esac | case $SORT_BY in
+    name)  sort -t$'\t' -k2 ;;
+    size)  sort -t$'\t' -k5 -nr ;;
+    mtime) sort -t$'\t' -k6 -nr ;;
+    *)     sort -t$'\t' -k5 -nr ;;
+  esac
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_render() {
+  # 一次性 scan + filter + sort + 渲染 (避免 zsh 5.9 函数体内 multi-var leak)
+  local tmp_data
+  tmp_data=$(mktemp -t appmenu.XXXXXX)
+  trap "rm -f '$tmp_data'" EXIT
+
+  _scan_all > "$tmp_data"
+
+  # 用 awk 一次性做:统计 + 过滤 + 排序 + 渲染
+  _filter_sort < "$tmp_data" | awk -F'\t' \
+    -v c_bold="$C_BOLD" -v c_dim="$C_DIM" -v c_reset="$C_RESET" -v c_cyan="$C_CYAN" \
+    -v top_n="$TOP_N" -v show_all="$SHOW_ALL" -v show_system="$SHOW_SYSTEM" '
+    function icon(archs) {
+      if (archs ~ /arm64/ && archs ~ /x86_64/) return "🟢 U"
+      if (archs ~ /arm64/) return "🟢 A"
+      if (archs ~ /x86_64/) return "🟡 I"
+      return "⚪ ?"
+    }
+    function size_h(b) {
+      if (b >= 1073741824) return sprintf("%.2f GB", b/1073741824)
+      if (b >= 1048576) return sprintf("%.1f MB", b/1048576)
+      if (b >= 1024) return sprintf("%.0f KB", b/1024)
+      return sprintf("%d B", b)
+    }
+    function truncate(s, n) {
+      if (length(s) > n) return substr(s, 1, n-3) "..."
+      return s
+    }
+    BEGIN {
+      print c_bold c_cyan "═══ 已安装 app 清单 ═══" c_reset
+      print c_dim "扫描路径: /Applications, ~/Applications" (show_system == "true" ? ", /System/Applications" : "") c_reset
+      print ""
+      total_count = 0; total_size = 0; u_count = 0; a_count = 0; i_count = 0
+      printf "  %s%-3s  %-30s  %-12s  %10s  %s%s\n", c_dim, "ARC", "NAME", "VERSION", "SIZE", "BUNDLE_ID", c_reset
+    }
+    {
+      total_count++
+      total_size += $5
+      if ($7 ~ /arm64/ && $7 ~ /x86_64/) u_count++
+      else if ($7 ~ /arm64/) a_count++
+      else if ($7 ~ /x86_64/) i_count++
+
+      if (show_all == "true" || NR <= top_n) {
+        icon_str = icon($7)
+        size_str = size_h($5)
+        name = truncate($2, 30)
+        printf "  %-3s  %-30s  %-12s  %10s  %s\n", icon_str, name, $4, size_str, $3
+      }
+    }
+    END {
+      print ""
+      printf "  %s总计:%s %s%d%s 个 app, 占用 %s%s%s\n", c_bold, c_reset, c_bold, total_count, c_reset, c_bold, size_h(total_size), c_reset
+      printf "  架构分布: "
+      if (u_count > 0) printf "🟢 Universal: %s%d%s  ", c_bold, u_count, c_reset
+      if (a_count > 0) printf "🟢 Apple Silicon: %s%d%s  ", c_bold, a_count, c_reset
+      if (i_count > 0) printf "🟡 Intel: %s%d%s  ", c_bold, i_count, c_reset
+      printf "\n"
+      if (show_all != "true" && total_count > top_n) {
+        printf "  %s(显示 %d / 共 %d,用 --all 看全部)%s\n", c_dim, top_n, total_count, c_reset
+      }
+    }
+  '
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: ls, plutil, du, lipo, stat${C_RESET}"
+}
+
+_json() {
+  local tmp_data
+  tmp_data=$(mktemp -t appmenu.XXXXXX)
+  trap "rm -f '$tmp_data'" EXIT
+  _scan_all > "$tmp_data"
+
+  # 一次性: filter → awk 构造 JSON
+  # 不用 while-read 因为 zsh 5.9 在 process substitution 里有 multi-var leak
+  _filter_sort < "$tmp_data" | awk -F'\t' '
+    function esc(s) {
+      gsub(/\\/, "\\\\", s)
+      gsub(/"/, "\\\"", s)
+      return s
+    }
+    BEGIN { print "[" }
+    NR > 1 { printf ",\n" }
+    {
+      printf "  {\"name\": \"%s\", \"bundle_id\": \"%s\", \"version\": \"%s\", \"size_bytes\": %s, \"mtime\": %s, \"arch\": \"%s\", \"path\": \"%s\"}",
+        esc($2), esc($3), esc($4), $5, $6, esc($7), esc($1)
+    }
+    END { print "\n]" }
+  '
+}
+
+# ---- 入口 ------------------------------------------------------------------
+if $OUTPUT_JSON; then
+  _json
+else
+  _render
+fi
