@@ -37,7 +37,7 @@ _parse_size() {
   awk -v s="$1" 'BEGIN{
     n = s; sub(/[kKmMgG]$/, "", n); m = 1
     if (s ~ /[gG]$/) m = 1024*1024
-    else if (s ~ /mM]$/) m = 1024
+    else if (s ~ /[mM]$/) m = 1024
     printf "%d", n * m
   }'
 }
@@ -97,7 +97,7 @@ _big_dirs() {
         if (kb + 0 < min_kb) next
         printf "%d\t%s\n", kb, path
       }
-    ' | sort -nr | head -$TOP_N
+    ' | sort -nr | head -$TOP_N || true
 }
 
 # ---- 大文件 Top N ---------------------------------------------------------
@@ -114,7 +114,7 @@ _big_files() {
         if (size / 1024 < min_kb) next
         printf "%d\t%s\n", size/1024, $0
       }
-    ' | sort -nr | head -$TOP_N
+    ' | sort -nr | head -$TOP_N || true
 }
 
 # ---- 按文件类型聚合 -------------------------------------------------------
@@ -166,7 +166,7 @@ _categorize_by_size() {
     | awk '
         { sz[$2] += $1 }
         END { for (c in sz) printf "%d\t%s\n", sz[c], c }
-      ' | sort -nr | head -10
+      ' | sort -nr | head -10 || true
 }
 
 # ---- 常见可清理目录 ------------------------------------------------------
@@ -188,15 +188,15 @@ _clean_hints() {
     "$HOME/Downloads"
     "/private/var/folders"     # macOS 临时文件夹顶层
   )
+  # local 必须提到循环外:zsh 里循环体内重复 local 会把旧值回显到 stdout
+  local d kb pretty
   for d in $hints; do
     [[ -d $d ]] || continue
-    local kb
     kb=$(du -sk "$d" 2>/dev/null | awk '{print $1}')
     [[ -z $kb ]] && continue
-    # 把 $HOME 替换成 ~
-    local pretty=${d/$HOME/~}
+    pretty=${d/$HOME/~}
     printf "%s\t%s\n" "$kb" "$pretty"
-  done | sort -nr | head -15
+  done | sort -nr | head -15 || true   # head 关 stdin → 上游 SIGPIPE(141)
 }
 
 # ---- 渲染 ------------------------------------------------------------------
@@ -216,12 +216,12 @@ _render() {
     echo "  ${C_DIM}(没有 ≥ $(_human_kb $MIN_SIZE_KB) 的子目录)${C_RESET}"
   else
     printf "  ${C_DIM}%8s  %s${C_RESET}\n" 'SIZE' 'PATH'
-    while IFS=$'\t' read -r kb path; do
-      # 颜色:> 1G 红, > 100M 黄, 否则绿
-      local c=$C_GREEN
-      (( kb >= 1048576 )) && c=$C_RED
-      (( kb >= 102400 && kb < 1048576 )) && c=$C_YELLOW
-      printf "  ${c}%8s${C_RESET}  %s\n" "$(_human_kb $kb)" "$path"
+    local d_kb d_path d_color
+    while IFS=$'\t' read -r d_kb d_path; do
+      d_color=$C_GREEN
+      (( d_kb >= 1048576 )) && d_color=$C_RED
+      (( d_kb >= 102400 && d_kb < 1048576 )) && d_color=$C_YELLOW
+      printf "  ${d_color}%8s${C_RESET}  %s\n" "$(_human_kb $d_kb)" "$d_path"
     done <<<"$dirs"
   fi
 
@@ -235,11 +235,12 @@ _render() {
     echo "  ${C_DIM}(没有 ≥ $(_human_kb $MIN_SIZE_KB) 的文件)${C_RESET}"
   else
     printf "  ${C_DIM}%8s  %s${C_RESET}\n" 'SIZE' 'PATH'
-    while IFS=$'\t' read -r kb path; do
-      local c=$C_GREEN
-      (( kb >= 1048576 )) && c=$C_RED
-      (( kb >= 102400 && kb < 1048576 )) && c=$C_YELLOW
-      printf "  ${c}%8s${C_RESET}  %s\n" "$(_human_kb $kb)" "$path"
+    local f_kb f_path f_color
+    while IFS=$'\t' read -r f_kb f_path; do
+      f_color=$C_GREEN
+      (( f_kb >= 1048576 )) && f_color=$C_RED
+      (( f_kb >= 102400 && f_kb < 1048576 )) && f_color=$C_YELLOW
+      printf "  ${f_color}%8s${C_RESET}  %s\n" "$(_human_kb $f_kb)" "$f_path"
     done <<<"$files"
   fi
 
@@ -253,9 +254,9 @@ _render() {
     if [[ -z $cats ]]; then
       echo "  ${C_DIM}(无 ≥ $(_human_kb $MIN_SIZE_KB) 的文件可分类)${C_RESET}"
     else
-      while IFS=$'\t' read -r bytes cat; do
-        local kb=$((bytes / 1024))
-        printf "  %10s  %s\n" "$(_human_kb $kb)" "$cat"
+      local cat_bytes cat_name
+      while IFS=$'\t' read -r cat_bytes cat_name; do
+        printf "  %10s  %s\n" "$(_human_kb $((cat_bytes / 1024)))" "$cat_name"
       done <<<"$cats"
     fi
   fi
@@ -270,13 +271,15 @@ _render() {
     echo "  ${C_DIM}(没有匹配项)${C_RESET}"
   else
     printf "  ${C_DIM}%8s  %s${C_RESET}\n" 'SIZE' 'PATH'
-    while IFS=$'\t' read -r kb path; do
-      printf "  %8s  %s\n" "$(_human_kb $kb)" "$path"
+    local h_kb h_path
+    while IFS=$'\t' read -r h_kb h_path; do
+      printf "  %8s  %s\n" "$(_human_kb $h_kb)" "$h_path"
     done <<<"$hints"
     echo
     echo "  ${C_DIM}清理示例 (执行前确认):"
     local top3
     top3=$(echo "$hints" | head -3 | awk -F'\t' '{print $2}')
+    local p
     while IFS= read -r p; do
       [[ -z $p ]] && continue
       echo "    rm -rf '$p'    # ${C_DIM}# 删除前 du -sh '$p' 确认大小${C_RESET}"

@@ -1,0 +1,266 @@
+#!/usr/bin/env zsh
+# displaywatch — 显示设备 / 分辨率 / 刷新率 / HiDPI 缩放 / 色彩观察器
+#
+# 设计目标:
+#   - 公司配 Mac,无 brew / 无 python,只 zsh + system_profiler / osascript / ioreg
+#   - 显示:
+#       ① GPU 芯片 + 核心数 + Metal 支持
+#       ② 每块显示器:厂商 / 原始分辨率 / UI 缩放(HiDPI)/ 刷新率 / 是否主屏 / 镜像 / 在线
+#       ③ Retina 判断(UI 缩放 ≠ 物理分辨率即开启 HiDPI)
+#       ④ 显示器 EDID 序列号 + 连接方式(DisplayPort/HDMI/Thunderbolt)
+#       ⑤ 总像素负载估算(分辨率 × 刷新率 × 屏数)
+#   - 显示信息变化慢,默认单次;--watch 可持续刷新
+#
+# 用法:
+#   displaywatch                 # 单次输出
+#   displaywatch --watch         # 持续观察 (5s)
+#   displaywatch --once          # 同默认,显式单次
+#   displaywatch --edid          # 额外显示每块屏的 EDID 序列号
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i INTERVAL=5
+typeset ONCE=true SHOW_EDID=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --interval|-i) INTERVAL=$2; shift 2 ;;
+    --watch)       ONCE=false;   shift ;;
+    --once)        ONCE=true;    shift ;;
+    --edid)        SHOW_EDID=true; shift ;;
+    --version)     echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--watch] [--interval N] [--edid]"
+      echo "  --watch  持续刷新 (默认单次)"
+      echo "  --edid   显示每块屏的 EDID 序列号"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+typeset -r BAR_FILLED='█'
+typeset -r BAR_EMPTY='░'
+
+# ---- GPU -------------------------------------------------------------------
+# system_profiler SPDisplaysDataType 输出层级(空格数):
+#   "Graphics/Displays:"                          0
+#     "    Apple M4:"                              4    ← GPU 芯片
+#       "      Chipset Model: Apple M4"            6
+#       "      Total Number of Cores: 10"          6
+#       "      Metal Support: Metal 4"             6
+#       "      Displays:"                          6
+#         "        DELL U2720QM:"                  8    ← 显示器名
+#           "          Resolution: 5120 x 2880"    10
+#           "          UI Looks like: ..."         10
+# 输出 TSV: gpu <TAB> cores <TAB> metal
+_parse_gpu() {
+  system_profiler SPDisplaysDataType 2>/dev/null | awk '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    /Chipset Model:/  { gpu = trim($0); sub(/^Chipset Model:[[:space:]]*/, "", gpu); next }
+    /Total Number of Cores:/ { cores = $NF; next }
+    /Metal Support:/  { metal = trim($0); sub(/^Metal Support:[[:space:]]*/, "", metal); next }
+    END { printf "%s\t%s\t%s\n", (gpu?gpu:"?"), (cores?cores:"?"), (metal?metal:"?") }
+  '
+}
+
+# ---- 显示器列表 ------------------------------------------------------------
+# 输出 TSV: name <TAB> native_res <TAB> native_desc <TAB> ui_looks <TAB> main <TAB> mirror <TAB> online
+_parse_displays() {
+  system_profiler SPDisplaysDataType 2>/dev/null | awk '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    BEGIN { in_disp = 0 }
+    # "      Displays:" (6 spaces) 进入显示器段
+    /^[[:space:]]{6}Displays:[[:space:]]*$/ { in_disp = 1; next }
+    # 显示器名 (8 spaces, 以 : 结尾)
+    in_disp && /^[[:space:]]{8}[^[:space:]].*:[[:space:]]*$/ {
+      if (name != "") flush()
+      name = trim($0); sub(/:$/, "", name)
+      nat = ""; ndesc = ""; ui = ""; main = ""; mir = ""; onl = ""
+      next
+    }
+    in_disp && /Resolution:/ {
+      nat = trim($0); sub(/^Resolution:[[:space:]]*/, "", nat)
+      # "5120 x 2880 (5K/UHD+ - ...)" → 分辨率 与 描述
+      if (match(nat, /^[0-9]+ x [0-9]+/)) {
+        ndesc = substr(nat, 1, RLENGTH)
+        nat = substr(nat, RLENGTH + 1)
+        sub(/^[[:space:]]*\(/, "", nat); sub(/\).*/, "", nat)
+      }
+      next
+    }
+    in_disp && /UI Looks like:/ {
+      ui = trim($0); sub(/^UI Looks like:[[:space:]]*/, "", ui); next
+    }
+    in_disp && /Main Display:/  { main = trim($0); sub(/^Main Display:[[:space:]]*/, "", main); next }
+    in_disp && /Mirror:/       { mir  = trim($0); sub(/^Mirror:[[:space:]]*/, "", mir);  next }
+    in_disp && /Online:/       { onl  = trim($0); sub(/^Online:[[:space:]]*/, "", onl);  next }
+    END { if (in_disp && name != "") flush() }
+
+    function flush() {
+      printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+        name, nat, ndesc, ui, main, mir, onl
+    }
+  '
+}
+
+# ---- EDID / 序列号 ----------------------------------------------------------
+# ioreg 的 display 节点上有两种来源:
+#   ① "Metadata" 字典里的 "SerialNumber" — 已解码,最可靠
+#   ② "EDID" 原始 hex — 前 8 字节是固定头,序列号在字节 8-11(0-based)
+# 优先用 ①,缺失时回退 ②
+_edid_list() {
+  ioreg -l -w 0 2>/dev/null | awk '
+    # ① Metadata.SerialNumber
+    /"SerialNumber" = [0-9]/ {
+      s = $0
+      if (match(s, /"SerialNumber" = [0-9]+/)) {
+        v = substr(s, RSTART + 17, RLENGTH - 17)
+        gsub(/[^0-9]/, "", v)
+        if (length(v) >= 4) print v
+      }
+      next
+    }
+    # ② EDID 字节 8-11
+    /"EDID" = </ {
+      s = $0
+      if (!match(s, /<[0-9a-fA-F]+>/)) next
+      hex = substr(s, RSTART + 1, RLENGTH - 2)
+      if (length(hex) < 64) next          # 至少 16 字节才有意义
+      sn = substr(hex, 8 * 4 + 1, 4 * 4)  # 字节 8..11
+      if (sn == "" ) next
+      if (sn ~ /^0+$/ || sn ~ /^f+$/i) next   # 全 0 或全 f = 无效
+      print sn
+    }
+  ' | sort -u
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_render() {
+  if [[ -t 1 ]]; then printf '\033[?25l\033[2J\033[H'; fi
+
+  echo "${C_BOLD}${C_CYAN}═══ 显示设备 观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')$([[ $ONCE == true ]] || echo "  ·  刷新 ${INTERVAL}s")  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  # ① GPU
+  local gpu cores metal
+  local gpu_info
+  gpu_info=$(_parse_gpu)
+  IFS=$'\t' read -r gpu cores metal <<< "$gpu_info"
+  echo "${C_BOLD}  图形芯片${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  printf '  芯片:   %s%s%s\n' "$C_BOLD" "${gpu:-?}" "$C_RESET"
+  printf '  核心数: %s%s%s\n' "$C_BOLD" "${cores:-?}" "$C_RESET"
+  printf '  Metal:  %s\n' "${metal:-?}"
+
+  # ② 显示器
+  echo
+  echo "${C_BOLD}  显示器${C_RESET} ${C_DIM}(分辨率 / HiDPI 缩放 / 刷新率)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+
+  local disp
+  disp=$(_parse_displays)
+  if [[ -z $disp ]]; then
+    echo "  ${C_DIM}(无显示器信息 — 可能无头机器或 system_profiler 被限制)${C_RESET}"
+    return 0
+  fi
+
+  # EDID(可选):预取一次,按顺序取用
+  local -a edids
+  if $SHOW_EDID; then
+    edids=(${(f)"$(_edid_list)"})
+  fi
+
+  local idx=0 total_load=0
+  local d_name d_nat d_desc d_ui d_main d_mir d_onl
+  print -r -- "$disp" | awk -F'\t' \
+    -v c_bold="$C_BOLD" -v c_dim="$C_DIM" -v c_cyan="$C_CYAN" \
+    -v c_green="$C_GREEN" -v c_yellow="$C_YELLOW" -v c_reset="$C_RESET" \
+    -v filled="$BAR_FILLED" -v empty="$BAR_EMPTY" '
+    function hidpi(nat, ui,   a, b) {
+      if (nat == "" || ui == "") return "?"
+      split(nat, a, / x /); split(ui, b, / @ /)
+      return (a[1]*1 == b[1]*1 && a[2]*1 == b[2]*1) ? "no" : "yes"
+    }
+    function hz_of(ui,   n, parts) {
+      if (ui == "" || index(ui, "@") == 0) return 0
+      n = split(ui, parts, "@"); if (n < 2) return 0
+      sub(/[[:space:]]*Hz.*$/, "", parts[2])
+      return parts[2] + 0
+    }
+    function dims(s,   a) { split(s, a, / x /); return a[1]*1 " " a[2]*1 }
+    function load_bar(w, h, r,   gbs, pct, f, i) {
+      if (w == "?" || h == "?" || r == 0) return c_dim "?" c_reset
+      gbs = w * h * r * 4 / 1e9
+      pct = gbs * 100 / 32; if (pct > 100) pct = 100
+      f = int(pct / 100 * 16); if (f > 16) f = 16
+      s = ""
+      for (i = 0; i < f; i++) s = s filled
+      for (i = 0; i < 16 - f; i++) s = s empty
+      return s sprintf(" %5.1f GB/s", gbs)
+    }
+    BEGIN {
+      n = 0
+      print c_dim sprintf("  %-3s %-24s %-14s %-16s %-5s %s", \
+        "#", "NAME", "NATIVE", "UI LOOKS LIKE", "HIDPI", "LOAD") c_reset
+    }
+    {
+      n++
+      hd = hidpi($3, $4)
+      hzc = hz_of($4)
+      split($3, dr, / x /)
+      lbl = $1; if (length(lbl) > 24) lbl = substr(lbl, 1, 21) "..."
+      # 主屏标青,离线标暗
+      namecol = ($5 == "Yes") ? c_cyan : c_dim
+      # HiDPI 开 → 黄,关 → 绿
+      hdcol = (hd == "yes") ? c_yellow : ((hd == "no") ? c_green : c_dim)
+      nat = $3; if (length(nat) > 14) nat = substr(nat, 1, 14)
+      ui = $4; if (length(ui) > 16) ui = substr(ui, 1, 16)
+      # 带宽用物理分辨率算(传输的是原始像素,缩放只影响逻辑像素)
+      printf "  %-3d %s%-24s%s %-14s %-16s %s%-5s%s %s\n", \
+        n, namecol, lbl, c_reset, nat, ui, hdcol, hd, c_reset, \
+        load_bar(dr[1]+0, dr[2]+0, hzc+0)
+      printf "  %s%-3s %-24s %-14s %s主屏=%s 镜像=%s 在线=%s%s\n", \
+        c_dim, "", "", "", c_dim, $5, $6, $7, c_reset
+      if ($3 != "" && $3 != "?")
+        printf "  %s%-3s %-24s %s%s%s\n", c_dim, "", "", c_dim, $3, c_reset
+    }
+    END { if (n > 0) printf c_dim "\n  共 %d 块显示器%s", n, c_reset }
+  '
+
+  # ③ EDID
+  if $SHOW_EDID; then
+    echo
+    echo "${C_BOLD}  EDID 序列号${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    if [[ ${#edids} -eq 0 ]]; then
+      echo "  ${C_DIM}(未读到 EDID — 可能是转接坞或直连)${C_RESET}"
+    else
+      local i=1 sn
+      for sn in $edids; do
+        printf '  %s%-3s %s%s\n' "$C_DIM" "$i" "$C_BOLD" "$sn"
+        (( i += 1 ))
+      done
+    fi
+  fi
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: system_profiler SPDisplaysDataType, ioreg${C_RESET}"
+  echo "${C_DIM}  带宽 = 物理分辨率 × 刷新率 × 4 字节/像素,满格参考 32 GB/s (DP2.0/TB4)${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+if $ONCE; then _render; else while true; do _render; sleep $INTERVAL; done; fi

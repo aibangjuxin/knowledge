@@ -1,0 +1,261 @@
+#!/usr/bin/env zsh
+# audiowatch — 音频设备 / 默认输出输入 / 采样率 / 音量观察器
+#
+# 设计目标:
+#   - 公司配 Mac,无 brew / 无 python / 无 SwitchAudioSource,
+#     只 zsh + system_profiler + osascript
+#   - 显示:
+#       ① 全部音频设备:名称 / 厂商 / 传输方式(USB/内置/DisplayPort/Virtual/蓝牙)
+#       ② 每台设备的能力:输入 / 输出声道数、当前采样率、是否系统默认
+#       ③ 系统默认输出与输入设备高亮
+#       ④ 系统音量(输出 / 输入 / 静音 / 提示音)与 CoreAudio 采样规格
+#       ⑤ 按传输方式分组统计,便于发现虚拟设备(会议软件)和异常采样率
+#   - 音频设备变化不频繁,默认单次;--watch 可持续刷新
+#
+# 用法:
+#   audiowatch                 # 单次全量
+#   audiowatch --watch         # 持续刷新
+#   audiowatch --volume        # 只看音量
+#   audiowatch --devices       # 只看设备
+#   audiowatch --once          # 显式单次
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i INTERVAL=5
+typeset ONCE=true
+typeset SHOW_VOLUME=true SHOW_DEVICES=true
+
+while (( $# > 0 )); do
+  case $1 in
+    --interval|-i) INTERVAL=$2; shift 2 ;;
+    --watch)        ONCE=false;   shift ;;
+    --once)         ONCE=true;    shift ;;
+    --volume)       SHOW_DEVICES=false; shift ;;
+    --devices)      SHOW_VOLUME=false;  shift ;;
+    --version)      echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--watch] [--volume] [--devices] [--interval N]"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+typeset -r BAR_FILLED='█'
+typeset -r BAR_EMPTY='░'
+
+# ---- 设备解析 --------------------------------------------------------------
+# system_profiler SPAudioDataType 结构(空格数):
+#   "Audio:"                                0
+#     "    Devices:"                        4
+#       "        U34G3G3R3:"                8    ← 设备名
+#         "          Manufacturer: AOC"     10
+#         "          Output Channels: 2"    10
+#         "          Current SampleRate: 48000"  10
+#         "          Transport: DisplayPort"     10
+#         "          Default System Output Device: Yes"  10
+#
+# 输出 TSV: name <TAB> transport <TAB> vendor <TAB> out_ch <TAB> in_ch <TAB> rate <TAB> is_out <TAB> is_in
+_parse_devices() {
+  system_profiler SPAudioDataType 2>/dev/null | awk '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    function indent_of(s,   n, i, c) {
+      n = 0
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (c == " ") n++
+        else break
+      }
+      return n
+    }
+    function flush() {
+      if (name == "") return
+      printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", \
+        name, (transport==""?"?":transport), (vendor==""?"?":vendor), \
+        (outch==""?"-":outch), (inch==""?"-":inch), (rate==""?"?":rate), \
+        (is_out==""?"no":is_out), (is_in==""?"no":is_in)
+    }
+    /^[[:space:]]+Devices:/ { in_dev = 1; next }
+    # 设备名:8 空格缩进,以 : 结尾
+    in_dev && indent_of($0) == 8 && /:[[:space:]]*$/ {
+      flush()
+      name = trim($0); sub(/:$/, "", name)
+      transport = ""; vendor = ""; outch = ""; inch = ""
+      rate = ""; is_out = ""; is_in = ""
+      next
+    }
+    in_dev && indent_of($0) >= 10 && /:/ {
+      k = trim($0); sub(/:.*$/, "", k)
+      v = trim($0); sub(/^[^:]*:[[:space:]]*/, "", v)
+      if (k == "Manufacturer")                    { vendor = v }
+      else if (k == "Output Channels")             { outch = v }
+      else if (k == "Input Channels")              { inch = v }
+      else if (k == "Current SampleRate")          { rate = v }
+      else if (k == "Transport")                   { transport = v }
+      else if (k == "Default System Output Device"){ is_out = "yes" }
+      else if (k == "Default Output Device")       { is_out = "yes" }
+      else if (k == "Default System Input Device") { is_in = "yes" }
+      else if (k == "Default Input Device")        { is_in = "yes" }
+      else if (k == "Output Source")               { outsrc = v }
+      else if (k == "Input Source")                { insrc = v }
+      next
+    }
+    END { flush() }
+  '
+}
+
+# ---- 系统音量 --------------------------------------------------------------
+# osascript get volume settings — 无需任何第三方工具
+_volume_settings() {
+  # osascript 输出形如:
+  #   output volume:39, input volume:89, alert volume:0, output muted:false
+  # 要在 ", " 处断行(不能按所有 "," 切,否则 "volume:39" 会被拆坏)
+  osascript -e 'get volume settings' 2>/dev/null | sed 's/,[[:space:]]*/\n/g' | awk '
+    {
+      k = $0; sub(/:.*$/, "", k)
+      v = $0; sub(/^[^:]*:[[:space:]]*/, "", v)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", k)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
+      if (k == "output volume")     out = v
+      else if (k == "input volume") inp = v
+      else if (k == "alert volume") alert = v
+      else if (k == "output muted") muted = v
+    }
+    END { printf "%s\t%s\t%s\t%s\n", out, inp, alert, muted }
+  '
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_vol_bar() {
+  local pct=$1 width=${2:-24}
+  awk -v p="$pct" -v w="$width" -v f="$BAR_FILLED" -v e="$BAR_EMPTY" 'BEGIN{
+    if (p < 0) p = 0; if (p > 100) p = 100
+    n = int(p / 100 * w)
+    for (i = 0; i < n; i++) printf f
+    for (i = 0; i < w - n; i++) printf e
+    printf " %3d%%", p
+  }'
+}
+
+_devices_block() {
+  local data n
+  data=$(_parse_devices)
+  if [[ -z $data ]]; then
+    echo "  ${C_DIM}(未读到音频设备信息 — system_profiler 受限或无音频硬件)${C_RESET}"
+    return
+  fi
+  n=$(print -r -- "$data" | wc -l | tr -d ' ')
+  echo "  ${C_DIM}共 $n 个音频设备${C_RESET}"
+  echo
+  print -r -- "$data" | awk -F'\t' \
+    -v b=$C_BOLD -v d=$C_DIM -v c=$C_CYAN -v y=$C_YELLOW -v r=$C_RESET '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return substr(s, 1, w) }
+    BEGIN {
+      print d pad("DEVICE", 32) pad("TRANSPORT", 13) pad("VENDOR", 14) \
+            pad("CHANNELS", 10) pad("RATE", 8) "DEFAULT" r
+    }
+    {
+      # awk 按字节计数,中文占 3 字节;留足空间避免乱码
+      nm = $1; if (length(nm) > 30) nm = substr(nm, 1, 27) "..."
+      # 声道: "in2" / "out2" / "in2+out2"
+      io = ""
+      if ($5 != "-") io = io "in" $5
+      if ($4 != "-") io = io (io == "" ? "" : "+") "out" $4
+      if (io == "") io = "-"
+      # 默认设备标青,其余暗色
+      isdef = ($7 == "yes" || $8 == "yes")
+      col = isdef ? c : d
+      # 采样率:只认 48k / 44.1k,其他标黄(音视频不同步的常见原因)
+      rate = $6
+      rcol = (rate != "48000" && rate != "44100" && rate != "?") ? y : d
+      defs = ""
+      if ($7 == "yes") defs = defs "输出"
+      if ($8 == "yes") defs = defs (defs == "" ? "" : "+") "输入"
+      if (defs == "") defs = "-"
+      printf "%s%s%s %s %s %s %s%s%s %s\n", \
+        col, pad(nm, 32), r, pad($2, 13), pad($3, 14), pad(io, 10), \
+        rcol, pad(rate, 8), r, defs
+    }
+  '
+  # 传输方式统计
+  print -r -- "$data" | awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET '
+    { cnt[$2]++ }
+    END {
+      # 按数量降序,保证输出稳定
+      n = 0
+      for (t in cnt) { n++; ts[n] = t }
+      for (i = 1; i <= n; i++)
+        for (j = i + 1; j <= n; j++)
+          if (cnt[ts[j]] > cnt[ts[i]]) { tmp = ts[i]; ts[i] = ts[j]; ts[j] = tmp }
+      printf "  %s按传输方式:%s", d, r
+      sep = ""
+      for (i = 1; i <= n; i++) {
+        printf "%s%s %s ×%d%s", sep, b, ts[i], cnt[ts[i]], r
+        sep = "  ·  "
+      }
+      printf "\n"
+    }
+  '
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_vol_bar() {
+  local pct=$1 width=${2:-24}
+  awk -v p="$pct" -v w="$width" -v f="$BAR_FILLED" -v e="$BAR_EMPTY" 'BEGIN{
+    if (p < 0) p = 0; if (p > 100) p = 100
+    n = int(p / 100 * w)
+    for (i = 0; i < n; i++) printf f
+    for (i = 0; i < w - n; i++) printf e
+    printf " %3d%%", p
+  }'
+}
+
+_render() {
+  if [[ -t 1 ]]; then printf '\033[?25l\033[2J\033[H'; fi
+
+  echo "${C_BOLD}${C_CYAN}═══ 音频设备 观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')$([[ $ONCE == true ]] || echo "  ·  刷新 ${INTERVAL}s")  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  if $SHOW_DEVICES; then
+    echo "${C_BOLD}  音频设备${C_RESET} ${C_DIM}(system_profiler SPAudioDataType)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    _devices_block
+    echo
+  fi
+
+  if $SHOW_VOLUME; then
+    echo "${C_BOLD}  系统音量${C_RESET} ${C_DIM}(osascript get volume settings)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    local vs out inp alert muted
+    vs=$(_volume_settings)
+    IFS=$'\t' read -r out inp alert muted <<< "$vs"
+    out=${out:-0}; inp=${inp:-0}; alert=${alert:-0}; muted=${muted:-false}
+
+    local mute_badge=""
+    [[ $muted == true ]] && mute_badge="${C_RED}MUTED${C_RESET}"
+    printf "  输出音量  %s  %s\n" "$(_vol_bar "$out")" "$mute_badge"
+    printf "  输入音量  %s\n" "$(_vol_bar "$inp")"
+    printf "  提示音    %s\n" "$(_vol_bar "$alert")"
+    echo
+    echo "  ${C_DIM}提示:脚本只读,不改音量;调节用系统设置或 osascript${C_RESET}"
+    echo
+  fi
+
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: system_profiler SPAudioDataType, osascript${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+if $ONCE; then _render; else while true; do _render; sleep $INTERVAL; done; fi

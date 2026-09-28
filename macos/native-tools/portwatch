@@ -132,31 +132,99 @@ _active_outbound() {
   lsof -nP -iTCP -sTCP:ESTABLISHED 2>/dev/null | awk -v u="$USER_FILTER" '
     NR > 1 {
       cmd = $1; pid = $2; user = $3
+      # NAME 是 $9 起的连续字段(内部有空格),重建完整字符串
       name = ""
       for (i = 9; i <= NF; i++) name = name (i == 9 ? "" : " ") $i
       if (u != "" && user != u) next
+      # 去掉尾部 " (ESTABLISHED)" / "(LISTEN)" 之类状态后缀
+      sub(/[[:space:]]*\(.*\)$/, "", name)
       # name 形如 "192.168.1.10:54321->203.0.113.5:443"
-      # BSD awk 没有 split 三参数组, 自己找 ->
+      #        或 "[fe80::1]:52022->[fe80::2]:54197" (IPv6 带方括号)
       arrow = index(name, "->")
       if (arrow == 0) next
       remote = substr(name, arrow + 2)
-      # 提取远端 host:port — 最后 : 前是 host, 后是 port
+      # 取最后一个 : 后的端口;IPv6 的 ]:port 也能覆盖到
       if (match(remote, /:[0-9]+$/)) {
         rport = substr(remote, RSTART + 1)
         rhost = substr(remote, 1, RSTART - 1)
       } else {
         next
       }
+      # 去掉 IPv6 的方括号,便于聚合显示
+      gsub(/[\[\]]/, "", rhost)
       key = rhost ":" rport
-      cnt[key]++; cpu_cmd[key] = cmd
+      cnt[key]++; sample_cmd[key] = cmd
     }
     END {
-      for (k in cnt) printf "%d\t%s\t%s\n", cnt[k], k, cpu_cmd[k]
+      for (k in cnt) printf "%d\t%s\t%s\n", cnt[k], k, sample_cmd[k]
     }
   ' | sort -nr | head -15
 }
 
 # ---- 渲染 ------------------------------------------------------------------
+# 三段渲染都用 awk 一次成型,避免在 zsh 循环体内 local 变量
+# (zsh 里重复 local 一个已有值的变量会把值回显到 stdout,污染终端)
+
+# ① 监听 TCP
+_tcp_block() {
+  local data
+  data=$(_listening_tcp)
+  if [[ -z $data ]]; then
+    echo "  ${C_DIM}(无监听 TCP 端口 — 罕见,机器可能空闲)${C_RESET}"
+    return
+  fi
+  printf "  ${C_DIM}%-8s  %-22s  %-6s  %-15s  %-7s  %s${C_RESET}\n" \
+    'SECURE' 'PROCESS' 'PID' 'BIND' 'PORT' 'SERVICE'
+  print -r -- "$data" | awk -F'\t' -v r=$C_RED -v g=$C_GREEN -v z=$C_RESET -v d=$C_DIM '
+    BEGIN {
+      # BSD awk 对长三元链解析有问题,改用查表
+      S["22"]="ssh";    S["80"]="http";   S["443"]="https"
+      S["445"]="smb";   S["548"]="afp";   S["873"]="rsync"
+      S["3306"]="mysql"; S["5432"]="postgres"; S["5900"]="vnc"
+      S["6379"]="redis"; S["7000"]="airplay"; S["8770"]="sharing"
+      S["8000"]="http-alt"; S["8080"]="http-alt"
+    }
+    function svc(p) { return (p in S) ? S[p] : "?" }
+    { col = ($6 == "yes") ? r : g
+      printf "  %s%-8s%s  %-22s  %-6s  %-15s  %-7s  %s%s\n",
+        col, $6, z, substr($1,1,22), $2, $4, $5, svc($5), z }
+  '
+}
+
+# ② 监听 UDP
+_udp_block() {
+  local data
+  data=$(_listening_udp)
+  [[ -z $data ]] && return
+  echo
+  echo "${C_BOLD}  监听 UDP 端口${C_RESET} ${C_DIM}(已过滤 mDNS 等噪音)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  printf "  ${C_DIM}%-6s  %-22s  %-6s  %-7s  %s${C_RESET}\n" \
+    'USER' 'PROCESS' 'PID' 'PORT' 'SERVICE'
+  print -r -- "$data" | awk -F'\t' -v d=$C_DIM -v z=$C_RESET '
+    BEGIN {
+      S["53"]="dns"; S["67"]="dhcp"; S["137"]="netbios"
+      S["631"]="ipp"; S["5355"]="wpad"
+    }
+    function svc(p) { return (p in S) ? S[p] : "?" }
+    { printf "  %-6s  %-22s  %-6s  %-7s  %s%s%s\n",
+        $3, substr($1,1,22), $2, $4, d, svc($4), z }
+  '
+}
+
+# ③ 活跃外连
+_outbound_block() {
+  local data
+  data=$(_active_outbound)
+  if [[ -z $data ]]; then
+    echo "  ${C_DIM}(无活跃 TCP 外连)${C_RESET}"
+    return
+  fi
+  printf "  ${C_DIM}%5s  %-42s  %s${C_RESET}\n" 'CONNS' 'REMOTE' 'SAMPLE_PROC'
+  print -r -- "$data" | awk -F'\t' \
+    '{ printf "  %5d  %-42s  %s\n", $1, substr($2,1,42), $3 }'
+}
+
 _render() {
   printf '\033[?25l\033[2J\033[H'
 
@@ -165,65 +233,20 @@ _render() {
   [[ -n $USER_FILTER ]] && echo "${C_DIM}过滤用户: ${USER_FILTER}${C_RESET}"
   echo
 
-  # ① 监听 TCP
-  echo "${C_BOLD}  监听 TCP 端口${C_RESET} ${C_DIM}(对外开放的端口标红 — 安全审计要点)${C_RESET}"
+  echo "${C_BOLD}  监听 TCP 端口${C_RESET} ${C_DIM}(绑 0.0.0.0/* 的对外开放,标红 — 安全审计要点)${C_RESET}"
   echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
-  printf "  ${C_DIM}%-6s  %-22s  %-6s  %-15s  %-7s  %s${C_RESET}\n" 'SECURE' 'PROCESS' 'PID' 'BIND' 'PORT' 'SERVICE'
+  _tcp_block
+  _udp_block
 
-  local tcp_lines
-  tcp_lines=$(_listening_tcp)
-  if [[ -z $tcp_lines ]]; then
-    echo "  ${C_DIM}(无监听 TCP 端口 — 罕见,机器可能空闲)${C_RESET}"
-  else
-    while IFS=$'\t' read -r cmd pid user bind port secure; do
-      local svc color
-      svc=$(_service_for_port "$port")
-      if [[ $secure == yes ]]; then color=$C_RED; else color=$C_GREEN; fi
-      printf "  ${color}%-6s${C_RESET}  %-22s  %-6s  %-15s  %-7s  %s\n" \
-        "$secure" "$(printf '%.22s' "$cmd")" "$pid" "$bind" "$port" "$svc"
-    done <<<"$tcp_lines"
-  fi
-
-  # ② 监听 UDP
-  local udp_lines
-  udp_lines=$(_listening_udp)
-  if [[ -n $udp_lines ]]; then
-    echo
-    echo "${C_BOLD}  监听 UDP 端口${C_RESET} ${C_DIM}(已过滤 mDNS 等噪音)${C_RESET}"
-    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
-    printf "  ${C_DIM}%-6s  %-22s  %-6s  %s${C_RESET}\n" 'USER' 'PROCESS' 'PID' 'PORT'
-    while IFS=$'\t' read -r cmd pid user port; do
-      local svc
-      svc=$(_service_for_port "$port")
-      printf "  %-6s  %-22s  %-6s  %-7s  ${C_DIM}%s${C_RESET}\n" \
-        "$user" "$(printf '%.22s' "$cmd")" "$pid" "$port" "$svc"
-    done <<<"$udp_lines"
-  fi
-
-  # ③ 活跃外连 (Top)
   if $SHOW_OUTBOUND; then
     echo
     echo "${C_BOLD}  活跃 TCP 外连 (Top 15)${C_RESET} ${C_DIM}(按远端 host:port 聚合)${C_RESET}"
     echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
-    printf "  ${C_DIM}%5s  %-40s  %s${C_RESET}\n" 'CONNS' 'REMOTE' 'SAMPLE_PROC'
-    local ob_lines
-    ob_lines=$(_active_outbound)
-    if [[ -z $ob_lines ]]; then
-      echo "  ${C_DIM}(无活跃 TCP 外连)${C_RESET}"
-    else
-      while IFS=$'\t' read -r n remote proc; do
-        printf "  %5d  %-40s  %s\n" "$n" "$(printf '%.40s' "$remote")" "$proc"
-      done <<<"$ob_lines"
-    fi
+    _outbound_block
   fi
 
-  # 总数
-  local tcp_total udp_total ob_total
-  tcp_total=$(_listening_tcp | wc -l | tr -d ' ')
-  udp_total=$(_listening_udp | wc -l | tr -d ' ')
-  ob_total=$(lsof -nP -iTCP -sTCP:ESTABLISHED 2>/dev/null | tail -n +2 | wc -l | tr -d ' ')
   echo
-  echo "${C_DIM}  总计: TCP 监听 = $tcp_total  ·  UDP 监听 = $udp_total  ·  活跃外连 = $ob_total${C_RESET}"
+  echo "${C_DIM}  总计: TCP 监听 = $(_listening_tcp | wc -l | tr -d ' ')  ·  UDP 监听 = $(_listening_udp | wc -l | tr -d ' ')  ·  活跃外连 = $(lsof -nP -iTCP -sTCP:ESTABLISHED 2>/dev/null | tail -n +2 | wc -l | tr -d ' ')${C_RESET}"
   echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: lsof -nP${C_RESET}"
 }
 

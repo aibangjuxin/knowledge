@@ -51,52 +51,58 @@ else
   C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
 fi
 
-# 解析 plist 文件,提取关键字段
-# 输出 TSV: label<TAB>program<TAB>runatload<TAB>keepalive<TAB>runatloadonce<TAB>user<TAB>category<TAB>disabled<TAB>path
+# 解析 plist,提取 6 个字段
+# 输出 TSV: label <TAB> program <TAB> runatload <TAB> keepalive <TAB> user <TAB> category
+#
+# 两个 macOS 坑:
+#   ① plutil -extract 对不存在的 key 返回 exit 1,errexit 下会杀掉整个脚本 — 必须 `|| echo ""`
+#   ② KeepAlive 常常是 <dict> 而不是 <bool>,raw 模式会输出多行 — 必须压成单行
 _parse_plist() {
   local plist=$1
-  local label program runatload keepalive user category runatloadonce disabled
-  # plutil -extract 失败时返回非 0 + 输出到 stderr,2>/dev/null 吃错;但 key 不存在时 exit=1
-  # zsh errexit 下会让脚本退出 — 加 `|| echo ""` 让赋值永远成功
-  label=$(plutil -extract Label raw -o - "$plist" 2>/dev/null || echo "")
-  program=$(plutil -extract ProgramArguments.0 raw -o - "$plist" 2>/dev/null \
-            || plutil -extract Program raw -o - "$plist" 2>/dev/null || echo "")
-  runatload=$(plutil -extract RunAtLoad raw -o - "$plist" 2>/dev/null || echo "")
-  keepalive=$(plutil -extract KeepAlive raw -o - "$plist" 2>/dev/null || echo "")
-  runatloadonce=$(plutil -extract RunAtLoadOnce raw -o - "$plist" 2>/dev/null || echo "")
-  user=$(plutil -extract UserName raw -o - "$plist" 2>/dev/null || echo "")
-  category=$(plutil -extract LimitLoadToSessionType raw -o - "$plist" 2>/dev/null || echo "")
+  local label program runatload keepalive user category
+  # 压成单行:dict 类型字段会带换行,会破坏 TSV
+  local raw
+  raw=$(plutil -extract Label raw -o - "$plist" 2>/dev/null) || raw=""
+  label=${raw//$'\n'/ }
+  raw=$(plutil -extract ProgramArguments.0 raw -o - "$plist" 2>/dev/null) \
+    || raw=$(plutil -extract Program raw -o - "$plist" 2>/dev/null) || raw=""
+  program=${raw//$'\n'/ }
+  raw=$(plutil -extract RunAtLoad raw -o - "$plist" 2>/dev/null) || raw=""
+  runatload=${raw//$'\n'/ }
+  raw=$(plutil -extract KeepAlive raw -o - "$plist" 2>/dev/null) || raw=""
+  keepalive=${raw//$'\n'/ }
+  raw=$(plutil -extract UserName raw -o - "$plist" 2>/dev/null) || raw=""
+  user=${raw//$'\n'/ }
+  raw=$(plutil -extract LimitLoadToSessionType raw -o - "$plist" 2>/dev/null) || raw=""
+  category=${raw//$'\n'/ }
 
-  # disabled 状态: launchctl print-disabled <domain> 给出;我们先不查,只是列文件
-  # 9 个字段(8 个 \t 分隔),path 是第 9 个字段
-  printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
     "${label:-?}" "${program:-?}" "${runatload:-no}" "${keepalive:-no}" \
-    "${runatloadonce:-no}" "${user:-root}" "${category:-any}" "no" "$plist"
+    "${user:-root}" "${category:-any}"
 }
 
-# 收集所有 plist
+# 收集目录里所有 plist 的 label
+# 关键: local 必须声明在 for 循环外面 — zsh 里循环体内重复 local 一个已有值的
+# 变量,会把值回显到 stdout,污染管道输出
 _collect() {
-  local domain=$1   # user | system_local | system_apple
+  local domain=$1   # user | system | daemon | apple
   local dir=$2
+  local plist row lbl cat
   [[ -d $dir ]] || return
-  # 用 glob (N) 防止无匹配时返回错误
+  # (.N) glob qualifier: 无匹配时返回空而不是报错
   for plist in "$dir"/*.plist(.N); do
     [[ -f $plist ]] || continue
-    local row
     row=$(_parse_plist "$plist")
     [[ -z $row ]] && continue
-    # 字段 1 = label
-    local lbl
-    lbl=$(echo "$row" | awk -F'\t' '{print $1}')
+    lbl=${row%%$'\t'*}
     if [[ -n $LABEL_FILTER ]] && [[ $lbl != *"$LABEL_FILTER"* ]]; then
       continue
     fi
-    if [[ -n $CATEGORY_FILTER ]]; then
-      local cat
-      cat=$(echo "$row" | awk -F'\t' '{print $7}')
-      [[ $cat != *"$CATEGORY_FILTER"* ]] && continue
+    cat=${row##*$'\t'}
+    if [[ -n $CATEGORY_FILTER ]] && [[ $cat != *"$CATEGORY_FILTER"* ]]; then
+      continue
     fi
-    echo "${domain}|${row}"
+    printf '%s\t%s\n' "$domain" "$row"
   done
 }
 
@@ -112,36 +118,60 @@ _running_jobs() {
   '
 }
 
+# 渲染一个 plist 目录块
+# 单独一个函数而不是内联三次:zsh 里同名 local 重复声明会把旧值回显到 stdout
+_plist_block() {
+  local title=$1 hint=$2 domain=$3 dir=$4 empty_msg=$5
+  local data row lbl prg ral kal run_user cat color
+  echo
+  echo "${C_BOLD}  ${title}${C_RESET} ${C_DIM}(${hint})${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  data=$(_collect "$domain" "$dir")
+  if [[ -z $data ]]; then
+    echo "  ${C_DIM}${empty_msg}${C_RESET}"
+    return
+  fi
+  printf "  ${C_DIM}%-40s  %-25s  %-5s  %-16s  %-6s  %s${C_RESET}\n" \
+    'LABEL' 'PROGRAM' 'RAL' 'KAL' 'USER' 'CATEGORY'
+  while IFS=$'\t' read -r row; do
+    row=${row#*$'\t'}   # 去掉第 1 列 domain
+    IFS=$'\t' read -r lbl prg ral kal run_user cat <<< "$row"
+    color=$C_GREEN
+    [[ $ral == true ]] && color=$C_YELLOW   # 开机就跑,拖慢启动
+    [[ $kal != no && -n $kal ]] && color=$C_RED   # KeepAlive = 常驻后台
+    printf "  ${color}%-40s${C_RESET}  %-25s  %-5s  %-16s  %-6s  %s\n" \
+      "${lbl:0:40}" "${prg##*/}" "$ral" "$kal" "$run_user" "$cat"
+  done <<< "$data"
+}
+
 # ---- 渲染 ------------------------------------------------------------------
 _render() {
   printf '\033[?25l\033[2J\033[H'
 
   echo "${C_BOLD}${C_CYAN}═══ LaunchAgents / Daemons 观察器 ═══${C_RESET}"
   echo "${C_DIM}本机器上的所有 launchd 自启动项 — 影响启动速度和合规审计${C_RESET}"
-  [[ -n $LABEL_FILTER ]]  && echo "${C_DIM}过滤 label: $LABEL_FILTER${C_RESET}"
-  [[ -n $CATEGORY_FILTER ]] && echo "${C_DIM}过滤 category: $CATEGORY_FILTER${C_RESET}"
+  [[ -n $LABEL_FILTER ]]  && echo "${C_DIM}过滤 label: ${LABEL_FILTER}${C_RESET}"
+  [[ -n $CATEGORY_FILTER ]] && echo "${C_DIM}过滤 category: ${CATEGORY_FILTER}${C_RESET}"
   echo
 
   # ① 当前 launchctl 在跑的 jobs
   if $RUNNING_ONLY || [[ $SCOPE == all ]]; then
     echo "${C_BOLD}  当前 launchctl 在跑的 jobs${C_RESET} ${C_DIM}(launchctl list)${C_RESET}"
     echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
-    local rj
+    local rj job_label job_pid job_exit
     rj=$(_running_jobs)
     if [[ -z $rj ]]; then
       echo "  ${C_DIM}(无 — 系统刚启动?)${C_RESET}"
     else
       printf "  ${C_DIM}%-8s  %-8s  %s${C_RESET}\n" 'PID' 'STATUS' 'LABEL'
-      while IFS=$'\t' read -r lbl proc_pid proc_status; do 2>/dev/null
-        # proc_status: 0 = 正常;-9/-15 = 异常退出;负数 = signal
-        local c=$C_GREEN
-        [[ $proc_status == -* ]] && c=$C_RED
-        [[ $proc_status != 0 && $proc_status != -* ]] && c=$C_YELLOW
-        printf "  %-8s  ${c}%-8s${C_RESET}  %s\n" "${proc_pid:--}" "$proc_status" "$lbl"
-      done <<<"$rj" | head -30 || true   # head 关 stdin 让 while 循环 SIGPIPE
-      local total
-      total=$(echo "$rj" | wc -l | tr -d ' ')
-      echo "  ${C_DIM}... 共 ${total} 个 jobs (只显示前 30)${C_RESET}"
+      # head 会提前关掉管道导致上游 SIGPIPE(141),用 awk 截断避免
+      print -r -- "$rj" | awk -v b=$C_BOLD -v r=$C_RESET 'NR<=30 {
+        split($0, f, "\t")
+        col = (f[3] ~ /^-/) ? "\033[31m" : (f[3] == "0" ? "\033[32m" : "\033[33m")
+        pid = (f[2] == "") ? "-" : f[2]
+        printf "  %-8s  %s%-8s%s  %s\n", pid, col, f[3], r, f[1]
+      }'
+      echo "  ${C_DIM}... 共 $(print -r -- "$rj" | wc -l | tr -d ' ') 个 jobs (只显示前 30)${C_RESET}"
     fi
   fi
 
@@ -151,94 +181,35 @@ _render() {
     return
   fi
 
-  # ② 各目录 plist
-  echo
-  echo "${C_BOLD}  用户级 LaunchAgents${C_RESET} ${C_DIM}(~/Library/LaunchAgents)${C_RESET}"
-  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
-  local ua
-  ua=$(_collect 'user' "$HOME/Library/LaunchAgents")
-  if [[ -z $ua ]]; then
-    echo "  ${C_DIM}(无 — 公司电脑常见情况,IT 锁了用户级自启动)${C_RESET}"
-  else
-    printf "  ${C_DIM}%-40s  %-25s  %-5s  %-5s  %-10s  %s${C_RESET}\n" \
-      'LABEL' 'PROGRAM' 'RAL' 'KAL' 'USER' 'CATEGORY'
-    while IFS='|' read -r domain row; do 2>/dev/null
-      IFS=$'\t' read -r lbl prg ral kal u cat <<<"$row"
-      c=$C_GREEN
-      [[ $ral == true ]] && c=$C_YELLOW   # RunAtLoad 影响启动时间
-      [[ $kal == true ]] && c=$C_RED      # KeepAlive 永远后台跑
-      printf "  ${c}%-40s${C_RESET}  %-25s  %-5s  %-5s  %-10s  %s\n" \
-        "$(printf '%.40s' "$lbl")" \
-        "$(printf '%.25s' "$(basename "$prg" 2>/dev/null || echo "$prg")")" \
-        "$ral" "$kal" "$u" "$cat"
-    done <<<"$ua"
-  fi
+  # ②③④ 各目录 plist
+  _plist_block '用户级 LaunchAgents' '~/Library/LaunchAgents' \
+    'user' "$HOME/Library/LaunchAgents" '(无 — 公司电脑常见情况,IT 锁了用户级自启动)'
+  _plist_block '系统级 LaunchAgents' '/Library/LaunchAgents' \
+    'system' '/Library/LaunchAgents' '(无 — 公司电脑常见)'
+  _plist_block '系统级 LaunchDaemons' '/Library/LaunchDaemons' \
+    'daemon' '/Library/LaunchDaemons' '(无 — 第三方 Daemons,公司 Mac 通常被 MDM 锁)'
 
-  echo
-  echo "${C_BOLD}  系统级 LaunchAgents${C_RESET} ${C_DIM}(/Library/LaunchAgents)${C_RESET}"
-  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
-  local sa
-  sa=$(_collect 'system' '/Library/LaunchAgents')
-  if [[ -z $sa ]]; then
-    echo "  ${C_DIM}(无 — 公司电脑常见)${C_RESET}"
-  else
-    printf "  ${C_DIM}%-40s  %-25s  %-5s  %-5s  %-10s  %s${C_RESET}\n" \
-      'LABEL' 'PROGRAM' 'RAL' 'KAL' 'USER' 'CATEGORY'
-    while IFS='|' read -r domain row; do 2>/dev/null
-      IFS=$'\t' read -r lbl prg ral kal u cat <<<"$row"
-      c=$C_GREEN
-      [[ $ral == true ]] && c=$C_YELLOW
-      [[ $kal == true ]] && c=$C_RED
-      printf "  ${c}%-40s${C_RESET}  %-25s  %-5s  %-5s  %-10s  %s\n" \
-        "$(printf '%.40s' "$lbl")" \
-        "$(printf '%.25s' "$(basename "$prg" 2>/dev/null || echo "$prg")")" \
-        "$ral" "$kal" "$u" "$cat"
-    done <<<"$sa"
-  fi
-
-  echo
-  echo "${C_BOLD}  系统级 LaunchDaemons${C_RESET} ${C_DIM}(/Library/LaunchDaemons)${C_RESET}"
-  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
-  local sd
-  sd=$(_collect 'daemon' '/Library/LaunchDaemons')
-  if [[ -z $sd ]]; then
-    echo "  ${C_DIM}(无 — 第三方 Daemons,公司 Mac 通常被 MDM 锁)${C_RESET}"
-  else
-    printf "  ${C_DIM}%-40s  %-25s  %-5s  %-5s  %-10s  %s${C_RESET}\n" \
-      'LABEL' 'PROGRAM' 'RAL' 'KAL' 'USER' 'CATEGORY'
-    while IFS='|' read -r domain row; do 2>/dev/null
-      IFS=$'\t' read -r lbl prg ral kal u cat <<<"$row"
-      c=$C_GREEN
-      [[ $ral == true ]] && c=$C_YELLOW
-      [[ $kal == true ]] && c=$C_RED
-      printf "  ${c}%-40s${C_RESET}  %-25s  %-5s  %-5s  %-10s  %s\n" \
-        "$(printf '%.40s' "$lbl")" \
-        "$(printf '%.25s' "$(basename "$prg" 2>/dev/null || echo "$prg")")" \
-        "$ral" "$kal" "$u" "$cat"
-    done <<<"$sd"
-  fi
-
+  # ⑤ macOS 自带 Daemons — 只统计,逐个列出来没意义
   echo
   echo "${C_BOLD}  macOS 自带 Daemons${C_RESET} ${C_DIM}(/System/Library/LaunchDaemons — 不要动)${C_RESET}"
   echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
-  local apple
+  local apple apple_total apple_ral apple_kal
   apple=$(_collect 'apple' '/System/Library/LaunchDaemons')
   if [[ -z $apple ]]; then
     echo "  ${C_DIM}(目录不可读 — 罕见)${C_RESET}"
   else
-    local total
-    total=$(echo "$apple" | wc -l | tr -d ' ')
-    local ral_count kal_count
-    ral_count=$(echo "$apple" | awk -F'\t' '$3=="true"' | wc -l | tr -d ' ')
-    kal_count=$(echo "$apple" | awk -F'\t' '$4=="true"' | wc -l | tr -d ' ')
-    printf "  ${C_BOLD}%d${C_RESET} 个 daemon, ${C_BOLD}%d${C_RESET} RunAtLoad, ${C_BOLD}%d${C_RESET} KeepAlive\n" \
-      "$total" "$ral_count" "$kal_count"
+    apple_total=$(print -r -- "$apple" | wc -l | tr -d ' ')
+    # 统计前先剥掉 domain 列,字段才是 label..category
+    apple_ral=$(print -r -- "$apple" | awk -F'\t' '{print $4}' | grep -c '^true$' || true)
+    apple_kal=$(print -r -- "$apple" | awk -F'\t' '{print $5}' | grep -vc '^no$' || true)
+    printf "  ${C_BOLD}%s${C_RESET} 个 daemon, ${C_BOLD}%s${C_RESET} RunAtLoad, ${C_BOLD}%s${C_RESET} KeepAlive\n" \
+      "$apple_total" "$apple_ral" "$apple_kal"
     echo "  ${C_DIM}(用 --label <name> 查看具体某个)${C_RESET}"
   fi
 
   echo
   echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: plutil, launchctl list${C_RESET}"
-  echo "${C_DIM}  RAL=RunAtLoad  KAL=KeepAlive  颜色:绿=一次性 / 黄=启动时跑 / 红=一直后台保活${C_RESET}"
+  echo "${C_DIM}  RAL=RunAtLoad  KAL=KeepAlive  颜色:绿=一次性 / 黄=开机就跑 / 红=常驻后台${C_RESET}"
 }
 
 _cleanup() { printf '\033[?25h\033[0m'; echo; }

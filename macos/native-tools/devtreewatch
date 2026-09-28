@@ -1,0 +1,361 @@
+#!/usr/bin/env zsh
+# devtreewatch — USB / Thunderbolt / 蓝牙 设备树观察器
+#
+# 设计目标:
+#   - 公司配 Mac,无 brew / 无 python,只 zsh + ioreg / system_profiler
+#   - 为什么不用 system_profiler SPUSBDataType:
+#       实测部分机型(Mac mini M4)该类型返回空,ioreg -p IOUSB 反而有完整树
+#       所以 USB 走 ioreg,Thunderbolt 走 SPThunderboltDataType,蓝牙走 SPBluetoothDataType
+#   - 显示:
+#       ① USB 设备树(按控制器分组,缩进显示层级)含厂商 / 产品 / VID:PID / 序列号
+#       ② Thunderbolt / USB4 总线与端口状态、已连接设备、协商速率
+#       ③ 蓝牙控制器信息(芯片 / 固件 / 传输方式 / 支持的 profile)
+#       ④ 蓝牙已连接设备 + 电量 / 信号强度
+#       ⑤ 蓝牙已配对但未连接设备
+#   - 设备插拔不频繁,默认单次;--watch 可持续刷新
+#
+# 用法:
+#   devtreewatch                 # 单次全量
+#   devtreewatch --usb           # 只看 USB
+#   devtreewatch --thunderbolt   # 只看 Thunderbolt
+#   devtreewatch --bluetooth     # 只看蓝牙
+#   devtreewatch --watch         # 持续刷新
+#   devtreewatch --paired        # 包含未连接的已配对蓝牙设备(默认含)
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i INTERVAL=5
+typeset ONCE=true
+typeset SHOW_USB=true SHOW_TB=true SHOW_BT=true
+
+while (( $# > 0 )); do
+  case $1 in
+    --interval|-i)  INTERVAL=$2; shift 2 ;;
+    --watch)        ONCE=false;   shift ;;
+    --once)         ONCE=true;    shift ;;
+    --usb)          SHOW_TB=false; SHOW_BT=false; shift ;;
+    --thunderbolt)  SHOW_USB=false; SHOW_BT=false; shift ;;
+    --bluetooth)    SHOW_USB=false; SHOW_TB=false; shift ;;
+    --version)      echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--usb|--thunderbolt|--bluetooth] [--watch] [--interval N]"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+# ---- USB 设备树 ------------------------------------------------------------
+# 数据源(实测,别乱改):
+#   ioreg -p IOUSB                 → 只有节点树,无属性
+#   ioreg -w 0                      → 完整树,但不含 USB 设备属性
+#   ioreg -r -c IOUSBHostDevice -w 0 → 节点 + 属性齐全,唯一可用组合
+#
+# 结构:属性行紧跟所属节点之后,缩进比节点深 4。同一设备连续出现
+# USB Product Name / Vendor Name / Serial / idVendor / idProduct 五类,
+# 遇到下一个设备节点时结算上一条。
+#
+# 输出 TSV: depth <TAB> product <TAB> vendor <TAB> vid <TAB> pid <TAB> serial <TAB> addr
+_usb_devices() {
+  ioreg -r -c IOUSBHostDevice -w 0 2>/dev/null | awk '
+    # 缩进只数空格和 |
+    function indent_of(s,   n, i, c) {
+      n = 0
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (c == " " || c == "|") n++
+        else break
+      }
+      return n
+    }
+    function val(   q, v) {
+      q = index($0, " = ")
+      if (q == 0) return ""
+      v = substr($0, q + 3)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
+      gsub(/^"|"$/, "", v)
+      return v
+    }
+    function emit(   d) {
+      if (!have) return
+      if (base_ind == 0 || ind < base_ind) base_ind = ind
+      d = int((ind - base_ind) / 4) + 1
+      printf "%d\t%s\t%s\t%s\t%s\t%s\t%s\n", \
+        (d < 1 ? 1 : d), (nm == "" ? "IOUSBHostDevice" : nm), \
+        (vd == "" ? "?" : vd), (vi == "" ? "?" : vi), \
+        (pi == "" ? "?" : pi), (sn == "" ? "-" : sn), ad
+    }
+    # ---- 设备节点 ----
+    /<class IOUSBHostDevice,/ {
+      emit(); have = 1
+      ind = indent_of($0)
+      nm = ""; ad = "-"; vd = ""; vi = ""; pi = ""; sn = ""
+      if (match($0, /[+-]o [A-Za-z0-9_.+-]+@[0-9a-f]+/)) {
+        h = substr($0, RSTART, RLENGTH); sub(/^[+-]o /, "", h)
+        at = index(h, "@")
+        if (at > 0) { nm = substr(h, 1, at - 1); ad = substr(h, at + 1) }
+      }
+      next
+    }
+    # ---- 其他节点:跳出当前设备 ----
+    /[+-]o [A-Za-z0-9_.+-]+/ && /<class/ {
+      emit(); have = 0; next
+    }
+    # ---- 属性 ----
+    /"[A-Za-z ]+"[ ]*=/ {
+      if (!have) next
+      # 剥掉行首缩进(含 | 字符)再取 key,否则会带上 "  | |   " 前缀
+      k = $0; sub(/^[[:space:]|]*/, "", k); sub(/[ ]*=.*$/, "", k); gsub(/"/, "", k)
+      if (k == "USB Product Name")       { nm = val() }
+      else if (k == "USB Vendor Name")    { vd = val() }
+      else if (k == "USB Serial Number") { sn = val() }
+      else if (k == "idVendor")           { vi = val() }
+      else if (k == "idProduct")          { pi = val() }
+      next
+    }
+    END { emit() }
+  '
+}
+
+# ---- 渲染 USB --------------------------------------------------------------
+_usb_block() {
+  local data n_dev
+  data=$(_usb_devices)
+  if [[ -z $data ]]; then
+    echo "  ${C_DIM}(未读到 USB 设备 — 该机型可能只有内建控制器,或 ioreg 受限)${C_RESET}"
+    return
+  fi
+  n_dev=$(print -r -- "$data" | wc -l | tr -d ' ')
+  echo "  ${C_DIM}共 $n_dev 个 USB 设备节点(按 ioreg 树层级缩进)${C_RESET}"
+  echo
+  print -r -- "$data" | awk -F'\t' \
+    -v b=$C_BOLD -v d=$C_DIM -v c=$C_CYAN -v y=$C_YELLOW -v r=$C_RESET '
+    function pad(s, n) { s = s ""; while (length(s) < n) s = s " "; return substr(s, 1, n) }
+    BEGIN { print d pad("DEVICE", 40) pad("VENDOR", 16) pad("VID:PID", 12) pad("SERIAL", 15) r }
+    {
+      depth = $1 + 0
+      ind = ""; for (i = 1; i < depth; i++) ind = ind "  "
+      label = ind (depth == 1 ? "├─ " : "└─ ") $2
+      col = (depth == 1) ? c : d
+      printf "%s%s%s %s %s %s\n", \
+        col, pad(label, 40), r, pad($3, 16), pad($4 ":" $5, 12), pad($6, 15)
+    }
+  '
+}
+
+# ---- Thunderbolt -----------------------------------------------------------
+# SPThunderboltDataType 结构:
+#   "Thunderbolt/USB4 Bus 3:"        ← 总线
+#     "      Port:"                  ← 端口
+#         "          Status: ..."    ← 连接状态 / 速率
+_tb_block() {
+  local data
+  data=$(system_profiler SPThunderboltDataType 2>/dev/null)
+  if [[ -z $data ]]; then
+    echo "  ${C_DIM}(该机型无 Thunderbolt / USB4 控制器 — 常见于无线版 MacBook)${C_RESET}"
+    return
+  fi
+  # awk 的 -v 必须在程序之前(之前写反了导致变量全空)
+  print -r -- "$data" | awk -v b="$C_BOLD" -v d="$C_DIM" -v c="$C_CYAN" -v y="$C_YELLOW" -v g="$C_GREEN" -v r="$C_RESET" '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    /Thunderbolt\/USB4 Bus/ {
+      bus = trim($0); sub(/:$/, "", bus)
+      printf "\n  %s%s%s\n", b, bus, r
+      st = ""; sp = ""
+      next
+    }
+    /^[[:space:]]+Port:/ { want = 1; next }
+    # 注意:必须先排除 Link Status:,否则它会覆盖真正的 Status
+    want && /^[[:space:]]*Link Status:/ { next }
+    want && /^[[:space:]]*Status:/ {
+      st = trim($0); sub(/^Status:[[:space:]]*/, "", st); next
+    }
+    want && /Speed:/ {
+      sp = trim($0); sub(/^Speed:[[:space:]]*/, "", sp)
+      # Status + Speed 一起输出
+      col = (st == "No device connected") ? d : g
+      printf "    %s端口%s %s%s%s", d, r, col, st, r
+      if (sp != "") printf "  ·  %s%s%s\n", d, sp, r; else print ""
+      want = 0
+      next
+    }
+    want && /^[[:space:]]+Vendor Name:/ { next }
+  '
+}
+
+# ---- 蓝牙控制器 ------------------------------------------------------------
+_bt_controller() {
+  # awk 的 -v 必须在程序之前(写在后面会被当成输入文件名)
+  system_profiler SPBluetoothDataType 2>/dev/null | awk -v b="$C_BOLD" -v d="$C_DIM" -v r="$C_RESET" '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    /Bluetooth Controller:/ { in_ctrl = 1; next }
+    in_ctrl && /Connected:|Not Connected:/ { in_ctrl = 0 }
+    in_ctrl && /Address:/          { addr = trim($0); sub(/^Address:[[:space:]]*/, "", addr); next }
+    in_ctrl && /State:/            { st   = trim($0); sub(/^State:[[:space:]]*/, "", st); next }
+    in_ctrl && /Chipset:/          { chip = trim($0); sub(/^Chipset:[[:space:]]*/, "", chip); next }
+    in_ctrl && /Transport:/        { tp   = trim($0); sub(/^Transport:[[:space:]]*/, "", tp); next }
+    in_ctrl && /Firmware Version:/ { fw   = trim($0); sub(/^Firmware Version:[[:space:]]*/, "", fw); next }
+    in_ctrl && /Discoverable:/     { disc = trim($0); sub(/^Discoverable:[[:space:]]*/, "", disc); next }
+    in_ctrl && /Supported services:/ {
+      svc = trim($0); sub(/^Supported services:[[:space:]]*/, "", svc)
+      # 形如 "0x1390039 < HFP AVRCP A2DP HID ... >" → 只留尖括号内的 profile 名
+      if (match(svc, /<[^>]*>/)) svc = substr(svc, RSTART+1, RLENGTH-2)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", svc)
+      next
+    }
+    END {
+      printf "  %-14s %s%s%s\n", "Address", b, (addr?addr:"?"), r
+      printf "  %-14s %s%s%s\n", "State",   b, (st?st:"?"), r
+      printf "  %-14s %s%s%s\n", "Chipset", b, (chip?chip:"?"), r
+      printf "  %-14s %s%s%s\n", "Transport", b, (tp?tp:"?"), r
+      printf "  %-14s %s%s%s\n", "Firmware", b, (fw?fw:"?"), r
+      printf "  %-14s %s%s%s\n", "Discoverable", b, (disc?disc:"?"), r
+      if (svc != "") printf "  %-14s %s%s%s\n", "Services", d, svc, r
+    }
+  '
+}
+
+# ---- 蓝牙设备列表 ----------------------------------------------------------
+# section = "Connected" 或 "Not Connected"
+_bt_devices() {
+  local want=$1   # "Connected" 或 "Not Connected"
+  # 状态机:段落标记切换 want,设备名(10 空格)开启新记录,
+  # 属性行(14 空格)填字段,遇到下一个设备名时结算上一条。
+  system_profiler SPBluetoothDataType 2>/dev/null | awk -v want="$want" '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    function indent_of(s,   n, i, c) {
+      n = 0
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (c == " ") n++
+        else break
+      }
+      return n
+    }
+    function emit() {
+      if (!have || name == "") return
+      printf "%s\t%s\t%s\t%s\t%s\n", \
+        name, addr, (rssi == "" ? "-" : rssi), (batt == "" ? "-" : batt), \
+        (mtype != "" ? mtype : (vid != "" ? vid : "-"))
+    }
+    # 段落标记(6 空格)
+    /^[[:space:]]+Connected:/     { cur = "Connected"; have = 0; next }
+    /^[[:space:]]+Not Connected:/ { cur = "Not Connected"; have = 0; next }
+    cur != want { next }
+    # 设备名(10 空格,以 : 结尾)
+    indent_of($0) == 10 && /:$/ {
+      emit()
+      name = trim($0); sub(/:$/, "", name)
+      addr = ""; rssi = ""; batt = ""; mtype = ""; vid = ""
+      have = 1
+      next
+    }
+    # 属性(14 空格)
+    have && indent_of($0) >= 14 && /:/ {
+      k = trim($0); sub(/:.*$/, "", k)
+      v = trim($0); sub(/^[^:]*:[[:space:]]*/, "", v)
+      if (k == "Address")                  addr  = v
+      else if (k == "RSSI")                 rssi  = v
+      else if (k == "Battery Level")       batt  = v
+      else if (k == "Minor Type")           mtype = v
+      else if (k == "Vendor ID")            vid   = v
+      next
+    }
+    END { emit() }
+  '
+}
+
+_bt_block() {
+  local connected paired
+  echo "${C_BOLD}  蓝牙控制器${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  _bt_controller
+
+  echo
+  echo "${C_BOLD}  已连接蓝牙设备${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  connected=$(_bt_devices Connected)
+  if [[ -z $connected ]]; then
+    echo "  ${C_DIM}(无已连接设备)${C_RESET}"
+  else
+    print -r -- "$connected" | awk -F'\t' \
+      -v b=$C_BOLD -v d=$C_DIM -v g=$C_GREEN -v y=$C_YELLOW -v r=$C_RESET '
+      BEGIN { print d sprintf("  %-26s %-18s %-8s %-8s %s", "NAME", "ADDRESS", "RSSI", "BATTERY", "TYPE") r }
+      {
+        nm = $1; if (length(nm) > 26) nm = substr(nm, 1, 23) "..."
+        # RSSI 颜色:强绿弱红
+        rc = d
+        if ($3 != "" && $3 != "0") {
+          v = $3 + 0
+          rc = (v >= -60) ? g : ((v >= -75) ? y : "\033[31m")
+        }
+        bat = $4
+        bc = (bat != "" && bat != "") ? g : d
+        printf "  %s%-26s%s %-18s %s%-8s%s %s%-8s%s %s\n", \
+          b, nm, r, $2, rc, ($3==""?"-":$3), r, bc, (bat==""?"-":bat), r, $5
+      }
+    '
+  fi
+
+  echo
+  echo "${C_BOLD}  已配对(未连接)${C_RESET} ${C_DIM}(RSSI 为最近一次配对时记录)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  paired=$(_bt_devices "Not Connected")
+  if [[ -z $paired ]]; then
+    echo "  ${C_DIM}(无)${C_RESET}"
+  else
+    print -r -- "$paired" | awk -F'\t' \
+      -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET '
+      BEGIN { print d sprintf("  %-26s %-18s %s", "NAME", "ADDRESS", "TYPE") r }
+      {
+        nm = $1; if (length(nm) > 26) nm = substr(nm, 1, 23) "..."
+        printf "  %s%-26s%s %-18s %s\n", b, nm, r, $2, $5
+      }
+    '
+  fi
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_render() {
+  if [[ -t 1 ]]; then printf '\033[?25l\033[2J\033[H'; fi
+
+  echo "${C_BOLD}${C_CYAN}═══ USB / Thunderbolt / 蓝牙 设备树 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')$([[ $ONCE == true ]] || echo "  ·  刷新 ${INTERVAL}s")  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  if $SHOW_USB; then
+    echo "${C_BOLD}  USB 设备${C_RESET} ${C_DIM}(ioreg -r -c IOUSBHostDevice)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    _usb_block
+    echo
+  fi
+
+  if $SHOW_TB; then
+    echo "${C_BOLD}  Thunderbolt / USB4${C_RESET} ${C_DIM}(system_profiler SPThunderboltDataType)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    _tb_block
+    echo
+  fi
+
+  if $SHOW_BT; then
+    _bt_block
+    echo
+  fi
+
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: ioreg -r -c IOUSBHostDevice, system_profiler SP{Thunderbolt,Bluetooth}DataType${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+if $ONCE; then _render; else while true; do _render; sleep $INTERVAL; done; fi
