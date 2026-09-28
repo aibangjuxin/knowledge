@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "caas-portal-temporal-demo"
+version = "0.1.0"
+description = "CaaS portal approval orchestration using Temporal + FastAPI"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.6",
+    "temporalio>=1.4",
+    "httpx>=0.27",
+    "sse-starlette>=2.0",
+    "python-dotenv>=1.0",
+    # frontend is plain HTML+JS, no JS deps; keep Python deps minimal
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.3",
+    "mypy>=1.8",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["api*", "workflow*", "k8s_stub*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
