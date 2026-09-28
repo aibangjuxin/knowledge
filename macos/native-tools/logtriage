@@ -1,0 +1,516 @@
+#!/usr/bin/env zsh
+# logtriage — 系统日志分诊:这台机器到底在抱怨什么?
+#
+# 设计目标:
+#   - 现有脚本里 loginwatch 用了 log show,但只捞 sudo 审计,不管错误。
+#     "系统为什么慢 / 为什么风扇转 / 为什么 App 弹权限框"这些问题,
+#     答案都在 unified log 里,但没人会去翻。
+#   - 显示:
+#       ① 错误 Top 进程      —— 谁在刷错误(最有用的一行)
+#       ② 错误 Top subsystem —— 哪个系统子系统在报错
+#       ③ Gatekeeper / 签名  —— syspolicyd 反复校验 = 有 App 签名异常
+#       ④ 错误时间线        —— 按分钟分桶,看是突发还是持续
+#       ⑤ 高频 formatString  —— 同一句话被反复报 = 循环失败
+#       ③ 默认 / 故障 / 全量 三档时间窗
+#   - 只读:只查 log show,不改任何设置
+#
+# 用法:
+#   logtriage                        # 最近 1 小时(默认)
+#   logtriage --last 30m             # 自定义时间窗(支持 30s/5m/2h/1d)
+#   logtriage --since 09:00          # 从今天 09:00 到现在
+#   logtriage --gatekeeper           # 只看 Gatekeeper / 代码签名
+#   logtriage --timeline             # 错误时间线(看突发还是持续)
+#   logtriage --top 30               # Top N(默认 15)
+#   logtriage --raw <process>        # 某个进程的原始错误日志
+#   logtriage --watch                # 每 10 秒刷新
+#
+# 性能实测(M4 / 30 分钟错误日志):
+#   log show --last 30m --predicate 'messageType == error' --style json
+#   → 519 万行 / 4.6 秒 —— 完全可接受
+#
+# ⚠ 必须用 --style json:compact 模式会把消息体替换成 <private>,
+#   聚合出来只有 "ref / directory / out" 这种噪音,拿不到 subsystem / 进程路径。
+
+emulate -L zsh
+setopt errexit nounset pipefail
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+
+typeset LAST='1h'
+typeset SINCE=''
+typeset -i TOP_N=15
+typeset ONLY_GK=false ONLY_TL=false DO_WATCH=false DO_RAW=false
+typeset RAW_PROC=''
+
+while (( $# > 0 )); do
+  case $1 in
+    --last)      LAST=$2; shift 2 ;;
+    --since)     SINCE=$2; shift 2 ;;
+    --top|-n)    TOP_N=$2; shift 2 ;;
+    --gatekeeper) ONLY_GK=true; shift ;;
+    --timeline)  ONLY_TL=true; shift ;;
+    --raw)       RAW_PROC=$2; DO_RAW=true; shift 2 ;;
+    --watch)     DO_WATCH=true; shift ;;
+    --version)   echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--last 30m] [--since 09:00] [--top N]"
+      echo "                     [--gatekeeper] [--timeline] [--raw 进程名] [--watch]"
+      echo ""
+      echo "  --last 30m       时间窗(支持 30s / 5m / 2h / 1d,默认 1h)"
+      echo "  --since 09:00    从今天该时刻到现在"
+      echo "  --top N          Top N 条(默认 15)"
+      echo "  --gatekeeper     只看 Gatekeeper / 代码签名相关"
+      echo "  --timeline       错误时间线(按分钟分桶)"
+      echo "  --raw 进程名     某进程的原始错误日志"
+      echo "  --watch          每 10 秒刷新"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+_ok()   { print -r -- "${C_GREEN}✓${C_RESET} $1" }
+_warn() { print -r -- "${C_YELLOW}!${C_RESET} $1" }
+_bad()  { print -r -- "${C_RED}✗${C_RESET} $1" }
+_info() { print -r -- "${C_DIM}  $1${C_RESET}" }
+_section() {
+  echo
+  echo "${C_BOLD}  $1${C_RESET} ${C_DIM}$2${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+}
+
+# ---- 时间窗 → log show 参数 -------------------------------------------------
+# 返回数组(--last 1h 或 --start <ts>)。
+# 注意:不能写成 `print -r -- "--last" "$LAST"` 再用 ${(f)...} 切 ——
+# ${(f)} 只按换行切,"--last 1h" 会变成单个元素,log 收到 3 个参数报
+# "too many arguments"(实测 0.068s 就静默返回空)。
+# 直接设全局数组最干净。
+typeset -ga TIME_ARGS
+
+_time_args() {
+  if [[ -n $SINCE ]]; then
+    TIME_ARGS=(--start "$(date "+%Y-%m-%d $SINCE:00")")
+  else
+    TIME_ARGS=(--last "$LAST")
+  fi
+}
+
+# ---- 核心:拉取错误日志的 JSON 流 ------------------------------------------
+# ⚠ 性能要点:JSON 绝不能存进 shell 变量。
+#   2 分钟窗口 = 29 万行 ≈ 30MB;存进变量后每个 block 再 print + tr + grep
+#   扫一遍,5 个 block 就是 5 次 30MB 复制,实测 >180s 超时。
+#   正确做法:落临时文件,block 直接引用文件路径,shell 只传路径。
+#   实测单次 tr+grep+sort+uniq 仅 1.0 秒。
+typeset -r _TMPDIR="${TMPDIR:-/tmp}"
+typeset -g LOG_JSON=''
+typeset -g LOG_KEEP=0
+typeset -g EXTRACT_TSV=''
+
+# 清理临时文件
+_log_cleanup() {
+  [[ -n $LOG_JSON && -f $LOG_JSON ]] && rm -f "$LOG_JSON"
+  return 0
+}
+
+# 拉取到临时文件,echo 文件路径
+_logs() {
+  _time_args
+  LOG_JSON=$(mktemp "${_TMPDIR%/}/logtriage.XXXXXX")
+  # ⚠ 必须 `command log` —— zsh 里 `log` 是数学函数(自然对数/对数十进制底),
+  #   裸调用会被 zsh 内建截获并对参数做求值:
+  #     $ zsh -c 'log show --last 1s --style compact'
+  #     zsh:log:1: too many arguments
+  #   而 `command log show ...` 正常。README §3 记过这个坑但只提"log show 报
+  #   too many arguments",没写清楚根因是 zsh 内建,以及必须加 command 前缀。
+  command log show "${TIME_ARGS[@]}" \
+    --predicate 'messageType == error' \
+    --style json >"$LOG_JSON" 2>&1 || true
+  print -r -- "$LOG_JSON"
+}
+
+# 记录一条记录的关键字段(每条一行,tab 分隔),供各 block 复用。
+# 比"每个 block 自己 grep 原始 JSON"快一个数量级,而且只解析一次。
+_extract() {
+  tr '{' '\n' <"$LOG_JSON" \
+    | awk '
+      {
+        p = index($0, "\"processImagePath\"")
+        proc = ""
+        if (p > 0) {
+          rest = substr($0, p)
+          if (match(rest, /"[^"]*"[[:space:]]*:/)) {
+            v = substr(rest, RSTART + RLENGTH)
+            if (match(v, /"[^"]*"/)) proc = substr(v, RSTART + 1, RLENGTH - 2)
+          }
+        }
+        subsys = ""
+        p = index($0, "\"subsystem\"")
+        if (p > 0) {
+          rest = substr($0, p)
+          if (match(rest, /"[^"]*"[[:space:]]*:/)) {
+            v = substr(rest, RSTART + RLENGTH)
+            if (match(v, /"[^"]*"/)) subsys = substr(v, RSTART + 1, RLENGTH - 2)
+          }
+        }
+        fs = ""
+        p = index($0, "\"formatString\"")
+        if (p > 0) {
+          rest = substr($0, p)
+          if (match(rest, /"[^"]*"[[:space:]]*:/)) {
+            v = substr(rest, RSTART + RLENGTH)
+            if (match(v, /"[^"]*"/)) fs = substr(v, RSTART + 1, RLENGTH - 2)
+          }
+        }
+        ts = ""
+        p = index($0, "\"timestamp\"")
+        if (p > 0) {
+          rest = substr($0, p)
+          # "timestamp" : "2026-09-28 18:04:22.898623+0800"
+          # 不能用 match()+RLENGTH 截日期 —— BSD awk 下正则量词计数不可靠,
+          # 实测只取到 "2026-09-28 18:0" 就断了(README §12 同类坑)。
+          # 改用 split 按分隔符切:剥引号 → 取前两个空格前的部分。
+          # 同样要跳过键名的引号对(见上面 process 的处理)
+          if (match(rest, /"[^"]*"[[:space:]]*:/)) {
+            v = substr(rest, RSTART + RLENGTH)
+            if (match(v, /"[^"]*"/)) {
+              raw = substr(v, RSTART + 1, RLENGTH - 2)
+              # 截到分钟:2026-09-28 18:04:22.898+0800 → 2026-09-28 18:04
+              nf = split(raw, dt, /[ T]/)
+              if (nf >= 2) ts = dt[1] " " substr(dt[2], 1, 5)
+            }
+          }
+        }
+        # 路径 → basename(awk 里按 / 切,不用 shell 的 ${f##*/})
+        if (proc != "") {
+          n = split(proc, seg, "/")
+          proc = seg[n]
+        }
+        printf "%s\t%s\t%s\t%s\n", proc, subsys, ts, fs
+      }
+    '
+}
+
+# 所有 block 都消费 _extract 的 TSV(字段序: proc \t subsystem \t timestamp \t formatString),
+# 不再各自 grep 原始 JSON —— 那会把 30MB 复制 5 次。
+#
+# 重要:某些记录的 formatString 为空(纯 signpost / 无模板日志),
+# 这类记录不能进"高频消息"统计,否则空行会被聚合成一条假消息。
+
+# ---- ① 错误 Top 进程 -------------------------------------------------------
+_proc_block() {
+  local rows
+  rows=$(cat "$EXTRACT_TSV" | awk -F'\t' -v n="$TOP_N" '$1 != "" { print $1 }' \
+    | sort | uniq -c | sort -rn | awk -v n="$TOP_N" 'NR<=n')
+
+  if [[ -z $rows ]]; then
+    _info "(时间窗内没有错误日志 —— 系统很健康)"
+    return
+  fi
+
+  local nproc total
+  nproc=$(cat "$EXTRACT_TSV" | awk -F'\t' '$1 != "" { print $1 }' | sort -u | wc -l | tr -d ' ')
+  total=$(print -r -- "$rows" | awk '{ s += $1 } END { print s + 0 }')
+  _ok "共 $nproc 个进程在报错,Top $TOP_N 内合计 $total 条"
+  echo
+  printf "  ${C_DIM}%9s  %s${C_RESET}\n" 'COUNT' 'PROCESS'
+  local cnt proc color
+  while read -r cnt proc; do
+    [[ -z $cnt ]] && continue
+    color=$C_YELLOW
+    (( cnt > 5000 )) && color=$C_RED
+    (( cnt < 100 ))  && color=$C_DIM
+    printf "  ${color}%9s${C_RESET}  %s\n" "$cnt" "$proc"
+  done <<<"$rows"
+
+  echo
+  # 内核态 vs 用户态:内核进程刷错误通常是硬件/驱动问题,第三方 App 则是 App 自己的
+  local kernel third
+  kernel=$(print -r -- "$rows" | awk '$2 ~ /^(ReportCrash|ReportMemoryException|kernel_task|WindowServer|coreservicesd)$/ { c += $1 } END { print c + 0 }')
+  third=$(print -r -- "$rows" | grep -vE '(core|systemd|launchd|WindowServer|mDNSResponder|powerd|securityd|trustd|diskarbitrationd|syspolicyd|runningboardd|duetexpertd|biomesyncd|wifip2pd|CommCenter|ReportCrash|ReportMemoryException)' \
+    | awk '{ c += $1 } END { print c + 0 }')
+  if (( third > 0 )); then
+    _warn "Top N 里第三方进程合计 $third 条 —— 那些不是系统的问题"
+  fi
+}
+
+# ---- ② 错误 Top subsystem --------------------------------------------------
+_subsystem_block() {
+  local rows
+  rows=$(cat "$EXTRACT_TSV" | awk -F'\t' '$2 != "" { print $2 }' \
+    | sort | uniq -c | sort -rn | awk -v n="$TOP_N" 'NR<=n')
+
+  if [[ -z $rows ]]; then
+    _info "(无 subsystem 字段 —— 这些是未分类的系统级日志)"
+    return
+  fi
+
+  printf "  ${C_DIM}%9s  %s${C_RESET}\n" 'COUNT' 'SUBSYSTEM'
+  local cnt subsys color
+  while read -r cnt subsys; do
+    [[ -z $cnt ]] && continue
+    color=$C_YELLOW
+    (( cnt > 5000 )) && color=$C_RED
+    (( cnt < 100 ))  && color=$C_DIM
+    printf "  ${color}%9s${C_RESET}  %s\n" "$cnt" "$subsys"
+  done <<<"$rows"
+
+  echo
+  # 非 com.apple 的 subsystem = 第三方 App 自己的命名空间,那是 App 的问题
+  local third
+  third=$(print -r -- "$rows" | awk '$2 !~ /^com\.apple\./ { c += $1 } END { print c + 0 }')
+  if (( third > 0 )); then
+    _warn "Top N 里第三方 App subsystem 合计 $third 条"
+    print -r -- "$rows" | awk '$2 !~ /^com\.apple\./ { print "    " $2 }' \
+      | while IFS= read -r s; do _info "$s"; done
+  else
+    _ok "Top N 全是 com.apple.* —— 系统自身的问题,不是 App 拖的"
+  fi
+}
+
+# ---- ③ Gatekeeper / 代码签名 ----------------------------------------------
+# syspolicyd 反复校验 = 有 App 签名异常 / 被反复修改 / 走了 quarantine
+_gatekeeper_block() {
+  _info "单独查 syspolicyd / Gatekeeper(走 compact,窗口小所以很快)"
+
+  _time_args
+  local raw
+  raw=$(command log show "${TIME_ARGS[@]}" \
+    --predicate 'process == "syspolicyd" OR process == "taskgated-helper" OR subsystem == "com.apple.syspolicy"' \
+    --style compact 2>&1 || true)
+
+  if [[ -z ${raw//[[:space:]]/} ]]; then
+    _ok "该时间窗内 syspolicyd 没有报错 —— 签名校验正常"
+    return
+  fi
+
+  local n
+  n=$(print -r -- "$raw" | grep -c . || true)
+  _warn "syspolicyd 产生 $n 条日志"
+  echo
+
+  # ⚠ compact 模式的消息体是 <private>,App 路径也被遮掉了。
+  #   要拿到具体是哪个 App,必须另外走 --style json(只查 syspolicyd,
+  #   量很小 —— 实测 3 分钟窗口几百条,不影响性能)。
+  local tmp
+  tmp=$(mktemp "${_TMPDIR%/}/gk.XXXXXX")
+  command log show "${TIME_ARGS[@]}" \
+    --predicate 'process == "syspolicyd" OR subsystem == "com.apple.syspolicy"' \
+    --style json >"$tmp" 2>&1 || true
+
+  # 提取被校验的 bundle 路径 / App 名
+  local rows
+  rows=$(tr '{' '\n' <"$tmp" \
+    | grep -oE '/Applications/[^"\\]*' \
+    | sort | uniq -c | sort -rn | awk 'NR<=12' || true)
+
+  if [[ -n $rows ]]; then
+    echo "  ${C_BOLD}被反复校验的 App${C_RESET} ${C_DIM}(次数越高,签名问题越可疑)${C_RESET}"
+    printf "  ${C_DIM}%9s  %s${C_RESET}\n" 'TIMES' 'APP'
+    local cnt app color
+    while read -r cnt app; do
+      [[ -z $cnt ]] && continue
+      color=$C_DIM
+      (( cnt > 50 )) && color=$C_YELLOW
+      (( cnt > 200 )) && color=$C_RED
+      printf "  ${color}%9s${C_RESET}  %s\n" "$cnt" "$app"
+    done <<<"$rows"
+    echo
+    _info "深度校验:${C_RESET}codesign --verify --deep --verbose=2 \"/Applications/X.app\""
+    _info "签名详情:${C_RESET}codesign -dv --verbose=4 \"/Applications/X.app\""
+  else
+    echo "  ${C_DIM}(JSON 里也没有 /Applications 路径 —— 说明是系统自身的 Gatekeeper 校验,不是某个 App)${C_RESET}"
+    echo
+    _info "看具体报什么:${C_RESET}command log show --last 5m --predicate 'process == \"syspolicyd\"' --style json | head -40"
+  fi
+  rm -f "$tmp"
+
+  # 常见的"反复校验"根因
+  echo
+  echo "  ${C_DIM}常见原因:${C_RESET}"
+  echo "  ${C_DIM}  ① App 被反复修改(重签名 / 每次启动重写 Contents)${C_RESET}"
+  echo "  ${C_DIM}  ② 从网络下载但 quarantine 属性没清,每次访问都重新验签${C_RESET}"
+  echo "  ${C_DIM}  ③ 签名损坏 —— 改过 Contents/ 下的二进制或脚本${C_RESET}"
+  echo "  ${C_DIM}  ④ 开发中频繁重编译 / 未 notarize${C_RESET}"
+  echo
+  _info "清 quarantine:${C_RESET}xattr -d com.apple.quarantine \"/Applications/X.app\""
+  _info "当前带 quarantine 的 App:${C_RESET}见下方 §shareprint 之外,可另跑 xattr 扫描"
+}
+
+# ---- ④ 错误时间线 ----------------------------------------------------------
+_timeline_block() {
+  local rows
+  # uniq -c 的输出是 "  1234 2026-09-28 18:04" —— count 和分钟之间是空格分隔,
+  # 但分钟本身也含空格。所以不能 awk '{print $1,$2}'(会只拿到日期丢时间),
+  # 要用 sed 剥前导空白后按首个空白切成两段。
+  rows=$(cat "$EXTRACT_TSV" | awk -F'\t' '$3 != "" { print $3 }' \
+    | sort | uniq -c | sed 's/^[[:space:]]*//' \
+    | awk -v OFS='\t' '{ c = $1; $1 = ""; sub(/^[[:space:]]+/, ""); print c, $0 }' \
+    | tail -30)
+
+  if [[ -z $rows ]]; then
+    _info "(无 timestamp 字段)"
+    return
+  fi
+
+  local total_min max
+  total_min=$(print -r -- "$rows" | wc -l | tr -d ' ')
+  max=$(print -r -- "$rows" | awk -F'\t' '{ if ($1 + 0 > m) m = $1 + 0 } END { print m + 0 }')
+  (( max == 0 )) && max=1
+
+  _info "每分钟错误数(最近 $total_min 个有错误的分钟,峰值 $max 条/分)"
+  echo
+  local cnt min bar color
+  while IFS=$'\t' read -r cnt min; do
+    [[ -z $cnt ]] && continue
+    bar=$(awk -v c="$cnt" -v m="$max" 'BEGIN{ n = int(c * 40 / m); if (n < 1) n = 1; s = ""; for (i = 0; i < n; i++) s = s "#"; print s }')
+    color=$C_GREEN
+    (( cnt * 3 > max )) && color=$C_RED
+    (( cnt * 3 <= max && cnt * 2 > max )) && color=$C_YELLOW
+    printf "  %s%s  %s%6s${C_RESET}  %s\n" "$color" "$min" "$C_DIM" "$cnt" "$bar"
+  done <<<"$rows"
+
+  echo
+  _info "持续均匀 = 常态问题(某个服务一直报);单点尖峰 = 突发事件(重启/更新/App 卡死)"
+}
+
+# ---- ⑤ 高频 formatString ---------------------------------------------------
+_format_block() {
+  # 必须过滤空 formatString —— 那类是 signpost / 无模板日志,
+  # 不过滤的话会被聚合成一条 "N" 的假消息。
+  local rows
+  rows=$(cat "$EXTRACT_TSV" | awk -F'\t' '$4 != "" { print $4 }' \
+    | sort | uniq -c | sort -rn | awk 'NR<=12')
+
+  if [[ -z $rows ]]; then
+    _info "(无 formatString —— 这些日志没有固定消息模板)"
+    return
+  fi
+
+  _info "同一句话被反复报 = 循环失败(重试无效 / 依赖缺失 / 权限不足)"
+  echo
+  local cnt msg color
+  while read -r cnt msg; do
+    [[ -z $cnt ]] && continue
+    color=$C_DIM
+    (( cnt > 100 )) && color=$C_YELLOW
+    (( cnt > 1000 )) && color=$C_RED
+    printf "  ${color}%7s${C_RESET}  %s\n" "$cnt" "$msg"
+  done <<<"$rows"
+}
+
+# ---- ⑥ 原始日志 -----------------------------------------------------------
+_raw_block() {
+  local proc=$1
+  _time_args
+  # predicate 里的双引号必须能活到 log show 手上。
+  # 写成 "--predicate \"process == \\\"$proc\\\"\"" 会让 shell 先吃掉一层引号,
+  # 实测结果为空且不报错。安全做法:predicate 整体用单引号,
+  # 进程名通过环境变量传给 log show 不支持 —— 只能接受双引号内联,
+  # 前提是变量本身不含引号(进程名不会有)。
+  command log show "${TIME_ARGS[@]}" \
+    --predicate "process == '$proc'" \
+    --style compact 2>&1 | tail -40 || true
+}
+
+_render() {
+  if [[ -t 1 ]]; then
+    printf '\033[?25l\033[2J\033[H'
+  fi
+  echo "${C_BOLD}${C_CYAN}═══ 系统日志分诊 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读  ·  数据源: log show --style json${C_RESET}"
+
+  if $DO_RAW; then
+    echo
+    _raw_block "$RAW_PROC"
+    return
+  fi
+
+  local win
+  if [[ -n $SINCE ]]; then
+    win="从 $(date "+%Y-%m-%d $SINCE:00") 到现在"
+  else
+    win="最近 $LAST"
+  fi
+
+  # --gatekeeper 走独立的 compact 查询,不需要 JSON 聚合。
+  # 提前返回,否则会白拉一份几十 MB 的 JSON(实测 3 分钟窗口 = 49 万行 / 3 秒)。
+  if $ONLY_GK; then
+    echo
+    _info "$win"
+    _section "Gatekeeper / 代码签名" "syspolicyd · taskgated-helper"
+    _gatekeeper_block
+    echo
+    echo "${C_DIM}  $SCRIPT_NAME $VERSION · --raw <进程> 看原始日志${C_RESET}"
+    return
+  fi
+
+  # 拉取到临时文件(见 _logs 的性能说明),后面所有 block 引用路径
+  _logs >/dev/null
+
+  if [[ ! -s $LOG_JSON ]]; then
+    echo
+    _ok "$win 内没有任何错误日志"
+    echo "  ${C_DIM}  系统很健康 —— 或者该时间窗还没写入 unified log${C_RESET}"
+    return
+  fi
+
+  # 先把 TSV 提取结果也落盘,避免每个 block 重跑一次 awk
+  local tsv="${LOG_JSON}.tsv"
+  _extract >"$tsv"
+  # 后面 block 改成读这个文件
+  EXTRACT_TSV=$tsv
+
+  # 条数 = TSV 行数(每条日志记录一行)
+  local est
+  est=$(wc -l <"$tsv" | tr -d ' ')
+
+  echo
+  _ok "$win:$est 条错误日志"
+
+  if $ONLY_TL; then
+    _section "错误时间线" "按分钟分桶"
+    _timeline_block
+  else
+    _section "错误 Top 进程" "谁在刷错误 —— 最有用的一行"
+    _proc_block
+    echo
+    _section "错误 Top subsystem" "哪个系统子系统在报错"
+    _subsystem_block
+    echo
+    _section "被反复报的消息" "同一句话反复出现 = 循环失败"
+    _format_block
+    echo
+    _section "错误时间线" "按分钟分桶"
+    _timeline_block
+    echo
+    _section "Gatekeeper / 代码签名" "syspolicyd · taskgated-helper"
+    _gatekeeper_block
+  fi
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · --gatekeeper 只看签名 · --timeline 只看时间线 · --raw <进程> 看原始日志${C_RESET}"
+  echo "${C_DIM}  ⚠ 必须 --style json:compact 模式消息体是 <private>,聚合出来只有噪音${C_RESET}"
+}
+
+# 清理:临时 JSON + TSV
+_cleanup() {
+  printf '\033[?25h\033[0m'; echo
+  _log_cleanup
+  [[ -n ${EXTRACT_TSV:-} && -f ${EXTRACT_TSV} ]] && rm -f "$EXTRACT_TSV"
+  return 0
+}
+trap _cleanup EXIT INT TERM
+
+if $DO_WATCH; then
+  while true; do _render; sleep 10; done
+else
+  _render
+fi

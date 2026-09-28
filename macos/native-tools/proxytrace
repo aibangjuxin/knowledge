@@ -1,0 +1,492 @@
+#!/usr/bin/env zsh
+# proxytrace — 代理链路全貌:到底哪个代理在生效?
+#
+# 设计目标:
+#   - 本机装了 Loon / Shadowrocket / Clash 系(127.0.0.1:7893)等一堆代理,
+#     但三种代理模式(TUN / 系统 HTTP 代理 / SOCKS)互斥且优先级不同,
+#     现有脚本(netwatch / netpath)只能告诉你"走 utun4",没人能说清"为什么"。
+#   - 显示:
+#       ① 当前生效的系统代理   —— scutil --proxy(全局合并后的结果)
+#       ② 各网络服务的代理配置  —— networksetup 逐服务对比,看谁开着谁关着
+#       ③ 代理端口对应的进程    —— 谁占着 7893 / 1080 / 8888
+#       ④ 代理模式判定          —— TUN / 系统代理 / 都没有,以及冲突告警
+#       ⑤ PAC / 自动代理        —— 有没有企业 PAC 文件
+#       ⑥ bypass 列表          —— 哪些地址绕过代理
+#       ⑦ fake-ip 与真实 DNS 分层 —— 为什么 ping 到的 IP 不对
+#   - 只读:不写 networksetup / 不改代理设置
+#
+# 用法:
+#   proxytrace                # 全量
+#   proxytrace --services     # 只看各服务代理对比表
+#   proxytrace --ports        # 只看代理端口占用
+#   proxytrace --mode         # 只判定当前模式
+#   proxytrace --json         # 结构化输出
+#
+# 为什么要做这个:三种模式的互斥关系是 macOS 代理配置最大的困惑点 ——
+#   系统代理开着但 TUN 也在跑,系统代理那套实际不生效;
+#   TUN 模式下 scutil --proxy 可能完全为空,让人误以为"没开代理"。
+
+emulate -L zsh
+setopt errexit nounset pipefail
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+
+typeset ONLY_SVC=false ONLY_PORTS=false ONLY_MODE=false DO_JSON=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --services) ONLY_SVC=true; shift ;;
+    --ports)    ONLY_PORTS=true; shift ;;
+    --mode)     ONLY_MODE=true; shift ;;
+    --json)     DO_JSON=true; shift ;;
+    --version)  echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--services|--ports|--mode] [--json]"
+      echo "  --services  各网络服务的代理配置对比表"
+      echo "  --ports     常见代理端口被谁占用"
+      echo "  --mode      只判定当前生效的代理模式"
+      echo "  --json      结构化输出"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+_ok()   { print -r -- "${C_GREEN}✓${C_RESET} $1" }
+_warn() { print -r -- "${C_YELLOW}!${C_RESET} $1" }
+_bad()  { print -r -- "${C_RED}✗${C_RESET} $1" }
+_info() { print -r -- "${C_DIM}  $1${C_RESET}" }
+_section() {
+  echo
+  echo "${C_BOLD}  $1${C_RESET} ${C_DIM}$2${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+}
+
+# ---- ① 当前生效的系统代理 ---------------------------------------------------
+_scutil_proxy_block() {
+  local raw
+  raw=$(scutil --proxy 2>/dev/null || true)
+
+  if [[ -z ${raw//[[:space:]]/} ]]; then
+    _info "scutil --proxy 无输出 —— 系统层面没有任何代理"
+    return
+  fi
+
+  # scutil --proxy 是 plist 风格:<dictionary> { KEY : VALUE ... }
+  # 只提取有意义的键,跳过 FTP/FTPPassive 之类噪声
+  local rows
+  rows=$(print -r -- "$raw" | awk -F' : ' '
+    /^[[:space:]]*[A-Za-z]+[[:space:]]*:[[:space:]]/ {
+      k = $1
+      v = $2
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", k)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
+      if (k == "HTTPEnable" || k == "HTTPSEnable" || k == "SOCKSEnable" || k == "ProxyAutoConfigEnable")
+        printf "%s\t%s\n", k, v
+    }
+  ')
+
+  # 各协议的实际地址
+  local http_srv http_port https_srv https_port socks_srv socks_port pac
+  http_srv=$(print -r -- "$raw" | awk -F' : ' '/^[[:space:]]*HTTPProxy/ { gsub(/[ \t]/,"",$2); print $2; exit }')
+  http_port=$(print -r -- "$raw" | awk -F' : ' '/^[[:space:]]*HTTPPort/ { gsub(/[ \t]/,"",$2); print $2; exit }')
+  https_srv=$(print -r -- "$raw" | awk -F' : ' '/^[[:space:]]*HTTPSProxy/ { gsub(/[ \t]/,"",$2); print $2; exit }')
+  https_port=$(print -r -- "$raw" | awk -F' : ' '/^[[:space:]]*HTTPSPort/ { gsub(/[ \t]/,"",$2); print $2; exit }')
+  socks_srv=$(print -r -- "$raw" | awk -F' : ' '/^[[:space:]]*SOCKSProxy/ { gsub(/[ \t]/,"",$2); print $2; exit }')
+  socks_port=$(print -r -- "$raw" | awk -F' : ' '/^[[:space:]]*SOCKSPort/ { gsub(/[ \t]/,"",$2); print $2; exit }')
+  pac=$(print -r -- "$raw" | awk -F' : ' '/^[[:space:]]*ProxyAutoConfigURLString/ { gsub(/[ \t]/,"",$2); print $2; exit }')
+
+  local any=0
+  if [[ -n $http_srv || -n $https_srv || -n $socks_srv ]]; then
+    _ok "系统层有代理配置"
+    any=1
+    [[ -n $http_srv ]] && echo "  ${C_BOLD}HTTP  ${C_RESET}${C_CYAN}${http_srv}:${http_port:-?}${C_RESET}"
+    [[ -n $https_srv ]] && echo "  ${C_BOLD}HTTPS ${C_RESET}${C_CYAN}${https_srv}:${https_port:-?}${C_RESET}"
+    [[ -n $socks_srv ]] && echo "  ${C_BOLD}SOCKS ${C_RESET}${C_CYAN}${socks_srv}:${socks_port:-?}${C_RESET}"
+  fi
+  if [[ -n $pac ]]; then
+    echo "  ${C_BOLD}PAC   ${C_RESET}${C_CYAN}${pac}${C_RESET}"
+    _info "PAC 文件决定每个 URL 走不走代理,优先级高于手动代理"
+    any=1
+  fi
+  (( any == 0 )) && _info "只有 FTP/Gopher 之类的老协议,实际等于没开代理"
+
+  # Enable 开关的真实值
+  echo
+  local k v
+  while IFS=$'\t' read -r k v; do
+    [[ -z $k ]] && continue
+    case $k in
+      *Enable)
+        if [[ $v == 1 ]]; then
+          printf "  ${C_GREEN}✓${C_RESET} %-24s = 开\n" "$k"
+        else
+          printf "  ${C_DIM}·${C_RESET} %-24s = 关\n" "$k"
+        fi ;;
+    esac
+  done <<<"$rows"
+
+  # bypass
+  local bypass
+  bypass=$(print -r -- "$raw" | awk -F' : ' '/^[[:space:]]*ExceptionsList/ { gsub(/[ \t]/,"",$2); print $2; exit }' || true)
+  if [[ -n $bypass ]]; then
+    echo
+    echo "  ${C_BOLD}Bypass(不走代理的地址)${C_RESET}"
+    print -r -- "$bypass" | tr ',' '\n' | sed 's/^[[:space:]]*/    /' || true
+  fi
+}
+
+# ---- ② 各网络服务的代理配置 -------------------------------------------------
+# ⚠ networksetup 对不存在的服务名会报 "** Error: Unable to find item in network database."
+#   并返回非 0 —— 必须逐个兜住,否则 errexit 直接杀脚本。
+# ⚠ 服务列表第 1 行是表头说明,不是服务名。
+# ⚠ 服务名可能带 * 前缀(禁用),传参时要去掉。
+_service_proxies_block() {
+  local raw
+  raw=$(networksetup -listallnetworkservices 2>/dev/null || true)
+  if [[ -z ${raw//[[:space:]]/} ]]; then
+    _info "(拿不到网络服务列表)"
+    return
+  fi
+
+  # 收集:名称 + 是否禁用(* 前缀)
+  local -a names
+  local -a disabled
+  local line svc
+  while IFS= read -r line; do
+    [[ -z ${line//[[:space:]]/} ]] && continue
+    [[ $line == *"An asterisk"* ]] && continue
+    svc=$line
+    if [[ $svc == \** ]]; then
+      disabled+=(true)
+      svc=${svc#\*}
+      svc=${svc## }
+    else
+      disabled+=(false)
+    fi
+    names+=("$svc")
+  done <<<"$raw"
+
+  if (( ${#names[@]} == 0 )); then
+    _info "(服务列表为空)"
+    return
+  fi
+
+  printf "  ${C_DIM}%-24s %-5s %-7s %-22s %s${C_RESET}\n" 'SERVICE' 'STATE' 'WEB' 'SERVER:PORT' 'SOCKS'
+  echo "  ${C_DIM}$(printf '%.0s─' {1..74})${C_RESET}"
+
+  local i
+  for (( i = 1; i <= ${#names[@]}; i++ )); do
+    svc=${names[$i]}
+    local st
+    if [[ ${disabled[$i]} == true ]]; then
+      st="${C_DIM}off${C_RESET}"
+    else
+      st="${C_GREEN}on${C_RESET}"
+    fi
+
+    # 逐个 networksetup 调用都要 || true —— 不存在的服务会报错
+    local web svr port socks
+    web=$(networksetup -getwebproxy "$svc" 2>&1 | awk -F': ' '/^Enabled:/ { print $2; exit }' || true)
+    svr=$(networksetup -getwebproxy "$svc" 2>&1 | awk -F': ' '/^Server:/ { print $2; exit }' || true)
+    port=$(networksetup -getwebproxy "$svc" 2>&1 | awk -F': ' '/^Port:/ { print $2; exit }' || true)
+    socks=$(networksetup -getsocksfirewallproxy "$svc" 2>&1 | awk -F': ' '/^Enabled:/ { print $2; exit }' || true)
+
+    [[ -z $web ]] && web='?'
+    [[ -z $socks ]] && socks='?'
+
+    local web_c socks_c
+    if [[ $web == 1 ]]; then web_c="${C_YELLOW}ON${C_RESET}"; else web_c="${C_DIM}off${C_RESET}"; fi
+    if [[ $socks == 1 ]]; then socks_c="${C_YELLOW}ON${C_RESET}"; else socks_c="${C_DIM}off${C_RESET}"; fi
+
+    local addr='-'
+    if [[ -n $svr && $svr != ' ' ]]; then
+      addr="${svr}:${port:-?}"
+    fi
+
+    printf "  %-24s %b %b %-22s %b\n" "$svc" "$st" "$web_c" "$addr" "$socks_c"
+  done
+
+  echo
+  _info "ON = 该服务启用了系统代理;但如果 TUN 也在跑,系统代理这层实际不生效"
+  _info "改配置用:networksetup -setwebproxy \"Wi-Fi\" <server> <port>"
+}
+
+# ---- ③ 代理端口占用 --------------------------------------------------------
+_proxy_ports_block() {
+  # 常见代理客户端默认端口
+  local -a ports=(1080 7890 7891 7892 7893 8080 8888 8889 10808 10809 20170 6152 6153)
+  local -a labels=(
+    'SOCKS 标准'
+    'Clash HTTP'
+    'Clash Mixed'
+    'Clash Socks'
+    'Clash 备用'
+    '通用 HTTP'
+    '通用 HTTP2'
+    '通用 HTTP3'
+    'v2ray HTTP'
+    'v2ray Socks'
+    'Shadowsocks'
+    'Surge HTTP'
+    'Surge Socks'
+  )
+
+  printf "  ${C_DIM}%-6s %-18s %-16s %s${C_RESET}\n" 'PORT' 'SERVICE' 'PROCESS' 'PID'
+  echo "  ${C_DIM}$(printf '%.0s─' {1..58})${C_RESET}"
+
+  local i p lbl line proc pid found=0
+  for (( i = 1; i <= ${#ports[@]}; i++ )); do
+    p=${ports[$i]}
+    lbl=${labels[$i]}
+    # lsof 输出:COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+    line=$(lsof -nP -iTCP:"$p" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 { print $1, $2; exit }' || true)
+    if [[ -n $line ]]; then
+      found=1
+      proc=${line%% *}
+      pid=${line#* }
+      printf "  %-6s %-18s ${C_GREEN}%-16s${C_RESET} %s\n" "$p" "$lbl" "$proc" "$pid"
+    else
+      printf "  %-6s ${C_DIM}%-18s %-16s %s${C_RESET}\n" "$p" "$lbl" '-' '-'
+    fi
+  done
+
+  echo
+  if (( found == 1 )); then
+    _ok "有代理端口在监听"
+    _info "端口开着但系统代理关着 = 客户端在跑但没接管流量(常见于只开了 TUN 或规则不匹配)"
+  else
+    _info "没有常见代理端口在监听 —— 当前没有代理客户端在提供本地代理服务"
+    _info "如果用了 TUN 模式,本来就不需要本地监听端口,流量直接进 utun 接口"
+  fi
+}
+
+# ---- ④ 代理模式判定 --------------------------------------------------------
+# 三种模式互斥,优先级从低到高:
+#   1) 系统 HTTP/SOCKS 代理 —— 只影响"尊重系统代理"的应用(浏览器等)
+#   2) PAC 自动代理 —— 按 URL 决定,优先级高于手动代理
+#   3) TUN 模式(虚拟网卡)—— 全局接管,包括不认系统代理的应用
+_mode_block() {
+  # 判断 TUN:默认路由落在 utun* 上
+  local raw iface
+  raw=$(route -n get default 2>/dev/null || true)
+  iface=$(print -r -- "$raw" | awk -F': *' '/^[[:space:]]*interface:/ { print $2; exit }')
+
+  # 判断系统代理
+  local web_on socks_on pac_on
+  web_on=$(scutil --proxy 2>/dev/null | awk -F' : ' '/^[[:space:]]*HTTPEnable|^[[:space:]]*HTTPSEnable/ { gsub(/[ \t]/,"",$2); if ($2 == 1) { print 1; exit } }' || true)
+  socks_on=$(scutil --proxy 2>/dev/null | awk -F' : ' '/^[[:space:]]*SOCKSEnable/ { gsub(/[ \t]/,"",$2); print $2; exit }' || true)
+  pac_on=$(scutil --proxy 2>/dev/null | awk -F' : ' '/^[[:space:]]*ProxyAutoConfigEnable/ { gsub(/[ \t]/,"",$2); print $2; exit }' || true)
+
+  local tun=0
+  [[ $iface == utun* ]] && tun=1
+
+  # utun 存在不代表 TUN 接管(可能是 iCloud Private Relay / AWDL)
+  local n_utun
+  n_utun=$(ifconfig -l 2>/dev/null | tr ' ' '\n' | grep -c '^utun' || true)
+
+  echo "  ${C_DIM}${C_BOLD}判定结果${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+
+  if (( tun == 1 )); then
+    echo "  ${C_BOLD}${C_CYAN}TUN 模式(虚拟网卡接管)${C_RESET}"
+    echo "  ${C_DIM}  默认路由出口:${C_RESET}${C_BOLD}${iface}${C_RESET}(utun 接口)"
+    echo "  ${C_DIM}  共 $n_utun 个 utun 接口(其他可能是 iCloud Private Relay / AWDL)${C_RESET}"
+    echo
+    echo "  ${C_DIM}  影响范围:${C_RESET}所有流量,包括不认系统代理的程序(curl / ssh / brew)"
+    echo "  ${C_DIM}  所以下面那些「看着没开代理」的服务配置,在 TUN 模式下其实也在走代理${C_RESET}"
+  else
+    echo "  ${C_BOLD}${C_CYAN}非 TUN 模式${C_RESET}"
+    echo "  ${C_DIM}  默认路由出口:${C_RESET}${iface}"
+    echo "  ${C_DIM}  共 $n_utun 个 utun 接口(存在但没接管默认路由)${C_RESET}"
+    echo
+    if [[ $pac_on == 1 ]]; then
+      echo "  ${C_BOLD}${C_YELLOW}PAC 自动代理${C_RESET} ${C_DIM}优先级最高,按 URL 决定${C_RESET}"
+    fi
+    if [[ $web_on == 1 ]]; then
+      echo "  ${C_BOLD}${C_GREEN}系统 HTTP 代理${C_RESET} ${C_DIM}开${C_RESET}"
+    else
+      echo "  ${C_DIM}系统 HTTP 代理:${C_RESET}关"
+    fi
+    if [[ $socks_on == 1 ]]; then
+      echo "  ${C_BOLD}${C_GREEN}SOCKS 代理${C_RESET} ${C_DIM}开${C_RESET}"
+    else
+      echo "  ${C_DIM}SOCKS 代理:${C_RESET}关"
+    fi
+  fi
+
+  echo
+  if (( tun == 1 )) && [[ -n ${web_on+x} && $web_on == 1 || ${socks_on:-0} == 1 ]]; then
+    _warn "TUN 和系统代理同时开着 —— 冗余,但不一定冲突"
+    _info "TUN 已经全量接管,系统代理那层通常轮不到它生效"
+    _info "留着的好处:某些应用会读系统代理,行为可能不一致"
+  fi
+
+  if (( tun == 0 )) && [[ ${web_on:-0} != 1 && ${socks_on:-0} != 1 && ${pac_on:-0} != 1 ]]; then
+    _ok "没有任何代理生效 —— 流量直连"
+  fi
+}
+
+# ---- ⑤ fake-ip 与 DNS 分层 --------------------------------------------------
+_dns_layer_block() {
+  # 从 scutil --dns 里看有没有 198.x / 28.x / 10.x 的代理 DNS
+  local raw
+  raw=$(scutil --dns 2>/dev/null || true)
+  if [[ -z ${raw//[[:space:]]/} ]]; then
+    _info "(scutil --dns 无输出)"
+    return
+  fi
+
+  local rows
+  rows=$(print -r -- "$raw" | awk '
+    /^resolver #/ { inblk = 1; idx = ""; ns = ""; next }
+    inblk && /nameserver\[[0-9]+\]/ {
+      if (ns == "") ns = $NF
+      else ns = ns ", " $NF
+      next
+    }
+    inblk && /^[[:space:]]*if_index/ {
+      if (match($0, /\([^)]+\)/)) idx = substr($0, RSTART + 1, RLENGTH - 2)
+      next
+    }
+    /^$/ { inblk = 0 }
+    inblk && idx != "" { printf "%s\t%s\n", idx, ns; inblk = 0 }
+  ')
+
+  if [[ -z $rows ]]; then
+    _info "(解析不出 resolver 结构)"
+    return
+  fi
+
+  printf "  ${C_DIM}%-10s %s${C_RESET}\n" 'INTERFACE' 'NAMESERVERS'
+  local idx ns
+  while IFS=$'\t' read -r idx ns; do
+    [[ -z $idx ]] && continue
+    local color=$C_GREEN
+    [[ $idx == utun* ]] && color=$C_YELLOW
+    printf "  ${color}%-10s${C_RESET} %s\n" "$idx" "$ns"
+  done <<<"$rows"
+
+  echo
+  # 判定 fake-ip
+  local fake
+  fake=$(print -r -- "$rows" | awk -F'\t' '$2 ~ /198\.(1[89]|[0-9])\.|28\./ { print 1; exit }' || true)
+  if [[ -n $fake ]]; then
+    _warn "DNS 里有保留段地址(198.x / 28.x)—— fake-ip 模式"
+    _info "域名被映射成假地址,真实连接由代理端发起"
+    _info "所以 ping 出来的延迟是到本地代理入口,不是到真实服务器"
+    _info "验证:netdiag <域名> 会明确标出 fake-ip"
+  else
+    _ok "DNS 里没有 fake-ip 特征地址 —— 解析结果应该是真实 IP"
+  fi
+}
+
+# ---- JSON ------------------------------------------------------------------
+_json_block() {
+  local raw iface
+  raw=$(scutil --proxy 2>/dev/null || true)
+  iface=$(route -n get default 2>/dev/null | awk -F': *' '/^[[:space:]]*interface:/ { print $2; exit }' || true)
+
+  _jstr() {
+    local s=${1:-}
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    print -r -- "$s"
+  }
+
+  echo '{'
+  printf '  "default_route_interface": "%s",\n' "$(_jstr "$iface")"
+  if [[ $iface == utun* ]]; then
+    echo '  "proxy_mode": "TUN",'
+  elif print -r -- "$raw" | grep -q 'ProxyAutoConfigEnable.*: 1'; then
+    echo '  "proxy_mode": "PAC",'
+  elif print -r -- "$raw" | grep -qE '(HTTPEnable|HTTPSEnable|SOCKSEnable)[[:space:]]*: 1'; then
+    echo '  "proxy_mode": "SYSTEM",'
+  else
+    echo '  "proxy_mode": "NONE",'
+  fi
+
+  echo '  "system_proxy": {'
+  local k v first=true
+  for k in HTTPEnable HTTPSEnable SOCKSEnable ProxyAutoConfigEnable; do
+    v=$(print -r -- "$raw" | awk -F' : ' -v key="$k" '$1 ~ key { gsub(/[ \t]/,"",$2); print $2; exit }' || true)
+    [[ -z $v ]] && v=0
+    $first || echo ','
+    first=false
+    printf '    "%s": %s' "$k" "$v"
+  done
+  echo
+  echo '  },'
+
+  echo '  "proxy_ports": ['
+  local p first=true proc pid
+  for p in 1080 7890 7891 7892 7893 8080 8888 10808 10809; do
+    line=$(lsof -nP -iTCP:"$p" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 { print $1 "\t" $2; exit }' || true)
+    if [[ -n $line ]]; then
+      proc=${line%%$'\t'*}
+      pid=${line#*$'\t'}
+      $first || echo ','
+      first=false
+      printf '    {"port": %s, "process": "%s", "pid": %s}' "$p" "$(_jstr "$proc")" "${pid:-0}"
+    fi
+  done
+  echo
+  echo '  ]'
+  echo '}'
+}
+
+_render() {
+  if $DO_JSON; then
+    _json_block
+    return
+  fi
+
+  if [[ -t 1 ]]; then
+    printf '\033[?25l\033[2J\033[H'
+  fi
+  echo "${C_BOLD}${C_CYAN}═══ 代理链路全貌 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读:不写 networksetup / 不改代理设置${C_RESET}"
+
+  if $ONLY_MODE; then
+    _section "当前代理模式" "TUN / 系统代理 / PAC"
+    _mode_block
+  elif $ONLY_PORTS; then
+    _section "代理端口占用" "lsof -nP -iTCP"
+    _proxy_ports_block
+  elif $ONLY_SVC; then
+    _section "各网络服务的代理配置" "networksetup -getwebproxy / -getsocksfirewallproxy"
+    _service_proxies_block
+  else
+    _section "当前代理模式" "先判定谁在生效"
+    _mode_block
+    echo
+    _section "系统层代理" "scutil --proxy"
+    _scutil_proxy_block
+    echo
+    _section "各网络服务的代理配置" "networksetup 逐服务对比"
+    _service_proxies_block
+    echo
+    _section "代理端口占用" "lsof -nP -iTCP"
+    _proxy_ports_block
+    echo
+    _section "DNS 分层" "scutil --dns"
+    _dns_layer_block
+  fi
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: scutil --proxy/--dns, networksetup, route, ifconfig, lsof${C_RESET}"
+  echo "${C_DIM}  配套:netpath <IP> 看出口 · netdiag <域名> 连通性诊断 · logtriage 查 App 为什么被拦${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+_render

@@ -29,6 +29,9 @@
 | `extwatch` | 系统扩展 / 后台登录项 / launchd 常驻任务 | systemextensionsctl, sfltool dumpbtm, launchctl | 单次 |
 | `backupwatch` | Time Machine / APFS 快照占用 / 备份盘 | tmutil, diskutil apfs listSnapshots, mount | 单次 |
 | `inputwatch` | 键盘布局 / 输入法 / 快捷键 / 指针设置 | defaults read, system_profiler | 单次 |
+| `netpath` | 网络路径决策:这个包走哪条路 | route, scutil --nc/--dns/--nwi, netstat -rn | 单次 / `--services` / `--dns` / `--watch` |
+| `netdiag` | 连通性诊断包(DNS→ping→端口→traceroute→MTU) | ping, nc -z, traceroute, dscacheutil, route | 单次 / `--quick` / `--tcp` |
+| `shareprint` | 文件共享点 / guest access / 打印队列 / 共享端口 | /usr/sbin/sharing, lpstat, lsof, dns-sd | 单次 / `--json` |
 
 ## 安装
 
@@ -320,6 +323,211 @@ tmutil listbackups 2>&1 | grep -E '^/Volumes/.*\.backup$'   # ✓ 内容判定
 
 `_print_checks` 定义在 `_render` 之后 → 调用时 function not found → 静默退出。
 `secwatch` 因此只输出了前两段就停。写完顺手核对一下定义顺序。
+
+---
+
+## 25. `local path=...` 会把 `PATH` 整个覆盖掉 ⚠ 最隐蔽
+
+`path` 在 zsh 里是**与 `PATH` 绑定的数组变量**,不像 bash 那样是独立变量。
+
+```zsh
+local nm path proto ...
+while read -r nm path ...; do ... done
+print -r -- "$rows" | awk ...
+```
+
+症状:**只报一个** `command not found: awk` 就再无输出,前面所有解析都正常。
+`zsh -x` 会看到 `local path=/Users/lex/Public` 之后所有外部命令都找不到。
+
+```zsh
+# 实测
+$ zsh -c 'f(){ local path=/foo; print $PATH }; f'
+/foo          ← PATH 被吃掉了
+```
+
+**修法:** zsh 层变量一律避开 `path`,用 `sh_path` / `target_dir` 之类。
+**注意:** awk 内部的 `path` 变量无害(awk 不是 shell,不绑定 PATH),只有 zsh 层要避。
+`shareprint` 的 `_shares_block` 中过这个坑。
+
+## 26. `[[ $host != *[!0-9.]* ]]` 在 `emulate -L zsh` 下会静默返回假
+
+写"判断是不是主机名"时用了这个 glob:
+
+```zsh
+if [[ -n $host && $host != *[![0-9.]]* ]]; then   # ✗
+```
+
+`netpath --dns github.com` 的解析段**整个不执行**,不报错、不中断,
+`zsh -x` 显示从该行直接跳到函数末尾。
+
+**修法:** 用 `case` 而不是 `[[ != glob ]]`:
+
+```zsh
+_is_ipv4() {
+  case $1 in
+    <->.<->.<->.<->) return 0 ;;
+    *)              return 1 ;;
+  esac
+}
+```
+
+`netpath` 三处、`netdiag` 一处都改成了 `case`。
+
+## 27. `route -n get` 的 MTU 在表头下一行,不在 `mtu:` 行
+
+```sh
+route -n get 8.8.8.8
+#      recvpipe  sendpipe  ssthresh  rtt,msec    rttvar  hopcount      mtu     expire
+#            0         0         0         0         0         0      4000         0
+```
+
+没有 `mtu: 4000` 这种独立行 —— MTU 是那张表的**第 7 列**。
+而且数据行是纯数字,**不含 `recvpipe` 字样**,所以 `grep recvpipe` 只匹配到表头行,
+`awk '{print $7}'` 会输出字符串 `mtu`。
+
+**修法:** 先匹配表头行,再 `getline` 取下一行:
+
+```sh
+awk '/recvpipe[[:space:]]+sendpipe/ { getline; print $7; exit }'
+```
+
+## 28. 靠退出码判断的工具必须兜住,否则 `errexit` 静默杀脚本
+
+```zsh
+out=$(nc -z -G 3 -w 3 "$host" "$p" 2>&1)   # ✗ 端口关闭 → nc 返回 1 → 脚本死在这
+rc=$?                                          #   永远到不了
+```
+
+症状:**输出到第 N 个端口就静默停止**,没有任何错误信息。
+`./netdiag --quick <host> 80,443,22` 里 22 是关闭端口,结果 80/443 打完就没了。
+
+**修法:** `rc=0` 先初始化,再用 `|| rc=$?` 只在失败时覆盖:
+
+```zsh
+rc=0
+out=$(nc -z ... 2>&1) || rc=$?
+```
+
+同类工具:`nc` / `ping` / `traceroute` / `tmutil` / `mdutil`,凡是对"目标不可达"
+返回非 0 的,都不能裸写 `$(...)`。跟 §23 是同一个根因的不同表现。
+
+## 29. `scutil --nc list` 的第 1 行是表头说明,不是数据
+
+```
+Available network connection services in the current set (*=enabled):
+* (Disconnected)   248C68ED-... VPN (io.tailscale.ipn.macsys) "Tailscale"   [VPN:...]
+```
+
+不跳过第一行,表格里会多出一行 `network / ? / connecti`。
+
+**字段序(实测):** `[1]=*` `[2]=(Status)` `[3]=UUID` `[4]=VPN`
+`[5]=(bundle.id)` `[6]="Name"` `[7]=[VPN:bundle.id]`
+
+区分多条 VPN 的键是 **字段 5 的 bundle id**,不是字段 4 —— 不同客户端注册的
+`type` 全都是 `VPN`。同名显示名也可能重复(本机两个都叫 "Loon")。
+
+## 30. `scutil --dns` 的接口名在括号里,不是 `$3`
+
+```
+  if_index : 37 (utun4)
+```
+
+`$1=if_index` `$2=:` `$3=37` `$4=(utun4)`。
+取 `$3` 会得到纯数字 `37`,显示成"iface: 37"。要从括号里抠:
+
+```awk
+if (match($0, /\([^)]+\)/)) idx = substr($0, RSTART + 1, RLENGTH - 2)
+else idx = $3
+```
+
+另外 `resolver #1` 只有两个字段,编号在 `$2` 且**带前导 `#`**,要 `sub(/^#/, "", rid)`。
+
+## 31. `netstat -rn` 的 `default` 行会被数字过滤误杀
+
+```awk
+NR>2 && $1 ~ /^[0-9]/ { print }    # ✗ "default" 不是数字开头,全被过滤
+```
+
+而 `default` 行恰恰是最关键的(它直接告诉你谁在吃默认路由)。
+
+**修法:** `awk 'NR>2 && ($1 ~ /^[0-9]/ || $1 == "default")'`。
+
+列序是 `$1=Destination $2=Gateway $3=Flags $4=Netif $5=Expire`,
+`Expire` 常为空 —— 按 `$NF` 取列会取到 `Netif`。
+
+## 32. `/usr/sbin/sharing -l` 是 tab + 空格混合缩进,数空格会失败
+
+实测每行的前导字符:
+
+| 行 | 前导 |
+|---|---|
+| `name:` / `path:` | 无 |
+| `smb:` | **1 个 TAB** |
+| 块内 `shared:` / `guest access:` | **4 空格 + 2 TAB** |
+| `}` | **1 个 TAB** |
+
+而且协议名后面**直接跟 `\t{` 在同一行**,不是另起一行。
+"数缩进空格"的启发式在这里全军覆没 —— `awk` 的 `substr` 逐字符判断
+只能数空格,数不到 tab。
+
+**修法:** 用状态机而不是缩进启发 —— 看到 `^<TAB>字母+:` 进块,
+看到 `^<TAB>}` 出块并输出。
+
+另外共享名里可能有 UTF-8 右单引号(`’`),`awk -F'\t'` 按字节处理时
+会报 `towc: multibyte conversion failure`,JSON 输出整个数组变空。
+加 `LC_ALL=C awk` 按字节走即可。
+
+## 33. `--json` 模式的 trap 不能往 stdout 写任何东西
+
+```zsh
+_cleanup() { printf '\033[?25h\033[0m'; echo; }   # ✗ 跟在 `}` 后面
+```
+
+消费方 `json.load()` 报 `Extra data: line 10 column 1`,
+`jq` 报 `Unexpected character`。肉眼完全看不出问题 —— 终端里就是一行。
+
+**修法:**
+
+```zsh
+_cleanup() {
+  $DO_JSON && return
+  printf '\033[?25h\033[0m'; echo
+}
+```
+
+**通用原则:** 任何承诺机器可读的输出模式,`_render` 和 `_cleanup` 两处都不能污染 stdout。
+非 TTY 时 `_cleanup` 仍会输出 1 个 ESC(和 `inputwatch` 等现有脚本行为一致,
+因为光标恢复只在 TTY 下有意义),所以 G4 闸口要排除这一行。
+
+## 34. VPN 全局模式下"默认路由"拿不到本地网关
+
+```sh
+route -n get default
+#   interface: utun4        ← 没有 gateway 行(点对点隧道)
+```
+
+这时测网关延迟测的是隧道,不是 Wi-Fi —— 而用户真正想知道的是 Wi-Fi 有没有问题。
+
+**修法:** 回退到物理接口自己的 default 路由:
+
+```sh
+phy=$(netstat -rn -f inet | awk '$1 == "default" && $NF !~ /^utun/ { print $NF; exit }')
+```
+
+本机实测:`utun4`(Loon)吃默认路由,但 `en1` 仍有独立的 `default → 192.168.31.1`,
+回退后测得 9.5ms —— 这才是真实的本地链路延迟。
+
+## 35. fake-ip:DNS 解析结果可能是假地址
+
+TUN 模式代理(Loon / Clash / Surge)接管 DNS 后,域名会被映射到保留段的假地址,
+真实连接由代理端发起。本机实测 `github.com → 198.0.0.74`(Loon 用的 `198.0.0.0/16`;
+Clash / Surge 常用 `198.18.0.0/16`)。
+
+后果很实在:**ping / nc / curl 到的不是服务器,是本地代理入口**,
+测出来的延迟(本机 0.2ms)完全是代理本地的延迟,没有参考价值。
+
+判断:落在 `198.0.0.0/8`(RFC 2544 benchmarking 保留段,不做公网路由)即命中。
+
 
 ---
 
