@@ -1,0 +1,327 @@
+#!/usr/bin/env zsh
+# inputwatch — 键盘 / 输入法 / 快捷键 / 指针 观察器
+#
+# 设计目标:
+#   - 公司配 Mac,无 brew / 无 python / 无 Karabiner,
+#     只 zsh + defaults + system_profiler
+#   - 显示:
+#       ① 已启用的键盘布局与输入法(中英文切换状态)
+#       ② 按键重复速率与延迟(写代码的人最常调的两个值)
+#       ③ Fn 键行为 / 按住不放重复 / 修饰键映射
+#       ④ 系统级快捷键(AppleSymbolicHotKeys)与 Spotlight 状态
+#       ⑤ 指针设备:触控板手势 / 外接鼠标设置
+#       ⑥ 键盘硬件信息
+#   - 只读:改设置要手动去系统设置,脚本只报告当前值与含义
+#
+# 用法:
+#   inputwatch                 # 全量
+#   inputwatch --keyboard      # 只看键盘
+#   inputwatch --input-sources # 只看输入法
+#   inputwatch --shortcuts     # 只看快捷键
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset ONLY_KB=false ONLY_IS=false ONLY_SC=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --keyboard)      ONLY_IS=false; ONLY_SC=false; ONLY_KB=true; shift ;;
+    --input-sources) ONLY_KB=false; ONLY_SC=false; ONLY_IS=true; shift ;;
+    --shortcuts)     ONLY_KB=false; ONLY_IS=false; ONLY_SC=true; shift ;;
+    --version)       echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--keyboard|--input-sources|--shortcuts]"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+# defaults 读单个 key,读不到返回 1 + 空。用这个函数统一兜住。
+# 用法:_d <domain> <key>
+# 注意:全局域要写 NSGlobalDomain 而不是 -g —— 传 -g 会被 zsh 当 glob 前缀解析,
+# 在没设 no_nomatch 时报 "no matches found"。两者对 defaults 是等价的。
+# 例:_d NSGlobalDomain com.apple.keyboard.KeyboardRepeat
+_d() {
+  local domain=$1 key=$2
+  defaults read "$domain" "$key" 2>/dev/null || true
+}
+
+# ---- 键盘硬件 --------------------------------------------------------------
+_hardware_block() {
+  local hw
+  hw=$(system_profiler SPHardwareDataType 2>/dev/null | awk -F': *' '
+    /Model Name/      { model = $2 }
+    /Keyboard/        { kb = $2 }
+    END { printf "%s\t%s", model, kb }
+  ')
+  local model kb
+  IFS=$'\t' read -r model kb <<< "$hw"
+  echo "  ${C_DIM}机型: ${C_BOLD}${model:-?}${C_RESET}${C_DIM}  ·  键盘: ${C_BOLD}${kb:-未报告}${C_RESET}${C_RESET}"
+}
+
+# ---- 键盘行为 --------------------------------------------------------------
+_keyboard_block() {
+  local repeat interval fn press_hold
+
+  repeat=$(_d NSGlobalDomain com.apple.keyboard.KeyboardRepeat)
+  interval=$(_d NSGlobalDomain com.apple.keyboard.KeyboardRepeatInterval)
+  fn=$(_d NSGlobalDomain com.apple.keyboard.AppleFnUsageType)
+  press_hold=$(_d NSGlobalDomain ApplePressAndHoldEnabled)
+
+  echo "  ${C_BOLD}按键重复${C_RESET} ${C_DIM}(按住不放的连发速度)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  if [[ -z $repeat ]]; then
+    echo "  ${C_DIM}  速率: 使用系统默认值(中等)${C_RESET}"
+  else
+    local fast="no"
+    (( repeat <= 2 )) && fast="yes"
+    if [[ $fast == yes ]]; then
+      echo "  ${C_GREEN}✓ 速率: $repeat (很快)${C_RESET}"
+    else
+      echo "  ${C_BOLD}  速率: $repeat${C_RESET}"
+    fi
+  fi
+  if [[ -z $interval ]]; then
+    echo "  ${C_DIM}  延迟: 使用系统默认值${C_RESET}"
+  else
+    # interval 单位是 15ms 一档,换算成毫秒便于理解
+    echo "  ${C_BOLD}  延迟: $interval 档(约 $(( interval * 15 )) ms 按下后开始连发)${C_RESET}"
+  fi
+  case $press_hold in
+    1|true) echo "  ${C_YELLOW}! 按住字母: 弹出重音菜单(写代码建议关闭)${C_RESET}" ;;
+    0|false) echo "  ${C_GREEN}✓ 按住字母: 正常重复(适合编程)${C_RESET}" ;;
+    *) echo "  ${C_DIM}  按住字母: 系统默认${C_RESET}" ;;
+  esac
+  echo
+  echo "  ${C_BOLD}Fn 键${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  case $fn in
+    0) echo "  ${C_BOLD}  Fn 键: 不做任何事(需按 Fn 组合键才生效)${C_RESET}" ;;
+    1) echo "  ${C_BOLD}  Fn 键: 显示 F1-F12 标准功能键${C_RESET}" ;;
+    2) echo "  ${C_BOLD}  Fn 键: 切换 F1-F12 与功能键行为${C_RESET}" ;;
+    *) echo "  ${C_DIM}  Fn 键: 系统默认(通常 2 = 切换)${C_RESET}" ;;
+  esac
+  echo
+  echo "  ${C_DIM}修改位置:系统设置 → 键盘 → 重复按键速率 / Fn 键行为${C_RESET}"
+}
+
+# ---- 输入法 ----------------------------------------------------------------
+_input_sources_block() {
+  local raw
+  raw=$(defaults read com.apple.HIToolbox AppleEnabledInputSources 2>/dev/null || true)
+  if [[ -z $raw ]]; then
+    echo "  ${C_DIM}(无法读取输入法列表)${C_RESET}"
+    return
+  fi
+  # 提取三类输入源(用 sed 逐项抽,awk 动态正则的引号转义太容易出错)
+  echo "  ${C_BOLD}键盘布局${C_RESET}"
+  local -a layouts
+  layouts=(${(f)"$(print -r -- "$raw" | sed -n 's/.*"KeyboardLayout Name" = \([^;]*\);.*/\1/p' | sort -u)"})
+  if (( ${#layouts} == 0 )); then
+    echo "    ${C_DIM}(无)${C_RESET}"
+  else
+    local l
+    for l in $layouts; do
+      [[ -n $l ]] && echo "    $l"
+    done
+  fi
+
+  echo
+  echo "  ${C_BOLD}输入法${C_RESET} ${C_DIM}(切换用 Control+Space)${C_RESET}"
+  local -a modes
+  modes=(${(f)"$(print -r -- "$raw" | sed -n 's/.*"Input Mode" = "\([^";]*\)".*/\1/p' | sort -u)"})
+  if (( ${#modes} == 0 )); then
+    echo "    ${C_DIM}(无)${C_RESET}"
+  else
+    local m desc
+    for m in $modes; do
+      [[ -z $m ]] && continue
+      desc=""
+      case $m in
+        *SCIM.ITABC)     desc="  ← 拼音(简体)" ;;
+        *SCIM.ITWQY)     desc="  ← 拼音(繁体)" ;;
+        *SCIM.SCGT)      desc="  ← 简体" ;;
+        *SCIM.TCY)       desc="  ← 繁体" ;;
+        *SCIM.ITNAND)    desc="  ← 注音" ;;
+        *Kotoeri)        desc="  ← かな-to-ri(日文罗马音)" ;;
+      esac
+      echo "    $m$desc"
+    done
+  fi
+
+  echo
+  echo "  ${C_BOLD}辅助输入源${C_RESET} ${C_DIM}(字符面板 / 按住重音 / 听写)${C_RESET}"
+  local -a extras
+  extras=(${(f)"$(print -r -- "$raw" \
+    | sed -n 's/.*"Bundle ID" = "\([^";]*\)".*/\1/p' | sort -u)"})
+  if (( ${#extras} == 0 )); then
+    echo "    ${C_DIM}(无)${C_RESET}"
+  else
+    local e
+    for e in $extras; do
+      [[ -z $e ]] && continue
+      case $e in
+        *PressAndHold*)      echo "    PressAndHold      — 按住字母弹重音菜单" ;;
+        *CharacterPalette*)  echo "    CharacterPalette   — 字符面板 / Emoji" ;;
+        *DictationIM*)       echo "    DictationIM        — 语音听写" ;;
+        *)                   echo "    $e" ;;
+      esac
+    done
+  fi
+  echo
+  # 当前选中的输入源
+  echo
+  local selected
+  selected=$(_d com.apple.HIToolbox AppleSelectedInputSources)
+  if [[ -n $selected ]]; then
+    echo "  ${C_BOLD}当前选中${C_RESET}"
+    # 用 sed 逐项抽取(awk 里的动态正则转义太容易出错)
+    local v
+    v=$(print -r -- "$selected" | sed -n 's/.*"KeyboardLayout Name" = \([^;]*\);.*/\1/p' | head -1)
+    [[ -n $v ]] && echo "    布局:   $v"
+    v=$(print -r -- "$selected" | sed -n 's/.*"Input Mode" = "\([^";]*\)".*/\1/p' | head -1)
+    [[ -n $v ]] && echo "    输入法: $v"
+    v=$(print -r -- "$selected" | sed -n 's/.*InputSourceKind = "\([^";]*\)".*/\1/p' | head -1)
+    [[ -n $v ]] && echo "    类型:   $v"
+  fi
+  echo "  ${C_DIM}切换:Control + Space(可在系统设置 → 键盘 → 快捷键里改)${C_RESET}"
+}
+
+# ---- 快捷键 ----------------------------------------------------------------
+_shortcuts_block() {
+  # AppleSymbolicHotKeys 是数字 ID → 快捷键定义,ID 含义需要硬编码对照
+  local raw
+  raw=$(defaults read com.apple.symbolichotkeys AppleSymbolicHotKeys 2>/dev/null || true)
+  if [[ -z $raw ]]; then
+    echo "  ${C_DIM}(无法读取系统快捷键 — 部分 macOS 版本限制访问)${C_RESET}"
+  else
+    # 统计启用数量
+    local enabled total
+    enabled=$(print -r -- "$raw" | grep -c 'enabled = 1' || true)
+    total=$(print -r -- "$raw" | grep -c 'enabled =' || true)
+    echo "  ${C_BOLD}系统快捷键${C_RESET} ${C_DIM}(com.apple.symbolichotkeys)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    echo "  ${C_DIM}已启用 $enabled / $total 个内置快捷键${C_RESET}"
+    echo
+    echo "  ${C_DIM}常用 ID 对照:${C_RESET}"
+    echo "    ${C_DIM}64-75  聚焦 Dock 图标  ·  126  Launchpad  ·  160  隐藏所有窗口${C_RESET}"
+    echo "    ${C_DIM}164  窗口调度中心  ·  173  输入法切换  ·  175  强制退出${C_RESET}"
+    echo "    ${C_DIM} Spotlight 搜索 = 64~75 区间的自定义项,在系统设置里配${C_RESET}"
+    echo
+    echo "  ${C_DIM}修改入口:系统设置 → 键盘 → 快捷键${C_RESET}"
+  fi
+
+  # 有启用项时给个确认
+  if print -r -- "$raw" | grep -q 'enabled = 1'; then
+    echo "  ${C_GREEN}✓ 存在启用的系统快捷键${C_RESET}"
+  fi
+}
+
+# ---- 指针设备 --------------------------------------------------------------
+_pointer_block() {
+  local tp mouse
+  tp=$(_d com.apple.driver.AppleBluetoothMultitouch.trackpad)
+  mouse=$(_d com.apple.AppleMultitouchMouse)
+
+  if [[ -n $tp ]]; then
+    echo "  ${C_BOLD}触控板${C_RESET} ${C_DIM}(Magic Trackpad / 板载)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    print -r -- "$tp" | awk -F' = ' '
+      NF < 2 { next }
+      $1 ~ /ThreeFingerDragGesture/     { printf "  三指拖移: %s\n", $2 }
+      $1 ~ /CornerSecondaryClick/       { printf "  点按角触发副键: %s\n", $2 }
+      $1 ~ /FiveFingerPinchGesture/      { printf "  五指捏合(调度中心): %s\n", $2 }
+      $1 ~ /FourFingerPinchGesture/     { printf "  四指捏合(放大): %s\n", $2 }
+      $1 ~ /FourFingerHorizSwipeGesture/ { printf "  四指横滑(切换桌面): %s\n", $2 }
+      $1 ~ /DragLock/                   { printf "  拖移锁定(角落): %s\n", $2 }
+      $1 ~ /^TrackpadClickMethod/       { printf "  点按方式: %s\n", $2 }
+    '
+  fi
+
+  if [[ -n $mouse ]]; then
+    echo
+    echo "  ${C_BOLD}外接鼠标${C_RESET} ${C_DIM}(Apple Multitouch Mouse)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    print -r -- "$mouse" | awk -F' = ' '
+      NF < 2 { next }
+      $1 ~ /MouseButtonDivision/  { printf "  滚轮速度: %s\n", $2 }
+      $1 ~ /MouseMomentumScroll/  { printf "  惯性滚动: %s\n", $2 }
+      $1 ~ /MouseHorizontalScroll/ { printf "  水平滚动: %s\n", $2 }
+    '
+  fi
+
+  # 蓝牙指针设备
+  echo
+  local bt
+  bt=$(system_profiler SPBluetoothDataType 2>/dev/null | awk '
+    # 设备名在 Minor Type 之前那一行(10 空格缩进、以 : 结尾)
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    function indent(s,   n, i, c) { n = 0; for (i = 1; i <= length(s); i++) { c = substr(s,i,1); if (c == " ") n++; else break } return n }
+    /Minor Type:/ {
+      mt = trim($0); sub(/^Minor Type:[[:space:]]*/, "", mt); sub(/;$/, "", mt)
+      if (last_name != "" && (mt ~ /Mouse|Trackpad|Keyboard/))
+        printf "%s\t%s\n", last_name, mt
+      next
+    }
+    indent($0) == 10 && /:[[:space:]]*$/ {
+      last_name = trim($0); sub(/:$/, "", last_name)
+      next
+    }
+  ')
+  if [[ -n $bt ]]; then
+    echo "  ${C_BOLD}蓝牙指针/键盘设备${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    print -r -- "$bt" | awk -F'"'"'\t'"'"' '{ printf "    %-30s %s\n", $1, $2 }'
+  fi
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_render() {
+  if [[ -t 1 ]]; then printf '\033[?25l\033[2J\033[H'; fi
+
+  echo "${C_BOLD}${C_CYAN}═══ 键盘 / 输入法 / 指针 观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读,改设置请去系统设置  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  if $ONLY_KB || (! $ONLY_IS && ! $ONLY_SC); then
+    echo "${C_BOLD}  键盘硬件${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    _hardware_block
+    echo
+    _keyboard_block
+    echo
+  fi
+
+  if $ONLY_IS || (! $ONLY_KB && ! $ONLY_SC); then
+    echo "${C_BOLD}  键盘布局与输入法${C_RESET} ${C_DIM}(com.apple.HIToolbox)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    _input_sources_block
+    echo
+  fi
+
+  if $ONLY_SC || (! $ONLY_KB && ! $ONLY_IS); then
+    _shortcuts_block
+    echo
+    _pointer_block
+    echo
+  fi
+
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: defaults read, system_profiler SP{Hardware,Bluetooth}DataType${C_RESET}"
+  echo "${C_DIM}  注意:多数键盘设置用 defaults 直接改会被系统忽略,建议走系统设置 GUI${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+_render

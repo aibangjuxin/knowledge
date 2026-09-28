@@ -1,0 +1,291 @@
+#!/usr/bin/env zsh
+# backupwatch — Time Machine / APFS 快照 / 备份盘 观察器
+#
+# 设计目标:
+#   - 公司配 Mac,无 brew / 无 python,只 zsh + tmutil / diskutil / mount
+#   - 未配置备份的机器在公司里非常常见,这个脚本要能明确回答:
+#       ① 有没有配 Time Machine?配了哪里?
+#       ② 最近一次备份是什么时候?当前在不在备份?
+#       ③ 本地快照占了多少空间?(macOS 会用快照占满磁盘)
+#       ④ 外接盘 / 网络盘能不能用作备份目标
+#   - 显示:
+#       ① Time Machine 总体状态(启用/关闭、目标、模式)
+#       ② 备份历史(最近若干次,含类型与大小)
+#       ③ 本地 APFS 快照列表与占用(区分系统更新快照 vs Time Machine 快照)
+#       ④ 挂载卷盘点(哪些是备份盘、哪些是外接设备)
+#       ⑤ 综合结论:是否需要处理
+#   - 只读:thinlocalsnapshots / delete 这些命令只打印建议,不执行
+#
+# 用法:
+#   backupwatch                 # 全量
+#   backupwatch --snapshots     # 只看本地快照占用
+#   backupwatch --top 20        # 快照显示条数 (默认 10)
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i TOP_N=10
+typeset ONLY_SNAPSHOTS=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --snapshots)  ONLY_SNAPSHOTS=true; shift ;;
+    --top|-n)     TOP_N=$2; shift 2 ;;
+    --version)   echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--snapshots] [--top N]"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+typeset -r BAR_FILLED='█'
+typeset -r BAR_EMPTY='░'
+
+# ---- TM 状态 ---------------------------------------------------------------
+# tmutil destinationinfo 在未配置时返回非 0 + "No destinations configured"
+_tm_status() {
+  local dest mode autolock
+  dest=$(tmutil destinationinfo 2>/dev/null || true)
+  mode=$(tmutil currentmode 2>/dev/null | head -1 || true)
+  autolock=$(tmutil autolock 2>/dev/null | head -1 || true)
+
+  if [[ -z $dest ]] || [[ $dest == *"No destinations"* ]]; then
+    printf "bad\tTime Machine\t未配置\t没有设置任何备份目标 — 数据只在本机,硬盘坏了就没了\n"
+    return
+  fi
+  printf "ok\tTime Machine\t已配置\t\n"
+  print -r -- "$dest" | awk '
+    /^ID:/                       { id = $2; next }
+    /^Name:/                     { nm = $2; next }
+    /^URL:/                      { url = $2; next }
+    /^Mount Point:/               { mp = $2; next }
+    END {
+      if (nm != "") printf "info\t  目标名\t%s\t\n", nm
+      if (mp  != "") printf "info\t  挂载点\t%s\t\n", mp
+      if (url != "") printf "info\t  URL\t%s\t\n", url
+      if (id  != "") printf "info\t  目标 ID\t%s\t\n", id
+    }
+  '
+  [[ -n $mode ]] && printf "info\t  备份模式\t%s\tautomatic / manual\n" "${mode#currentmode: }"
+  [[ -n $autolock ]] && printf "info\t  自动锁定\t%s\t\n" "${autolock#AutoLock: }"
+}
+
+# ---- 备份历史 --------------------------------------------------------------
+_backup_history() {
+  # tmutil listbackups 的错误信息(No machine directory / Command exited)
+  # 走的是 stdout 不是 stderr,所以不能靠 2>/dev/null 过滤,
+  # 必须把内容拿在变量里再做内容判定。
+  local out
+  out=$(tmutil listbackups 2>&1 || true)
+  # 过滤掉 tmutil 的自述错误行
+  local lines
+  lines=$(print -r -- "$out" | grep -E '^/Volumes/.*\.backup$' || true)
+  if [[ -z $lines ]]; then
+    local reason
+    reason=$(print -r -- "$out" | head -1)
+    [[ -z $reason ]] && reason="(无记录)"
+    printf "info\t备份历史\t(空)\t%s\n" "$reason"
+    return
+  fi
+  local n
+  n=$(print -r -- "$lines" | wc -l | tr -d ' ')
+  printf "info\t备份历史\t%d 条\t以下为最近记录\n" "$n"
+  printf "\n"
+  # 输出形如 /Volumes/xxx/Backups.backupdb/<host>-2026-09-27-113000.backup
+  print -r -- "$lines" | sort -r | awk -v lim="$TOP_N" '
+    NR > lim { exit }
+    {
+      n = split($0, parts, "/")
+      base = parts[n]
+      sub(/\.backup$/, "", base)
+      ts = base
+      # 去掉机器名前缀,只留 -YYYY-MM-DD-HHMMSS 部分
+      if (match(ts, /20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]/)) {
+        s = substr(ts, RSTART, RLENGTH)
+        printf "  %s-%s %s:%s:%s  %s\n", substr(s,1,10), substr(s,1,0), \
+          substr(s,12,2), substr(s,15,2), substr(s,18,2), substr($0, length($0)-RLENGTH+1)
+      } else {
+        printf "  %s\n", $0
+      }
+    }
+  '
+}
+
+# ---- APFS 本地快照 ---------------------------------------------------------
+# diskutil apfs listSnapshots <mount> 输出是树形:
+#   Snapshot for disk5s2s1 (1 found)
+#   |
+#   +-- F47F6069-...
+#       Name:        com.apple.os.update-...
+#       XID:         23814158
+#       Purgeable:   No
+#
+# 关键:只有 "Purgeable: Yes" 的快照才能被 Time Machine 回收;
+# "com.apple.os.update-*" 是系统更新快照,占空间大且不能删。
+_snapshot_rows() {
+  local mount=$1
+  diskutil apfs listSnapshots "$mount" 2>/dev/null | awk '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    /Snapshot for/ { vol = trim($0); sub(/^Snapshot for /, "", vol); vol_disk = vol; next }
+    /^[[:space:]]+Name:/ {
+      nm = trim($0); sub(/^Name:[[:space:]]*/, "", nm)
+      purge = ""; xid = ""; note = ""
+      next
+    }
+    /^[[:space:]]+Purgeable:/ { purge = trim($0); sub(/^Purgeable:[[:space:]]*/, "", purge); next }
+    /^[[:space:]]+XID:/      { xid = trim($0); sub(/^XID:[[:space:]]*/, "", xid); next }
+    /^[[:space:]]+NOTE:/     { note = trim($0); sub(/^NOTE:[[:space:]]*/, "", note); if (nm != "") print nm "\t" purge "\t" xid "\t" vol_disk "\t" note; next }
+    END { }
+  '
+}
+
+_snapshots_block() {
+  local rows total
+  rows=$(_snapshot_rows /)
+  if [[ -z $rows ]]; then
+    echo "  ${C_DIM}根卷无 APFS 快照${C_RESET}"
+  else
+    total=$(print -r -- "$rows" | wc -l | tr -d ' ')
+    echo "  ${C_DIM}根卷共 $total 个快照${C_RESET}"
+    echo
+    print -r -- "$rows" | awk -F'\t' \
+      -v b=$C_BOLD -v d=$C_DIM -v y=$C_YELLOW -v r=$C_RESET '
+      function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return substr(s, 1, w) }
+      BEGIN { print d pad("SNAPSHOT NAME", 46) pad("PURGEABLE", 11) "DISK" r }
+      {
+        kind = "other"
+        if ($1 ~ /^com\.apple\.os\.update/)      kind = "os-update"
+        else if ($1 ~ /^com\.apple\.TimeMachine/) kind = "tm"
+        col = (kind == "os-update") ? "\033[33m" : ((kind == "tm") ? "\033[32m" : "\033[0m")
+        nm = $1; if (length(nm) > 46) nm = substr(nm, 1, 43) "..."
+        printf "  %s%-46s%s %-11s %s\n", col, pad(nm, 46), r, pad($2, 11), $4
+      }
+    '
+    echo
+    echo "  ${C_DIM}类型:${C_RESET} ${C_YELLOW}os-update${C_RESET} = 系统更新快照(不可删,会占空间)"
+    echo "        ${C_GREEN}tm${C_RESET}          = Time Machine 本地快照(可回收)"
+    echo "        Purgeable=Yes 的才会随空间紧张被自动清理"
+  fi
+}
+
+# ---- 挂载卷 ----------------------------------------------------------------
+_volumes_block() {
+  local data
+  data=$(mount 2>/dev/null)
+  if [[ -z $data ]]; then
+    echo "  ${C_DIM}(无挂载信息)${C_RESET}"
+    return
+  fi
+  # 只看 /Volumes 下的卷(外接盘 / 网络盘),系统卷忽略
+  print -r -- "$data" | awk '
+    /^\/dev\/.* on \/Volumes\// {
+      split($0, parts, " on ")
+      dev = parts[1]
+      rest = parts[2]
+      sub(/ \(.*/, "", rest)
+      vol = rest; sub(/^\/Volumes\//, "", vol)
+      # 提取文件系统类型
+      if (match($0, /\(([a-z0-9]+)\)/)) fs = substr($0, RSTART+1, RLENGTH-2)
+      else fs = "?"
+      printf "%s\t%s\t%s\n", vol, fs, dev
+    }
+  ' | sort | awk -F'\t' \
+    -v b=$C_BOLD -v d=$C_DIM -v c=$C_CYAN -v r=$C_RESET '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return substr(s, 1, w) }
+    BEGIN { print d pad("VOLUME", 30) pad("FS TYPE", 14) "DEVICE" r }
+    {
+      printf "  %s%-30s%s %-14s %s\n", c, pad($1, 30), r, pad($2, 14), d $3 r
+    }
+  '
+}
+
+# ---- 结论 ------------------------------------------------------------------
+_verdict() {
+  local dest rows purgeable_count
+  dest=$(tmutil destinationinfo 2>/dev/null || true)
+  rows=$(_snapshot_rows /)
+  purgeable_count=0
+  if [[ -n $rows ]]; then
+    purgeable_count=$(print -r -- "$rows" | awk -F'\t' '$2 == "Yes"' | wc -l | tr -d ' ')
+  fi
+
+  echo "${C_BOLD}  结论${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  if [[ -z $dest ]] || [[ $dest == *"No destinations"* ]]; then
+    echo "  ${C_RED}✗ 未配置 Time Machine${C_RESET}"
+    echo "    ${C_DIM}本机数据没有任何异地副本。建议:接一块外接盘,或用 NAS/网络盘作为目标。${C_RESET}"
+  else
+    echo "  ${C_GREEN}✓ Time Machine 已配置${C_RESET}"
+  fi
+  if [[ $purgeable_count -gt 0 ]]; then
+    echo "  ${C_YELLOW}! 有 $purgeable_count 个可回收的本地快照${C_RESET}"
+    echo "    ${C_DIM}回收: tmutil thinlocalsnapshots / 10000000000 4${C_RESET}"
+  fi
+}
+
+# 渲染 level<TAB>item<TAB>value<TAB>note 四元组(带等级着色)
+_print_checks() {
+  awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED -v r=$C_RESET '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return substr(s, 1, w) }
+    {
+      if (NF < 2) next
+      col = d; mark = "-"
+      if ($1 == "ok")       { col = g;   mark = "OK" }
+      else if ($1 == "warn") { col = y;   mark = "!" }
+      else if ($1 == "bad")  { col = red; mark = "X" }
+      printf "  %s%-2s%s %s%s%s %s%s%s %s\n", col, mark, r, b, pad($2, 20), r, col, pad($3, 16), r, $4
+    }
+  '
+}
+
+
+_render() {
+  if [[ -t 1 ]]; then printf '\033[?25l\033[2J\033[H'; fi
+
+  echo "${C_BOLD}${C_CYAN}═══ 备份 / 快照 观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读,不执行任何清理  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  if ! $ONLY_SNAPSHOTS; then
+    echo "${C_BOLD}  Time Machine 状态${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    _tm_status | _print_checks
+
+    echo
+    echo "${C_BOLD}  备份历史${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    _backup_history | _print_checks
+
+    echo
+    echo "${C_BOLD}  挂载卷${C_RESET} ${C_DIM}(/Volumes — 外接盘与网络盘,备份目标候选)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    _volumes_block
+    echo
+  fi
+
+  echo "${C_BOLD}  APFS 本地快照${C_RESET} ${C_DIM}(macOS 用快照占空间,会不知不觉吃掉几十 G)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  _snapshots_block
+
+  echo
+  _verdict
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: tmutil destinationinfo / listbackups, diskutil apfs listSnapshots, mount${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+_render

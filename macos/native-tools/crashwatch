@@ -1,0 +1,256 @@
+#!/usr/bin/env zsh
+# crashwatch — 崩溃 / panic / 资源异常 诊断日志观察器
+#
+# 设计目标:
+#   - 公司配 Mac,无 brew / 无 python / 无 Xcode,
+#     只 zsh + ls / stat / awk / head
+#   - 显示:
+#       ① 用户级崩溃汇总(~/Library/Logs/DiagnosticReports)
+#          按 app 聚合,标出崩溃次数最多的应用
+#       ② 系统级严重事件:panic / kernel panic / JetsamEvent(内存不足被杀)
+#       ③ 资源异常:.cpu_resource / .disk_resource / .memory_resource 等 diag
+#       ④ 最近 N 条崩溃明细:时间 / 应用 / 版本 / bug_type / 路径
+#       ⑤ 崩溃类型解释(ExcUserFault / Jetsam / panic 等分别代表什么)
+#   - 只读:绝不删除或上传任何日志
+#
+# 日志格式说明:
+#   .ips 文件 = 两段 JSON
+#     第 1 行:JSON 对象(紧凑单行),含 app_name / timestamp / bundleID / bug_type
+#     第 2 行起:完整报告(pretty-printed JSON)
+#   所以只读第一行就能拿到关键信息,不必解析整个文件。
+#
+# 用法:
+#   crashwatch                 # 全量
+#   crashwatch --top 20        # 明细条数 (默认 10)
+#   crashwatch --app Edge      # 只看某个 app
+#   crashwatch --days 7        # 只看最近 7 天 (默认 30)
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i TOP_N=10 DAYS=30
+typeset APP_FILTER=""
+typeset -g USER_LOGS="$HOME/Library/Logs/DiagnosticReports"
+typeset -g SYS_LOGS="/Library/Logs/DiagnosticReports"
+
+while (( $# > 0 )); do
+  case $1 in
+    --top|-n) TOP_N=$2; shift 2 ;;
+    --days|-d) DAYS=$2; shift 2 ;;
+    --app)    APP_FILTER=$2; shift 2 ;;
+    --version) echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--top N] [--days N] [--app NAME]"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+# ---- 崩溃明细 --------------------------------------------------------------
+# 读每个 .ips 的第一行(紧凑 JSON),提取 app_name / timestamp / bug_type / bundleID
+# .diag 文件不是 JSON,走文件名解析
+# 输出 TSV: time <TAB> app <TAB> version <TAB> bug <TAB> kind <TAB> path
+_crash_rows() {
+  local dir=$1
+  [[ -d $dir ]] || return
+  # 注意:不要用 "while read; do ... done" 循环体里再管道 ——
+  # zsh 5.9 在这种情况下会静默丢输出。改成一条管道直接给 awk。
+  command find "$dir" -maxdepth 1 -name '*.ips' -type f 2>/dev/null \
+  | while IFS= read -r f; do
+      [[ -f $f ]] || continue
+      _ips_line "$f" crash
+    done
+}
+
+# 解析单个 .ips 的第一行(紧凑 JSON),输出一行 TSV
+_ips_line() {
+  local f=$1 default_kind=$2
+  [[ -f $f ]] || return
+  local mtime
+  mtime=$(stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' "$f" 2>/dev/null) || return
+  local head
+  head=$(head -1 "$f" 2>/dev/null) || return
+  [[ -z $head ]] && return
+
+  local app ver bug
+  app=$(print -r -- "$head" | sed -n 's/.*"app_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+  ver=$(print -r -- "$head" | sed -n 's/.*"app_version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+  bug=$(print -r -- "$head" | sed -n 's/.*"bug_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+
+  # 非标准首行(系统日志)从文件名推断 app
+  if [[ -z $app ]]; then
+    app=$(basename "$f" .ips)
+    app=${app%%-[0-9][0-9][0-9][0-9]-*}
+    [[ -z $app ]] && app=$(basename "$f" .ips)
+  fi
+
+  local kind=$default_kind
+  [[ $f == *JetsamEvent* ]] && kind="jetsam"
+  [[ $f == *panic* ]] && kind="panic"
+
+  printf "%s\t%s\t%s\t%s\t%s\t%s\n" \
+    "$mtime" "$app" "${ver:--}" "${bug:--}" "$kind" "$f"
+}
+
+# ---- 资源异常 (.diag) ------------------------------------------------------
+_resource_rows() {
+  local dir=$1
+  [[ -d $dir ]] || return
+  command find "$dir" -maxdepth 1 -name '*.diag' -type f 2>/dev/null \
+  | while IFS= read -r f; do
+      [[ -f $f ]] || continue
+      local mtime proc kind
+      mtime=$(stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' "$f" 2>/dev/null) || continue
+      proc=$(basename "$f"); proc=${proc%%_*}
+      kind=${f##*.}; kind=${kind%.diag}
+      printf "%s\t%s\t%s\t%s\t%s\t%s\n" "$mtime" "$proc" "-" "$kind" "resource" "$f"
+    done
+}
+
+# ---- 时间过滤 --------------------------------------------------------------
+# 只保留最近 N 天的记录(用文件 mtime 与当前时间比较)
+_filter_days() {
+  local cutoff
+  cutoff=$(date -v "-${DAYS}d" '+%Y-%m-%d' 2>/dev/null)
+  [[ -z $cutoff ]] && return
+  awk -F'\t' -v cut="$cutoff" '$1 >= cut'
+}
+
+# ---- 崩溃类型图例 ----------------------------------------------------------
+_legend() {
+  echo "  ${C_DIM}类型说明:${C_RESET}"
+  echo "    ${C_RED}jetsam${C_RESET}      内存不足被系统杀掉(critical)— 通常是某 app 内存泄漏"
+  echo "    ${C_RED}panic${C_RESET}       内核崩溃 — 最严重,会导致自动重启"
+  echo "    ${C_YELLOW}crash${C_RESET}      用户态 app 崩溃(ExcUserFault = 用户触发的异常)"
+  echo "    ${C_YELLOW}resource${C_RESET}   资源异常(cpu/disk/memory 超时)— 系统判定某进程失控"
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_user_block() {
+  local data
+  data=$(_crash_rows "$USER_LOGS" | _filter_days)
+  if [[ -z $data ]]; then
+    echo "  ${C_DIM}(最近 $DAYS 天无用户级崩溃日志)${C_RESET}"
+    return
+  fi
+  local total
+  total=$(print -r -- "$data" | wc -l | tr -d ' ')
+  echo "  ${C_DIM}最近 $DAYS 天共 $total 条${C_RESET}"
+  echo
+  # 按 app 聚合
+  print -r -- "$data" | awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v y=$C_YELLOW -v r=$C_RESET '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return substr(s, 1, w) }
+    { cnt[$2]++; last[$2] = $1 }
+    END {
+      n = 0; for (a in cnt) { n++; as[n] = a }
+      for (i = 1; i <= n; i++) for (j = i+1; j <= n; j++)
+        if (cnt[as[j]] > cnt[as[i]]) { t = as[i]; as[i] = as[j]; as[j] = t }
+      print d pad("APP", 34) pad("CRASHES", 9) "LAST SEEN" r
+      for (i = 1; i <= n; i++) {
+        col = (cnt[as[i]] >= 5) ? y : b
+        col2 = (cnt[as[i]] >= 5) ? "\033[33m" : "\033[1m"
+        printf "%s%s%s %s%d%s   %s\n", col, pad(as[i], 34), r, col2, cnt[as[i]], r, last[as[i]]
+      }
+    }
+  '
+}
+
+_system_block() {
+  local data
+  data=$(_crash_rows "$SYS_LOGS" | _filter_days)
+  data+=$'\n'$(_resource_rows "$SYS_LOGS" | _filter_days)
+  data=$(print -r -- "$data" | grep -v '^$' || true)
+  if [[ -z $data ]]; then
+    echo "  ${C_DIM}(最近 $DAYS 天无系统级严重事件)${C_RESET}"
+    return
+  fi
+  # 只显示严重类型
+  local severe
+  severe=$(print -r -- "$data" | awk -F'\t' '$5 == "jetsam" || $5 == "panic" || $5 == "resource"')
+  if [[ -z $severe ]]; then
+    echo "  ${C_DIM}(无 panic / jetsam / 资源异常)${C_RESET}"
+  else
+    print -r -- "$severe" | awk -F'\t' \
+      -v b=$C_BOLD -v d=$C_DIM -v y=$C_YELLOW -v r=$C_RESET '
+      function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return substr(s, 1, w) }
+      BEGIN { print d pad("WHEN", 20) pad("TYPE", 12) pad("PROCESS", 30) "DETAIL" r }
+      {
+        col = ($5 == "panic") ? "\033[31m" : (($5 == "jetsam") ? "\033[31m" : "\033[33m")
+        printf "  %-20s %s%s%s %-30s %s\n", $1, col, pad($5, 12), r, pad($2, 30), $4
+      }
+    '
+  fi
+}
+
+_detail_block() {
+  local data
+  data=$(_crash_rows "$USER_LOGS" | _filter_days)
+  data+=$'\n'$(_crash_rows "$SYS_LOGS" | _filter_days)
+  data=$(print -r -- "$data" | grep -v '^$' || true)
+
+  if [[ -n $APP_FILTER ]]; then
+    data=$(print -r -- "$data" | grep -F "$APP_FILTER" || true)
+    echo "  ${C_DIM}过滤 app: $APP_FILTER${C_RESET}"
+  fi
+  if [[ -z $data ]]; then
+    echo "  ${C_DIM}(无匹配记录)${C_RESET}"
+    return
+  fi
+  echo
+  # 用 awk 自己截断,避免 head 关管道导致上游 SIGPIPE(141)
+  print -r -- "$data" | sort -r | awk -F'\t' -v lim="$TOP_N" -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET '
+    NR > lim { exit }
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return substr(s, 1, w) }
+    BEGIN { print d pad("WHEN", 20) pad("APP", 28) pad("VER", 9) pad("BUG", 6) "LOG FILE" r }
+    {
+      f = $6
+      n = split(f, parts, "/"); f = parts[n]
+      if (length(f) > 46) f = substr(f, 1, 43) "..."
+      printf "  %-20s %s%-28s%s %-9s %-6s %s%s%s\n", $1, b, pad($2, 28), r, pad($3, 9), pad($4, 6), d, f, r
+    }
+  '
+}
+
+_render() {
+  if [[ -t 1 ]]; then printf '\033[?25l\033[2J\033[H'; fi
+
+  echo "${C_BOLD}${C_CYAN}═══ 崩溃 / 资源异常 观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  最近 $DAYS 天  ·  只读  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  echo "${C_BOLD}  用户级崩溃汇总${C_RESET} ${C_DIM}(~/Library/Logs/DiagnosticReports)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  _user_block
+
+  echo
+  echo "${C_BOLD}  系统级严重事件${C_RESET} ${C_DIM}(/Library/Logs/DiagnosticReports)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  _system_block
+
+  echo
+  echo "${C_BOLD}  最近崩溃明细${C_RESET} ${C_DIM}(Top $TOP_N)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  _detail_block
+
+  echo
+  _legend
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: ~/Library/Logs/DiagnosticReports, /Library/Logs/DiagnosticReports${C_RESET}"
+  echo "${C_DIM}  清理旧日志(会丢历史,自己决定): find ~/Library/Logs/DiagnosticReports -name '*.ips' -mtime +30 -delete${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+_render

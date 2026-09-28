@@ -1,0 +1,287 @@
+#!/usr/bin/env zsh
+# secwatch — 机器安全态势观察器 (FileVault / SIP / Gatekeeper / 防火墙 / 隔离区)
+#
+# 设计目标:
+#   - 公司配 Mac,无 brew / 无 python / 无 profile manager,
+#     只 zsh + fdesetup / csrutil / spctl / sqlite3 / defaults
+#   - 显示:
+#       ① 磁盘加密 (FileVault) — 公司机合规第一项
+#       ② 系统完整性保护 (SIP) 与已禁用的保护项
+#       ③ Gatekeeper 评估策略 + 应用执行策略
+#       ④ 防火墙:全局开关 / 阻止所有 / 隐身模式
+#       ⑤ 屏幕保护:自动锁定与密码要求
+#       ⑥ 隔离区(Quarantine)最近下载的 app 与来源
+#       ⑦ 汇总评级,一眼看出最该修的那一项
+#   - 只读:绝不改任何安全设置
+#
+# 用法:
+#   secwatch                 # 全量单次
+#   secwatch --quarantine    # 只看隔离区
+#   secwatch --top 20        # 隔离区显示条数 (默认 10)
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i TOP_N=10
+typeset ONLY_QUARANTINE=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --quarantine) ONLY_QUARANTINE=true; shift ;;
+    --top|-n)     TOP_N=$2; shift 2 ;;
+    --version)    echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--quarantine] [--top N]"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+typeset -r QUARANTINE_DB="$HOME/Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2"
+typeset -g QUARANTINE_TOTAL="?"
+
+# ---- 各项检查 ---------------------------------------------------------------
+# 每个检查输出 "等级<TAB>项目<TAB>值<TAB>说明"
+# 等级: ok(绿) / warn(黄) / bad(红) / info(暗)
+_fdesetup_check() {
+  local out level
+  out=$(fdesetup status 2>/dev/null | head -1)
+  if [[ -z $out ]]; then
+    printf "info\tFileVault\t(unavailable)\tcannot query fdesetup\n"
+    return
+  fi
+  if [[ $out == *On* ]]; then
+    level=ok
+  else
+    level=bad
+  fi
+  printf "%s\tFileVault\t%s\t%s\n" "$level" "${out}" \
+    "disk encryption — company machines normally require On"
+}
+
+_sip_check() {
+  local out level detail
+  out=$(csrutil status 2>/dev/null | head -1)
+  if [[ -z $out ]]; then
+    printf "info\tSIP\t(unavailable)\tcannot query csrutil\n"
+    return
+  fi
+  detail="system integrity protection"
+  if [[ $out == *enabled* ]]; then
+    level=ok
+  else
+    level=bad
+    detail="$detail — DISABLED, rootkits / unauthorized kexts not blocked"
+  fi
+  printf "%s\tSIP\t%s\t%s\n" "$level" "${out##*: }" "$detail"
+
+  # 已禁用的保护项(CSR 列表),存在即风险
+  local disabled
+  disabled=$(csrutil disabled 2>/dev/null | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' || true)
+  if [[ -n $disabled ]]; then
+    printf "warn\tSIP disabled\tnone\t%s\n" "${disabled//$'\n'/, }"
+  fi
+}
+
+_gatekeeper_check() {
+  local out
+  out=$(spctl --status 2>/dev/null | head -1)
+  if [[ -z $out ]]; then
+    printf "info\tGatekeeper\t(unavailable)\tcannot query spctl\n"
+    return
+  fi
+  if [[ $out == *enabled* ]]; then
+    printf "ok\tGatekeeper\t%s\tapp assessment policy\n" "${out##*: }"
+  else
+    printf "bad\tGatekeeper\t%s\tapp assessment DISABLED — unsigned apps run freely\n" "${out##*: }"
+  fi
+}
+
+_firewall_check() {
+  local bin=/usr/libexec/ApplicationFirewall/socketfilterfw
+  local global block stealth
+  if [[ ! -x $bin ]]; then
+    printf "info\tFirewall\t(unavailable)\tsocketfilterfw not found\n"
+    return
+  fi
+  global=$($bin --getglobalstate 2>/dev/null | head -1)
+  block=$($bin --getblockall 2>/dev/null | head -1)
+  stealth=$($bin --getstealthmode 2>/dev/null | head -1)
+
+  local level=ok
+  [[ $global == *"disabled"* || $global == *"State = 0"* ]] && level=warn
+  printf "%s\tFirewall\t%s\t%s\n" "$level" \
+    "${global#*Firewall is }" "incoming connections"
+  [[ -n $block ]] && printf "info\t  block all\t%s\t\n" "${block#*has block all state set to }"
+  [[ -n $stealth ]] && printf "info\t  stealth\t%s\t\n" "${stealth#*stealth mode is }"
+}
+
+_lock_check() {
+  local idle ask
+  idle=$(defaults read com.apple.screensaver idleTime 2>/dev/null || true)
+  ask=$(defaults read com.apple.screensaver askForPassword 2>/dev/null || true)
+
+  local idle_txt="(not set)"
+  [[ -n $idle ]] && idle_txt="${idle}s"
+  local level=info
+  if [[ -z $idle ]]; then
+    level=warn
+    idle_txt="(never)"
+  elif (( idle < 300 )); then
+    level=ok
+  else
+    level=warn
+  fi
+  printf "%s\tScreen idle\t%s\tscreen saver trigger delay\n" "$level" "$idle_txt"
+
+  case $ask in
+    1|true) printf "ok\tPassword required\tYes\tpassword on resume\n" ;;
+    0|false) printf "warn\tPassword required\tNo\tpassword NOT required on resume\n" ;;
+    *) printf "info\tPassword required\t(default)\t\n" ;;
+  esac
+}
+
+_quarantine_check() {
+  [[ -f $QUARANTINE_DB ]] || {
+    printf "info\tQuarantine\t(no db)\tnever launched a quarantined app\n"
+    return
+  }
+  local total
+  total=$(sqlite3 "$QUARANTINE_DB" \
+    "select count(*) from LSQuarantineEvent;" 2>/dev/null || echo "?")
+  QUARANTINE_TOTAL=$total
+
+  # 最近下载的隔离项
+  # 三个坑(都踩过):
+  #   ① SQL 必须单行 — 多行 SQL 在 $() 里结果拿不到
+  #   ② CASE ... ELSE 'x'||col 会被 sqlite3 误解析(- 当运算符),改用 coalesce 链
+  #   ③ sqlite3 -separator $'\t' 只给一个反斜杠;写成 '\\t' 会传字面 \t,
+  #      导致 awk -F'\t' 匹配不上、整行塞进 $1
+  local sql
+  sql="select datetime(LSQuarantineTimeStamp + 978307200, 'unixepoch', 'localtime'),"
+  sql+=" coalesce(nullif(LSQuarantineDataURLString,''), '-'),"
+  sql+=" coalesce(LSQuarantineAgentName,'-'),"
+  sql+=" coalesce(case LSQuarantineTypeNumber when 0 then 'file' when 2 then 'app' end, 'other')"
+  sql+=" from LSQuarantineEvent order by LSQuarantineTimeStamp desc limit $TOP_N;"
+
+  # 直接管道给 awk,不要用 ${(f)} 数组再 print —— 数组会丢分隔
+  local out
+  out=$(sqlite3 -separator $'\t' "$QUARANTINE_DB" "$sql" 2>/dev/null)
+  if [[ -z $out ]]; then
+    printf "info\t  (no recent items)\t\t\n"
+    return
+  fi
+  printf "\n"
+  print -r -- "$out" | awk -F'\t' \
+    -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET '
+    BEGIN { printf "  %s%-20s %-18s %s\n", d, "WHEN", "AGENT", "TYPE / TARGET" r }
+    {
+      f = $2
+      if (f != "-" && f != "") {
+        n = split(f, parts, "/"); f = parts[n]
+        if (length(f) > 30) f = substr(f, 1, 27) "..."
+      } else {
+        f = "(url not recorded)"
+      }
+      printf "  %-20s %-18s %s%s%s  %s\n", $1, $3, d, f, r, $4
+    }
+  '
+}
+
+# ---- 汇总评级 ---------------------------------------------------------------
+_summary() {
+  local bad=0 warn=0 ok=0
+  local line level
+  while IFS=$'\t' read -r level _rest; do
+    # 用 += 1 而不是 ++:post-increment 在 0 时求值为 0,errexit 会退出
+    case $level in
+      bad)  bad=$(( bad + 1 )) ;;
+      warn) warn=$(( warn + 1 )) ;;
+      ok)   ok=$(( ok + 1 )) ;;
+    esac
+  done
+  local verdict color
+  if (( bad > 0 )); then
+    verdict="NEEDS ATTENTION"; color=$C_RED
+  elif (( warn > 0 )); then
+    verdict="MOSTLY OK"; color=$C_YELLOW
+  else
+    verdict="ALL CHECKS PASSED"; color=$C_GREEN
+  fi
+  printf "  %s%-18s%s %s✓%d ok  %s!%d warn  %s✗%d bad%s\n" \
+    "$C_BOLD" "$verdict" "$C_RESET" "$C_GREEN" "$ok" "$C_YELLOW" "$warn" "$C_RED" "$bad" "$C_RESET"
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+# 打印检查结果(等级着色)
+_print_checks() {
+  awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET \
+      -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return substr(s, 1, w) }
+    {
+      if (NF < 2) { next }
+      col = d; mark = "·"
+      if ($1 == "ok")       { col = g;   mark = "✓" }
+      else if ($1 == "warn") { col = y;   mark = "!" }
+      else if ($1 == "bad")  { col = red; mark = "✗" }
+      # 名称(第 2 列)左对齐 22,值(第 3 列)左对齐 34,说明(第 4 列)其余
+      val = ($3 == "" ? "-" : $3)
+      note = ($4 == "" ? "" : $4)
+      printf "  %s%s%s %s%s%s %s%s%s %s\n", col, mark, r, b, pad($2, 22), r, pad(val, 34), d, note, r
+    }
+  '
+}
+
+_render() {
+  if [[ -t 1 ]]; then printf '\033[?25l\033[2J\033[H'; fi
+
+  echo "${C_BOLD}${C_CYAN}═══ 安全态势 观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读,不改任何设置  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  if ! $ONLY_QUARANTINE; then
+    echo "${C_BOLD}  磁盘加密与系统完整性${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    { _fdesetup_check; _sip_check; } | _print_checks
+
+    echo
+    echo "${C_BOLD}  应用与网络策略${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    { _gatekeeper_check; _firewall_check; } | _print_checks
+
+    echo
+    echo "${C_BOLD}  屏幕锁定${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    _lock_check | _print_checks
+
+    echo
+    echo "${C_BOLD}  汇总${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    { _fdesetup_check; _sip_check; _gatekeeper_check; _firewall_check; _lock_check; } | _summary
+    echo
+  fi
+
+  echo "${C_BOLD}  隔离区 (Gatekeeper Quarantine)${C_RESET} ${C_DIM}(最近 $TOP_N 条)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  _quarantine_check
+  printf "info\tQuarantine entries\t%s\tdownloaded items awaiting first launch\n" "$QUARANTINE_TOTAL" | _print_checks
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: fdesetup, csrutil, spctl, socketfilterfw, defaults, sqlite3${C_RESET}"
+  echo "${C_DIM}  修复命令(需 sudo): fdesetup -enable / csrutil -enable / spctl --master-enable / 系统设置→网络→防火墙${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+_render

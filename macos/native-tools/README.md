@@ -24,6 +24,11 @@
 | `displaywatch` | 显示器 / HiDPI 缩放 / 刷新率 / 像素带宽 | system_profiler SPDisplaysDataType, ioreg | 单次 / `--watch` |
 | `devtreewatch` | USB / Thunderbolt / 蓝牙 设备树 | ioreg -r -c IOUSBHostDevice, system_profiler SP{Thunderbolt,Bluetooth}DataType | 单次 / `--watch` |
 | `audiowatch` | 音频设备 / 声道 / 采样率 / 系统音量 | system_profiler SPAudioDataType, osascript | 单次 / `--watch` |
+| `secwatch` | 安全态势:FileVault / SIP / Gatekeeper / 防火墙 / 隔离区 | fdesetup, csrutil, spctl, socketfilterfw, sqlite3 | 单次 |
+| `crashwatch` | 崩溃日志 / panic / 内存不足 / 资源异常 | ~/Library/Logs/DiagnosticReports | 单次 |
+| `extwatch` | 系统扩展 / 后台登录项 / launchd 常驻任务 | systemextensionsctl, sfltool dumpbtm, launchctl | 单次 |
+| `backupwatch` | Time Machine / APFS 快照占用 / 备份盘 | tmutil, diskutil apfs listSnapshots, mount | 单次 |
+| `inputwatch` | 键盘布局 / 输入法 / 快捷键 / 指针设置 | defaults read, system_profiler | 单次 |
 
 ## 安装
 
@@ -248,15 +253,88 @@ output volume:39, input volume:89, alert volume:0, output muted:false
 
 ---
 
+## 18. awk 单引号块内不能用 `\` 续行
+
+```awk
+awk '
+  printf "a %s b\n", \
+    x, y
+'                          # ✗ syntax error near '\'
+```
+
+`\` 只在 **shell 层**是续行;进了 awk 的单引号字符串后就是字面反斜杠。
+本项目里反复栽在这个上面(`extwatch` / `crashwatch` / `backupwatch` 各一次)。
+**修法:** awk 内的长语句一律写成一行;或先把 `-v` 赋值写成独立变量再进 printf。
+
+## 19. shell 里 `grep -v '^$'` 无匹配时返回 1
+
+`setopt errexit` 下,过滤器一个都没匹配到 → 退出码 1 → 整个脚本静默中断。
+表现是"输出到某一行就没了",没有任何报错。
+**修法:** 过滤后必须接 `|| true`。这坑在 `crashwatch` 让明细表整个消失。
+
+## 20. `${(f)"$(...)"}` 数组捕获可能丢分隔符
+
+```zsh
+rows=(${(f)"$(cmd)"})       # 按行切,行内 tab 保留
+print -r -- "${rows[@]}"     # 但这样输出会粘成一行
+```
+
+`secwatch` 一开始隔离区表格整行挤在一起,就是这个原因。
+**修法:** 拿到单个变量后直接 `print -r -- "$out" | awk -F'	'` 管道给 awk,
+不要走数组。
+
+## 21. 传 `-g` 给 `defaults` 会被 zsh 当 glob
+
+```zsh
+defaults read -g com.apple.keyboard.KeyboardRepeat   # ✗ no matches found: -g*
+_d -g com.apple.keyboard.KeyboardRepeat              # ✗ 同上
+_d NSGlobalDomain com.apple.keyboard.KeyboardRepeat  # ✓
+```
+
+`emulate -L zsh` 默认开着 glob,`-g*` 匹配不到文件就报错。
+**修法:** 用 `NSGlobalDomain` 代替 `-g`,对 `defaults` 完全等价。
+
+## 22. `sqlite3` 的三个坑
+
+```sh
+# ① SQL 必须单行 —— 多行 SQL 在 $() 里可能拿不到结果
+# ② CASE ... ELSE 'prefix'||col 会被误解析(把 - 当运算符)
+sql="select ..., case t when 0 then 'file' end from ..."
+# ③ 列名为空时要显式兜底,否则 awk 的 $N 会错位
+```
+
+## 23. 工具的错误信息可能走 stdout 而非 stderr
+
+```sh
+tmutil listbackups 2>/dev/null     # ✗ 错误信息照样漏出来
+# 实际输出:
+#   No machine directory found for host.
+#   Command exited with status 1.
+tmutil listbackups 2>&1 | grep -E '^/Volumes/.*\.backup$'   # ✓ 内容判定
+```
+
+**修法:** 对这类"失败也算成功返回"的工具,拿 `2>&1` 存变量后**按内容判定**,
+而不是靠退出码。
+
+## 24. zsh 函数必须先定义后调用
+
+`_print_checks` 定义在 `_render` 之后 → 调用时 function not found → 静默退出。
+`secwatch` 因此只输出了前两段就停。写完顺手核对一下定义顺序。
+
+---
+
 ## 可继续扩展的方向
 
 现有 14 个脚本覆盖了硬件(内存/CPU/磁盘/电池/温度/网络/Wi-Fi)、
 进程(进程树/端口)、安全(登录审计/自启动项)、运维(大文件清理)。
 尚未覆盖的原生数据源:
 
-- **键盘 / 输入法** — `defaults read com.apple.HIToolbox`,查布局与快捷键冲突
 - **剪贴板历史** — `pbpaste` + `osascript`,不依赖第三方剪贴板工具
 - **TLS 证书有效期** — `openssl s_client` 检查内网/公司证书是否过期
 - **网络诊断** — ping / traceroute / `dscacheutil -q host` 组合,定位办公网问题
 - **Spotlight 索引状态** — `mdutil -sa`,公司机常被 MDM 关掉
-- **Time Machine 备份历史** — `tmutil listbackups` + `tmutil calculatedrift`
+- **软件更新状态** — `softwareupdate -l`,检查是否有待装补丁
+- **打印队列** — `lpstat -p / -d`,公司常配共享打印机
+- **字体清单** — `system_profiler SPFontsDataType`,排查排版问题
+- **通知与专注模式** — `defaults read com.apple.ncprefs`,看哪些 app 在打扰你
+- **能耗与电池循环** — `pmset -g` 补充 `batwatch` 缺的维度

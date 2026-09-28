@@ -1,0 +1,289 @@
+#!/usr/bin/env zsh
+# extwatch — 系统扩展 / 后台登录项 / 常驻程序 观察器
+#
+# 设计目标:
+#   - 公司配 Mac,无 brew / 无 python / 无 profile manager,
+#     只 zsh + systemextensionsctl / sfltool / launchctl
+#   - 显示:
+#       ① 系统扩展(systemextensionsctl)—— VPN / 网络过滤器 / 杀毒等内核级组件
+#          标注每个扩展的团队 ID、版本、是否激活、状态
+#       ② 后台登录项(Background Task Management)—— 开机自启的 app/工具
+#          区分 enabled / disabled / allowed,标出未知开发者
+#       ③ 常驻 LaunchAgents/Daemons(launchctl 已加载)
+#       ④ 安全视角:标出"等待用户授权""未知开发者""已停用待卸载"等需要注意的状态
+#   - 只读:不禁用、不卸载任何东西
+#
+# 用法:
+#   extwatch                 # 全量
+#   extwatch --extensions    # 只看系统扩展
+#   extwatch --login-items   # 只看后台登录项
+#   extwatch --launchd       # 只看 launchd 任务
+#   extwatch --unknown       # 只看未知开发者 / 待授权项(安全视角)
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i TOP_N=15
+typeset ONLY_EXT=false ONLY_BTM=false ONLY_LAUNCHD=false ONLY_UNKNOWN=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --extensions)  ONLY_BTM=false; ONLY_LAUNCHD=false; ONLY_UNKNOWN=false; ONLY_EXT=true; shift ;;
+    --login-items) ONLY_EXT=false; ONLY_LAUNCHD=false; ONLY_UNKNOWN=false; ONLY_BTM=true; shift ;;
+    --launchd)     ONLY_EXT=false; ONLY_BTM=false; ONLY_UNKNOWN=false; ONLY_LAUNCHD=true; shift ;;
+    --unknown)     ONLY_EXT=false; ONLY_BTM=false; ONLY_LAUNCHD=false; ONLY_UNKNOWN=true; shift ;;
+    --top|-n)      TOP_N=$2; shift 2 ;;
+    --version)     echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--extensions|--login-items|--launchd|--unknown] [--top N]"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+# ---- 系统扩展 --------------------------------------------------------------
+# systemextensionsctl list 输出(制表符分隔):
+#   enabled<TAB>active<TAB>teamID<TAB>bundleID (version)<TAB>name<TAB>[state]
+_extensions_rows() {
+  systemextensionsctl list 2>/dev/null | awk -F'\t' '
+    # 表头与说明行跳过
+    /^[0-9]+ extension/ { next }
+    /^enabled/            { next }
+    /^#/                  { next }
+    /Go to .System Settings/ { next }
+    NF < 5 { next }
+    {
+      # 字段可能因为 bundleID 内含空格而不整齐,按 tab 数不足时改用最后两列兜底
+      enabled = $1; active = $2; team = $3
+      rest = $0
+      sub(/^[^\t]*\t[^\t]*\t[^\t]*\t/, "", rest)   # 去掉前 3 列
+      # rest = "bundleID (ver)\tname\t[state]"
+      bi = rest; sub(/\t.*$/, "", bi)
+      rest2 = rest; sub(/^[^\t]*\t/, "", rest2)
+      nm = rest2; sub(/\t.*$/, "", nm)
+      st = rest2; sub(/^[^\t]*\t/, "", st)
+      if (bi == "" || nm == "") next
+      printf "%s\t%s\t%s\t%s\t%s\t%s\n", (enabled=="*"?"yes":"no"), (active=="*"?"yes":"no"), team, bi, nm, st
+    }
+  '
+}
+
+# ---- 后台登录项 (Background Task Management) -------------------------------
+# sfltool dumpbtm 输出是 plist 风格,每组字段:
+#   Name: xxx / Developer Name: xxx / Disposition: [enabled,...] (0x..)
+#   Identifier: xxx / URL: xxx
+# 注意:不同 macOS 版本字段名会变,抓不到就输出空
+_btm_rows() {
+  sfltool dumpbtm 2>/dev/null | awk '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    function emit() {
+      if (!have || name == "" || name == "(null)") { reset(); return }
+      printf "%s\t%s\t%s\t%s\t%s\n", name, dev, disp, ident, url
+      reset()
+    }
+    function reset() { have=0; name=""; dev=""; disp=""; ident=""; url="" }
+    /^[[:space:]]*Name:/ {
+      emit()
+      name = trim($0); sub(/^Name:[[:space:]]*/, "", name)
+      if (name != "(null)") have = 1
+      next
+    }
+    /^[[:space:]]*Developer Name:/ { dev = trim($0); sub(/^Developer Name:[[:space:]]*/, "", dev); next }
+    /^[[:space:]]*Disposition:/     { disp = trim($0); sub(/^Disposition:[[:space:]]*/, "", disp); next }
+    /^[[:space:]]*Identifier:/     { ident = trim($0); sub(/^Identifier:[[:space:]]*/, "", ident); next }
+    /^[[:space:]]*URL:/             { url = trim($0); sub(/^URL:[[:space:]]*/, "", url); next }
+    END { emit() }
+  '
+}
+
+# ---- launchd 任务 ----------------------------------------------------------
+_launchd_rows() {
+  launchctl list 2>/dev/null | awk '
+    NR > 1 {
+      pid = $1; st = $2; label = $3
+      for (i = 4; i <= NF; i++) label = label " " $i
+      if (label == "") next
+      printf "%s\t%s\t%s\n", label, (pid == "-" ? "" : pid), st
+    }
+  ' | sort
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_ext_block() {
+  local data n
+  data=$(_extensions_rows)
+  if [[ -z $data ]]; then
+    echo "  ${C_DIM}(无系统扩展,或需要更高权限才能列出)${C_RESET}"
+    return
+  fi
+  n=$(print -r -- "$data" | wc -l | tr -d ' ')
+  echo "  ${C_DIM}共 $n 个系统扩展${C_RESET}"
+  echo
+  print -r -- "$data" | awk -F'\t' \
+    -v b=$C_BOLD -v d=$C_DIM -v g=$C_GREEN -v y=$C_YELLOW -v r=$C_RESET '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return substr(s, 1, w) }
+    BEGIN { print d pad("ENABLED", 8) pad("ACTIVE", 7) pad("TEAM ID", 11) pad("EXTENSION", 46) "STATE" r }
+    {
+      # 状态着色:waiting for user / uninstall 需关注
+      col = d
+      if ($6 ~ /waiting for user/)          col = y
+      else if ($6 ~ /uninstall/)            col = y
+      else if ($6 ~ /enabled/)              col = g
+      else if ($6 ~ /terminated/)           col = y
+      nm = $5; if (length(nm) > 46) nm = substr(nm, 1, 43) "..."
+      printf "  %-8s %-7s %-11s %-46s %s%s%s\n",  ($1=="yes"?"✓":"·"), ($2=="yes"?"✓":"·"), $3, pad(nm, 46), col, $6, r
+    }
+  '
+  echo
+  echo "  ${C_DIM}说明:${C_RESET} ENABLED/ACTIVE = 随系统加载的标记;teamID 为开发者签名标识"
+  echo "  ${C_DIM}      [activated waiting for user] 表示已安装但需在系统设置里手动批准${C_RESET}"
+}
+
+_btm_block() {
+  local data n
+  data=$(_btm_rows)
+  if [[ -z $data ]]; then
+    echo "  ${C_DIM}(无后台登录项,或 sfltool 需要权限)${C_RESET}"
+    return
+  fi
+  n=$(print -r -- "$data" | wc -l | tr -d ' ')
+  echo "  ${C_DIM}共 $n 个后台任务${C_RESET}"
+  echo
+  print -r -- "$data" | awk -F'\t' \
+    -v b=$C_BOLD -v d=$C_DIM -v g=$C_GREEN -v y=$C_YELLOW -v r=$C_RESET '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return substr(s, 1, w) }
+    function disp_of(s) {
+      if (s ~ /disabled/)     return "disabled"
+      if (s ~ /not notified/) return "not-notified"
+      if (s ~ /enabled/)      return "enabled"
+      if (s ~ /allowed/)      return "allowed"
+      return s
+    }
+    BEGIN { print d pad("NAME", 28) pad("DISPOSITION", 14) pad("DEVELOPER", 20) "IDENTIFIER" r }
+    {
+      dd = disp_of($3)
+      col = (dd == "enabled") ? g : ((dd == "disabled") ? y : d)
+      # 未知开发者标黄 — 公司机安全视角
+      if ($4 == "Unknown Developer" || $2 == "Unknown Developer") col = y
+      nm = $1; if (length(nm) > 28) nm = substr(nm, 1, 25) "..."
+      dv = $2; if (dv == "(null)" || dv == "") dv = "?"
+      if (length(dv) > 20) dv = substr(dv, 1, 17) "..."
+      printf "  %s%-28s%s %s%-14s%s %-20s %s\n",  b, pad(nm, 28), r, col, pad(dd, 14), r, pad(dv, 20), $4
+    }
+  '
+  echo
+  echo "  ${C_DIM}管理入口:系统设置 → 通用 → 登录项与扩展${C_RESET}"
+  echo "  ${C_DIM}命令行开关: sfltool resetbtm  (会清空所有后台项记录,慎用)${C_RESET}"
+}
+
+_launchd_block() {
+  local data n
+  data=$(_launchd_rows)
+  if [[ -z $data ]]; then
+    echo "  ${C_DIM}(无 launchd 任务)${C_RESET}"
+    return
+  fi
+  n=$(print -r -- "$data" | wc -l | tr -d ' ')
+  echo "  ${C_DIM}launchctl 当前加载 $n 个任务(显示前 $TOP_N)${C_RESET}"
+  echo
+  # 按 label 排序,取前 N(用 awk 截断避免 head 的 SIGPIPE)
+  print -r -- "$data" | awk -F'\t' -v lim="$TOP_N" \
+    -v b=$C_BOLD -v d=$C_DIM -v g=$C_GREEN -v y=$C_YELLOW -v r=$C_RESET '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return substr(s, 1, w) }
+    NR > lim { exit }
+    BEGIN { print d pad("LABEL", 56) pad("PID", 8) "LAST EXIT" r }
+    {
+      st = $3
+      col = d
+      if (st == "0") col = g
+      else if (st != "") col = y
+      lb = $1; if (length(lb) > 56) lb = substr(lb, 1, 53) "..."
+      printf "  %-56s %-8s %s%s%s\n", lb, ($2==""?"-":$2), col, (st==""?"-":st), r
+    }
+  '
+  echo
+  echo "  ${C_DIM}LAST EXIT: 0 = 正常;-9 = 被 SIGKILL 终止;-15 = SIGTERM 终止${C_RESET}"
+}
+
+# ---- 只看需要注意的项 ------------------------------------------------------
+_unknown_block() {
+  local data
+  echo "${C_BOLD}  需要关注的项${C_RESET} ${C_DIM}(未知开发者 / 待授权 / 已停用待卸载)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+
+  local ext btm found=false
+  ext=$(_extensions_rows | awk -F'\t' '$6 ~ /waiting for user|uninstall/')
+  if [[ -n $ext ]]; then
+    found=true
+    echo
+    echo "  ${C_YELLOW}系统扩展:${C_RESET}"
+    print -r -- "$ext" | awk -F'\t' -v d=$C_DIM -v r=$C_RESET -v y=$C_YELLOW '
+      { printf "    %s%s%s  %s  (team %s)\n", y, $5, r, $6, $3 }'
+  fi
+
+  btm=$(_btm_rows | awk -F'\t' '$2 == "Unknown Developer" || $4 == "Unknown Developer" || $3 ~ /disabled/')
+  if [[ -n $btm ]]; then
+    found=true
+    echo
+    echo "  ${C_YELLOW}后台登录项:${C_RESET}"
+    print -r -- "$btm" | awk -F'\t' -v d=$C_DIM -v r=$C_RESET -v y=$C_YELLOW '
+      { printf "    %s%s%s  %s  (dev: %s)\n", y, $1, r, $3, ($2==""?"?":$2) }'
+  fi
+
+  if ! $found; then
+    echo
+    echo "  ${C_GREEN}✓ 没有需要注意的项${C_RESET}"
+  fi
+  echo
+  echo "  ${C_DIM}说明:公司设备上,出现未知开发者的常驻项值得上报 IT${C_RESET}"
+}
+
+_render() {
+  if [[ -t 1 ]]; then printf '\033[?25l\033[2J\033[H'; fi
+
+  echo "${C_BOLD}${C_CYAN}═══ 系统扩展 / 后台常驻 观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读,不禁用任何组件  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  if $ONLY_UNKNOWN; then
+    _unknown_block
+  else
+    if $ONLY_EXT || (! $ONLY_BTM && ! $ONLY_LAUNCHD); then
+      echo "${C_BOLD}  系统扩展${C_RESET} ${C_DIM}(systemextensionsctl — 内核级组件:VPN/网络过滤/安全)${C_RESET}"
+      echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+      _ext_block
+      echo
+    fi
+
+    if $ONLY_BTM || (! $ONLY_EXT && ! $ONLY_LAUNCHD); then
+      echo "${C_BOLD}  后台登录项${C_RESET} ${C_DIM}(Background Task Management — 开机自启)${C_RESET}"
+      echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+      _btm_block
+      echo
+    fi
+
+    if $ONLY_LAUNCHD || (! $ONLY_EXT && ! $ONLY_BTM); then
+      echo "${C_BOLD}  launchd 已加载任务${C_RESET} ${C_DIM}(launchctl list)${C_RESET}"
+      echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+      _launchd_block
+      echo
+    fi
+  fi
+
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: systemextensionsctl list, sfltool dumpbtm, launchctl list${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+_render
