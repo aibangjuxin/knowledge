@@ -1,0 +1,477 @@
+#!/usr/bin/env zsh
+# codesignaudit — App 代码签名与供应链审计
+#
+# 设计目标:
+#   - logtriage 会告诉你 "syspolicyd 在反复做 Gatekeeper 校验",但不会告诉你是谁。
+#     这个脚本就是那个"谁"。
+#   - 显示:
+#       ① 签名完整性   —— codesign --verify,分四档:完好 / 资源封套过期 / 签名损坏 / 未签名
+#       ② 签名来源     —— Team ID / Authority 链(谁开发的、有没有 notarize)
+#       ③ 架构         —— universal / arm64 / x86_64(Intel 转译会告警)
+#       ④ Hardened Runtime —— flags 里的 runtime 位,关掉的话很多安全特性失效
+#       ⑤ Gatekeeper 状态 —— spctl 判定 + quarantine 属性
+#       ⑥ 问题清单     —— 只列有问题的,给出可执行的处理建议
+#       ⑦ Team 分布    —— 同一开发者签了多个 App(供应链集中度)
+#   - 只读:只验签,不重签、不改 quarantine、不动 App
+#
+# 用法:
+#   codesignaudit                  # 全量审计
+#   codesignaudit --issues         # 只看有问题的(默认按严重度排序)
+#   codesignaudit --app "Loon.app" # 审计单个 App(精确模式)
+#   codesignaudit --teams          # Team 分布
+#   codesignaudit --deep           # 深度验证(慢:验每个嵌套 framework/可执行文件)
+#   codesignaudit --json           # 结构化输出
+#
+# 性能实测(M4 / 128 个 App,非 deep):
+#   codesign --verify --verbose=2 逐个跑 ≈ 60 秒
+#   单个 App ≈ 0.04 秒(Xcode 这种大的接近 1 秒)
+#
+# ⚠ 四种结果的区别很重要,不要混为一谈:
+#   satisfies its Designated Requirement   签名完好,被 Gatekeeper 认可
+#   resource envelope is obsolete          签名完好,但资源封套是旧格式 —— 开发方没更新,不是安全问题
+#   file modified / file added / missing   ⚠ 真问题:签名与内容对不上,通常是被打过补丁
+#   code object is not signed at all       没签名(Homebrew 命令行工具常见)
+
+emulate -L zsh
+setopt errexit nounset pipefail
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+
+typeset ONLY_ISSUES=false ONLY_TEAMS=false DO_JSON=false DO_DEEP=false
+typeset SINGLE=''
+
+while (( $# > 0 )); do
+  case $1 in
+    --issues) ONLY_ISSUES=true; shift ;;
+    --teams)  ONLY_TEAMS=true; shift ;;
+    --deep)   DO_DEEP=true; shift ;;
+    --json)   DO_JSON=true; shift ;;
+    --app)    SINGLE=$2; shift 2 ;;
+    --version) echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--issues|--teams|--deep] [--app 名字.app] [--json]"
+      echo "  --issues      只看有问题的,按严重度排序"
+      echo "  --teams       Team ID 分布(谁签的、签了几个)"
+      echo "  --app X.app   只审计指定 App"
+      echo "  --deep        深度验证(逐个嵌套 framework/二进制,慢)"
+      echo "  --json        结构化输出"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+_ok()   { print -r -- "${C_GREEN}✓${C_RESET} $1" }
+_warn() { print -r -- "${C_YELLOW}!${C_RESET} $1" }
+_bad()  { print -r -- "${C_RED}✗${C_RESET} $1" }
+_info() { print -r -- "${C_DIM}  $1${C_RESET}" }
+_section() {
+  echo
+  echo "${C_BOLD}  $1${C_RESET} ${C_DIM}$2${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+}
+
+# ---- 收集 App 列表 ---------------------------------------------------------
+_collect_apps() {
+  local -a apps
+  if [[ -n $SINGLE ]]; then
+    # 允许:全路径 / 带 .app / 只给名字(Loon → Loon.app)
+    # ⚬ 候选顺序很重要:先按原样试,再试补 .app,最后试路径拼接。
+    #   先补 .app 会在 `--app Loon` 时生成 "Loon.app" 相对路径,当前目录
+    #   不存在 → 判定失败,而真正的 /Applications/Loon.app 根本没被试到。
+    local c
+    for c in "$SINGLE" "$SINGLE.app" "/Applications/$SINGLE" "/Applications/${SINGLE%.app}.app" \
+             "$HOME/Applications/$SINGLE" "$HOME/Applications/${SINGLE%.app}.app"; do
+      [[ -d $c ]] || continue
+      print -r -- "$c"
+      return 0
+    done
+    return 1
+  fi
+  # 三处都扫:系统、用户、以及 /Applications 下的嵌套(少见)
+  local d
+  for d in /Applications "$HOME/Applications" /System/Applications; do
+    [[ -d $d ]] || continue
+    local f
+    for f in "$d"/*.app(N); do
+      print -r -- "$f"
+    done
+  done
+}
+
+# ---- 单个 App 审计 ---------------------------------------------------------
+# 输出 TSV(9 列): sig \t severity \t name \t team \t authority \t arch \t runtime \t bundle_id \t detail
+#
+# ⚠ 变量名不能叫 `status` —— zsh 里它是只读变量,
+#   `local status=OK` 直接报 "read-only variable: status"(README §3)。
+# severity: 0=OK 1=info 2=warn 3=critical
+_audit_one() {
+  local app=$1
+  local nm=${app:t}
+
+  # ⚠ codesign 对"不存在 / 坏格式"会返回非 0 并把信息写 stderr,
+  #   全部都要 || true(README §28)
+  local verify_flag='--verbose=2'
+  $DO_DEEP && verify_flag='--verify --deep --verbose=2'
+
+  local out rc
+  out=$(codesign $verify_flag "$app" 2>&1) || true
+
+  local sig sev detail
+  if print -r -- "$out" | grep -q 'satisfies its Designated Requirement'; then
+    sig='OK'
+    sev=0
+    detail=''
+  elif print -r -- "$out" | grep -q 'resource envelope is obsolete'; then
+    # 签名本身没问题,只是资源封套格式旧 —— 不算安全问题
+    sig='OBSOLETE'
+    sev=1
+    detail='资源封套是旧格式(开发方未更新),签名本身完好'
+  elif print -r -- "$out" | grep -q 'code object is not signed at all'; then
+    sig='UNSIGNED'
+    sev=3
+    detail='完全没有代码签名'
+  elif print -r -- "$out" | grep -qE 'bundle format unrecognized|invalid, or unsuitable'; then
+    sig='BADSIG'
+    sev=2
+    detail='签名格式无法识别(可能不是标准 App bundle)'
+  elif print -r -- "$out" | grep -qE 'file modified|file added|file missing|a sealed resource is missing or invalid'; then
+    sig='TAMPERED'
+    sev=3
+    # ⚠ codesign 对签名损坏的 App 可能输出数千行(实测 ChatGPT Atlas 报 2000+ 个
+    #   file missing)。不要对整个 $out 跑 grep|head —— head 提前关管道会让上游
+    #   收到 SIGPIPE,整体 exit 141,脚本静默死在这里。
+    #   修法:先用 awk 只取前 200 行,再在小子集上做提取;并且用 awk 的
+    #   "找到第一个就 exit" 代替 head,避免关管道。
+    detail=$(print -r -- "$out" | awk '
+      /file modified/ || /file added/ || /file missing/ || /sealed resource is missing/ {
+        if (!seen) { print; seen = 1; exit }
+      }
+    ' || true)
+    detail=${detail:0:120}
+  elif [[ -z ${out//[[:space:]]/} ]]; then
+    sig='OK'
+    sev=0
+    detail=''
+  else
+    sig='UNKNOWN'
+    sev=2
+    detail=$(print -r -- "$out" | tail -1 | cut -c1-80)
+  fi
+
+  # ---- 元信息(codesign -dv) ----
+  local meta team auth arch runtime ident
+  meta=$(codesign -dv --verbose=4 "$app" 2>&1 || true)
+  # ⚠ 每条管道都可能"无匹配" —— grep/sed/head 在 errexit 下返回非 0 会杀掉脚本
+  #   (README §19)。Loon 的 Authority 是 "Apple iPhone OS Application Signing"
+  #   而非 "Developer ID Application",grep 无匹配就静默中断了整个审计。
+  team=$(print -r -- "$meta" | sed -n 's/^TeamIdentifier=//p' | head -1 || true)
+  auth=$(print -r -- "$meta" | grep '^Authority=Developer ID Application' | head -1 | sed 's/^Authority=Developer ID Application: //' || true)
+  # 非 Developer ID 但有 Authority 的,回退取第一级 Authority
+  if [[ -z $auth ]]; then
+    auth=$(print -r -- "$meta" | grep '^Authority=' | head -1 | sed 's/^Authority=//' || true)
+  fi
+  arch=$(print -r -- "$meta" | sed -n 's/^Format=app bundle with Mach-O //p' | head -1 || true)
+  [[ -z $arch ]] && arch=$(print -r -- "$meta" | sed -n 's/^Format=//p' | head -1 || true)
+  ident=$(print -r -- "$meta" | sed -n 's/^Identifier=//p' | head -1 || true)
+
+  # Hardened Runtime:CodeDirectory flags 里 0x10000(runtime)
+  # 注意 flags 可能是 0x0(none) / 0x10000(runtime) / 0x2(adhoc)
+  if print -r -- "$meta" | grep -q 'flags=0x[0-9a-f]*(.*runtime' ; then
+    runtime='yes'
+  elif print -r -- "$meta" | grep -q 'flags=' ; then
+    runtime='no'
+  else
+    runtime='?'
+  fi
+
+  # 未签名 / ad-hoc 进一步细分
+  if print -r -- "$meta" | grep -q '^Signature=adhoc' ; then
+    sig='ADHOC'
+    sev=3
+    detail='ad-hoc 自签名(无开发者身份)'
+  fi
+  [[ -z $team || $team == 'not set' ]] && team='(无)'
+
+  # x86_64 需要 Rosetta 才能跑 = 可能是老 App
+  [[ $arch == *x86_64* && $arch != *arm64* ]] && sev=$(( sev > 2 ? sev : 1 ))
+
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$sig" "$sev" "$nm" "$team" "${auth:-(无)}" "${arch:-(未知)}" "$runtime" "${ident:-(无)}" "$detail"
+}
+
+# ---- 主渲染 ----------------------------------------------------------------
+_render() {
+  if [[ -t 1 ]] && ! $DO_JSON; then
+    printf '\033[?25l\033[2J\033[H'
+  fi
+  # ⚠ banner 只在 TTY 下输出 —— 非 TTY(重定向到文件/管道)时
+  #   头部装饰会污染下游解析(README 的"非 TTY 无 banner"约定)
+  if [[ -t 1 ]] && ! $DO_JSON; then
+    echo "${C_BOLD}${C_CYAN}═══ App 代码签名与供应链审计 ═══${C_RESET}"
+    echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读:只验签,不重签、不改 quarantine${C_RESET}"
+    $DO_DEEP && echo "${C_DIM}deep 模式:逐个验证嵌套 framework / 可执行文件,会明显变慢${C_RESET}"
+  fi
+
+  # ---- 收集 ----
+  local -a apps
+  local a
+  while IFS= read -r a; do
+    [[ -n $a ]] && apps+=("$a")
+  done < <(_collect_apps)
+
+  if (( ${#apps[@]} == 0 )); then
+    if ! $DO_JSON; then
+      echo
+      if [[ -n $SINGLE ]]; then
+        _info "找不到: $SINGLE"
+        _info "试试:$SCRIPT_NAME --app \"$(basename "$SINGLE")\" 或给完整路径"
+      else
+        _info "(没有扫描到任何 .app)"
+      fi
+    fi
+    return
+  fi
+
+  # ---- 逐个审计(落临时文件,避免把 128 行 TSV 反复在管道里重跑)----
+  local tmp
+  tmp=$(mktemp "${TMPDIR:-/tmp}/csaudit.XXXXXX")
+  local app
+  # ⚠ 必须写 "$app" 或 "${apps[@]}" —— 不加引号时含空格的 App 名
+  #   (ChatGPT Atlas.app / TRAE SOLO CN.app)会按 IFS 被拆成多个不存在的路径,
+  #   codesign 逐个报错,实测整体 exit 141(SIGPIPE)。
+  for app in "${apps[@]}"; do
+    _audit_one "$app" >>"$tmp"
+  done
+
+  if $DO_JSON; then
+    _json_block "$tmp"
+    rm -f "$tmp"
+    return
+  fi
+
+  local n
+  n=$(wc -l <"$tmp" | tr -d ' ')
+  echo
+  _ok "审计 $n 个 App"
+
+  if $ONLY_TEAMS; then
+    _section "Team ID 分布" "谁签的 · 各签了几个"
+    awk -F'\t' '$1 != "OK" || $4 != "(无)" { print $4 }' "$tmp" \
+      | sort | uniq -c | sort -rn \
+      | while read -r cnt team; do
+          printf "  %-6s %s\n" "$cnt" "$team"
+        done
+    echo
+    _info "同一 Team 签多个 App = 正常(同一开发者);不同 App 同一 Team 要留意"
+    rm -f "$tmp"
+    return
+  fi
+
+  if $ONLY_ISSUES; then
+    _issues_block "$tmp"
+    rm -f "$tmp"
+    return
+  fi
+
+  # ---- 概览 ----
+  local ok obsolete unsigned tampered adhoc badsig unknown
+  ok=$(awk -F'\t' '$1 == "OK"' "$tmp" | wc -l | tr -d ' ')
+  obsolete=$(awk -F'\t' '$1 == "OBSOLETE"' "$tmp" | wc -l | tr -d ' ')
+  unsigned=$(awk -F'\t' '$1 == "UNSIGNED"' "$tmp" | wc -l | tr -d ' ')
+  tampered=$(awk -F'\t' '$1 == "TAMPERED"' "$tmp" | wc -l | tr -d ' ')
+  adhoc=$(awk -F'\t' '$1 == "ADHOC"' "$tmp" | wc -l | tr -d ' ')
+  badsig=$(awk -F'\t' '$1 == "BADSIG"' "$tmp" | wc -l | tr -d ' ')
+  unknown=$(awk -F'\t' '$1 == "UNKNOWN"' "$tmp" | wc -l | tr -d ' ')
+
+  _section "签名概览" "codesign --verify"
+  printf "  %-24s %s\n" "完好 OK"         "${C_GREEN}$ok${C_RESET}"
+  printf "  %-24s %s\n" "封套过期"        "${C_DIM}$obsolete${C_RESET}  ${C_DIM}(签名没问题,格式旧)${C_RESET}"
+  printf "  %-24s %s\n" "⚠ 签名与内容不符" "${C_RED}$tampered${C_RESET}"
+  printf "  %-24s %s\n" "⚠ ad-hoc 自签名" "${C_RED}$adhoc${C_RESET}"
+  printf "  %-24s %s\n" "⚠ 完全未签名"   "${C_RED}$unsigned${C_RESET}"
+  (( badsig > 0 ))   && printf "  %-24s %s\n" "格式无法识别" "${C_YELLOW}$badsig${C_RESET}"
+  (( unknown > 0 ))  && printf "  %-24s %s\n" "结果未知"   "${C_YELLOW}$unknown${C_RESET}"
+
+  # ---- 问题清单 ----
+  if (( tampered + adhoc + unsigned + badsig > 0 )); then
+    _issues_block "$tmp"
+  else
+    echo
+    _ok "没有发现签名异常"
+  fi
+
+  # ---- Hardened Runtime 统计 ----
+  local no_rt
+  no_rt=$(awk -F'\t' '$7 == "no" && ($1 == "OK" || $1 == "OBSOLETE")' "$tmp" | wc -l | tr -d ' ')
+  if (( no_rt > 0 )); then
+    _section "未启用 Hardened Runtime" "flags 里缺 0x10000(runtime)"
+    awk -F'\t' '$7 == "no" && ($1 == "OK" || $1 == "OBSOLETE") { print $3 }' "$tmp" \
+      | head -15 | while IFS= read -r n2; do
+          [[ -z $n2 ]] && continue
+          printf "    %s %s\n" "${C_YELLOW}·${C_RESET}" "$n2"
+        done
+    echo
+    _info "没开 Hardened Runtime 的 App 缺少 JIT / dylib 注入 / 未授权内存访问保护"
+    _info "对签名完好但 runtime=off 的 App 属于正常(老 App 未适配),不是安全问题"
+    _info "如果是 Intel App 还要跑 Rosetta,性能损失明显"
+  fi
+
+  # ---- Gatekeeper / quarantine ----
+  # 注意:不要对每个 App 跑 spctl --assess —— 128 个要 20 秒以上,
+  #   而它给出的信息和 codesign --verify 高度重叠。只在 --app 单个模式
+  #   或用户显式要求时才值得跑。
+  _section "quarantine 属性" "下载来源是否已确认"
+  _quarantine_block
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: codesign, spctl, xattr, lipo${C_RESET}"
+  echo "${C_DIM}  配套:logtriage --gatekeeper 看 Gatekeeper 在对谁反复校验${C_RESET}"
+
+  rm -f "$tmp"
+}
+
+# ---- 问题清单 --------------------------------------------------------------
+_issues_block() {
+  local tmp=$1
+  _section "⚠ 需要关注的 App" "按严重度排序"
+
+  local found=0
+  local st sev nm team auth arch rt ident detail path
+
+  while IFS=$'\t' read -r st sev nm team auth arch rt ident detail; do
+    (( sev < 2 )) && continue
+    found=1
+    case $st in
+      TAMPERED)
+        echo "  ${C_RED}✗${C_RESET} ${C_BOLD}${nm}${C_RESET}  ${C_DIM}[签名与内容不符]${C_RESET}"
+        _info "问题  $detail"
+        _info "Team  ${team}"
+        _info "架构  ${arch} · Hardened Runtime ${rt}"
+        _info "含义  Contents/ 被修改过,但签名没跟着重做"
+        _info "常见  打过补丁 / 替换过内部二进制 / 注入过 framework"
+        _info "影响  Gatekeeper 会持续重新校验 —— 这正是 logtriage 里"
+        _info "      syspolicyd 疯狂刷日志的常见来源"
+        ;;
+      ADHOC)
+        echo "  ${C_RED}✗${C_RESET} ${C_BOLD}${nm}${C_RESET}  ${C_DIM}[ad-hoc 自签名]${C_RESET}"
+        _info "Team  ${team}"
+        _info "架构  ${arch}"
+        _info "含义  用 codesign -s - 签的,没有开发者身份,无法证明来源"
+        _info "常见  自己编译的工具 / 第三方作者未购买开发者账号"
+        ;;
+      UNSIGNED)
+        echo "  ${C_RED}✗${C_RESET} ${C_BOLD}${nm}${C_RESET}  ${C_DIM}[完全未签名]${C_RESET}"
+        _info "架构  ${arch}"
+        _info "含义  没有任何代码签名"
+        _info "常见  Homebrew / 源码直接编译的命令行工具"
+        _info "      如果是 .app 形式(而非纯命令行工具),要确认来源"
+        ;;
+      BADSIG)
+        echo "  ${C_YELLOW}!${C_RESET} ${C_BOLD}${nm}${C_RESET}  ${C_DIM}[签名格式无法识别]${C_RESET}"
+        _info "含义  ${detail}"
+        _info "常见  非标准 bundle 结构,或签名用了不兼容的格式"
+        ;;
+      UNKNOWN)
+        echo "  ${C_YELLOW}!${C_RESET} ${C_BOLD}${nm}${C_RESET}  ${C_DIM}[结果未知]${C_RESET}"
+        _info "输出  ${detail}"
+        ;;
+    esac
+    echo
+  done <"$tmp"
+
+  if (( found == 0 )); then
+    _ok "没有签名异常"
+  fi
+
+  echo "  ${C_DIM}处理建议:${C_RESET}"
+  echo "  ${C_DIM}  ① 补丁类 App(签名不符)→ 换官方版本,或让开发者重签${C_RESET}"
+  echo "  ${C_DIM}  ② 自己编译的工具 → codesign -s - --force \"<App>\" 补个 ad-hoc 签名${C_RESET}"
+  echo "  ${C_DIM}  ③ 确认来源 → spctl -a -vvv -t exec \"<App>\" 看 Gatekeeper 判定${C_RESET}"
+  echo "  ${C_DIM}  ④ 想看某个 App 到底哪个文件被动过:${C_RESET}"
+  echo "  ${C_DIM}     codesign --verify --deep --verbose=4 \"<App>\""
+}
+
+# ---- quarantine 扫描 -------------------------------------------------------
+_quarantine_block() {
+  echo
+  local n=0
+  # xattr 逐个 App 查 —— 128 次调用约 3 秒
+  local -a quarantined
+  local f
+  for f in /Applications/*.app(N); do
+    if xattr -p com.apple.quarantine "$f" >/dev/null 2>&1; then
+      quarantined+=("${f:t}")
+    fi
+  done
+
+  if (( ${#quarantined[@]} == 0 )); then
+    _ok "没有 App 带 quarantine 属性 —— 都已确认过来源"
+    return
+  fi
+
+  _warn "${#quarantined[@]} 个 App 还带 quarantine(来源未确认)"
+  local nm
+  for nm in "${quarantined[@]}"; do
+    [[ -z $nm ]] && continue
+    printf "    %s %s\n" "${C_YELLOW}·${C_RESET}" "$nm"
+    n=$(( n + 1 ))
+    (( n >= 15 )) && { echo "    ${C_DIM}... 还有 $(( ${#quarantined[@]} - 15 )) 个${C_RESET}"; break; }
+  done
+  echo
+  _info "quarantine 存在 = 这个 App 从网络下载过,Gatekeeper 每次访问都要重新验签"
+  _info "确认来源可信后清除:${C_RESET}xattr -dr com.apple.quarantine \"<App>\""
+}
+
+# ---- JSON ------------------------------------------------------------------
+_json_block() {
+  local tmp=$1
+  _jstr() {
+    local s=${1:-}
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    s=${s//$'\n'/ }
+    print -r -- "$s"
+  }
+  local first=true
+  local st sev nm team auth arch rt ident detail
+  echo '{'
+  echo '  "apps": ['
+  while IFS=$'\t' read -r st sev nm team auth arch rt ident detail; do
+    [[ -z $nm ]] && continue
+    $first || echo ','
+    first=false
+    printf '    {"name": "%s", "status": "%s", "severity": %s, "team": "%s", "authority": "%s", "arch": "%s", "hardened_runtime": "%s", "bundle_id": "%s", "detail": "%s"}' \
+      "$(_jstr "$nm")" "$st" "${sev:-0}" "$(_jstr "$team")" "$(_jstr "$auth")" \
+      "$(_jstr "$arch")" "$rt" "$(_jstr "$ident")" "$(_jstr "$detail")"
+  done <"$tmp"
+  echo
+  echo '  ],'
+  local o ta un tm ad bs uk
+  o=$(awk -F'\t' '$1 == "OK"' "$tmp" | wc -l | tr -d ' ')
+  ta=$(awk -F'\t' '$1 == "OBSOLETE"' "$tmp" | wc -l | tr -d ' ')
+  un=$(awk -F'\t' '$1 == "UNSIGNED"' "$tmp" | wc -l | tr -d ' ')
+  tm=$(awk -F'\t' '$1 == "TAMPERED"' "$tmp" | wc -l | tr -d ' ')
+  ad=$(awk -F'\t' '$1 == "ADHOC"' "$tmp" | wc -l | tr -d ' ')
+  bs=$(awk -F'\t' '$1 == "BADSIG"' "$tmp" | wc -l | tr -d ' ')
+  uk=$(awk -F'\t' '$1 == "UNKNOWN"' "$tmp" | wc -l | tr -d ' ')
+  printf '  "summary": {"ok": %s, "obsolete_envelope": %s, "tampered": %s, "adhoc": %s, "unsigned": %s, "bad_signature": %s, "unknown": %s}\n' \
+    "$o" "$ta" "$tm" "$ad" "$un" "$bs" "$uk"
+  echo '}'
+}
+
+_cleanup() {
+  $DO_JSON && return
+  printf '\033[?25h\033[0m'; echo
+}
+trap _cleanup EXIT INT TERM
+
+_render

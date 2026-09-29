@@ -158,13 +158,25 @@ _service_proxies_block() {
   fi
 
   # 收集:名称 + 是否禁用(* 前缀)
-  local -a names
-  local -a disabled
-  local line svc
-  while IFS= read -r line; do
-    [[ -z ${line//[[:space:]]/} ]] && continue
-    [[ $line == *"An asterisk"* ]] && continue
-    svc=$line
+  #
+  # ⚠ 不要用 `while IFS= read -r line; do ... svc=$line ... done <<< "$raw"` ——
+  #   在 emulate -L zsh 下,循环结束时 zsh 会把最后一次赋值回显到 stdout
+  #   (实测漏出 "svc='Loon for Mac'" 一行,在表格上方)。
+  #   README §1 记的是"循环体内重复 local",这里连 local 都在循环外仍会漏,
+  #   根因是 heredoc + 循环体的组合。改成一次性展开成数组再 for 遍历。
+  # ⚠ 不要在同一个函数里对同一个变量写两次 `local`。
+  #   第一个循环里 local svc,第二个循环又 local i svc st web ... ——
+  #   第二次 local 会把已有的 svc='Loon for Mac' 回显到 stdout
+  #   (实测表格上方多出一行 "svc='Loon for Mac'")。README §1。
+  #   所以这里一次性把两个循环要用的变量全声明了。
+  local -a names disabled
+  local -a lines
+  local idx i svc st web svr port socks web_c socks_c addr
+  lines=(${(f)raw})
+  for (( idx = 1; idx <= ${#lines[@]}; idx++ )); do
+    svc=${lines[$idx]}
+    [[ -z ${svc//[[:space:]]/} ]] && continue
+    [[ $svc == *"An asterisk"* ]] && continue
     if [[ $svc == \** ]]; then
       disabled+=(true)
       svc=${svc#\*}
@@ -173,7 +185,7 @@ _service_proxies_block() {
       disabled+=(false)
     fi
     names+=("$svc")
-  done <<<"$raw"
+  done
 
   if (( ${#names[@]} == 0 )); then
     _info "(服务列表为空)"
@@ -183,18 +195,17 @@ _service_proxies_block() {
   printf "  ${C_DIM}%-24s %-5s %-7s %-22s %s${C_RESET}\n" 'SERVICE' 'STATE' 'WEB' 'SERVER:PORT' 'SOCKS'
   echo "  ${C_DIM}$(printf '%.0s─' {1..74})${C_RESET}"
 
-  local i
+  # 变量已在上面统一 local 过,这里绝不再声明(README §1)
   for (( i = 1; i <= ${#names[@]}; i++ )); do
     svc=${names[$i]}
-    local st
     if [[ ${disabled[$i]} == true ]]; then
       st="${C_DIM}off${C_RESET}"
     else
       st="${C_GREEN}on${C_RESET}"
     fi
 
-    # 逐个 networksetup 调用都要 || true —— 不存在的服务会报错
-    local web svr port socks
+    # 逐个 networksetup 调用都要 || true —— 不存在的服务会报
+    # "** Error: Unable to find item in network database." 并返回非 0
     web=$(networksetup -getwebproxy "$svc" 2>&1 | awk -F': ' '/^Enabled:/ { print $2; exit }' || true)
     svr=$(networksetup -getwebproxy "$svc" 2>&1 | awk -F': ' '/^Server:/ { print $2; exit }' || true)
     port=$(networksetup -getwebproxy "$svc" 2>&1 | awk -F': ' '/^Port:/ { print $2; exit }' || true)
@@ -203,11 +214,10 @@ _service_proxies_block() {
     [[ -z $web ]] && web='?'
     [[ -z $socks ]] && socks='?'
 
-    local web_c socks_c
     if [[ $web == 1 ]]; then web_c="${C_YELLOW}ON${C_RESET}"; else web_c="${C_DIM}off${C_RESET}"; fi
     if [[ $socks == 1 ]]; then socks_c="${C_YELLOW}ON${C_RESET}"; else socks_c="${C_DIM}off${C_RESET}"; fi
 
-    local addr='-'
+    addr='-'
     if [[ -n $svr && $svr != ' ' ]]; then
       addr="${svr}:${port:-?}"
     fi
@@ -486,7 +496,13 @@ _render() {
   echo "${C_DIM}  配套:netpath <IP> 看出口 · netdiag <域名> 连通性诊断 · logtriage 查 App 为什么被拦${C_RESET}"
 }
 
-_cleanup() { printf '\033[?25h\033[0m'; echo; }
+# ⚠ --json 模式下 trap 不能碰 stdout —— 光标恢复转义会跟在最后的 `}` 后面,
+#   消费方报 "Extra data: line 14 column 1"(README §33)。
+#   通用原则:任何承诺机器可读的输出模式,_render 和 _cleanup 都不能污染 stdout。
+_cleanup() {
+  $DO_JSON && return
+  printf '\033[?25h\033[0m'; echo
+}
 trap _cleanup EXIT INT TERM
 
 _render

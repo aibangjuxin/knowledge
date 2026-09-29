@@ -32,6 +32,9 @@
 | `netpath` | 网络路径决策:这个包走哪条路 | route, scutil --nc/--dns/--nwi, netstat -rn | 单次 / `--services` / `--dns` / `--watch` |
 | `netdiag` | 连通性诊断包(DNS→ping→端口→traceroute→MTU) | ping, nc -z, traceroute, dscacheutil, route | 单次 / `--quick` / `--tcp` |
 | `shareprint` | 文件共享点 / guest access / 打印队列 / 共享端口 | /usr/sbin/sharing, lpstat, lsof, dns-sd | 单次 / `--json` |
+| `logtriage` | 系统日志分诊:谁在刷错误 / 签名异常 / 循环失败 | log show --style json | 单次 / `--gatekeeper` / `--timeline` / `--raw` |
+| `proxytrace` | 代理链路:TUN vs 系统代理 vs PAC 谁在生效 | scutil --proxy/--dns, networksetup, route | 单次 / `--mode` / `--json` |
+| `codesignaudit` | App 签名与供应链:签名完整性 / Team 来源 / Hardened Runtime / quarantine | codesign, spctl, xattr | 单次 / `--issues` / `--teams` / `--app` / `--json` |
 
 ## 安装
 
@@ -528,21 +531,314 @@ Clash / Surge 常用 `198.18.0.0/16`)。
 
 判断:落在 `198.0.0.0/8`(RFC 2544 benchmarking 保留段,不做公网路由)即命中。
 
+---
+
+## 36. zsh 里 `log` 是数学函数,必须 `command log` ⚠
+
+§3 记过"`log` 会遮蔽 `/usr/bin/log`",但没写清楚**根因和确切症状**:
+
+```zsh
+$ zsh -c 'log show --last 1s --style compact'
+zsh:log:1: too many arguments          ← zsh 自己报的,不是 log 报的
+
+$ zsh -c 'command log show --last 1s --style compact'
+Timestamp  Ty  Process[PID:TID]        ← 正常
+```
+
+`log` 在 zsh 里是数学函数(对数十进制底),裸调用会被 zsh 内建截获并
+对参数做求值,`--last 1s` 不是合法数学表达式 → 直接报 too many arguments。
+
+**注意:** 如果调用被包在 `$(...)` 里再喂给 `awk`,错误信息会变成
+`log: too many arguments` 混进数据流,更难定位。
+
+**修法:** 所有 `log show` / `log stream` 都加 `command` 前缀。
+`logtriage` 三处全部踩过。
+
+## 37. `log show` 必须用 `--style json`,compact 模式是废的
+
+```sh
+log show --last 1h --predicate 'messageType == error' --style compact \
+  | awk '{print $NF}' | sort | uniq -c | sort -rn | head
+#  ref 105350 / directory 90318 / out 8611 / 3 8104 ...   ← 全是噪音
+```
+
+消息体被替换成 `<private>`,`awk '{print $NF}'` 只能切出碎片。
+
+```sh
+log show ... --style json
+#  "subsystem" : "com.apple.CarbonCore"
+#  "processImagePath" : "\/usr\/sbin\/cfprefsd"
+#  "formatString" : "%s: FSNode(%d): asked for zero entry ref"
+```
+
+**修法:** 用 json 模式。本机实测 30 分钟错误日志 = 519 万行 / 4.6 秒,性能完全可接受。
+
+**predicate 的引号:** 整体必须用**单引号**包住。写成
+`--predicate "a == \"x\""` 时 shell 先吃掉一层引号,`log show` 收到残缺 predicate,
+**返回空结果且不报错** —— 静默失效,极难发现。
+
+```zsh
+command log show --last 1h --predicate 'process == "syspolicyd"' --style json  # ✓
+```
+
+另外 `log show` 的 predicate **接受单引号字符串**:
+`--predicate "process == 'cfprefsd'"` 实测也有效(976 条命中),
+所以变量插值时用双引号包外层、单引号包值最安全。
+
+## 38. 大 JSON 绝对不能进 shell 变量
+
+2 分钟窗口的错误日志 = **29 万行 ≈ 30MB**。存进变量后:
+
+- 每个 block 再 `print -r` 出来 + `tr` + `grep` + `sort`
+- 5 个 block = **5 次 30MB 复制**
+- 实测直接 **>180 秒超时**
+
+**修法:** 落临时文件,block 引用路径;更狠的是把提取结果也落盘一次:
+
+```zsh
+LOG_JSON=$(mktemp ...)
+command log show ... --style json >"$LOG_JSON"
+_extract >"$LOG_JSON.tsv"      # 只解析一次
+# block 全部 cat "$LOG_JSON.tsv" | awk ...
+```
+
+实测降到 **1.6 秒**。`_cleanup` trap 里记得删临时文件。
+
+## 39. 从 JSON 提值要跳过键名的引号对
+
+```awk
+p = index($0, "\"processImagePath\"")
+if (match(substr($0, p), /"[^"]*"/)) proc = substr(..., RSTART+1, RLENGTH-2)
+# ✗ 提取到的是 processImagePath 这个键名本身,不是值
+```
+
+结果:整张表所有行都显示成 `processImagePath` / `subsystem` / `formatString`,
+计数还挺大 —— 看起来像在跑,其实全是垃圾。
+
+**修法:** 先匹配到键名后面的冒号,再从那里开始找值的引号对:
+
+```awk
+if (match(rest, /"[^"]*"[[:space:]]*:/)) {
+  v = substr(rest, RSTART + RLENGTH)      # 跳过键名,从值开始
+  if (match(v, /"[^"]*"/)) val = substr(v, RSTART + 1, RLENGTH - 2)
+}
+```
+
+## 40. `uniq -c` 的输出不能用 `awk '{print $1, $2}'`
+
+时间线要按分钟分桶,而分钟串 `2026-09-28 18:04` **本身含空格**:
+
+```awk
+uniq -c | awk '{ print $1, $2 }'
+#  8118 2026-09-28        ← 时间部分整个丢了
+```
+
+**修法:** 剥前导空白后按首个空白切成两段,再用 tab 传给 shell:
+
+```awk
+sed 's/^[[:space:]]*//' | awk -v OFS='\t' '{ c=$1; $1=""; sub(/^[[:space:]]+/,""); print c, $0 }'
+```
+
+## 41. BSD awk 的 `match()` 对日期正则会少截字符
+
+```awk
+match(rest, /"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}"/)
+# 实际只匹配到 "2026-09-28 18:0"  ← RLENGTH 少算了
+```
+
+跟 §12 是同一个坑的延伸:**不要用 `match` + `RLENGTH` 提取定长格式**。
+拆成 `split()` 按分隔符切:
+
+```awk
+match(rest, /"[^"]*"/) && { v = substr(...) }
+nf = split(v, dt, /[ T]/)
+ts = dt[1] " " substr(dt[2], 1, 5)     # 秒数再截掉
+```
+
+## 42. `networksetup` 对不存在的服务名报错且返回非 0
+
+```sh
+networksetup -getwebproxy "Thunderbolt Bridge"
+# ** Error: Unable to find item in network database.
+# exit 1
+```
+
+如果循环里不加 `|| true`,`errexit` 会杀掉整个脚本(§28 同根因)。
+
+另外 `-listallnetworkservices` 的**第 1 行是表头说明**
+("An asterisk (*) denotes that a network service is disabled."),
+不是服务名 —— 直接 `tail -n +2` 剥掉。服务名可能带 `*` 前缀(禁用),
+传参给 `-getwebproxy` 前要去掉。
+
+## 43. 同一函数里同一个变量只能 `local` 一次
+
+§1 说的是"循环体内重复 local",但真正的原因更宽:**同函数内二次声明同一变量**。
+
+```zsh
+for (( i=1; i<=${#lines[@]}; i++ )); do
+  svc=${lines[$i]}          # 循环一里 svc='Loon for Mac'
+done
+
+local i svc st web ...      # 循环二里又 local svc
+for (( i=1; i<=${#names[@]}; i++ )); do ... done
+# → stdout 顶部多出一行 "svc='Loon for Mac'"
+```
+
+即使两个 `local` 都在循环体**外面**、中间还有别的语句,也照样回显。
+`proxytrace` 的服务表格上方就是这么多出一行的。
+
+**修法:** 把一个函数里所有要用的变量在函数开头一次性 `local` 完。
+这个习惯值得在整个项目里执行 —— 它同时规避 §1 和 §43。
+
+## 44. zsh 双引号串里不能再直接嵌双引号
+
+```zsh
+echo "  ${C_DIM}  所以下面这些"看着没开代理"的配置...${C_RESET}"
+# ✗ 前面的双引号提前闭合,后半段被当命令执行
+```
+
+看起来能跑,但输出会被截断或报错。**修法:** 用中文引号 `「」`,
+或者把整段拆成两次 `echo`。
+
+
+---
+
+## 45. `codesignaudit` 踩坑:三个真 bug,都是"看起来在跑其实早死了"
+
+写 `codesignaudit` 时连续踩了三个坑,都是**脚本静默退出但没有报错**。
+单独列出来,因为它们的症状(空输出 / 只输出一半)和"正常运行"很难区分。
+
+### 45.1 `status` 是 zsh 只读变量
+
+```zsh
+local status=OK
+# → _audit_one:19: read-only variable: status
+```
+
+zsh 的只读/特殊变量:`status`、`signame`、`signum`、`uid`、`gid`、`pid`、
+`EGID`、`GID`、`LINENO`、`HISTCMD`、`path`(覆盖 `PATH`)。
+
+**约定:结果变量叫 `sig` / `sev` / `nm`,不要用 `status` / `name` / `type`。**
+
+### 45.2 数组不加引号 → 整体 exit 141
+
+```zsh
+for app in $apps; do        # ✗
+  codesign --verbose=2 "$app"
+done
+```
+
+`apps` 里有 `ChatGPT Atlas.app`、`TRAE SOLO CN.app`、`Loon 3.app` 这种带空格的名字。
+不加引号时 zsh 按 IFS 拆开,`/Applications/ChatGPT` 不存在 → codesign 报错,
+`setopt pipefail` 把这个错误一路上抛,**整个脚本 exit 141(SIGPIPE)**。
+
+```zsh
+for app in "${apps[@]}"; do  # ✓
+```
+
+**鉴别**:`echo $?` 是 141 而不是 1;`grep 'for [a-z_]* in \$'`(没有引号)能静态扫出来。
+
+### 45.3 `grep | head -1` 在巨量输入上会杀掉整个脚本
+
+最隐蔽的一个。`codesign --verify` 对签名损坏的 App 会输出**数千行**:
+
+```
+ChatGPT Atlas.app: a sealed resource is missing or invalid
+file missing: .../Resources/sl_NEUTER.lproj/locale.pak
+file missing: .../Resources/pt_PT_NEUTER.lproj/locale.pak
+...  (实测 2000+ 行)
+```
+
+我写的是:
+
+```zsh
+detail=$(print -r -- "$out" | grep -oE '(file modified|file added): .*' | head -1)
+# → exit 141,脚本静默死在这里,只输出了 banner
+```
+
+`head -1` 拿到第一行就退出并**关闭管道**,上游 `grep` 收到 SIGPIPE(141),
+`pipefail` 把这个非 0 状态当成致命错误。数据量越大越容易触发——
+小规模测试时不会暴露。
+
+**修法:用 awk 的"找到就 exit"代替 head,让上游自然读到 EOF**:
+
+```zsh
+detail=$(print -r -- "$out" | awk '
+  /file modified/ || /file missing/ || /sealed resource/ {
+    if (!seen) { print; seen = 1; exit }   # exit 在 awk 内,管道正常关闭
+  }
+' || true)
+```
+
+**鉴别**:同样的 grep/head 在小输入上正常、在真实数据上 exit 141
+→ 就是 SIGPIPE,把 `head` 换成 `awk '{...; exit}'`。
+
+### 通用判据
+
+任何 `cmd | grep PATTERN | head -1` 形式的**赋值语句**,在 `setopt errexit pipefail` 下都有风险。
+要么末尾加 `|| true`,要么改用 awk 内部 exit,要么先 `head -c` 限制输入量。
+`if` 条件里的 `grep -q` 不受影响(无匹配走 else 分支,不算错误)。
+
+### 45.4 单 App 路径解析:候选顺序有讲究
+
+`--app Loon` 解析失败,但 `/Applications/Loon.app` 明明存在。原因是我先做了
+`${p%/}.app`,在当前目录生成了 `Loon.app` 相对路径。
+
+```zsh
+# ✗ 顺序错:先补 .app,当前目录没有就直接判失败
+for p in "$SINGLE" "/Applications/$SINGLE"; do ...
+
+# ✓ 顺序对:原样 → 补 .app → 路径拼接
+for c in "$SINGLE" "$SINGLE.app" "/Applications/$SINGLE" \
+         "/Applications/${SINGLE%.app}.app" ...; do
+  [[ -d $c ]] || continue
+  print -r -- "$c"; return 0
+done
+```
+
+现在 `--app Loon` / `--app Loon.app` / `--app /Applications/Loon 3.app` 三种形式都能命中。
+
+### 45.5 别对每个 App 跑 spctl
+
+`spctl --assess` 对 178 个 App 要 20 秒以上,而它给出的结论和
+`codesign --verify` 高度重叠。Gatekeeper 判定留到 `--app` 单个模式,
+全量模式只用 `codesign` + `xattr`。
+
+**签名状态的四档不要混淆**(README 表格里的 `codesign --verify` 输出):
+
+| 输出 | 含义 | 是安全问题吗 |
+|---|---|---|
+| `satisfies its Designated Requirement` | 签名完好 | 否 |
+| `resource envelope is obsolete` | 签名完好,资源封套格式旧 | 否 —— 开发方没更新而已 |
+| `file modified` / `file added` / `a sealed resource is missing` | 签名与内容对不上 | **是** —— 通常被打过补丁 |
+| `code object is not signed at all` | 无签名 | 看来源 |
+
+**这正好解释了 `logtriage` 里 `syspolicyd` 为什么疯狂刷日志**:
+前两档 App 不会被反复校验,只有第三档(签名损坏)会触发
+Gatekeeper 持续重新验证。本机实测 178 个 App 里有 3 个是第三档。
 
 ---
 
 ## 可继续扩展的方向
 
-现有 14 个脚本覆盖了硬件(内存/CPU/磁盘/电池/温度/网络/Wi-Fi)、
-进程(进程树/端口)、安全(登录审计/自启动项)、运维(大文件清理)。
-尚未覆盖的原生数据源:
+现有 **28 个脚本**覆盖了硬件(内存/CPU/磁盘/电池/温度/网络/Wi-Fi/显示器)、
+进程(进程树/端口)、安全(登录审计/自启动项/代码签名)、网络(路由/DNS/TCP 链路/代理链路)、
+系统诊断(Unified Log 分诊)、运维(大文件清理/共享打印)、文件操作。
 
-- **剪贴板历史** — `pbpaste` + `osascript`,不依赖第三方剪贴板工具
-- **TLS 证书有效期** — `openssl s_client` 检查内网/公司证书是否过期
-- **网络诊断** — ping / traceroute / `dscacheutil -q host` 组合,定位办公网问题
-- **Spotlight 索引状态** — `mdutil -sa`,公司机常被 MDM 关掉
-- **软件更新状态** — `softwareupdate -l`,检查是否有待装补丁
-- **打印队列** — `lpstat -p / -d`,公司常配共享打印机
-- **字体清单** — `system_profiler SPFontsDataType`,排查排版问题
-- **通知与专注模式** — `defaults read com.apple.ncprefs`,看哪些 app 在打扰你
-- **能耗与电池循环** — `pmset -g` 补充 `batwatch` 缺的维度
+按"补齐用户已明确提出的需求"排序:
+
+- **`devstack`** — 开发环境全景。PATH 里有几个 python/node/go、各版本、
+  `xcode-select -p` 指向、SDK 版本、已装的 CLT。这台机器上同时有
+  python3 / node / go / java,还装了 Xcode-beta 和 Xcode,版本对不对没人知道。
+- **`spaceaudit`** — APFS 空间真相。`diskutil apfs list` 显示的容器占用和
+  `du` 统计对不上是常态(Finder 排除 Time Machine 本地快照和 purgeable 空间)。
+- **`dualview`** — 多显示器拓扑:分辨率/刷新率/色域/排列位置。
+  排查"外接屏 4K 但只跑 60Hz"这类问题。
+- **`bandwidth`** — `networkQuality` 的封装。测带宽 + 响应性 + 是否有代理干扰。
+- **`clippaste`** — 剪贴板元信息。**优先级最低**:`pbpaste` 只能读当前一条,
+  没有历史功能,而那正是需要第三方工具的原因。
+
+不建议做的:
+
+- **凭据/Keychain 读取** — 需要交互解锁,且涉及敏感数据,不适合放进诊断工具集。
+- **任何需要 sudo 的** — 这批脚本的设计前提是完全免 sudo 即可跑通。
