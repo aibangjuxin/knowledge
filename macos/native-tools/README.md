@@ -35,6 +35,16 @@
 | `logtriage` | 系统日志分诊:谁在刷错误 / 签名异常 / 循环失败 | log show --style json | 单次 / `--gatekeeper` / `--timeline` / `--raw` |
 | `proxytrace` | 代理链路:TUN vs 系统代理 vs PAC 谁在生效 | scutil --proxy/--dns, networksetup, route | 单次 / `--mode` / `--json` |
 | `codesignaudit` | App 签名与供应链:签名完整性 / Team 来源 / Hardened Runtime / quarantine | codesign, spctl, xattr | 单次 / `--issues` / `--teams` / `--app` / `--json` |
+| `devstack` | 开发环境全景:PATH 链 / Xcode 与 CLT / SDK 矩阵 / 语言运行时 / 版本冲突 | xcode-select, xcodebuild, xcrun, pkgutil, whence | 单次 / `--path` / `--xcode` / `--langs` / `--json` |
+| `tccaudit` | 隐私权限审计:谁拿到了完全磁盘 / 屏幕录制 / 辅助功能 | sqlite3 (TCC.db), date | 单次 / `--disk` / `--screen` / `--zombies` / `--json` |
+| `sleepaudit` | 睡眠 / 唤醒 / 电源事件审计 + 谁在阻止休眠 | pmset -g log, pmset -g batt, sysctl | 单次 / `--hours` / `--days` / `--timeline` / `--holders` / `--json` |
+| `installhist` | 安装历史 + 自动更新策略(装过什么、谁装的、策略有没有被关) | system_profiler SPInstallHistoryDataType, defaults | 单次 / `--recent` / `--policy` / `--json` |
+| `spaceaudit` | APFS 空间对账:容器 / 卷 / 快照 / 差额(空间到底去哪了) | diskutil apfs list, listSnapshots, df -k, tmutil | 单次 / `--containers` / `--volumes` / `--snapshots` / `--json` |
+| `mdwatch` | Spotlight 索引观察器:搜不到文件 / 开机卡 | mdutil, mdfind, pgrep | 单次 / `--volumes` / `--excluded` / `--deep` / `--json` |
+| `dupescan` | 重复文件扫描(先按大小筛,再 SHA-256 校验) | find, stat, shasum | 单次 / `--dir` / `--min-size` / `--no-hash` / `--json` |
+| `permcheck` | 权限与 ACL 体检:世界可写 / SUID / 越权 ACL | stat, ls -le, find -perm | 单次 / `--dir` / `--system` / `--json` |
+| `bandwidth` | 带宽 / 响应性实测 + 缓冲膨胀 + 历史趋势 | networkQuality -c, scutil --proxy, route | 单次 / `--seconds` / `--quick` / `--interface` / `--history` / `--json` |
+| `dualview` | 多显示器拓扑:排列几何 / HiDPI / 刷新率 / 主屏 | osascript -l JavaScript (NSScreen + CoreGraphics), system_profiler | 单次 / `--map` / `--list` / `--json` |
 
 ## 安装
 
@@ -819,26 +829,284 @@ Gatekeeper 持续重新验证。本机实测 178 个 App 里有 3 个是第三�
 
 ---
 
+## 46. `log stream` 把 "Filtering the log data using …" 打到 stdout
+
+```zsh
+# 实测
+$ log stream --style compact --predicate 'x == 1' > out.txt 2>err.txt
+head -1 out.txt
+# → Filtering the log data using "x == 1"      ← 这不是日志,是横幅
+$ cat err.txt                                 # ← 空的
+```
+
+后果:任何 `log stream … | grep/awk` 都会先吃到这一行,统计结果永远多 1 条。
+做实时跟随脚本时必须 `--predicate` 之后立刻过滤掉以 `Filtering the log data` 开头的行,
+或者干脆改用 `log show --last 1s` 轮询。
+
+## 47. zsh 不对未加引号的参数做分词(bash 会)
+
+```zsh
+kindflag="-type f"
+find "$dir" $kindflag -perm -002          # ✗ find 收到的是**一个**叫 "-type f" 的参数
+find "$dir" ${=kindflag} -perm -002        # ✓ ${=var} 强制分词
+find "$dir" -type f -perm -002             # ✓ 最省事:别用变量拼参数
+
+# 正确做法:数组
+local -a kindflag; kindflag=(-type f)
+find "$dir" "${kindflag[@]}" -perm -002    # ✓
+```
+
+实测踩过的现场:写 `permcheck` 时把 `-type f/-type d` 抽成变量,
+结果 find 静默不匹配任何东西,**不报错、不输出、统计为 0** ——
+看起来像"这台机器权限没问题",其实是根本没扫。
+
+## 48. BSD awk 的 printf:参数多于转换符时**静默丢弃**
+
+```awk
+# 10 个参数,格式串只有 8 个 %s
+printf "  %s%s%s %-52s %s%s  %s%s\n", col, mark, r, $2, d, $5, r, d, reason, r
+#                                                                        ↑↑ 没了
+```
+
+不报错、不循环补行(这是 zsh 的 `printf` 行为,两者不一样),
+表现为"某一列永远是空的"。**写完 printf 立刻数一遍 %s 和参数**。
+另外格式串里的空格是**字面量**,不会被"对齐"到列上 ——
+`"%s%s%s  %s%s%s"` 里的两个空格是第 3 组和第 4 组之间的分隔,
+不是"值和说明之间"的分隔,放错组的位置就会看到值和说明粘在一起。
+
+## 49. zsh 函数里 `X || return` 会带着失败状态返回
+
+```zsh
+f() { $FLAG || return; ... }     # ✗ $FLAG 为假时 return,返回码是 1
+g() { $FLAG || return 0; ... }   # ✓
+```
+
+`$FLAG || return` 里 `return` 继承上一条命令(`$FLAG`)的退出码 = 1,
+调用方立刻被 `errexit` 打死。现场表现是脚本跑完前半段后 **exit 1 且不打印任何错误**。
+排查这类"静默死亡"时用 `zsh -x 脚本 2>&1 | tail` 看最后一条 trace 停在哪。
+
+## 50. `find` 遇到读不了的目录会 exit 1,pipefail 会把它变成静默死亡
+
+```zsh
+out=$(find ~ -type f -exec stat -f '%Sp' {} + | awk '...')   # ✗
+# find 遇到 ~/Library 里某个受保护目录 → exit 1
+# pipefail → 管道状态 1 → errexit → 脚本当场死掉,stdout 一个字都没有
+out=$(find ~ -type f -exec stat -f '%Sp' {} + 2>/dev/null | awk '...' || true)  # ✓
+```
+
+同理适用于任何"可能部分失败"的采集命令:`stat`、`diskutil`、`mdutil`。
+**采集阶段一律 `|| true`,让"某一项没采到"变成空数据而不是整脚本死亡。**
+
+## 51. 解析系统日志必须 `LC_ALL=C`
+
+```zsh
+pmset -g log | awk '{ if (match($0, /…/)) … }'
+# awk: towc: multibyte conversion failure on: 'Lex\x92s Magic Trackpad …'
+# input record number 41172
+```
+
+`pmset` / `log show` / `system_profiler` 的输出里混着非 UTF-8 字节(设备名、人名),
+BSD awk 默认按多字节处理,遇到坏字节就**整条管道死掉**,而且报错行号是几万行之后的那行。
+所有解析系统输出的 awk 一律加 `LC_ALL=C`,顺带 `length()` 变成字节语义,
+对 ASCII 日志正是想要的(渲染中文时另说,见 #16)。
+
+## 52. 绝对不要在 awk 里把"一组多行"拼进一个字段再交给 `while read`
+
+```zsh
+# ✗ awk 里 p[h] = p[h] "\n" path,输出一个"含换行的字段"
+print -r -- "$out" | while IFS=$'\t' read -r n paths; do …; done
+# read 是按行读的:paths 只拿到第一行,剩下的行被当成新记录
+# → 出现 count=0 / wasted 为负数的垃圾数据,而且不报错
+```
+
+**凡是"一组多行"的数据,一律保持行式流**:
+每行一条记录 + 组 id,回到 shell 后用关联数组在内存里聚合
+(`paths_of[$size]+="$path"$'\n'`)。`dupescan` 整条流水线都是按这个原则写的。
+
+## 53. `${(f)…}` 对位置参数的三种写法只有一种能用
+
+```zsh
+for p in ${(f)"$1"}; do …; done     # ✗ bad substitution
+for p in ${(f)$1};   do …; done     # ✗ bad substitution
+for p in ${(f)1};    do …; done     # ✓ 只有裸位置参数行
+for p in ${(f)x};    do …; done     # ✓ 具名变量也行
+for p in ${(@f)arr}; do …; done     # ✓ 数组要用 @,否则元素会被空格拼成一串
+```
+
+`${(f)"$(cmd)"}` 可以用(命令替换),`${(f)"$var"}` 和 `${(f)$var}` 都不行。
+数组尤其注意:${(f)arr} 会把数组用空格 join 之后再按换行切,等于没切。
+
+## 54. `${(j:sep:)arr}` 的分隔符带空格会 bad substitution
+
+```zsh
+print -r -- "${(j:, :)out}"    # ✗ bad substitution(空格被当成 expansion 结束)
+sep=', '
+print -r -- "${(pj:$sep:)out}" # ✓
+print -r -- "${(j.$sep.)out}"  # ✗ 不展开变量,安静地拼出字面量 "$sep"
+```
+
+## 55. `ls -lde` 的 ACL 行带一个前导空格
+
+```zsh
+[[ $line == [0-9]*:* ]]          # ✗ 一条都匹配不上
+line=${line##[[:space:]]}         # ✓
+[[ $line == [0-9]*:* ]]
+```
+
+同理 `${name## }` 只去掉**一个**空格(zsh 里 " " 是单字符模式,不是"空格串"),
+清完还剩一串空格,再 `%% ' '` 一刀切下去整行变空 —— 快照一条都收集不到。
+trim 交给 `sed 's/.*Name:[[:space:]]*//'`。
+
+## 56. BSD `date` 的 `-v` 与 awk 里的逐行 `date` = 分钟级开销
+
+```zsh
+# ✗ 四万行日志 = 四万个 date 进程,整个脚本 2 分 39 秒
+awk '{ cmd = "date -j -f …"; cmd | getline epoch; … }'
+
+# ✓ pmset 的时间戳是 "YYYY-MM-DD HH:MM:SS",字典序 == 时间序,直接比字符串
+cutoff=$(date -v-${HOURS}H '+%Y-%m-%d %H:%M:%S')
+awk -v cutoff="$cutoff" '($1 " " $2) < cutoff { next } …'
+```
+
+`sleepaudit` 用这个办法从 159 秒降到 3 秒。凡是日志时间戳都是 ISO 格式的场景都适用。
+
+## 57. `${name## }` vs `stat -f %Sp` vs `df -k` 的三个小陷阱
+
+- `stat -f '%Sp'` 给符号权限串;GNU 的 `%s`(文件大小)在 macOS 上会得到"权限串",别照抄。
+- `df -k` 的单位是 **KB**;拿它当字节算,1.8T 会显示成 1862 GB。
+- `diskutil apfs list` 的行首 `|` 会把 `Size (Capacity Ceiling):` 拆成
+  `Size` / `(Capacity` / `Ceiling):` 三个字段,`$(NF-2)` 取到的是字符串 `"B"` → 结果恒为 0。
+  用正则抓第一段 `<数字> B` 才稳。
+
+## 58. zsh:重定向挂在 `read` 上 = 死循环,必须挂在 `while` 循环上
+
+同一个循环,只因为重定向写在哪一侧,一个正常一个原地转圈:
+
+```zsh
+# ✗ 死循环:<<< 挂在 read 上,永远读到第一行
+while IFS=$'\t' read -r a b c <<< "$data"
+do
+  print "$a"
+done
+
+# ✓ 正常:<<< 挂在 while 循环上(do…done 之后)
+while IFS=$'\t' read -r a b c
+do
+  print "$a"
+done <<< "$data"
+```
+
+```zsh
+# 文件重定向同理:写在 read 上死循环,写在 done 上正常
+while read -r l < /tmp/file; do print "$l"; done             # ✗
+while read -r l; do print "$l"; done < /tmp/file             # ✓
+
+{ while read -r l; do …; done; } < /tmp/file               # ✓ 整块重定向
+cat /tmp/file | while read -r l; do …; done                # ✓ 管道(循环体在子 shell 里)
+```
+
+原因:zsh 给**内建命令**附加的输入重定向会被保存/还原,每次 `read` 结束
+文件偏移量就回到原处,于是第一行被反复读。bash 没这个行为,所以照抄 bash 的写法
+就会中招。现场表现:CPU 跑满、一行输出都没有,只有 `zsh -x 脚本 2>&1 | tail`
+能看出它卡在 `read` 上。写循环时养成习惯:**重定向一律写在 `done` 后面**。
+
+## 59. `IFS=$'\t'` 会**折叠连续 tab**,空字段直接消失 → 后面所有值整体左移
+
+```zsh
+row=$(printf 'a\t\tb\tc')          # 中间是空字段
+IFS=$'\t' read -r x y z w <<< "$row"
+# x=a  y=c  z=w  w=(空)   ← b 跑到了 y,整体错一位
+```
+
+因为 tab 属于 IFS 的**空白字符**,连续空白会被当成一个分隔符。
+后果:解析系统输出时,某一项没取到值(正则没匹配上)就会让后面所有列错位,
+症状非常迷惑(比如"刷新率"那一列显示 `Supported` —— 那是 Rotation 的值)。
+
+两条纪律:
+
+- **awk 永远不要吐空字段**,没取到就写 `-`,读进 shell 之后再换回空串。
+- 需要区分"空字段"和"分隔符"时,换用非空白分隔符,例如
+  `IFS=$'\x01'`(记得告诉 awk `-v OFS="\x01"`)。
+
+## 60. JXA 拿不到的东西(写显示/窗口类脚本前先看这段)
+
+```javascript
+ObjC.import('AppKit'); ObjC.import('CoreGraphics');
+const s = $.NSScreen.screens.objectAtIndex(0);
+s.frame                 // ✓ 逻辑矩形(Quartz 坐标,y 向下)
+s.backingScaleFactor    // ✓ 1 或 2
+s.maximumFramesPerSecond// ✓ 当前刷新率
+s.localizedName         // ✓ 屏名(和 system_profiler 里的名字一致,可用来 join)
+s.screenNumber          // ✗ undefined!NSScreen 早就不有这个属性了
+$.CGDisplayBounds(id)   // ✓ 像素/点矩形 + 原点(排左右关系就靠它)
+$.CGDisplayIsBuiltin(id) / IsMain / IsOnline / IsAsleep / IsInMirrorSet  // ✓
+$.CGDisplayMaximumRefreshRate(id)   // ✗ 本机(macOS 27)已不存在
+$.CGDisplayCopyAllDisplayModes(id, null)  // ✗ 返回 CFArrayRef,JXA 里是个 "function",
+                                           //    没法下标,拿不到"这块屏支持哪些刷新率"
+```
+
+- 屏号要从 `deviceDescription.objectForKey('NSScreenNumber')` 取,
+  而且两边都要 `.intValue` 再比:对象用 `===` 比的是引用,永远 false。
+- `NSScreen.frame` 是 **Cocoa 坐标**(原点在左下、y 向上),
+  `CGDisplayBounds` 是 **Quartz 坐标**(原点在左上、y 向下),画拓扑图必须用后者,
+  否则整张图上下颠倒。
+- 想列出"这块屏支持的所有刷新率",系统自带接口在 JXA 里够不着,
+  只能改看 `system_profiler` 的当前模式 + 让用户自己去系统设置里选。
+
+## 61. `networkQuality -c` 的三个坑
+
+```zsh
+networkQuality -c -M 15      # ✓ 正常
+```
+
+1. **JSON 排版是 `"key" : value`,冒号前有空格**。
+   所以 awk 里 `$1` 是键名、`$2` 是 `":"` —— 按 `$2` 取值会拿到一串冒号,
+   所有数字变 0(实测"下行 0.0 Mbps")。取值要自己剥:
+   `val=$0; sub(/^[^:]*:[[:space:]]*/,"",val)`。
+2. **`dl_throughput` / `ul_throughput` 的单位是 bit/s**,不是 byte/s。
+   实测 905216013 字节 / 19.9 秒 = 363 Mbps,字段值 385357120 = 385 Mbps。
+   再乘 8 会凭空放大 8 倍。
+3. **`other` 是三层嵌套对象,而且是多行排版**:
+   `"other" : { "interface-type" : { "wifi" : 70 }, … }`。
+   想按"一行里有键和值"来解析只对单行紧凑格式有效,多行格式下取到的永远是外层键名。
+   要用状态机:记住外层键,吃下一行的内层键。
+
+另外 `responsiveness` 就是**满载延迟(ms)**,和 `base_rtt`(空闲 RTT)相减
+就是缓冲膨胀 —— 这是"带宽够但一开下载就卡"的量化指标。
+`logtriage` 里的 `log show --style json` 是紧凑排版(`{"k":v}`),和这里不同,
+别把两套解析混用。
+
+---
+
 ## 可继续扩展的方向
 
-现有 **28 个脚本**覆盖了硬件(内存/CPU/磁盘/电池/温度/网络/Wi-Fi/显示器)、
-进程(进程树/端口)、安全(登录审计/自启动项/代码签名)、网络(路由/DNS/TCP 链路/代理链路)、
-系统诊断(Unified Log 分诊)、运维(大文件清理/共享打印)、文件操作。
+现有 **38 个脚本**覆盖了硬件(内存/CPU/磁盘/电池/温度/网络/Wi-Fi/显示器/音频)、
+进程(进程树/端口/资源)、安全(登录审计/自启动项/代码签名/隐私权限/权限 ACL)、
+网络(路由/DNS/TCP 链路/代理链路/带宽实测)、系统诊断(Unified Log 分诊/Spotlight 索引)、
+运维(大文件清理/重复文件/共享打印/空间对账/权限体检)、
+开发环境(工具链全景/安装历史)、显示(单屏参数 + 多屏拓扑)。
 
-按"补齐用户已明确提出的需求"排序:
+下一批值得做的(按"能救最多人的排障场景"排序):
 
-- **`devstack`** — 开发环境全景。PATH 里有几个 python/node/go、各版本、
-  `xcode-select -p` 指向、SDK 版本、已装的 CLT。这台机器上同时有
-  python3 / node / go / java,还装了 Xcode-beta 和 Xcode,版本对不对没人知道。
-- **`spaceaudit`** — APFS 空间真相。`diskutil apfs list` 显示的容器占用和
-  `du` 统计对不上是常态(Finder 排除 Time Machine 本地快照和 purgeable 空间)。
-- **`dualview`** — 多显示器拓扑:分辨率/刷新率/色域/排列位置。
-  排查"外接屏 4K 但只跑 60Hz"这类问题。
-- **`bandwidth`** — `networkQuality` 的封装。测带宽 + 响应性 + 是否有代理干扰。
-- **`clippaste`** — 剪贴板元信息。**优先级最低**:`pbpaste` 只能读当前一条,
-  没有历史功能,而那正是需要第三方工具的原因。
+- **`loglive`** — 实时日志跟随。`logtriage` 是**回溯**分诊("刚才那一小时谁在刷错误"),
+  缺的是**实时**视角:`log stream` 自带的输出没法过滤高亮、不能按进程/级别聚合。
+  注意 `log stream` 会把 "Filtering the log data using ..." 这行打到 **stdout**,
+  不去掉的话下游全被污染(坑见 #46)。
+- **`trashwatch`** — 废纸篓体检。`~/.Trash` 几十 G 是 macOS 最常见的空间黑洞,
+  而且 Finder 里根本看不到(Finder 显示的是"清倒废纸篓"前的可用空间)。
+  零成本:du + stat。
+- **`launchsched`** — 定时任务全景。`launchwatch` 看了 LaunchAgents/Daemons,
+  但没解析 `StartCalendarInterval` / `StartInterval`(谁在半夜 3 点跑东西)
+  和 `/etc/periodic/*`。
+- **`fontlist`** — 字体清单与来源(系统 / 用户 / 某个 App 自带),
+  排查"文档排版在同事机器上不一样"。`system_profiler SPFontsDataType` 很慢,
+  直接遍历三个字体目录 + `atsutil` 更快。
+- **`clippaste`** — 剪贴板元信息(来源 App、格式、大小)。**优先级最低**:
+  `pbpaste` 只能读当前一条,没有历史功能,而那正是需要第三方工具的原因。
 
 不建议做的:
 
 - **凭据/Keychain 读取** — 需要交互解锁,且涉及敏感数据,不适合放进诊断工具集。
 - **任何需要 sudo 的** — 这批脚本的设计前提是完全免 sudo 即可跑通。
+- **实时高频采样类(powermetrics / fs_usage / networkQuality 循环)** — 要么要 root,
+  要么一次采样几秒起,和"单文件、秒级响应"的设计前提冲突。

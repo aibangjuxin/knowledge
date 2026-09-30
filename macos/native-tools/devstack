@@ -1,0 +1,482 @@
+#!/usr/bin/env zsh
+# devstack — 开发环境全景: PATH / Xcode / CLT / SDK 矩阵 / 语言运行时 / 版本冲突
+#
+# 设计目标:
+#   - 公司 Mac,无 brew / 无 python 脚本可依赖,只 zsh + 原生 binary
+#     (xcode-select / xcodebuild / pkgutil / sw_vers / java_home / wh﻿ence)
+#   - 回答一个问题:"我机器上到底装了几套开发工具,它们互相打不打架?"
+#   - 显示:
+#       ① PATH 链 — 每一段是否存在 / 有多少可执行文件 / 有没有重复段
+#       ② Xcode 与 Command Line Tools — 谁在生效,xcodebuild 与 CLT 版本是否一致
+#       ③ SDK 矩阵 — CLT 与当前 Xcode 各有哪些 MacOSX SDK,能否覆盖当前系统版本
+#       ④ 语言运行时 — python3 / node / go / java / ruby / rustc ... 版本与真实路径
+#       ⑤ 版本冲突 — 同名工具在 PATH 里有多个候选(谁 shadow 了谁)
+#       ⑥ 结论 — 最该先修的那几项
+#   - 只读:绝不修改 xcode-select / PATH / 任何配置
+#
+# 用法:
+#   devstack                # 全量单次
+#   devstack --path         # 只看 PATH 链
+#   devstack --xcode        # 只看 Xcode / CLT / SDK
+#   devstack --langs        # 只看语言运行时与冲突
+#   devstack --top N        # 冲突候选显示条数 (默认 5)
+#   devstack --json         # 机器可读输出
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i TOP_N=5
+typeset ONLY=''
+typeset AS_JSON=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --path)  ONLY='path';  shift ;;
+    --xcode) ONLY='xcode'; shift ;;
+    --langs) ONLY='langs'; shift ;;
+    --top|-n) TOP_N=$2; shift 2 ;;
+    --json)  AS_JSON=true; shift ;;
+    --version) echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--path|--xcode|--langs] [--top N] [--json]"
+      echo ""
+      echo "  --path    只看 PATH 链"
+      echo "  --xcode   只看 Xcode / CLT / SDK 矩阵"
+      echo "  --langs   只看语言运行时与版本冲突"
+      echo "  --top N   冲突候选显示条数 (默认 $TOP_N)"
+      echo "  --json    机器可读输出 (TSV,便于 pipe 给其他脚本)"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 && $AS_JSON == false ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+typeset -g J_XCODE_SELECT='' J_XCODE_VER='' J_CLT_VER='' J_SDK_CUR='' J_OS_VER=''
+typeset -g J_DEV_SELECT=''
+typeset -g J_PATH_SEGS=0 J_PATH_MISSING=0 J_PATH_DUP=0
+typeset -g -a J_PATH=()        # dir<TAB>ok|missing<TAB>exe_count
+typeset -g -a J_LANGS=()      # name<TAB>version<TAB>resolvedtypeset -g -a J_CONFLICTS=()  # name<TAB>candidates
+
+# ---- 小工具 ----------------------------------------------------------------
+# 取命令第一行版本,跨平台写法:不同工具的 --version 行为差别很大
+# (有些写 stdout,有些写 stderr,有些两个都写),所以统一 2>&1 + head -1。
+# 注意:这里不能用 `head -1` 后再 pipe 给别的命令 —— pipefail 下上游会收到
+# SIGPIPE(141)直接把脚本打死。单条命令的 head 是安全的,只在自己末尾收口。
+_first_line() {
+  local out
+  out=$("$@" 2>&1 | head -1) || out=''
+  print -r -- "$out"
+}
+
+# realpath 只在 macOS 12.3+ 存在;老系统回退到"取绝对路径但不解引用 symlink"
+_resolve() {
+  local p=$1
+  [[ -e $p ]] || { print -r -- "$p"; return }
+  if [[ -x /bin/realpath ]]; then
+    /bin/realpath "$p" 2>/dev/null || print -r -- "$p"
+  else
+    print -r -- "$p"
+  fi
+}
+
+# ---- ① PATH 链 -------------------------------------------------------------
+_collect_path() {
+  local seg n_files
+  local -A seen
+  local -a exes
+  local dup=0 missing=0
+  for seg in ${(s/:/)PATH}; do
+    [[ -z $seg ]] && continue
+    if [[ -d $seg ]]; then
+      # 统计可执行文件数:用 zsh glob 限定符 (N=空匹配不报错, x=有执行位),
+      # 千万别写成 `ls | while read; do [[ -x ... ]] && print x; done | wc -l` ——
+      # 那个 while 的最后一次 [[ 失败返回 1,整条管道状态 1,errexit 直接把脚本打死,
+      # 而且一个字都不吐(实测 exit 1 + 空输出)。
+      exes=("$seg"/*(N.x))
+      n_files=${#exes}
+      J_PATH+=("$seg"$'\t'"ok"$'\t'"$n_files")
+    else
+      J_PATH+=("$seg"$'\t'"missing"$'\t'"0")
+      (( missing = missing + 1 ))
+    fi
+    if [[ -n ${seen[$seg]:-} ]]; then
+      (( dup = dup + 1 ))
+    else
+      seen[$seg]=1
+    fi
+  done
+  J_PATH_SEGS=${#J_PATH}
+  J_PATH_MISSING=$missing
+  J_PATH_DUP=$dup
+  J_DEV_SELECT="segments=${#J_PATH} missing=$missing dup=$dup"
+}
+
+# ---- ② Xcode / CLT ---------------------------------------------------------
+_collect_xcode() {
+  J_OS_VER=$(sw_vers -productVersion 2>/dev/null || echo '?')
+
+  # xcode-select -p 在没装任何 developer dir 时会失败并把错误打到 stderr
+  J_XCODE_SELECT=$(_resolve "$(xcode-select -p 2>/dev/null)") || J_XCODE_SELECT='(none)'
+  J_XCODE_VER=$(_first_line xcodebuild -version)
+  [[ $J_XCODE_VER == Xcode* ]] || J_XCODE_VER='(not active)'
+
+  # CLT 是独立 receipt,版本号长这样: 27.0.0.0.1788430756
+  local clt
+  clt=$(pkgutil --pkg-info=com.apple.pkg.CLTools_Executables 2>/dev/null | awk '/^version:/ {print $2; exit}')
+  J_CLT_VER=${clt:-'(not installed)'}
+
+  # 当前 SDK: xcrun --show-sdk-version 走的是 xcode-select 指向的那个 developer dir
+  J_SDK_CUR=$(_first_line xcrun --show-sdk-version)
+  [[ $J_SDK_CUR =~ ^[0-9] ]] || J_SDK_CUR='(unknown)'
+}
+
+# ---- ③ SDK 矩阵 ------------------------------------------------------------
+# 只列 SDK 名字 + 版本,一行一个,交给渲染层排版
+_collect_sdks() {
+  local -a roots
+  local dev J_CLT_SDK_ROOT
+  dev=$(xcode-select -p 2>/dev/null)
+  J_CLT_SDK_ROOT='/Library/Developer/CommandLineTools/SDKs'
+  roots=()
+  [[ -n $dev ]] && roots+=("Xcode${_TAB}$dev/Platforms/MacOSX.platform/Developer/SDKs")
+  roots+=("CLT${_TAB}$J_CLT_SDK_ROOT")
+
+  # 坑:${(f)roots} 会先把数组用空格拼成一个字符串再按换行切 -> 两个 SDK 根
+  # 粘成一行。数组要用 ${(@f)roots},@ 表示"逐个元素各自应用标志"。
+  local where dir
+  for where in ${(@f)roots}; do
+    local label=${where%%$'\t'*}
+    dir=${where#*$'\t'}
+    if [[ ! -d $dir ]]; then
+      print -r -- "$label${_TAB}-${_TAB}(no SDKs at $dir)"
+      continue
+    fi
+    local sdk
+    for sdk in ${(f)"$(command ls -1 "$dir" 2>/dev/null)"}; do
+      # MacOSX.sdk 是软链(指向当前 default),真正带版本的是 MacOSX27.0.sdk
+      print -r -- "$label${_TAB}$sdk${_TAB}$dir/$sdk"
+    done
+  done
+}
+typeset -r _TAB=$'\t'
+
+# ---- ④ 语言运行时 ----------------------------------------------------------
+# 覆盖公司机常见的语言;故意用白名单而不是遍历 PATH,否则输出会失控
+_collect_langs() {
+  local c name ver resolved
+  local -a cmds=(python3 pip3 node npm go java javac ruby gem rustc cargo perl php dotnet swift clang git make cmake docker gh brew)
+  for c in $cmds; do
+    if ! command -v $c >/dev/null 2>&1; then
+      J_LANGS+=("$c${_TAB}-${_TAB}-")
+      continue
+    fi
+    # 每个语言挑一个最可能输出版本号的参数组合
+    case $c in
+      python3) ver=$(_first_line python3 --version) ;;
+      pip3)    ver=$(_first_line pip3 --version) ;;
+      node)    ver=$(_first_line node --version) ;;
+      npm)     ver=$(_first_line npm --version) ;;
+      go)      ver=$(_first_line go version) ;;
+      java|javac) ver=$(_first_line java -version 2>/dev/null) ; [[ -z $ver ]] && ver=$(_first_line javac -version) ;;
+      ruby)    ver=$(_first_line ruby --version) ;;
+      gem)     ver=$(_first_line gem --version) ;;
+      rustc)   ver=$(_first_line rustc --version) ;;
+      cargo)   ver=$(_first_line cargo --version) ;;
+      perl)    # perl -v 第一行是空行,直接取会得到空串
+                ver=$(_first_line perl -e 'print "perl $]\n"') ;;
+      php)     ver=$(_first_line php --version) ;;
+      dotnet)  ver=$(_first_line dotnet --version) ;;
+      swift)   ver=$(_first_line swift --version) ;;
+      clang)   ver=$(_first_line clang --version) ;;
+      git)     ver=$(_first_line git --version) ;;
+      make)    ver=$(_first_line make --version) ;;
+      cmake)   ver=$(_first_line cmake --version) ;;
+      docker)  ver=$(_first_line docker --version) ;;
+      gh)      ver=$(_first_line gh --version) ;;
+      brew)    ver=$(_first_line brew --version) ;;
+      *)       ver='(installed)' ;;
+    esac
+    [[ -n $ver ]] || ver='(version unknown)'
+    resolved=$(_resolve "$(command -v $c)")
+    J_LANGS+=("$c${_TAB}$ver${_TAB}$resolved")
+  done
+}
+
+# ---- ⑤ 版本冲突 ------------------------------------------------------------
+# 同一个命令在 PATH 里有多个候选 = 谁在 shadow 谁。
+# whence -a 是 zsh 内建,bash 没有,所以只能用 zsh 写这个脚本(也算个理由)。
+_collect_conflicts() {
+  # local 必须只在函数开头写一次:放循环体内第二次起 zsh 会把值回显成
+  # "list=xxx" 打到 stdout,把表格冲得七零八落(实测在 banner 之前刷一屏)。
+  local c n p r list
+  local -A seen
+  local -a cmds=(python3 python node npm go java ruby rustc cargo clang git docker)
+  for c in $cmds; do
+    # PATH 里有重复段时 whence -a 会把同一条路径重复吐好几遍,
+    # 所以这里按解析后的真实路径去重再计数,否则 "6 个候选" 其实只有 2 个。
+    seen=()
+    for p in ${(f)"$(whence -a $c 2>/dev/null)"}; do
+      [[ -n $p ]] || continue
+      r=$(_resolve "$p")
+      seen[$r]=1
+    done
+    n=${#seen}
+    if (( n > 1 )); then
+      # 靠前的 PATH 段 shadow 靠后的,列表按出现顺序给
+      list=$(_resolve_all "$(whence -a $c 2>/dev/null)")
+      J_CONFLICTS+=("$c${_TAB}$n${_TAB}$list")
+    fi
+  done
+}
+_resolve_all() {
+  # 两个坑:
+  #  ① 分隔符带空格时不能用 ${(j:, :)out} —— zsh 把空格当 expansion 结束,报
+  #     "bad substitution"; 要用变量 + ${(pj:$sep:)out}。而 ${(j.$sep.)out} 这种
+  #     点写法不展开变量,会安静地拼出字面量 "$sep"。
+  #  ② ${(f)"$1"} 和 ${(f)$1} 在 zsh 5.9 都是 bad substitution;只有裸位置参数
+  #     ${(f)1} 或具名变量 ${(f)x}、以及 ${(f)"$(cmd)"} 能用。
+  local p r sep=', ' out=()
+  local -A seen
+  for p in ${(f)1}; do
+    [[ -n $p ]] || continue
+    r=$(_resolve "$p")
+    # PATH 里有重复段时 whence -a 会把同一个路径吐好几遍,展示前先去重
+    [[ -n ${seen[$r]:-} ]] && continue
+    seen[$r]=1
+    out+=("$r")
+  done
+  print -r -- "${(pj:$sep:)out}"
+}
+
+# ---- ⑥ 结论 ----------------------------------------------------------------
+_verdicts() {
+  local bad=0 warn=0
+  local n_clt n_xcode n_xcode_cmp
+
+  # Xcode 与 CLT 版本必须同 major
+  if [[ $J_XCODE_VER == Xcode* ]]; then
+    n_xcode=${J_XCODE_VER#Xcode }; n_xcode=${n_xcode%% *}
+  else
+    printf "bad\t无生效的 Xcode\txcode-select 指向 %s\t装 CLT 或设 xcode-select 路径\n" "$J_XCODE_SELECT"
+    (( bad = bad + 1 ))
+  fi
+  if [[ $J_CLT_VER == '(not installed)' ]]; then
+    printf "warn\t未装 Command Line Tools\t-\tgit / make / clang 全部缺失\n"
+    (( warn = warn + 1 ))
+  else
+    # 只比 major:xcodebuild 给 "Xcode 27.0",CLT receipt 给 "27.0.0.0.1788…"
+    n_clt=${J_CLT_VER%%.*}; n_clt=${n_clt%%.*}
+    n_xcode_cmp=${n_xcode%%.*}
+    if [[ -n ${n_xcode_cmp:-} && $n_clt != "$n_xcode_cmp" ]]; then
+      printf "warn\tXcode 与 CLT 大版本不一致\tXcode %s / CLT %s\t CLT 落后会让 xcrun 报 SDK 缺失\n" \
+        "$n_xcode" "$n_clt"
+      (( warn = warn + 1 ))
+    fi
+  fi
+
+  # Xcode-beta 指向 + 同机存在正式版 = 典型"编译结果诡异"来源
+  if [[ $J_XCODE_SELECT == *Xcode-beta* ]] && command ls -d /Applications/Xcode.app >/dev/null 2>&1; then
+    printf "bad\txcode-select 指向 beta 版\t%s\tXcode/CLT 混用会产出找不到 SDK 的二进制\n" "$J_XCODE_SELECT"
+    (( bad = bad + 1 ))
+  fi
+
+  # 当前系统版本是否有对应 SDK
+  if [[ $J_SDK_CUR != '(unknown)' ]]; then
+    local os_major=${J_OS_VER%%.*}
+    if [[ $J_SDK_CUR != "$os_major".* ]]; then
+      printf "warn\t当前 SDK 落后于系统\tSDK %s / 系统 %s\t升级 Xcode 后旧项目可能编不过\n" \
+        "$J_SDK_CUR" "$J_OS_VER"
+      (( warn = warn + 1 ))
+    fi
+  fi
+
+  # 冲突行太长,这里只报名字 + 候选数,完整路径在"版本冲突"小节里
+  local entry
+  for entry in $J_CONFLICTS; do
+    printf "warn\tPATH 里有多个 %s\t%d 个候选\t靠前的 shadow 靠后的,容易装错依赖\n" \
+      "${entry%%$'\t'*}" "${${entry#*$'\t'}%%$'\t'*}"
+    (( warn = warn + 1 ))
+  done
+
+  if (( J_PATH_MISSING > 0 )); then
+    printf "warn\tPATH 里有不存在的目录\t%d 段\t删掉比留着快\n" "$J_PATH_MISSING"
+    (( warn = warn + 1 ))
+  fi
+  if (( J_PATH_DUP > 0 )); then
+    printf "warn\tPATH 有重复目录\t%d 段\t每次命令都白扫一遍\n" "$J_PATH_DUP"
+    (( warn = warn + 1 ))
+  fi
+
+  if (( bad == 0 && warn == 0 )); then
+    printf "ok\t开发环境一致\tXcode %s / SDK %s / CLT %s\t没有需要修的项\n" \
+      "${n_xcode:-?}" "$J_SDK_CUR" "$J_CLT_VER"
+  fi
+  printf "info\t统计\tbad=%d warn=%d\t先修 bad 那一行\n" "$bad" "$warn"
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+# 统一的 4 字段行:level / name / value / note
+_kv() {
+  printf "%s\t%s\t%s\t%s\n" "$1" "$2" "$3" "$4"
+}
+
+_render_kv() {
+  # 关键:pad() 只补空格、绝不 substr 截断。BSD awk 的 length/substr 是按字节的,
+  # 截中文会把最后一个字切成一个乱码字节(实测"不一致"变成"不一�")。
+  # 列宽给够,宁可右边参差也不能切坏 UTF-8。
+  awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return s }
+    NF < 2 { next }
+    {
+      if ($1 == "ok")       { col = g;   mark = "✓" }
+      else if ($1 == "warn") { col = y;   mark = "!" }
+      else if ($1 == "bad")  { col = red; mark = "✗" }
+      else                  { col = d;   mark = "·" }
+      # 值的排版写法有个极易错的地方:printf 的格式串要按"列"分组,
+      # `  %s%s%s  %s%s%s  %s` 里的两个空格是组**之间**的分隔,不是"值和说明之间"的分隔。
+      # 写成 `%s%s%s  %s%s%s  %s%s%s  %s` 时,值/颜色/说明挤在同一组里,中间一个空格都没有,
+      # 两个空格反而跑到了行尾(看着就像 awk 把字吃了)。所以这里逐列写死:
+      #   标记 | 名称(补齐 26) | 值(补齐 46) | 说明
+      printf "  %s%s%s %s%s%s  %s%s  %s  %s\n", \
+        col, mark, r, b, pad($2, 26), r, pad($3, 46), d, $4, r
+    }
+  '
+}
+
+_render_sdks() {
+  awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET '
+    NF < 2 { next }
+    $2 == "-" { printf "  %s%-6s%s %s%s%s\n", b, $1, r, d, $3, r; next }
+    {
+      # MacOSX27.0.sdk -> 27.0,MacOSX.sdk 标成 "default(软链)"
+      ver = $2; sub(/^MacOSX/, "", ver); sub(/\.sdk$/, "", ver)
+      if (ver == "") tag = "default →"; else tag = ver
+      printf "  %s%-6s%s %-14s %s%s%s\n", b, $1, r, tag, d, $3, r
+    }
+  '
+}
+
+_render_langs() {
+  awk -F'\t' -v d=$C_DIM -v r=$C_RESET '
+    NF < 3 { next }
+    {
+      # 路径太长时只保留末两段,前面用 … 提示
+      p = $3
+      n = split(p, seg, "/")
+      if (n > 4) p = "…/" seg[n-1] "/" seg[n]
+      printf "  %-8s %-44s %s%s%s\n", $1, (length($2) > 44 ? substr($2, 1, 41) "..." : $2), d, p, r
+    }
+  '
+}
+
+_render_conflicts() {
+  awk -F'\t' -v d=$C_DIM -v r=$C_RESET -v y=$C_YELLOW -v limit="$TOP_N" '
+    NF < 3 { next }
+    {
+      if (++n > limit) { extra++; next }
+      printf "  %s%s%s (%d 个候选) %s%s%s\n", y, $1, r, $2, d, $3, r
+    }
+    END { if (extra) printf "  %s… 另有 %d 个命令存在多候选%s\n", d, extra, r }
+  '
+}
+
+_section() {
+  echo "${C_BOLD}$1${C_RESET}"
+  echo "  ${C_DIM}───────────────────────────────────────────────────────${C_RESET}"
+}
+
+_render_human() {
+  [[ -t 1 ]] && printf '\033[?25l\033[2J\033[H'
+  echo "${C_BOLD}${C_CYAN}═══ 开发环境全景 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  if [[ -z $ONLY || $ONLY == 'xcode' ]]; then
+    _section "Xcode / Command Line Tools"
+    # 坑:zsh 的 printf 在"参数比转换符多"时会拿格式串循环补行,于是多吐一行
+    # 字段错位、空列的垃圾行(看起来像数据乱了,其实是 printf 用法问题)。
+    # 所以这里统一走 _kv,固定 4 字段 4 参数,永远不多给。
+    {
+      _kv info "系统版本"     "$J_OS_VER"        "sw_vers"
+      _kv info "xcode-select" "$J_XCODE_SELECT" "当前开发者目录"
+      _kv ok   "xcodebuild"   "$J_XCODE_VER"     "实际在用的编译器"
+      _kv ok   "xcrun SDK"    "$J_SDK_CUR"       "编译时用的系统头文件版本"
+      _kv ok   "CLT receipt"  "$J_CLT_VER"       "xcode-select --install 装的,和 Xcode 分开"
+    } | _render_kv
+    echo
+    _section "SDK 矩阵"
+    _collect_sdks | _render_sdks
+    echo
+  fi
+
+  if [[ -z $ONLY || $ONLY == 'path' ]]; then
+    _section "PATH 链 (${J_PATH_SEGS} 段 · ${J_PATH_MISSING} 段不存在 · ${J_PATH_DUP} 段重复)"
+    print -rl -- $J_PATH | awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v red=$C_RED '
+      NF < 2 { next }
+      {
+        if ($2 == "ok") printf "  %s%2d%s %s%-44s%s %s%s 个可执行%s\n", b, NR, r, d, $1, r, g, $3, r
+        else            printf "  %s%2d%s %s%-44s%s %s目录不存在%s\n", b, NR, r, d, $1, r, red, r
+      }'
+    echo
+  fi
+
+  if [[ -z $ONLY || $ONLY == 'langs' ]]; then
+    _section "语言与工具"
+    print -rl -- $J_LANGS | _render_langs
+    echo
+    if (( ${#J_CONFLICTS} > 0 )); then
+      _section "版本冲突 (PATH 里多个候选)"
+      print -rl -- $J_CONFLICTS | _render_conflicts
+      echo
+    fi
+  fi
+
+  _section "结论"
+  _verdicts | _render_kv
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: xcode-select, xcodebuild, xcrun, pkgutil, sw_vers, java_home, whence${C_RESET}"
+  echo "${C_DIM}  修复命令: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer · xcode-select --install${C_RESET}"
+}
+
+_render_json() {
+  # 纯 TSV,避免 JSON 转义地狱;第一行是类型标记
+  print -r -- "meta${_TAB}${SCRIPT_NAME}${_TAB}${VERSION}${_TAB}$(date '+%Y-%m-%d %H:%M:%S')"
+  print -r -- "os${_TAB}${J_OS_VER}${_TAB}"
+  print -r -- "xcode_select${_TAB}${J_XCODE_SELECT}${_TAB}"
+  print -r -- "xcode${_TAB}${J_XCODE_VER}${_TAB}"
+  print -r -- "clt${_TAB}${J_CLT_VER}${_TAB}"
+  print -r -- "sdk_current${_TAB}${J_SDK_CUR}${_TAB}"
+  local e
+  for e in $J_PATH;   do print -r -- "path${_TAB}$e"; done
+  local row
+  for row in $J_LANGS; do print -r -- "lang${_TAB}$row"; done
+  for row in $J_CONFLICTS; do print -r -- "conflict${_TAB}$row"; done
+  _collect_sdks | while IFS=$'\t' read -r a b c; do print -r -- "sdk${_TAB}${a}${_TAB}${b}${_TAB}${c}"; done
+  _verdicts | while IFS=$'\t' read -r a b c d; do print -r -- "verdict${_TAB}${a}${_TAB}${b}${_TAB}${c}${_TAB}${d}"; done
+}
+
+_cleanup() { [[ -t 1 ]] && printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+# --json 模式不能让 trap 往 stdout 写东西,否则下游解析全乱(踩过)
+if $AS_JSON; then
+  trap - EXIT INT TERM
+  _collect_xcode; _collect_path; _collect_langs; _collect_conflicts
+  _render_json
+  exit 0
+fi
+
+_collect_xcode
+_collect_path
+_collect_langs
+_collect_conflicts
+_render_human

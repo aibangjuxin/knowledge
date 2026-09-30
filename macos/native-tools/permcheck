@@ -1,0 +1,421 @@
+#!/usr/bin/env zsh
+# permcheck — 权限与 ACL 体检:哪些文件/目录的权限松得不像话
+#
+# 设计目标:
+#   - "这个目录别人能写"、"这个文件居然是 777"、"我的家目录是 755",
+#     这些问题在 macOS 上不会有任何提示,但共享文件夹、U 盘拷贝、外接硬盘
+#     都会悄悄把权限搞坏
+#   - 免 brew / 免 sudo:只 zsh + find + stat + ls + getfacl 替代方案(ls -le)
+#   - 显示:
+#       ① 关键目录权限体检(家目录 / Desktop / Downloads / Documents / .Trash)
+#       ② 超出预期的 ACL 条目(ls -le 里的 allow write / allow delete)
+#       ③ 世界可写(world-writable)的文件与目录
+#       ④ SUID / SGID 位 —— 系统里出现陌生可执行文件时第一眼要看的地方
+#       ⑤ 临时目录 /tmp 的 sticky 位(没有它,别人能删你的文件)
+#       ⑥ 结论:哪些是真风险,哪些是 macOS 正常行为
+#   - 绝对只读:不 chmod、不 chown、不删 ACL
+#
+# 用法:
+#   permcheck                  # 体检(家目录范围,快)
+#   permcheck --dir ~/Downloads # 指定扫描目录
+#   permcheck --system         # 加上 SUID/SGID 与 /tmp 检查(略慢)
+#   permcheck --json
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -r _TAB=$'\t'
+typeset ONLY=''
+typeset AS_JSON=false
+typeset CHECK_SYSTEM=false
+typeset -a DIRS=()
+
+while (( $# > 0 )); do
+  case $1 in
+    --dir)      DIRS+=("$2"); shift 2 ;;
+    --system)   CHECK_SYSTEM=true; shift ;;
+    --json)     AS_JSON=true; shift ;;
+    --version)  echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--dir D]... [--system] [--json]"
+      echo ""
+      echo "  --dir D     追加扫描目录(默认家目录下的常见位置)"
+      echo "  --system    额外检查 SUID/SGID 与 /tmp sticky 位"
+      echo "  --json      TSV 输出"
+      exit 0
+      ;;
+    -*) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+    *)  DIRS+=("$1"); shift ;;
+  esac
+done
+
+# 默认不扫整个家目录:那要 90 秒,而且真正值得看的就那几个目录。
+# 确实要全扫时显式 `--dir ~`,慢是应该的。
+(( ${#DIRS} == 0 )) && DIRS=(
+  "$HOME/Desktop" "$HOME/Documents" "$HOME/Downloads"
+  "$HOME/Movies" "$HOME/Pictures"
+  "$HOME/Library/LaunchAgents" "$HOME/.Trash"
+)
+
+if [[ -t 1 && $AS_JSON == false ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+typeset -g -a J_KEY=()      # 目标<TAB>权限<TAB>期望<TAB>结论(ok/warn/bad)<TAB>说明
+typeset -g -a J_ACL=()      # 路径<TAB>owner<TAB>acl条目
+typeset -g -a J_WWORLD=()   # kind<TAB>perm<TAB>路径
+typeset -g -a J_SUID=()     # 路径<TAB>perm<TAB>owner
+typeset -g J_N_SCAN=0
+typeset -g J_OVER=0
+typeset -g J_TMP_STICKY='?'
+
+# ---- ① 关键目录权限 -------------------------------------------------------
+# stat -f '%Sp' 给出 drwxr-xr-x 这种符号串,比 %Lp(八进制)好读。
+# 坑:`stat -f '%Sp'` 在 Linux 上是 %s(文件大小),别照抄 GNU 写法。
+_dir_grade() {
+  local perm=$1 want=$2
+  # 去掉开头的类型位,只看 rwx 三组
+  local p=${perm#[dlbcps-]}
+  p=${p:0:9}
+  local other=${p:6:3}
+  local group=${p:3:3}
+  case $want in
+    private)   # 只有自己能写:other 不含 w
+      [[ $other == *w* ]] && { print "bad"; return }
+      print "ok"
+      ;;
+    noother)   # other 连读都不要
+      [[ $other != '---' ]] && { print "warn"; return }
+      print "ok"
+      ;;
+    nosticky)  # 需要 sticky 位(只对 /tmp 有意义)
+      print "ok"
+      ;;
+    *) print "info" ;;
+  esac
+}
+
+_collect_key_dirs() {
+  local d perm owner level note
+  for d in "$HOME" "$HOME/Desktop" "$HOME/Documents" "$HOME/Downloads" \
+           "$HOME/Movies" "$HOME/Pictures" "$HOME/.Trash" "$HOME/Library/LaunchAgents"; do
+    [[ -e $d ]] || continue
+    perm=$(stat -f '%Sp' "$d" 2>/dev/null) || continue
+    owner=$(stat -f '%Su' "$d" 2>/dev/null) || owner='?'
+    if [[ $d == "$HOME" ]]; then
+      level=$(_dir_grade "$perm" private)
+      note='家目录:别人不该能写'
+    elif [[ $d == "$HOME/.Trash" ]]; then
+      level=$(_dir_grade "$perm" private)
+      note='废纸篓:别人不该能读你的垃圾'
+    elif [[ $d == "$HOME/Library/LaunchAgents" ]]; then
+      level=$(_dir_grade "$perm" private)
+      note='自启动项目录:被改写等于被塞后门'
+    else
+      level=$(_dir_grade "$perm" noother)
+      note='共享/同步目录:other 可读属正常,不可写'
+    fi
+    J_KEY+=("${d}${_TAB}${perm}${_TAB}${owner}${_TAB}${level}${_TAB}${note}")
+  done
+}
+
+# ---- ② ACL ---------------------------------------------------------------
+# ls -le 的 ACL 行形如:
+#   0: group:everyone deny delete
+#   1: group:staff allow write
+# deny delete 是 macOS 家目录的正常行为(防误删),allow write 才是风险。
+_collect_acl() {
+  local d line entry n
+  for d in "$HOME" "$HOME/Desktop" "$HOME/Documents" "$HOME/Downloads" "$HOME/.Trash"; do
+    [[ -d $d ]] || continue
+    n=0
+    while IFS= read -r line; do
+      # 坑:ls -lde 的 ACL 行是 **带一个前导空格** 的 " 0: group:everyone deny delete",
+      # 直接用 [[ $line == [0-9]*:* ]] 判会一条都匹配不上(实测 ACL 列表永远为空)。
+      line=${line##[[:space:]]}
+      [[ $line == [0-9]*:* ]] || continue
+      (( n = n + 1 ))
+      entry=${line#*: }
+      J_ACL+=("${d}${_TAB}${entry}")
+    done < <(ls -lde "$d" 2>/dev/null)
+  done
+}
+
+# ---- ③ 世界可写 -----------------------------------------------------------
+# find -perm -o+w 是"others 有写位"。注意 BSD find 里 -perm -002 等价,
+# 但 -perm -o+w 在别的实现上语义不同,这里用数字形式最稳。
+_collect_world_writable() {
+  local dir kind perm out line1 tail
+  # 坑(最容易踩的一个 zsh / bash 差异):zsh 默认**不对未加引号的参数做分词**。
+  # `kindflag="-type f"; find "$dir" $kindflag …` 在 bash 里是 find "$dir" -type f …,
+  # 在 zsh 里 find 收到的是**一个**叫 "-type f" 的参数,于是既不报错也不匹配,
+  # 结果永远是"什么都没扫到"。要传多个参数就用数组 + "${arr[@]}"。
+  local -a kindflag
+  # set -- 会改函数的参数数组,这里单独一个 kind 变量走 if/else,避免串味
+  for dir in $DIRS; do
+    [[ -d $dir ]] || continue
+    # 坑(性能):`find | head -200 | while read; do stat; done` 是每个文件 fork 一次
+    # stat,扫 ~/Downloads 要 20 多秒。改成 `-exec stat ... {} +` 批量,
+    # 限流交给 awk 的 NR(用 head 会在 pipefail 下打死上游)。
+    for kind in f d; do
+      kindflag=(-type f)
+      [[ $kind == 'f' ]] || kindflag=(-type d)
+      # 坑(静默死亡):find 遇到读不了的目录会 exit 1,pipefail 会把这个状态
+      # 顺着管道传上来,errexit 立刻把脚本打死 —— 表现是"什么也不输出,exit 1"。
+      # 所以任何 `x=$(find … | …)` 都要 `|| true` 兜住。
+      out=$(find "$dir" "${kindflag[@]}" -perm -002 -exec stat -f '%Sp	%N' {} + 2>/dev/null \
+            | LC_ALL=C awk -v k="$([[ $kind == f ]] && print file || print dir)" -v lim=200 '
+              NR <= lim { print k "\t" $0 }
+              NR >  lim { over++ }
+              END { if (over) printf "OVER\t%d\n", over }
+            ' || true)
+      [[ -z $out ]] && continue
+      line1=${out%%$'\n'*}
+      tail=${out#*$'\n'}
+      if [[ $line1 == OVER* ]]; then
+        J_OVER=$(( J_OVER + ${line1#*OVER} ))
+        tail=${out#*$'\n'}; tail=${tail#*$'\n'}
+      fi
+      while IFS= read -r perm; do
+        [[ -n $perm && $perm != OVER* ]] || continue
+        # awk 出来的是 "kind<TAB>权限<TAB>路径",三个字段都要留:
+        # 渲染层按 $1/$2/$3 取,少拼一个就会出现"统计说有、表格却空着"
+        J_WWORLD+=("${perm%%$'\t'*}${_TAB}${${perm#*$'\t'}%%$'\t'*}${_TAB}${perm##*$'\t'}")
+        (( J_N_SCAN = J_N_SCAN + 1 ))
+      done <<< "$tail"
+    done
+  done
+}
+
+# ---- ④ SUID / SGID + /tmp sticky -----------------------------------------
+# 坑:macOS 自带的 SUID 程序是系统的一部分(/usr/bin/top 等),不是风险。
+# 真正值得警惕的是 /usr/local/bin、/opt、~/bin 这些"用户自己装的"位置里的。
+_collect_system() {
+  # 坑:`$X || return` 在条件为假时,函数会带着**上一条命令的失败状态**返回,
+  # 调用方立刻被 errexit 打死(表现:整个脚本 exit 1 且半行输出都没有)。必须 return 0。
+  $CHECK_SYSTEM || return 0
+  local dir perm t sout line2
+  local -a roots
+  roots=(/usr/local/bin /usr/local/sbin /opt "$HOME/bin" "$HOME/.local/bin")
+  for dir in $roots; do
+    [[ -d $dir ]] || continue
+    sout=$(find "$dir" \( -perm -4000 -o -perm -2000 \) -exec stat -f '%Sp	%N' {} + 2>/dev/null || true)
+    [[ -z $sout ]] && continue
+    while IFS= read -r line2; do
+      [[ -n $line2 ]] || continue
+      J_SUID+=("${line2##*$'\t'}${_TAB}${line2%%$'\t'*}")   # 路径 / 权限
+    done <<< "$sout"
+  done
+
+  # /tmp 必须是 drwxrwxrwt,末尾那个 t 就是 sticky
+  # 坑:新版 macOS 的 /tmp 是指向 /private/tmp 的**符号链接**,
+  # stat 默认看链接本身(显示 lrwxr-xr-x),要加 -L 跟到真正的目录。
+  t=$(stat -Lf '%Sp' /tmp 2>/dev/null)
+  if [[ ${t:9:1} == 't' ]]; then
+    J_TMP_STICKY='yes'
+  else
+    J_TMP_STICKY='no'
+  fi
+}
+
+# ---- ⑤ 结论 --------------------------------------------------------------
+_verdicts() {
+  local bad=0 warn=0 row
+
+  for row in $J_KEY; do
+    local lvl=${${row#*$'\t'#*$'\t'#*$'\t'}%%$'\t'*}
+    case $lvl in
+      bad)  (( bad = bad + 1 )) ;;
+      warn) (( warn = warn + 1 )) ;;
+    esac
+  done
+  if (( bad > 0 )); then
+    printf "bad\t%d 个关键目录权限过松\t-\t别人能写 = 你的文件能被改\n" "$bad"
+  elif (( warn > 0 )); then
+    printf "warn\t%d 个关键目录 other 可读\t-\t共享/网盘场景下属正常,私密目录请自行收紧\n" "$warn"
+  else
+    printf "ok\t关键目录权限正常\t-\t没有别人能写的地方\n"
+  fi
+
+  if (( J_N_SCAN > 0 )); then
+    printf "warn\t发现 %d 个世界可写对象\t见下表\tU 盘 / 压缩包解压最容易留下这种\n" "$J_N_SCAN"
+    (( warn = warn + 1 ))
+  else
+    printf "ok\t没发现世界可写的文件/目录\t-\n"
+  fi
+
+  # ACL 里带 allow write / allow delete 的才算风险,deny delete 是正常的
+  local risky=0 row2
+  for row2 in $J_ACL; do
+    [[ $row2 == *'allow write'* || $row2 == *'allow delete'* ]] && (( risky = risky + 1 ))
+  done
+  if (( risky > 0 )); then
+    printf "bad\tACL 里有 %d 条 allow write/delete\t-\t这些比权限位更隐蔽,ls -l 看不到\n" "$risky"
+    (( bad = bad + 1 ))
+  else
+    printf "ok\tACL 没有越权的 allow 规则\t-\tdeny delete 是 macOS 正常行为\n"
+  fi
+
+  if $CHECK_SYSTEM; then
+    if (( ${#J_SUID} > 0 )); then
+      printf "warn\t非系统目录里有 %d 个 SUID/SGID 文件\t-\t自己装的工具不该带这两个位\n" "${#J_SUID}"
+      (( warn = warn + 1 ))
+    else
+      printf "ok\t非系统目录没有 SUID/SGID\t-\n"
+    fi
+    if [[ $J_TMP_STICKY == 'yes' ]]; then
+      printf "ok\t/tmp 有 sticky 位\t-\t别人删不掉你的临时文件\n"
+    else
+      printf "bad\t/tmp 缺 sticky 位\t%s\t别人能删你的临时文件\n" "$(stat -Lf '%Sp' /tmp 2>/dev/null)"
+      (( bad = bad + 1 ))
+    fi
+  fi
+
+  printf "info\t统计\tbad=%d warn=%d\t先修 bad\n" "$bad" "$warn"
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_kv() { printf "%s\t%s\t%s\t%s\n" "$1" "$2" "$3" "$4"; }
+
+_render_kv() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return s }
+    NF < 2 { next }
+    {
+      if ($1 == "ok")       { col = g;   mark = "✓" }
+      else if ($1 == "warn") { col = y;   mark = "!" }
+      else if ($1 == "bad")  { col = red; mark = "✗" }
+      else                  { col = d;   mark = "·" }
+      printf "  %s%s%s %s%s%s  %s%s  %s  %s\n", col, mark, r, b, pad($2, 30), r, pad($3, 22), d, $4, r
+    }
+  '
+}
+
+_render_key() {
+  LC_ALL=C awk -F'\t' -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED '
+    NF < 5 { next }
+    {
+      # 字段:1=路径 2=权限 3=属主 4=结论 5=说明
+      if ($4 == "ok")       { col = g; mark = "✓" }
+      else if ($4 == "warn") { col = y; mark = "!" }
+      else if ($4 == "bad")  { col = red; mark = "✗" }
+      else                  { col = d; mark = "·" }
+      printf "  %s%s%s %-11s %-8s %-44s %s%s%s\n", col, mark, r, $2, $3, $1, d, $5, r
+    }
+  '
+}
+
+_render_acl() {
+  LC_ALL=C awk -F'\t' -v d=$C_DIM -v r=$C_RESET -v y=$C_YELLOW '
+    NF < 2 { next }
+    {
+      bad = ($2 ~ /allow write|allow delete/) ? 1 : 0
+      col = bad ? y : d
+      printf "  %s%-46s%s %s%s%s\n", d, $1, r, col, $2, r
+    }
+  '
+}
+
+_render_world() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v y=$C_YELLOW -v red=$C_RED '
+    NF < 3 { next }
+    {
+      n++
+      if (n > 20) { over++; next }
+      kind = ($1 == "file" ? "文件" : "目录")
+      printf "  %s%-4s%s %-11s %s%s%s\n", y, kind, r, $2, d, $3, r
+    }
+    END { if (over) printf "  %s… 另有 %d 个(用 --dir 缩小范围再看)%s\n", d, over, r }
+  '
+}
+
+_render_suid() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v y=$C_YELLOW '
+    NF < 2 { next }
+    { printf "  %-11s %s%s%s\n", $2, y, $1, r }
+  '
+}
+
+_section() {
+  echo "${C_BOLD}$1${C_RESET}"
+  echo "  ${C_DIM}───────────────────────────────────────────────────────${C_RESET}"
+}
+
+_render_human() {
+  [[ -t 1 ]] && printf '\033[?25l\033[2J\033[H'
+  echo "${C_BOLD}${C_CYAN}═══ 权限 / ACL 体检 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读,不改任何权限  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  _section "关键目录权限"
+  print -rl -- $J_KEY | _render_key
+  echo
+
+  _section "ACL 条目"
+  if (( ${#J_ACL} == 0 )); then
+    echo "  ${C_DIM}(没有 ACL 条目)${C_RESET}"
+  else
+    print -rl -- $J_ACL | _render_acl
+  fi
+  echo
+
+  _section "世界可写对象 (前 20)"
+  if (( J_N_SCAN == 0 )); then
+    echo "  ${C_DIM}(没发现)${C_RESET}"
+  else
+    print -rl -- $J_WWORLD | _render_world
+  fi
+  echo
+
+  if $CHECK_SYSTEM; then
+    _section "SUID / SGID 与 /tmp"
+    if (( ${#J_SUID} == 0 )); then
+      echo "  ${C_DIM}(非系统目录里没有 SUID/SGID 文件)${C_RESET}"
+    else
+      print -rl -- $J_SUID | _render_suid
+    fi
+    echo "  /tmp 权限: $(stat -Lf '%Sp' /tmp 2>/dev/null)  ${C_DIM}(末尾 t = sticky)${C_RESET}"
+    echo
+  fi
+
+  _section "结论"
+  _verdicts | _render_kv
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: stat, ls -le, find -perm${C_RESET}"
+  echo "${C_DIM}  修复(看清楚再执行): chmod 700 <目录> · 去掉 ACL: chmod -N <文件> · ACL 工具: chmod +a "everyone deny delete" <目录>${C_RESET}"
+}
+
+_render_json() {
+  local a b c d vout
+  print -r -- "meta${_TAB}${SCRIPT_NAME}${_TAB}${VERSION}${_TAB}$(date '+%Y-%m-%d %H:%M:%S')"
+  print -r -- "world_writable${_TAB}${J_N_SCAN}"
+  print -r -- "world_writable_truncated${_TAB}${J_OVER}"
+  print -r -- "tmp_sticky${_TAB}${J_TMP_STICKY}"
+  local row
+  for row in $J_KEY;   do print -r -- "keydir${_TAB}${row}"; done
+  for row in $J_ACL;   do print -r -- "acl${_TAB}${row}"; done
+  for row in $J_WWORLD; do print -r -- "world${_TAB}${row}"; done
+  for row in $J_SUID;  do print -r -- "suid${_TAB}${row}"; done
+  vout=$(_verdicts)
+  while IFS=$_TAB read -r a b c d; do print -r -- "verdict${_TAB}${a}${_TAB}${b}${_TAB}${c}${_TAB}${d}"; done <<< "$vout"
+}
+
+_cleanup() { [[ -t 1 ]] && printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+if $AS_JSON; then
+  trap - EXIT INT TERM
+  _collect_key_dirs; _collect_acl; _collect_world_writable; _collect_system
+  _render_json
+  exit 0
+fi
+
+_collect_key_dirs
+_collect_acl
+_collect_world_writable
+_collect_system
+_render_human

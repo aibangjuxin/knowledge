@@ -1,0 +1,475 @@
+#!/usr/bin/env zsh
+# spaceaudit — APFS 空间真相:df 说 1.4T 空闲,可用的到底有多少?
+#
+# 设计目标:
+#   - macOS 上"空间去哪了"永远说不清:`df` 只给一个数,Finder 显示的数字又对不上,
+#     因为 APFS 共享容器、可清除空间(purgeable)、本地快照、系统卷快照都在偷偷参与
+#   - 免 brew / 免 sudo:只 zsh + diskutil + df + tmutil
+#   - 显示:
+#       ① 每个 APFS 容器:容量上限 / 卷占用合计 / 未分配 —— 一眼看出哪个快满了
+#       ② 每个卷:名称 / 挂载点 / 实际占用,按占用排序
+#       ③ 差额对账:各卷占用之和 vs 容器"已用",差额就是快照 + 可清除空间
+#       ④ 系统卷快照 (com.apple.os.update-*) 与 Time Machine 本地快照
+#       ⑤ df / Finder 视角的交叉验证
+#       ⑥ 结论:哪个容器/卷该先动手
+#   - 只读:不删除任何快照,修复命令只打印
+#
+# 用法:
+#   spaceaudit                  # 全量
+#   spaceaudit --containers     # 只看容器表
+#   spaceaudit --volumes        # 只看卷明细
+#   spaceaudit --snapshots      # 只看快照
+#   spaceaudit --json
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -r _TAB=$'\t'
+typeset ONLY=''
+typeset AS_JSON=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --containers) ONLY='containers'; shift ;;
+    --volumes)    ONLY='volumes'; shift ;;
+    --snapshots)  ONLY='snapshots'; shift ;;
+    --json)       AS_JSON=true; shift ;;
+    --version)    echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--containers|--volumes|--snapshots] [--json]"
+      echo ""
+      echo "  --containers  只看 APFS 容器表"
+      echo "  --volumes     只看卷明细"
+      echo "  --snapshots   只看系统卷快照与 Time Machine 本地快照"
+      echo "  --json        TSV 输出"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 && $AS_JSON == false ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+typeset -g -a J_CONT=()     # disk<TAB>ceiling<TAB>inuse<TAB>free<TAB>pct
+typeset -g -a J_VOL=()      # container<TAB>disk<TAB>name<TAB>mount<TAB>bytes
+typeset -g -a J_SNAP=()     # kind<TAB>where<TAB>name<TAB>purgeable
+typeset -g -a J_DF=()       # fs<TAB>size_k<TAB>used_k<TAB>avail_k<TAB>pct
+typeset -g J_FULLEST='' J_FULLEST_PCT=0
+typeset -g J_GAP_TOTAL=0 J_VOL_TOTAL=0
+
+# ---- 容器与卷 -------------------------------------------------------------
+# diskutil apfs list 的结构(竖线是层级,不是数据):
+#   | +-- Container disk5 F7B5…-…
+#   |   ====================================================
+#   |   Size (Capacity Ceiling):      2000189177856 B (2.0 TB)
+#   |   Capacity In Use By Volumes:   621551869952 B (621.6 GB) (31.1% used)
+#   |   Capacity Not Allocated:       1378643628032 B (1.4 TB) (68.9% free)
+#   |   +-> Volume disk5s1 2D96…
+#   |   |   Name:                      mac
+#   |   |   Mount Point:               /
+#   |   |   Capacity Consumed:         13655818240 B (13.7 GB)
+#
+# 坑:字节数后面括号里是人类可读值,两者都要。排序和求和用**字节**,显示用可读值,
+# 而且"字节"那一串要按 B 前缀切出来 —— 直接拿括号里的值算会得到 0。
+_collect_apfs() {
+  local out
+  out=$(diskutil apfs list 2>/dev/null | LC_ALL=C awk '
+    # 取字节数:这一行形如
+    #   |   Size (Capacity Ceiling):   2000189177856 B (2.0 TB)
+    # 坑:不要用 $(NF-2) 取数 —— 行首的 "|" 和 "Size" "Capacity" "Ceiling):"
+    # 都是独立字段,NF 跟你以为的不一样,实测取到的是字符串 "B",结果全是 0。
+    # 稳妥做法:正则抓第一段 "<数字> B"。
+    function bytes(   a) {
+      if (match($0, /[0-9]+ B /) == 0) return 0
+      a = substr($0, RSTART, RLENGTH)
+      sub(/ B $/, "", a)
+      return a + 0
+    }
+    function human(b,   unit, v) {
+      if (b == "") return "-"
+      if (b >= 1099511627776) return sprintf("%.1f TB", b / 1099511627776)
+      if (b >= 1073741824)    return sprintf("%.1f GB", b / 1073741824)
+      if (b >= 1048576)       return sprintf("%.1f MB", b / 1048576)
+      if (b >= 1024)          return sprintf("%.1f KB", b / 1024)
+      return sprintf("%d B", b)
+    }
+    {
+      line = $0
+      if (line ~ /\+-- Container /) {
+        # flush 上一个容器
+        if (cur != "") printf "CONT\t%s\t%d\t%d\t%d\t%s\t%s\n", cur, ceil, used, free, human(ceil), human(free)
+        split(line, a, /[ ]+/)
+        cur = a[3]
+        ceil = 0; used = 0; free = 0
+        next
+      }
+      if (line ~ /Size \(Capacity Ceiling\):/)      { ceil = bytes(); next }
+      if (line ~ /Capacity In Use By Volumes:/)     { used = bytes(); next }
+      if (line ~ /Capacity Not Allocated:/)         { free = bytes(); next }
+      if (line ~ /\+-> Volume /) {
+        split(line, a, /[ ]+/)
+        vdisk = a[3]
+        vname = ""; vmount = ""; vbytes = 0
+        next
+      }
+      if (vdisk != "") {
+        if (line ~ /Name: /)         { vname = line; sub(/.*Name: */, "", vname); next }
+        if (line ~ /Mount Point: /)  { vmount = line; sub(/.*Mount Point: */, "", vmount); next }
+        if (line ~ /Capacity Consumed:/) {
+          vbytes = bytes()
+          printf "VOL\t%s\t%s\t%s\t%s\t%d\t%s\n", cur, vdisk, vname, vmount, vbytes, human(vbytes)
+          vdisk = ""
+        }
+      }
+    }
+    END {
+      if (cur != "") printf "CONT\t%s\t%d\t%d\t%d\t%s\t%s\n", cur, ceil, used, free, human(ceil), human(free)
+    }
+  ')
+  [[ -z $out ]] && return
+
+  local kind a b c d e f
+  while IFS=$_TAB read -r kind a b c d e f; do
+    case $kind in
+      CONT)
+        J_CONT+=("${a}${_TAB}${b}${_TAB}${c}${_TAB}${d}${_TAB}${e}${_TAB}${f}")
+        ;;
+      VOL)
+        J_VOL+=("${a}${_TAB}${b}${_TAB}${c}${_TAB}${d}${_TAB}${e}")
+        ;;
+    esac
+  done <<< "$out"
+}
+
+# ---- 快照 -----------------------------------------------------------------
+_collect_snapshots() {
+  # 取出所有"已挂载"的挂载点。
+  # 坑:别用 ${${row#*$'\t'}#*$'\t'} 这种三层嵌套参数展开去拆字段,
+  # 写到最后引号必然配不平,而且报错位置在几百行之后("parse error near '<'"),
+  # 根本指不到真正的出错行。拆 TSV 一律用 IFS= read。
+  local row2 mount name purge out line mp purge_all
+  local -a mounts
+  # 根卷的"可写快照"就是 /,而它在 `diskutil apfs list` 里显示成 Not Mounted
+  # (sealed system volume),不手动补上就会漏掉系统更新快照。
+  mounts=(/ /System/Volumes/Data)
+  for row2 in $J_VOL; do
+    IFS=$_TAB read -r _ _ _ mount _ <<< "$row2"
+    [[ -n $mount && $mount != 'Not Mounted' ]] && mounts+=("$mount")
+  done
+
+  # 系统卷快照:每次系统更新后都会留一个,长期不清就一直占着容器空间
+  for mp in $mounts; do
+    out=$(diskutil apfs listSnapshots "$mp" 2>/dev/null) || continue
+    [[ -z $out ]] && continue
+    purge_all=no
+    [[ $out == *'Purgeable:   Yes'* ]] && purge_all=yes
+    while IFS= read -r line; do
+      [[ $line == *'Name:'* ]] || continue
+      # 坑:${name## } 只去掉**一个**空格(zsh 里 " " 就是一个单字符模式,
+      # 不是"空格串"),所以清完还剩一串空格,再 %% ' ' 一刀切下去整行就成了空,
+      # 于是快照一条都收集不到。trim 用 sed 一次搞定。
+      name=$(print -r -- "$line" | sed -E 's/.*Name:[[:space:]]*//; s/[[:space:]]*$//')
+      [[ -z $name ]] && continue
+      case $name in
+        com.apple.os.update-*) J_SNAP+=("system${_TAB}${mp}${_TAB}${name}${_TAB}${purge_all}") ;;
+        *)                     J_SNAP+=("other${_TAB}${mp}${_TAB}${name}${_TAB}${purge_all}") ;;
+      esac
+    done <<< "$out"
+  done
+
+  # Time Machine 本地快照:输出是纯日期行,一行一个
+  # tmutil 的输出第一行是 "Snapshots for disk /:",**不是**一条快照,
+  # 早先没跳过它,列表里就多出一行"TM / Snapshots for disk /:"的假数据。
+  local tm
+  tm=$(tmutil listlocalsnapshots / 2>/dev/null | grep -v '^Snapshots for' | grep -v '^$' || true)
+  while IFS= read -r line; do
+    [[ -z $line ]] && continue
+    J_SNAP+=("tm${_TAB}/${_TAB}${line}${_TAB}-")
+  done <<< "$tm"
+}
+
+# ---- df 交叉验证 ----------------------------------------------------------
+_collect_df() {
+  local out
+  # -k 保证是 KB 而不是 512 字节块(默认就是 512,算出来的数会大一倍)
+  out=$(df -k 2>/dev/null | LC_ALL=C awk 'NR == 1 { next }
+    {
+      if ($1 ~ /^\/dev\//) printf "DF\t%s\t%s\t%s\t%s\t%s\n", $1, $2, $3, $4, $5
+    }')
+  [[ -z $out ]] && return
+  local kind a b c d e
+  while IFS=$_TAB read -r kind a b c d e; do
+    J_DF+=("${a}${_TAB}${b}${_TAB}${c}${_TAB}${d}${_TAB}${e}")
+  done <<< "$out"
+}
+
+# ---- 对账 -----------------------------------------------------------------
+_reconcile() {
+  # 坑:local 写在循环体内,第二轮起 zsh 会回显 used=… / ceiling=… 把输出冲花
+  local row row2 row3 r4 disk used ceiling sum gap pct bytes
+  local gap_h vol_h use_h
+  J_VOL_TOTAL=0
+  J_GAP_TOTAL=0
+  local -A volsum_by
+  for row in $J_VOL; do
+    disk=${row%%$'\t'*}
+    bytes=${row##*$'\t'}
+    volsum_by[$disk]=$(( ${volsum_by[$disk]:-0} + bytes ))
+    J_VOL_TOTAL=$(( J_VOL_TOTAL + bytes ))
+  done
+  # 最满的容器
+  for row2 in $J_CONT; do
+    used=$(print -r -- "$row2" | cut -f3)
+    ceiling=$(print -r -- "$row2" | cut -f2)
+    [[ $ceiling -gt 0 ]] || continue
+    pct=$(( used * 100 / ceiling ))
+    if (( pct > J_FULLEST_PCT )); then
+      J_FULLEST_PCT=$pct
+      J_FULLEST=$(print -r -- "$row2" | cut -f1)
+    fi
+    gap=$(( used - ${volsum_by[$(print -r -- "$row2" | cut -f1)]:-0} ))
+    J_GAP_TOTAL=$(( J_GAP_TOTAL + gap ))
+  done
+}
+
+# ---- 结论 -----------------------------------------------------------------
+_verdicts() {
+  # local 只在函数开头写一次(循环体内重复 local 会把值回显到 stdout)
+  local bad=0 warn=0 row row3 r5 nsys disk used ceiling sum gap gap_h vol_h use_h
+
+  if (( ${#J_CONT} == 0 )); then
+    printf "warn\t没读到 APFS 容器信息\t-\tdiskutil apfs list 输出异常,可能不是 APFS 机器\n"
+    (( warn = warn + 1 ))
+  else
+    # 坑(README 踩坑 #44):双引号串里**不能**再直接嵌双引号,前面的引号会提前闭合,
+    # 后半段被当成命令,报出来的却是 "parse error near ..." 这种完全指错位置的错。
+    # 中文引号请用「」或直接去掉。
+    printf "info\tAPFS 容器数\t%d\t共享容器是空间对不上的主要原因\n" "${#J_CONT}"
+  fi
+
+  if (( J_FULLEST_PCT >= 90 )); then
+    printf "bad\t最满的容器 %s 已用 %d%%\t-\t先处理它,别的操作都会受影响\n" "$J_FULLEST" "$J_FULLEST_PCT"
+    (( bad = bad + 1 ))
+  elif (( J_FULLEST_PCT >= 75 )); then
+    printf "warn\t最满的容器 %s 已用 %d%%\t-\t该清了\n" "$J_FULLEST" "$J_FULLEST_PCT"
+    (( warn = warn + 1 ))
+  else
+    printf "ok\t最满的容器 %s 已用 %d%%\t-\t还不紧张\n" "$J_FULLEST" "$J_FULLEST_PCT"
+  fi
+
+  # 差额:卷占用之和 vs 容器已用
+  for row3 in $J_CONT; do
+    disk=$(print -r -- "$row3" | cut -f1)
+    used=$(print -r -- "$row3" | cut -f3)
+    ceiling=$(print -r -- "$row3" | cut -f2)
+    sum=0
+    for r4 in $J_VOL; do
+      [[ ${r4%%$'\t'*} == $disk ]] || continue
+      sum=$(( sum + ${r4##*$'\t'} ))
+    done
+    gap=$(( used - sum ))
+    # printf 的 %%f 只吃数字,不能塞字符串;先在 awk 里算好可读值再传进来
+    gap_h=$(awk -v b="$gap"  'BEGIN{printf "%.1f GB", (b<0?-b:b)/1073741824}')
+    vol_h=$(awk -v b="$sum"   'BEGIN{printf "%.1f GB", b/1073741824}')
+    use_h=$(awk -v b="$used"  'BEGIN{printf "%.1f GB", b/1073741824}')
+    if (( gap > 1073741824 )); then
+      printf "info\t容器 %s 差额 %s\t卷合计 %s / 容器已用 %s\t多出来的是快照 + 可清除空间,不是文件\n" \
+        "$disk" "$gap_h" "$vol_h" "$use_h"
+    elif (( gap < -1073741824 )); then
+      printf "info\t容器 %s 差额 -%s\t卷合计 %s / 容器已用 %s\t卷之间共享了块(sealed system volume),所以卷加起来会偏大\n" \
+        "$disk" "$gap_h" "$vol_h" "$use_h"
+    else
+      printf "ok\t容器 %s 账对得上\t卷合计 %s / 容器已用 %s\t差额在 1 GB 以内\n" \
+        "$disk" "$vol_h" "$use_h"
+    fi
+  done
+
+  if (( ${#J_SNAP} > 0 )); then
+    nsys=0
+    for r5 in $J_SNAP; do [[ ${r5%%$'\t'*} == 'system' ]] && (( nsys = nsys + 1 )); done
+    printf "info\t快照共 %d 个\t系统卷 %d 个 / 其他 %d 个\t系统更新快照删了不影响回滚能力之外的任何东西\n" \
+      "${#J_SNAP}" "$nsys" "$(( ${#J_SNAP} - nsys ))"
+  fi
+
+  printf "info\t统计\tbad=%d warn=%d\t先修 bad\n" "$bad" "$warn"
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_kv() { printf "%s\t%s\t%s\t%s\n" "$1" "$2" "$3" "$4"; }
+
+_render_kv() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return s }
+    function human(b) {
+      if (b + 0 >= 1099511627776) return sprintf("%.1f TB", b / 1099511627776)
+      if (b + 0 >= 1073741824)    return sprintf("%.1f GB", b / 1073741824)
+      if (b + 0 >= 1048576)       return sprintf("%.1f MB", b / 1048576)
+      return sprintf("%d B", b)
+    }
+    NF < 2 { next }
+    {
+      if ($1 == "ok")       { col = g;   mark = "✓" }
+      else if ($1 == "warn") { col = y;   mark = "!" }
+      else if ($1 == "bad")  { col = red; mark = "✗" }
+      else                  { col = d;   mark = "·" }
+      # 说明里带 %f 的话先做替换(awk 不支持在字符串里内联计算)
+      note = $4
+      gsub(/%\.1f%/, "", note)
+      printf "  %s%s%s %s%s%s  %s%s  %s  %s\n", col, mark, r, b, pad($2, 26), r, pad($3, 30), d, note, r
+    }
+  '
+}
+
+_render_containers() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED '
+    function human(b) {
+      if (b + 0 >= 1099511627776) return sprintf("%.1f TB", b / 1099511627776)
+      if (b + 0 >= 1073741824)    return sprintf("%.1f GB", b / 1073741824)
+      if (b + 0 >= 1048576)       return sprintf("%.1f MB", b / 1048576)
+      return sprintf("%d B", b)
+    }
+    NF < 4 { next }
+    {
+      pct = ($2 > 0 ? int($3 * 100 / $2) : 0)
+      if (pct >= 90)      { col = red; bar = "▉▉▉▉▉" }
+      else if (pct >= 75) { col = y;   bar = "▉▉▉▉░" }
+      else if (pct >= 40) { col = g;   bar = "▉▉░░░" }
+      else                { col = d;   bar = "▉░░░░" }
+      printf "  %s%s%s %-10s %-10s  %s%-12s%s %s%3d%%%s  %s已用 %s / 空闲 %s%s\n", \
+        col, bar, r, $1, "", b, human($3), r, col, pct, r, d, human($3), $5, r
+    }
+  '
+}
+
+_render_volumes() {
+  # 坑:awk 里的 -v limit=$limit 会去取 **zsh 变量** limit(不存在 → 空),
+  # 于是 awk 报 "limit: parameter not set"。给 zsh 侧换个不撞名的名字。
+  local -i vlimit=25
+  # 第 1 段:字节数提到最前面方便 sort -rn;字段 = bytes / container / disk / name / mount
+  LC_ALL=C awk -F'\t' 'NF < 5 { next } { printf "%d\t%s\t%s\t%s\t%s\n", $5, $1, $2, $3, $4 }' \
+  | sort -rn \
+  | LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v limit="$vlimit" '
+    function human(b) {
+      if (b + 0 >= 1099511627776) return sprintf("%.2f TB", b / 1099511627776)
+      if (b + 0 >= 1073741824)    return sprintf("%.1f GB", b / 1073741824)
+      if (b + 0 >= 1048576)       return sprintf("%.1f MB", b / 1048576)
+      return sprintf("%d B", b)
+    }
+    NF < 5 { next }
+    {
+      n++
+      if (n > limit) { over++; next }
+      printf "  %s%-8s%s %-30s %-26s %s%9s%s\n", b, $2, r, $4, $5, d, human($1), r
+    }
+    END { if (over) printf "  %s… 另有 %d 个卷%s\n", d, over, r }
+  '
+}
+
+_render_snapshots() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v y=$C_YELLOW '
+    NF < 3 { next }
+    {
+      tag = ($1 == "system" ? "系统" : ($1 == "tm" ? "TM  " : "其他"))
+      printf "  %s%s%s %-6s %-28s %s%s%s\n", y, tag, r, $2, $3, d, $4, r
+    }
+  '
+}
+
+_render_df() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET '
+    # df -k 的单位是 KB,别拿它当字节除
+    function human(k) {
+      if (k + 0 >= 1073741824) return sprintf("%.2f TB", k / 1073741824)
+      if (k + 0 >= 1048576)    return sprintf("%.1f GB", k / 1048576)
+      return sprintf("%.1f MB", k / 1024)
+    }
+    NF < 5 { next }
+    {
+      p = $5; gsub(/%/, "", p)
+      printf "  %-44s %-10s %-10s %-10s %s%4s%%%s\n", $1, human($2), human($3), human($4), d, p, r
+    }
+  '
+}
+
+_section() {
+  echo "${C_BOLD}$1${C_RESET}"
+  echo "  ${C_DIM}───────────────────────────────────────────────────────${C_RESET}"
+}
+
+_render_human() {
+  [[ -t 1 ]] && printf '\033[?25l\033[2J\033[H'
+  echo "${C_BOLD}${C_CYAN}═══ APFS 空间 对账 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  if [[ -z $ONLY || $ONLY == 'containers' ]]; then
+    _section "APFS 容器 (共享同一块盘,这是空间对不上的根因)"
+    print -rl -- $J_CONT | _render_containers
+    echo
+  fi
+
+  if [[ -z $ONLY || $ONLY == 'volumes' ]]; then
+    _section "卷明细 (按占用排序,前 25)"
+    print -rl -- $J_VOL | _render_volumes
+    echo
+  fi
+
+  if [[ -z $ONLY || $ONLY == 'snapshots' ]]; then
+    _section "快照"
+    if (( ${#J_SNAP} == 0 )); then
+      echo "  ${C_DIM}(没有快照)${C_RESET}"
+    else
+      print -rl -- $J_SNAP | _render_snapshots
+    fi
+    echo
+    _section "df 交叉验证"
+    print -rl -- $J_DF | _render_df
+    echo
+  fi
+
+  if [[ $ONLY != 'snapshots' ]]; then
+    _section "结论"
+    _verdicts | _render_kv
+    echo
+  fi
+
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: diskutil apfs list, diskutil apfs listSnapshots, df -k, tmutil${C_RESET}"
+  echo "${C_DIM}  清理命令(需 sudo,都不可逆,先确认): tmutil deletelocalsnapshots <日期> · tmutil thinlocalsnapshots / 10000000000 4${C_RESET}"
+  echo "${C_DIM}  找具体大文件: findbig · 看卷/磁盘详情: diskwatch${C_RESET}"
+}
+
+_render_json() {
+  local a b c d e f vout
+  print -r -- "meta${_TAB}${SCRIPT_NAME}${_TAB}${VERSION}${_TAB}$(date '+%Y-%m-%d %H:%M:%S')"
+  print -r -- "fullest_container${_TAB}${J_FULLEST}${_TAB}${J_FULLEST_PCT}"
+  print -r -- "volume_bytes_total${_TAB}${J_VOL_TOTAL}"
+  local row
+  for row in $J_CONT; do print -r -- "container${_TAB}${row}"; done
+  for row in $J_VOL;  do print -r -- "volume${_TAB}${row}"; done
+  for row in $J_SNAP; do print -r -- "snapshot${_TAB}${row}"; done
+  for row in $J_DF;   do print -r -- "df${_TAB}${row}"; done
+  vout=$(_verdicts)
+  while IFS=$_TAB read -r a b c d e f; do print -r -- "verdict${_TAB}${a}${_TAB}${b}${_TAB}${c}${_TAB}${d}"; done <<< "$vout"
+}
+
+_cleanup() { [[ -t 1 ]] && printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+if $AS_JSON; then
+  trap - EXIT INT TERM
+  _collect_apfs; _collect_snapshots; _collect_df; _reconcile
+  _render_json
+  exit 0
+fi
+
+_collect_apfs
+_collect_snapshots
+_collect_df
+_reconcile
+_render_human

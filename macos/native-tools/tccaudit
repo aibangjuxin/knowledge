@@ -1,0 +1,421 @@
+#!/usr/bin/env zsh
+# tccaudit — 隐私权限 (TCC) 审计:哪些程序拿到了摄像头 / 麦克风 / 完全磁盘访问
+#
+# 设计目标:
+#   - macOS 10.15 之后,任何"读不到文件 / 打不开窗口 / 拿不到屏幕"的报错,
+#     十有八九是 TCC 权限没给或给错了 app。系统设置里那个列表没人会去看,
+#     而 tccutil 只能重置、看不了现状。这个脚本把现状直接拉到终端。
+#   - 免 brew / 免 sudo:只 zsh + sqlite3 + ps + osascript
+#   - 显示:
+#       ① 两个 TCC 数据库:系统级 (/Library/…/TCC.db) 与 用户级 (~/.…/TCC.db)
+#          —— 系统级读不了通常是本终端没有"完全磁盘访问",会明确告诉你
+#       ② 按服务分类的授权清单 (摄像头 / 麦克风 / 屏幕录制 / 完全磁盘 / 通讯录…)
+#       ③ 高危项自动标红:完全磁盘访问、辅助功能、屏幕录制、输入监控
+#       ④ 已授权但对应 app 已经不在磁盘上的"僵尸授权"(白占权限,也是清理线索)
+#       ⑤ 输入法 / 自动化 / 通讯录授权概览
+#       ⑥ 结论:该给谁、该收谁
+#   - 只读:绝不调用 tccutil reset / insert / sqlite3 写操作
+#
+# 用法:
+#   tccaudit                  # 全量
+#   tccaudit --disk           # 只看"完全磁盘访问"(排查文件读不到最快)
+#   tccaudit --screen         # 只看屏幕录制 / 辅助功能 / 输入监控
+#   tccaudit --zombies        # 只看已授权但 app 不存在的僵尸授权
+#   tccaudit --top N          # 每个服务最多列 N 条 (默认 10)
+#   tccaudit --json
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -r _TAB=$'\t'
+typeset -i TOP_N=10
+typeset ONLY=''
+typeset AS_JSON=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --disk)    ONLY='disk'; shift ;;
+    --screen)  ONLY='screen'; shift ;;
+    --zombies) ONLY='zombies'; shift ;;
+    --top|-n)  TOP_N=$2; shift 2 ;;
+    --json)    AS_JSON=true; shift ;;
+    --version) echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--disk|--screen|--zombies] [--top N] [--json]"
+      echo ""
+      echo "  --disk      只看完全磁盘访问 / 文件访问类"
+      echo "  --screen    只看屏幕录制 / 辅助功能 / 输入监控"
+      echo "  --zombies   只看 app 已不存在的僵尸授权"
+      echo "  --top N     每个服务最多列 N 条 (默认 $TOP_N)"
+      echo "  --json      TSV 输出"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 && $AS_JSON == false ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+typeset -r SYS_DB='/Library/Application Support/com.apple.TCC/TCC.db'
+typeset -r USR_DB="$HOME/Library/Application Support/com.apple.TCC/TCC.db"
+typeset -g J_DB_STATE='?'      # sys / user / none / denied
+typeset -g J_ERR=''
+typeset -g -a J_ROWS=()        # service<TAB>client<TAB>auth<TAB>reason<TAB>when<TAB>risk
+typeset -g -a J_SERVICES=()    # service<TAB>count
+typeset -g -a J_ZOMBIES=()     # client<TAB>service<TAB>when
+typeset -g -a J_SUMMARY=()     # service<TAB>中文名<TAB>count<TAB>risk
+
+# ---- 服务名映射 ------------------------------------------------------------
+# 只写关心的那些,其余原样透出 kTCCServiceXxx
+_service_cn() {
+  case $1 in
+    kTCCServiceSystemPolicyAllFiles)      print "完全磁盘访问" ;;
+    kTCCServiceSystemPolicyDesktopFolder) print "桌面文件夹" ;;
+    kTCCServiceSystemPolicyDocumentsFolder) print "文稿文件夹" ;;
+    kTCCServiceSystemPolicyDownloadsFolder) print "下载文件夹" ;;
+    kTCCServiceSystemPolicyNetworkVolumes) print "网络卷" ;;
+    kTCCServiceSystemPolicyRemovableVolumes) print "可移动卷" ;;
+    kTCCServiceCamera)                    print "摄像头" ;;
+    kTCCServiceMicrophone)                 print "麦克风" ;;
+    kTCCServiceScreenCapture)             print "屏幕录制" ;;
+    kTCCServiceAccessibility)             print "辅助功能" ;;
+    kTCCServiceListenEvent)               print "输入监控" ;;
+    kTCCServiceAddressBook)               print "通讯录" ;;
+    kTCCServiceCalendar)                  print "日历" ;;
+    kTCCServicePhotos)                    print "照片" ;;
+    kTCCServiceAppleEvents)               print "自动化(控制其他 App)" ;;
+    kTCCServicePostEvent)                 print "发送事件" ;;
+    kTCCServiceBluetoothAlways)           print "蓝牙" ;;
+    kTCCServiceSpeechRecognition)         print "语音识别" ;;
+    kTCCServiceMediaLibrary)              print "媒体资料库" ;;
+    kTCCServiceReminders)                 print "提醒事项" ;;
+    kTCCServiceUSB)                       print "USB 设备" ;;
+    kTCCServiceTracking)                  print "跟踪" ;;
+    *)                                    print "$1" ;;
+  esac
+}
+
+# 风险等级:完全磁盘 / 屏幕录制 / 辅助功能 / 输入监控 = 拿到整机的钥匙
+_service_risk() {
+  case $1 in
+    kTCCServiceSystemPolicyAllFiles|kTCCServiceScreenCapture|\
+    kTCCServiceAccessibility|kTCCServiceListenEvent)
+      print "high" ;;
+    kTCCServiceCamera|kTCCServiceMicrophone|kTCCServiceAddressBook|\
+    kTCCServicePhotos|kTCCServiceCalendar|kTCCServiceReminders|\
+    kTCCServiceSpeechRecognition)
+      print "mid" ;;
+    *) print "low" ;;
+  esac
+}
+
+# ---- 读库 ------------------------------------------------------------------
+# 坑(踩了三次):
+#   ① 没给"完全磁盘访问"时,sqlite3 的错误信息是打到 **stdout** 的:
+#        Error: unable to open database "..." (unable to open database file)
+#      所以一定要 2>/dev/null 之外再加 `|| 判空`,否则错误信息会被当成数据渲染。
+#   ② last_modified 是 unix 时间戳,必须 +978307200 才是 Apple 纪元,
+#      直接 datetime(x,'unixepoch') 会得到 1970 年的日期。
+#   ③ SQL 必须写成一行,多行在 $( ) 里容易拿不到结果。
+_collect_db() {
+  local db sql out when risk cn service client auth reason mtime
+  J_ERR=''
+  for db in "$SYS_DB" "$USR_DB"; do
+    # 坑:用户库不存在时不能把 J_DB_STATE 打回 none —— 系统库可能已经读成功并
+    # 标成 sys 了,后面覆盖掉就会误报"没有可读的 TCC.db"。
+    [[ -f $db ]] || continue
+    # 试一条最简单的查询判断能不能读
+    if ! sqlite3 "$db" 'select count(*) from access;' >/dev/null 2>&1; then
+      # 分不清是"文件不存在"还是"没权限",再确认一次
+      if [[ $db == "$SYS_DB" ]]; then
+        J_DB_STATE='denied'
+        J_ERR='系统级 TCC.db 读不到:多半是当前终端没有"完全磁盘访问"。给 /usr/bin/sqlite3 或你用的终端(App)授权后重试。'
+      fi
+      continue
+    fi
+    # 用户库可读时优先级低于系统库(sys 更全),别覆盖
+    if [[ $J_DB_STATE != 'sys' ]]; then
+      J_DB_STATE=$([[ $db == "$SYS_DB" ]] && print 'sys' || print 'user')
+    fi
+
+    sql="select s.service, s.client, s.auth_value, s.auth_reason, s.last_modified from access s "
+    # limit 给足:按服务分组的查询另走 _collect_summary,这里要的是全量行,
+    # 早先按 TOP_N*6 截断,结果"文件与文件夹访问"那种冷门服务整段是空的
+    # (因为按时间排序时它们被挤出去了)。
+    sql+="where s.auth_value > 0 order by s.last_modified desc limit 1000;"
+    out=$(sqlite3 -separator "$_TAB" "$db" "$sql" 2>/dev/null) || out=''
+    [[ -z $out ]] && continue
+
+    # 坑(两个,都很隐蔽):
+    #   ① `print | while read` 里的 while 跑在 **子 shell**,往 J_ROWS append 的
+    #      内容父进程完全看不到 —— 表现是"查出来了但页面一片空白"。
+    #      要在当前 shell 里循环只能用 here-string: done <<< "$out"。
+    #   ② `local` 写在循环体里,第二轮开始 zsh 会把值回显成 when=… / risk=…
+    #      打到 stdout,表格前面凭空多出几十行。local 一律提到函数开头。
+    while IFS=$_TAB read -r service client auth reason mtime; do
+      [[ -n $service ]] || continue
+      when=$(date -r "$mtime" '+%Y-%m-%d' 2>/dev/null) || when='?'
+      risk=$(_service_risk "$service")
+      cn=$(_service_cn "$service")
+      J_ROWS+=("${service}${_TAB}${client}${_TAB}${auth}${_TAB}${reason}${_TAB}${when}${_TAB}${risk}${_TAB}${cn}")
+    done <<< "$out"
+  done
+}
+
+# ---- 服务汇总 --------------------------------------------------------------
+_collect_services() {
+  local row service s tmp sorted c
+  local -A cnt
+  for row in $J_ROWS; do
+    service=${row%%$'\t'*}
+    cnt[$service]=$(( ${cnt[$service]:-0} + 1 ))
+  done
+  # 关联数组的键序是哈希序,要按数量排序。
+  # 坑:这里不能写成 `... | sort -rn | while read` —— while 在子 shell 里,
+  # append 到 J_SUMMARY 父进程收不到。正确姿势:先拼字符串 → 排序 → here-string 读回来。
+  tmp=''
+  for s in ${(k)cnt}; do
+    tmp+="${cnt[$s]}${_TAB}${s}"$'\n'
+  done
+  sorted=$(print -r -- "$tmp" | sort -rn)
+  while IFS=$_TAB read -r c service; do
+    [[ -n $service ]] || continue
+    J_SERVICES+=("${service}${_TAB}${c}")
+    J_SUMMARY+=("${service}${_TAB}$(_service_cn "$service")${_TAB}${c}${_TAB}$(_service_risk "$service")")
+  done <<< "$sorted"
+}
+
+# ---- 僵尸授权 --------------------------------------------------------------
+# client 是 bundle id 或路径。bundle id 无法直接判断 app 是否还在,
+# 只能对看起来像路径的 client 做存在性检查 —— 这已经能抓到一大半
+# (卸载后残留的 /Applications/Xxx.app 授权项)。
+_collect_zombies() {
+  local row client service when auth reason risk cn
+  for row in $J_ROWS; do
+    # 坑:`local -a f` 写在循环体里,第二轮 zsh 会把它**重新声明成空数组**,
+    # 紧接着 $f[2] 就报 "parameter not set"(nounset 直接退出)。
+    # 同理也别用 ${(s:$_TAB:)row} 拆字段,IFS= read 更稳也更直观。
+    IFS=$_TAB read -r service client auth reason when risk cn <<< "$row"
+    # 只看形如路径的 client(bundle id 另有办法,但要遍历 /Applications,太慢)
+    [[ $client == /* ]] || continue
+    [[ -e $client ]] && continue
+    J_ZOMBIES+=("${client}${_TAB}$(_service_cn "$service")${_TAB}${when}")
+  done
+}
+
+# ---- 结论 ------------------------------------------------------------------
+_verdicts() {
+  local bad=0 warn=0 high=0 row
+  case $J_DB_STATE in
+    sys)  printf "ok\t能读系统级 TCC.db\t权限正常\t下面这份是全机授权全景\n" ;;
+    user) printf "warn\t只能读用户级 TCC.db\t系统级没读到\t换个终端或给完全磁盘访问再跑一次\n"
+          (( warn = warn + 1 )) ;;
+    denied) printf "bad\t系统级 TCC.db 读不到\t% s\t多数 app 的授权都在系统库里,现在这份不完整\n" "$SYS_DB"
+          (( bad = bad + 1 )) ;;
+    none) printf "warn\t没有可读的 TCC.db\t-\t这台机器上还没发生过隐私授权请求\n"
+          (( warn = warn + 1 )) ;;
+  esac
+
+  for row in $J_ROWS; do
+    [[ ${row##*$'\t'} != 'high' ]] && continue
+    (( high = high + 1 ))
+  done
+  if (( high > 0 )); then
+    printf "warn\t%d 项高危授权在册\t完全磁盘/屏幕/辅助/输入监控\t定期对一遍,不需要的用 tccutil reset 收回\n" "$high"
+    (( warn = warn + 1 ))
+  fi
+
+  (( ${#J_ZOMBIES} > 0 )) && {
+    printf "info\t%d 条僵尸授权\tapp 已卸载但授权还在\t占着权限,可 tccutil reset <Service> 清理\n" ${#J_ZOMBIES}
+  }
+
+  if (( bad == 0 && warn == 0 )); then
+    printf "ok\t没有需要处理的问题\t-\t权限清单干净\n"
+  fi
+  printf "info\t统计\tbad=%d warn=%d\t先看 bad\n" "$bad" "$warn"
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_kv() { printf "%s\t%s\t%s\t%s\n" "$1" "$2" "$3" "$4"; }
+
+_render_kv() {
+  awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return s }
+    NF < 2 { next }
+    {
+      if ($1 == "ok")       { col = g;   mark = "✓" }
+      else if ($1 == "warn") { col = y;   mark = "!" }
+      else if ($1 == "bad")  { col = red; mark = "✗" }
+      else                  { col = d;   mark = "·" }
+      printf "  %s%s%s %s%s%s  %s%s  %s  %s\n", col, mark, r, b, pad($2, 22), r, pad($3, 30), d, $4, r
+    }
+  '
+}
+
+_render_summary() {
+  awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED '
+    NF < 3 { next }
+    {
+      if ($4 == "high")      { col = red; tag = "高危" }
+      else if ($4 == "mid")  { col = y;   tag = "敏感" }
+      else                   { col = d;   tag = "普通" }
+      printf "  %s%-4s%s %s%-16s%s %3d 项  %s%s%s\n", col, tag, r, b, $2, r, $3, d, $1, r
+    }
+  '
+}
+
+# 只列某类服务的行:--filter 会把 service 传进来做精确匹配
+_render_rows() {
+  awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED -v limit="$TOP_N" '
+    NF < 6 { next }
+    {
+      if (++n > limit) { over++; next }
+      if ($6 == "high")     { col = red; tag = "!" }
+      else if ($6 == "mid") { col = y;   tag = "·" }
+      else                  { col = d;   tag = " " }
+      # auth_reason: 1=用户同意 2=用户拒绝 4=系统策略允许(装上就给)
+      reason = ($4 == 1 ? "用户同意" : ($4 == 4 ? "安装即给" : "策略" $4))
+      # 转换符必须和参数一样多:BSD awk 的 printf 在参数多于转换符时**静默丢弃**
+      # 多余的参数(不像 zsh 的 printf 会拿格式串循环补行),所以少写一个 %s
+      # 就会看到"某一列永远是空的",而且没有任何报错。
+      printf "  %s%s%s %-52s %s%s  %s%s%s\n", col, tag, r, $2, d, $5, r, reason, r
+    }
+    END {
+      if (over) printf "  %s… 另有 %d 条同类授权未显示(--top 调大)%s\n", d, over, r
+    }
+  '
+}
+
+_render_zombies() {
+  awk -F'\t' -v d=$C_DIM -v r=$C_RESET '
+    NF < 3 { next }
+    { printf "  %-56s %-12s %s%s%s\n", $1, $2, d, $3, r }
+  '
+}
+
+_section() {
+  echo "${C_BOLD}$1${C_RESET}"
+  echo "  ${C_DIM}───────────────────────────────────────────────────────${C_RESET}"
+}
+
+# 单个服务的小节:有数据打表,没数据说清楚"没有",不留空白让人以为出错了
+_svc_block() {
+  local svc=$1 title=$2 n
+  n=$(print -rl -- $J_ROWS | awk -F'\t' -v f="$svc" '$1==f' | wc -l | tr -d ' ')
+  if (( n == 0 )); then
+    printf "  ${C_DIM}%s — 没有授权记录${C_RESET}\n" "$title"
+    return
+  fi
+  printf "  ${C_BOLD}%s${C_RESET} ${C_DIM}(%d 条)${C_RESET}\n" "$title" "$n"
+  print -rl -- $J_ROWS | awk -F'\t' -v f="$svc" '$1==f' | _render_rows
+}
+
+_render_human() {
+  [[ -t 1 ]] && printf '\033[?25l\033[2J\033[H'
+  echo "${C_BOLD}${C_CYAN}═══ 隐私权限 (TCC) 审计 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  if [[ -n $J_ERR ]]; then
+    echo "  ${C_YELLOW}!${C_RESET} $J_ERR"
+    echo
+  fi
+
+  if [[ $ONLY == 'zombies' ]]; then
+    _section "僵尸授权 (app 已不存在)"
+    if (( ${#J_ZOMBIES} == 0 )); then
+      echo "  ${C_DIM}(没有发现 app 已删除但授权还在的记录)${C_RESET}"
+    else
+      print -rl -- $J_ZOMBIES | _render_zombies
+    fi
+    echo
+    echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: sqlite3 (TCC.db), date${C_RESET}"
+    return 0
+  fi
+
+  if [[ -z $ONLY || $ONLY == 'disk' || $ONLY == 'screen' ]]; then
+    _section "服务汇总 (按授权数)"
+    if (( ${#J_SUMMARY} == 0 )); then
+      echo "  ${C_DIM}(没有读到任何授权记录)${C_RESET}"
+    else
+      print -rl -- $J_SUMMARY | _render_summary
+    fi
+    echo
+  fi
+
+  if [[ -z $ONLY || $ONLY == 'disk' ]]; then
+    _section "完全磁盘访问"
+    _svc_block kTCCServiceSystemPolicyAllFiles "完全磁盘访问 (读你所有文件)"
+    echo
+    _section "文件与文件夹访问"
+    _svc_block kTCCServiceSystemPolicyDesktopFolder "桌面"
+    _svc_block kTCCServiceSystemPolicyDocumentsFolder "文稿"
+    _svc_block kTCCServiceSystemPolicyDownloadsFolder "下载"
+    _svc_block kTCCServiceSystemPolicyNetworkVolumes "网络卷"
+    _svc_block kTCCServiceSystemPolicyRemovableVolumes "可移动卷"
+    echo
+  fi
+
+  if [[ -z $ONLY || $ONLY == 'screen' ]]; then
+    _section "屏幕 / 辅助 / 输入监控"
+    _svc_block kTCCServiceScreenCapture "屏幕录制 (能看到你屏幕上的一切)"
+    _svc_block kTCCServiceAccessibility "辅助功能 (能模拟点击和读 UI)"
+    _svc_block kTCCServiceListenEvent "输入监控 (能看到你按了什么键)"
+    echo
+    _section "摄像头 / 麦克风 / 通讯录 / 日历"
+    _svc_block kTCCServiceCamera "摄像头"
+    _svc_block kTCCServiceMicrophone "麦克风"
+    _svc_block kTCCServiceAddressBook "通讯录"
+    _svc_block kTCCServiceCalendar "日历"
+    _svc_block kTCCServicePhotos "照片"
+    _svc_block kTCCServiceAppleEvents "自动化 (控制其他 App)"
+    echo
+  fi
+
+  if [[ $ONLY == 'zombies' ]]; then :; else
+    _section "结论"
+    _verdicts | _render_kv
+    echo
+  fi
+
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: sqlite3, date · $SYS_DB${C_RESET}"
+  # 坑:双引号串里**不能**再直接嵌双引号 —— 里面的引号会提前闭合外层,
+  # 剩下那段(含 ? 的 URL)就变成裸词被 glob 展开,报 "no matches found" 直接退出。
+  # URL 里的 ? 在 zsh 里是通配符,必须引号包住,整行改用单引号拼接最稳。
+  echo "${C_DIM}  收回某个 app 的权限: tccutil reset ScreenCapture com.example.app${C_RESET}"
+  echo "${C_DIM}  打开系统设置面板: open 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'${C_RESET}"
+}
+
+_render_json() {
+  local a b c d vout
+  print -r -- "meta${_TAB}${SCRIPT_NAME}${_TAB}${VERSION}${_TAB}$(date '+%Y-%m-%d %H:%M:%S')"
+  print -r -- "db_state${_TAB}${J_DB_STATE}"
+  [[ -n $J_ERR ]] && print -r -- "error${_TAB}${J_ERR}"
+  local row
+  for row in $J_SUMMARY; do print -r -- "service${_TAB}${row}"; done
+  for row in $J_ROWS;    do print -r -- "grant${_TAB}${row}"; done
+  for row in $J_ZOMBIES; do print -r -- "zombie${_TAB}${row}"; done
+  vout=$(_verdicts)
+  while IFS=$_TAB read -r a b c d; do print -r -- "verdict${_TAB}${a}${_TAB}${b}${_TAB}${c}${_TAB}${d}"; done <<< "$vout"
+}
+
+_cleanup() { [[ -t 1 ]] && printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+if $AS_JSON; then
+  trap - EXIT INT TERM
+  _collect_db; _collect_services; _collect_zombies
+  _render_json
+  exit 0
+fi
+
+_collect_db
+_collect_services
+_collect_zombies
+_render_human

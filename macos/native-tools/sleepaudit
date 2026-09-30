@@ -1,0 +1,391 @@
+#!/usr/bin/env zsh
+# sleepaudit — 睡眠 / 唤醒 / 电源事件审计:这台机器昨晚到底睡没睡?
+#
+# 设计目标:
+#   - MacBook 续航掉了、"合盖后一晚上掉电 40%"、"风扇半夜自己转" ——
+#     这些问题的答案几乎都在 /var/log/powermanagement 里,但没人会去看
+#   - 免 brew / 免 sudo:只 zsh + pmset + awk + date
+#   - 显示:
+#       ① 最近 N 小时的睡眠 / 唤醒 / DarkWake 次数与明细
+#       ② 电源切换 (Using AC / Using Batt)时间线
+#       ③ 谁在阻止休眠 —— 按进程统计 Assertions 次数与累计时长
+#       ④ 电池/整机运行概况(交给 batwatch,这里只给一个提示)
+#       ⑤ 结论:正常 / 有异常唤醒 / 从没睡过
+#   - 只读:绝不改任何 pmset 设置
+#
+# 用法:
+#   sleepaudit                    # 最近 24 小时
+#   sleepaudit --hours 48         # 最近 48 小时
+#   sleepaudit --days 7           # 最近 7 天
+#   sleepaudit --timeline         # 只看事件时间线(最近 30 条)
+#   sleepaudit --holders          # 只看阻止休眠的进程排行
+#   sleepaudit --json
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -r _TAB=$'\t'
+typeset -i HOURS=24
+typeset -i TOP_N=8
+typeset ONLY=''
+typeset AS_JSON=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --hours)     HOURS=$2; shift 2 ;;
+    --hours=*)   HOURS=${1#*=}; shift ;;
+    --days)      HOURS=$(( $2 * 24 )); shift 2 ;;
+    --timeline)  ONLY='timeline'; shift ;;
+    --holders)   ONLY='holders'; shift ;;
+    --top|-n)    TOP_N=$2; shift 2 ;;
+    --json)      AS_JSON=true; shift ;;
+    --version)   echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--hours N|--days N] [--timeline|--holders] [--top N] [--json]"
+      echo ""
+      echo "  --hours N    看最近 N 小时 (默认 $HOURS)"
+      echo "  --days N     看最近 N 天"
+      echo "  --timeline   只看事件时间线"
+      echo "  --holders    只看阻止休眠的进程排行"
+      echo "  --top N      排行条数 (默认 $TOP_N)"
+      echo "  --json       TSV 输出"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 && $AS_JSON == false ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+typeset -g J_N_SLEEP=0 J_N_WAKE=0 J_N_DARK=0 J_N_AC=0 J_N_BATT=0
+typeset -g J_SLEEP_TOTAL=0 J_DARK_TOTAL=0
+typeset -g J_OLDEST=''
+typeset -g J_BOOT=''
+typeset -g -a J_EVENTS=()    # when<TAB>kind<TAB>detail
+typeset -g -a J_HOLDERS=()   # proc<TAB>count<TAB>types<TAB>sample
+typeset -g J_LOG_LINES=0
+
+# ---- 日志解析 --------------------------------------------------------------
+# pmset -g log 的行格式(坑点全在空格上):
+#   2026-09-30 10:39:48 +0800 Assertions          	PID 614(powerd) Summary PreventUserIdleSystemSleep "..." 311:57:50 id:0x…
+#   2026-09-30 08:00:00 +0800 Wake  from  DarkWake to  Sleep :   Entering Sleep state due to 'Idle Sleep'
+#   2026-09-30 07:59:00 +0800 DarkWake  from  Sleep  to  DarkWake :   Entering DarkWake state due to 'EC.Important: …'
+#   2026-09-30 07:00:00 +0800 Summary- [System: …] Using Batt
+#
+# ① "Wake  from  DarkWake to  Sleep" 之间是 **两个空格**,用单空格 grep 一定漏;
+#    一律用 awk 的 split() 按空白拆,或者用宽松正则。
+# ② 前 3 个字段是时间(日期 / 时间 / 时区),第 4 个开始才是事件正文。
+# ③ 这台机器上如果一直是台式机(没有电池),日志里根本不会出现 Sleep 事件,
+#    必须给出明确说明而不是空表。
+_collect_log() {
+  local cutoff
+  # 坑(性能,踩了 40 秒):一开始在 awk 里对**每一行**都 `cmd | getline` 调
+  # `date -j -f`,四万行 = 四万个进程,整个脚本跑了 2 分 39 秒。
+  #
+  # 正解:时间戳本来就是 "YYYY-MM-DD HH:MM:SS" 这种**定长且字典序 = 时间序**的格式,
+  # 直接用一次 date 算出截止字符串,然后字符串比较就行,一行都不用 fork。
+  #   cutoff=$(date -v-${HOURS}H '+%Y-%m-%d %H:%M:%S')
+  cutoff=$(date -v-${HOURS}H '+%Y-%m-%d %H:%M:%S' 2>/dev/null) || cutoff=''
+  [[ -z $cutoff ]] && cutoff='0000-00-00 00:00:00'
+
+  local out
+  # 坑(编码):pmset 日志里有非 UTF-8 字节(蓝牙设备名里就有),
+  # BSD awk 默认按多字节处理,会直接:
+  #   awk: towc: multibyte conversion failure on: '...'  input record number 41172
+  # 然后整个管道死掉。**所有解析系统日志的 awk 都要加 LC_ALL=C**,顺带还把
+  # length() 变成字节语义,对 ASCII 日志来说正是想要的。
+  out=$(pmset -g log 2>/dev/null | LC_ALL=C awk -v cutoff="$cutoff" -v topn="$TOP_N" '
+    {
+      n = NF
+      if (n < 4) next
+      ts = $1 " " $2
+      if (cutoff != "" && ts < cutoff) next
+
+      # 正文从第 4 字段起,这里不需要保留原始空格(分类靠正则)
+      kind = ""
+      if ($0 ~ /Entering Sleep state/)      { kind = "sleep"; nsleep++ }
+      else if ($0 ~ /Entering DarkWake state/) { kind = "dark";  ndark++ }
+      else if ($0 ~ /Wake  from|Wake from/)  { kind = "wake";  nwake++ }
+      # 坑:日志里 "Using AC" / "Using Batt" 是**周期性摘要行**(每 15 分钟一条),
+      # 不是"切换事件"。直接计数会得到"一天切了 160 次电"这种荒谬结论。
+      # 只有当前后状态不同才算一次真正的切换。
+      else if ($0 ~ /Using AC/) {
+        if (lastpwr != "AC") { nac++ }
+        lastpwr = "AC"
+        next
+      }
+      else if ($0 ~ /Using Batt/) {
+        if (lastpwr != "BATT") { nbatt++ }
+        lastpwr = "BATT"
+        next
+      }
+      else next
+
+      if (kind != "ac" && kind != "batt" && nshow < 30)
+        printf "EVENT\t%s\t%s\t%s\n", ts, kind, $0
+      nshow++
+    }
+    END {
+      printf "STAT\t%d\t%d\t%d\n", nsleep+0, nwake+0, ndark+0
+      printf "PWR\t%d\t%d\n", nac+0, nbatt+0
+    }
+  ')
+  [[ -z $out ]] && return
+
+  local kind when detail
+  while IFS=$_TAB read -r kind when detail extra; do
+    case $kind in
+      EVENT) J_EVENTS+=("${when}${_TAB}${detail}") ;;
+      STAT)  J_N_SLEEP=$when; J_N_WAKE=$extra; J_N_DARK=$detail
+              J_SLEEP_TOTAL=$when; J_DARK_TOTAL=$detail ;;
+      # 坑:这行是 3 字段("PWR" + 两个数字),read -r a b c d 里 d 是空的,
+      # 第二个数字落在 c 上。写成 $extra 会让 J_N_BATT 变成空字符串。
+      PWR)   J_N_AC=$when; J_N_BATT=$detail ;;
+    esac
+  done <<< "$out"
+}
+
+# ---- 阻止休眠的进程排行 ---------------------------------------------------
+# Assertions 行形如:
+#   2026-09-30 10:39:48 +0800 Assertions   PID 664(bluetoothd) Summary UserIsActive "Bluetooth LE HID Activity" 02:03:03 …
+# "累计时长"字段形如 483:00:08 (时:分:秒),有的行没有(刚创建时是 00:00:00)。
+_collect_holders() {
+  local out
+  out=$(pmset -g log 2>/dev/null | LC_ALL=C awk -v topn="$TOP_N" '
+    /Assertions/ && /PID/ {
+      # 找第一个形如 (name) 的括号
+      if (match($0, /\([A-Za-z0-9_.-]+\)/) == 0) next
+      proc = substr($0, RSTART + 1, RLENGTH - 2)
+      # 断言类型:Summary/Created/Released 后面紧跟的词
+      type = ""
+      if (match($0, /(Summary|Created|Released) [A-Za-z]+/)) {
+        type = substr($0, RSTART + RLENGTH, 1)
+        # 取 Summary 后面那个词的完整形式
+        split(substr($0, RSTART, RLENGTH), w, /[ ]+/)
+        type = w[2]
+      }
+      cnt[proc]++
+      if (types[proc] == "") types[proc] = type
+      else if (index(types[proc], type) == 0) types[proc] = types[proc] "," type
+    }
+    END {
+      for (p in cnt) printf "%d\t%s\t%s\n", cnt[p], p, types[p]
+    }
+  ' | sort -rn)
+  [[ -z $out ]] && return
+  local c proc types
+  while IFS=$_TAB read -r c proc types; do
+    [[ -n $proc ]] || continue
+    J_HOLDERS+=("${proc}${_TAB}${c}${_TAB}${types}")
+  done <<< "$out"
+}
+
+# ---- 开机时间 --------------------------------------------------------------
+_collect_boot() {
+  local boot
+  boot=$(sysctl -n kern.boottime 2>/dev/null | sed -nE 's/.*sec = ([0-9]+),.*/\1/p')
+  [[ -z $boot ]] && { J_BOOT='?'; return }
+  J_BOOT=$(date -r "$boot" '+%Y-%m-%d %H:%M:%S')
+}
+
+# ---- 结论 ------------------------------------------------------------------
+_verdicts() {
+  local bad=0 warn=0
+  local has_batt=0
+  pmset -g batt 2>/dev/null | grep -q 'Battery' && has_batt=1
+
+  if (( has_batt )); then
+    printf "info\t本机有电池\t-\t睡眠事件有意义\n"
+  else
+    printf "info\t本机是台式机 / 无电池\t-\t不会出现 Sleep 事件,只看唤醒与电源切换\n"
+  fi
+
+  printf "info\t本次统计窗口\t最近 %d 小时\t数据来自 pmset -g log\n" "$HOURS"
+
+  if (( J_N_SLEEP == 0 && J_N_DARK == 0 )); then
+    if (( has_batt )); then
+      printf "bad\t窗口内一次都没睡着\t%d 次 Sleep / %d 次 DarkWake\t合盖不休眠、掉电异常的典型症状\n" "$J_N_SLEEP" "$J_N_DARK"
+      (( bad = bad + 1 ))
+    else
+      printf "ok\t无睡眠事件属正常\t台式机不睡\t-\n"
+    fi
+  elif (( J_N_DARK > J_N_SLEEP * 3 )); then
+    printf "warn\tDarkWake 远多于正常睡眠\t%d : %d\t后台任务在睡眠中把机器叫醒(同步 / 邮件 / 定时任务)\n" "$J_N_DARK" "$J_N_SLEEP"
+    (( warn = warn + 1 ))
+  else
+    printf "ok\t睡眠/唤醒比例正常\t睡 %d 次 / DarkWake %d 次\t-\n" "$J_N_SLEEP" "$J_N_DARK"
+  fi
+
+  if (( J_N_AC > 0 || J_N_BATT > 0 )); then
+    if (( J_N_BATT > 0 )); then
+      printf "warn\t窗口内在电池上运行过\tAC 段 %d / 电池段 %d\t拔掉电源后耗电快的重点排查对象\n" "$J_N_AC" "$J_N_BATT"
+      (( warn = warn + 1 ))
+    else
+      printf "ok\t全程插电\tAC 段 %d / 电池段 %d\t-\n" "$J_N_AC" "$J_N_BATT"
+    fi
+  fi
+
+  printf "info\t统计\tbad=%d warn=%d\t先看 bad\n" "$bad" "$warn"
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_kv() { printf "%s\t%s\t%s\t%s\n" "$1" "$2" "$3" "$4"; }
+
+_render_kv() {
+  awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return s }
+    NF < 2 { next }
+    {
+      if ($1 == "ok")       { col = g;   mark = "✓" }
+      else if ($1 == "warn") { col = y;   mark = "!" }
+      else if ($1 == "bad")  { col = red; mark = "✗" }
+      else                  { col = d;   mark = "·" }
+      printf "  %s%s%s %s%s%s  %s%s  %s  %s\n", col, mark, r, b, pad($2, 22), r, pad($3, 34), d, $4, r
+    }
+  '
+}
+
+_render_stats() {
+  # 同样是字节语义,免得系统日志里的坏字节把 awk 掀翻
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW '
+    BEGIN {
+      printf "  %s%-14s %s%6s%s   %s\n", b, "事件", r, "次数", r, d
+    }
+    {
+      col = g
+      if ($2 == 0) col = y
+      printf "  %-14s %s%6d%s   %s%s%s\n", $1, col, $2, r, d, $3, r
+    }
+  '
+}
+
+_render_timeline() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v red=$C_RED '
+    NF < 2 { next }
+    {
+      # 第二段是 "10:39:48",事件类型在正文里
+      t = $1
+      sub(/^[0-9-]+ /, "", t)
+      if ($2 == "sleep")      { col = red; tag = "睡" }
+      else if ($2 == "dark")  { col = y;   tag = "暗" }
+      else if ($2 == "wake")  { col = g;   tag = "醒" }
+      else                    { col = d;   tag = "·" }
+      # 正文里 "Entering Sleep state due to X" 的 X 才是原因
+      reason = $2
+      if (match($2, /due to .*$/)) reason = substr($2, RSTART, RLENGTH)
+      else if (match($2, /Entering [A-Za-z ]+ state/)) reason = substr($2, RSTART, RLENGTH)
+      printf "  %s%s%s %-9s %s%s%s\n", col, tag, r, t, d, reason, r
+    }
+  '
+}
+
+_render_holders() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v y=$C_YELLOW -v limit="$TOP_N" '
+    NF < 2 { next }
+    {
+      n++
+      if (n > limit) { over++; next }
+      t = ($3 == "" ? "-" : $3)
+      printf "  %s%-22s%s %6d 次  %s%s%s\n", b, $1, r, $2, d, t, r
+    }
+    END {
+      if (over) printf "  %s… 另有 %d 个进程也出现在断言里%s\n", d, over, r
+      if (n)     printf "  %s合计 %d 个进程,以上按出现次数排序%s\n", d, n, r
+    }
+  '
+}
+
+_section() {
+  echo "${C_BOLD}$1${C_RESET}"
+  echo "  ${C_DIM}───────────────────────────────────────────────────────${C_RESET}"
+}
+
+_render_human() {
+  [[ -t 1 ]] && printf '\033[?25l\033[2J\033[H'
+  echo "${C_BOLD}${C_CYAN}═══ 睡眠 / 电源事件 审计 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读  ·  窗口:最近 $HOURS 小时  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  if [[ -z $ONLY ]]; then
+    _section "事件统计 (最近 $HOURS 小时)"
+    # 统计表是 3 字段(name / count / 说明),不走 _kv(那个是 4 字段的判定表)
+    {
+      printf "sleep\t%d\t正常进入睡眠的次数\n" "$J_N_SLEEP"
+      printf "wake\t%d\t从睡眠或暗唤醒里醒来的次数\n" "$J_N_WAKE"
+      printf "dark\t%d\tDarkWake:没真正睡着就被后台任务叫醒\n" "$J_N_DARK"
+      printf "ac\t%d\t电源切到交流电(插上)\n" "$J_N_AC"
+      printf "batt\t%d\t电源切到电池(拔掉)\n" "$J_N_BATT"
+    } | _render_stats
+    echo
+  fi
+
+  if [[ $ONLY == 'timeline' || -z $ONLY ]]; then
+    _section "事件时间线 (最近 30 条)"
+    if (( ${#J_EVENTS} == 0 )); then
+      echo "  ${C_DIM}(窗口内没有睡眠/唤醒事件 —— 台式机或一直没睡)${C_RESET}"
+    else
+      print -rl -- $J_EVENTS | _render_timeline
+    fi
+    echo
+  fi
+
+  if [[ $ONLY == 'holders' || -z $ONLY ]]; then
+    _section "谁在阻止休眠 (整份日志累计的 Assertions 排行,前 $TOP_N)"
+    if (( ${#J_HOLDERS} == 0 )); then
+      echo "  ${C_DIM}(没有解析到 Assertions 记录)${C_RESET}"
+    else
+      print -rl -- $J_HOLDERS | _render_holders
+      echo "  ${C_DIM}类型:UserIsActive=有用户活动 / PreventUserIdleSystemSleep=阻止空闲休眠${C_RESET}"
+      echo "  ${C_DIM}当前还在生效的断言看 batwatch(pmset -g assertions)${C_RESET}"
+    fi
+    echo
+  fi
+
+  if [[ $ONLY != 'holders' && $ONLY != 'timeline' ]]; then
+    _section "结论"
+    _verdicts | _render_kv
+    echo
+  fi
+
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: pmset -g log, pmset -g batt, sysctl, date${C_RESET}"
+  echo "${C_DIM}  本次开机时间: $J_BOOT · 电池详情: batwatch${C_RESET}"
+}
+
+_render_json() {
+  local a b c d
+  print -r -- "meta${_TAB}${SCRIPT_NAME}${_TAB}${VERSION}${_TAB}$(date '+%Y-%m-%d %H:%M:%S')"
+  print -r -- "window_hours${_TAB}${HOURS}"
+  print -r -- "boot${_TAB}${J_BOOT}"
+  print -r -- "count${_TAB}sleep${_TAB}${J_N_SLEEP}"
+  print -r -- "count${_TAB}wake${_TAB}${J_N_WAKE}"
+  print -r -- "count${_TAB}dark${_TAB}${J_N_DARK}"
+  print -r -- "count${_TAB}ac${_TAB}${J_N_AC}"
+  print -r -- "count${_TAB}batt${_TAB}${J_N_BATT}"
+  local row
+  for row in $J_EVENTS;  do print -r -- "event${_TAB}${row}"; done
+  for row in $J_HOLDERS; do print -r -- "holder${_TAB}${row}"; done
+  local vout
+  vout=$(_verdicts)
+  while IFS=$_TAB read -r a b c d; do print -r -- "verdict${_TAB}${a}${_TAB}${b}${_TAB}${c}${_TAB}${d}"; done <<< "$vout"
+}
+
+_cleanup() { [[ -t 1 ]] && printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+if $AS_JSON; then
+  trap - EXIT INT TERM
+  _collect_boot; _collect_log; _collect_holders
+  _render_json
+  exit 0
+fi
+
+_collect_boot
+_collect_log
+_collect_holders
+_render_human

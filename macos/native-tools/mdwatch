@@ -1,0 +1,365 @@
+#!/usr/bin/env zsh
+# mdwatch — Spotlight 索引观察器 (为什么"搜不到文件" / "机器突然变卡")
+#
+# 设计目标:
+#   - "我明明存了那个文件,Spotlight 搜不到"、"今天开机特别卡" —— 这两个问题
+#     九成是 Spotlight 索引(mdutil/mds)出了问题,macOS 却不给任何提示
+#   - 免 brew / 免 sudo,只 zsh + mdutil / mdfind / find / ps / df
+#   - 显示:
+#       ① 每个卷的索引开关 (mdutil -as)
+#       ② 主卷 / 数据卷 是否被索引 —— 关掉的话等于半个 Finder 失明
+#       ③ .metadata_never_index 排除列表 (哪些目录被明确排除在索引之外)
+#       ④ 索引相关进程 (mds / mds_stores / mdworker) 是否在跑
+#       ⑤ 索引不到文件的抽样自检 (mdfind 查一个一定存在的东西)
+#       ⑥ 结论:该不该重建索引
+#   - 只读:不执行 mdutil -E / -i off,只把修复命令打在最后一行
+#
+# 用法:
+#   mdwatch                  # 全量单次
+#   mdwatch --volumes        # 只看卷索引状态
+#   mdwatch --excluded       # 只看 .metadata_never_index 排除列表
+#   mdwatch --probe FILE...  # 用 mdfind 试搜给定关键词(默认 3 个)
+#   mdwatch --json
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -r _TAB=$'\t'
+typeset ONLY=''
+typeset AS_JSON=false DEEP=false
+typeset -a PROBES=()
+
+while (( $# > 0 )); do
+  case $1 in
+    --volumes)  ONLY='volumes'; shift ;;
+    --excluded) ONLY='excluded'; shift ;;
+    --deep)     DEEP=true; shift ;;
+    --probe)    shift; [[ $# -gt 0 ]] || { echo "$SCRIPT_NAME: --probe 需要关键词" >&2; exit 2; }
+                 while [[ $# -gt 0 && $1 != -* ]]; do PROBES+=("$1"); shift; done ;;
+    --json)     AS_JSON=true; shift ;;
+    --version)  echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--volumes|--excluded] [--deep] [--probe 关键词...] [--json]"
+      echo ""
+      echo "  --volumes        只看卷索引状态"
+      echo "  --excluded       只看被排除索引的目录"
+      echo "  --deep           排除列表扫到 6 层(慢,几十秒)"
+      echo "  --probe KEY...   用 mdfind 试搜这些关键词"
+      echo "  --json           TSV 输出"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+(( ${#PROBES} == 0 )) && PROBES=(README.md package.json .zsh_history)
+
+typeset -g -a J_VOL=()        # mount<TAB>state<TAB>note
+typeset -g -a J_EXCL=()       # path<TAB>depth-note
+typeset -g -a J_PROC=()       # pid<TAB>comm<TAB>cpu
+typeset -g -a J_PROBE=()      # keyword<TAB>hits<TAB>sample
+typeset -g J_ROOT_STATE='?' J_DATA_STATE='?' J_MDS_RUNNING='no'
+
+# ---- ① 卷索引状态 ----------------------------------------------------------
+# mdutil -as 的输出是两行一组:路径行 + 缩进的 "Indexing enabled/disabled."
+# 不能用 grep -c 一把梭:不同 macOS 版本文案不一样(enabled / disabled / not indexed)。
+_collect_volumes() {
+  # 坑:不能用关联数组记"上一个路径"来配对状态行。zsh 的 ${(k)assoc} 返回哈希顺序
+  # 而不是插入顺序,${keys[-1]} 拿到的往往不是刚遇到的那个卷,所有卷的状态全错位。
+  # 老老实实用标量变量记 last_path。
+  # 注意:局部变量千万别叫 path!zsh 里 path 和 PATH 是绑定变量,
+  # `local path` 会把 PATH 清空,函数里所有外部命令(command not found)全废,
+  # 而且如果错误信息被 2>/dev/null 吞掉,表现就是"这个函数啥也没干"。
+  local line vol state last_path=''
+  while IFS= read -r line; do
+    if [[ $line == /* && $line == *: ]]; then
+      # 路径行特征:以 / 开头且以 : 结尾,例如 "/System/Volumes/Data:"
+      vol=${line%:}
+      [[ $vol == */ && $vol != '/' ]] && vol=${vol%/}
+      last_path=$vol
+    elif [[ -n $last_path && $line == *[Ii]ndexing* ]]; then
+      # 状态行紧跟在其上方的路径行之后,带缩进、结尾一个句点
+      state=$(print -r -- "$line" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//; s/[.]$//')
+      if [[ $state == *disabled* ]]; then
+        J_VOL+=("$last_path${_TAB}off${_TAB}$state")
+      elif [[ $state == *enabled* ]]; then
+        J_VOL+=("$last_path${_TAB}on${_TAB}$state")
+      else
+        J_VOL+=("$last_path${_TAB}unknown${_TAB}$state")
+      fi
+      last_path=''
+    fi
+  done < <(mdutil -as 2>/dev/null)
+
+  # 主卷与数据卷单独标记出来,这是最该关心的一项
+  local row
+  for row in $J_VOL; do
+    case ${row%%$'\t'*} in
+      /)                     J_ROOT_STATE=${${row#*$'\t'}%%$'\t'*} ;;
+      /System/Volumes/Data)  J_DATA_STATE=${${row#*$'\t'}%%$'\t'*} ;;
+    esac
+  done
+}
+
+# ---- ② 排除列表 -----------------------------------------------------------
+# .metadata_never_index 是 macOS 的"这个目录别索引"标记文件。
+#
+# 坑:不能用 `find $HOME -depth 4 -name .metadata_never_index`(BSD find 照样要
+# 把整棵树走完,实测 42s),也不能用 `**/(N.d4)`(zsh 递归 glob 同样 23s,而且会
+# 刷一屏 permission denied)。这里改成"固定几层显式 glob":每个 `*` 只 stat
+# 下一层,实测 0.6s 跑完,而且永远不会碰到读不了的目录。
+# 需要更深就加 --deep(明确告诉你会很慢)。
+_collect_excluded() {
+  local p
+  local -a pats
+  pats=(
+    "$HOME"/.metadata_never_index(N)
+    "$HOME"/*/.metadata_never_index(N)
+    "$HOME"/*/*/.metadata_never_index(N)
+    "$HOME"/*/*/*/.metadata_never_index(N)
+    /Applications/.metadata_never_index(N)
+    /Applications/*/.metadata_never_index(N)
+    /Applications/*/*/.metadata_never_index(N)
+    /Library/.metadata_never_index(N)
+    /usr/local/.metadata_never_index(N)
+    /Volumes/*/.metadata_never_index(N)
+    /Volumes/*/*/.metadata_never_index(N)
+  )
+  for p in $pats; do
+    J_EXCL+=("${p%/.metadata_never_index}${_TAB}该目录及子目录不进 Spotlight")
+  done
+
+  if [[ $DEEP == true ]]; then
+    local root
+    for root in "$HOME" /Applications /Volumes; do
+      [[ -d $root ]] || continue
+      # 深度 6 的递归 glob:慢,但覆盖得全
+      for p in "$root"/**/.metadata_never_index(N.d6); do
+        J_EXCL+=("${p%/.metadata_never_index}${_TAB}深层排除(--deep 发现)")
+      done
+    done
+  fi
+}
+
+# ---- ③ 索引相关进程 -------------------------------------------------------
+_collect_procs() {
+  # ps 里 grep 自己会多出一行,所以用 pgrep -l 或按 comm 精确匹配
+  local c
+  for c in mds mds_stores mdworker_shared mdimport; do
+    if pgrep -x "$c" >/dev/null 2>&1; then
+      J_PROC+=("$(pgrep -x "$c" | tr '\n' ' ')${_TAB}$c${_TAB}运行中")
+    else
+      J_PROC+=("-${_TAB}$c${_TAB}未运行")
+    fi
+  done
+  if pgrep -x mds >/dev/null 2>&1 || pgrep -x mds_stores >/dev/null 2>&1; then
+    J_MDS_RUNNING='yes'
+  fi
+}
+
+# ---- ④ 试搜自检 -----------------------------------------------------------
+# 用 mdfind 查几个"一定存在"的东西,0 命中基本等于索引坏了。
+# 注意 mdfind 对中文/空格关键词要加引号,这里统一加双引号。
+_collect_probe() {
+  local k n sample
+  for k in $PROBES; do
+    n=$(mdfind -count "$k" 2>/dev/null | head -1) || n='0'
+    [[ $n == *[!0-9]* || -z $n ]] && n=0
+    # mdfind 结果第一条经常是空行,直接 head -1 会拿到空串
+    sample=$(mdfind "$k" 2>/dev/null | grep -v '^[[:space:]]*$' | head -1) || sample=''
+    J_PROBE+=("$k${_TAB}$n${_TAB}${sample:--}")
+  done
+}
+
+# ---- ⑤ 结论 ---------------------------------------------------------------
+_verdicts() {
+  local bad=0 warn=0 zero_probe=0
+  local row
+
+  case $J_ROOT_STATE in
+    off)  printf "bad\t启动卷索引已关闭\t/\tFinder 搜索与计算建议全部失效\n"
+          (( bad = bad + 1 )) ;;
+    on)   printf "ok\t启动卷索引开启\t/\t正常\n" ;;
+    *)    printf "warn\t启动卷索引状态未知\t/\tmdutil 输出异常,建议手工跑 mdutil -s /\n"
+          (( warn = warn + 1 )) ;;
+  esac
+  if [[ $J_DATA_STATE == 'off' ]]; then
+    printf "bad\t数据卷索引已关闭\t/System/Volumes/Data\t所有用户文件都搜不到\n"
+    (( bad = bad + 1 ))
+  fi
+  if [[ $J_ROOT_STATE == 'off' && $J_DATA_STATE == 'off' ]]; then
+    printf "bad\t等于整个 Spotlight 都是瞎的\t-\t恢复: sudo mdutil -a -i on\n"
+    (( bad = bad + 1 ))
+  fi
+
+  if [[ $J_MDS_RUNNING == 'no' ]]; then
+    printf "warn\t索引守护进程没在跑\tmds / mds_stores 都没起来\t索引不会自己重建\n"
+    (( warn = warn + 1 ))
+  else
+    printf "ok\t索引守护进程在跑\tmds_stores 存活\t正在或等待索引\n"
+  fi
+
+  (( ${#J_EXCL} > 0 )) && printf "info\t有 %d 个目录被排除\t见下方列表\t这些目录里搜不到东西是正常的\n" ${#J_EXCL}
+
+  # 试搜:有关键词 0 命中才算异常(关键词可能真的不存在,所以只 warn)
+  for row in $J_PROBE; do
+    if [[ ${${row#*$'\t'}%%$'\t'*} == '0' ]]; then
+      (( zero_probe = zero_probe + 1 ))
+    fi
+  done
+  if (( zero_probe == ${#J_PROBE} && ${#J_PROBE} > 0 )); then
+    printf "bad\t试搜全部 0 命中\t%d/%d 个关键词\t索引基本不可用\n" "$zero_probe" "${#J_PROBE}"
+    (( bad = bad + 1 ))
+  elif (( zero_probe > 0 )); then
+    printf "warn\t部分关键词搜不到\t%d/%d\t可能只是这些词确实不存在\n" "$zero_probe" "${#J_PROBE}"
+    (( warn = warn + 1 ))
+  else
+    printf "ok\t试搜全部有结果\t%d/%d\t索引工作正常\n" "${#J_PROBE}" "${#J_PROBE}"
+  fi
+
+  printf "info\t统计\tbad=%d warn=%d\t先修 bad\n" "$bad" "$warn"
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_kv() { printf "%s\t%s\t%s\t%s\n" "$1" "$2" "$3" "$4"; }
+
+_render_kv() {
+  # pad 只补空格不截断:BSD awk 的 substr 按字节,截中文会切出半个字
+  awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return s }
+    NF < 2 { next }
+    {
+      if ($1 == "ok")       { col = g;   mark = "✓" }
+      else if ($1 == "warn") { col = y;   mark = "!" }
+      else if ($1 == "bad")  { col = red; mark = "✗" }
+      else                  { col = d;   mark = "·" }
+      printf "  %s%s%s %s%s%s  %s%s  %s  %s\n", col, mark, r, b, pad($2, 24), r, pad($3, 40), d, $4, r
+    }
+  '
+}
+
+_render_volumes() {
+  awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v red=$C_RED '
+    NF < 2 { next }
+    {
+      st = $2
+      if (st == "on")       { col = g;   tag = "ON " }
+      else if (st == "off") { col = red; tag = "OFF" }
+      else                  { col = d;   tag = "?  " }
+      # 路径可能很长,单独一行 + 缩进的状态行,不做截断(截断会切坏中文路径)
+      printf "  %s%s%s %-5s %s%s\n", col, tag, r, d, $1, r
+      printf "              %s%s%s\n", d, $3, r
+    }
+  '
+}
+
+_render_excluded() {
+  awk -F'\t' -v d=$C_DIM -v r=$C_RESET '
+    NF < 1 { next }
+    { printf "  %-58s %s%s%s\n", $1, d, $2, r }
+  '
+}
+
+_render_procs() {
+  awk -F'\t' -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW '
+    NF < 3 { next }
+    {
+      if ($1 == "-") printf "  %s%-20s %s%s%s\n", y, $2, d, $3, r
+      else          printf "  %s%-20s %-6s %s%s%s\n", g, $2, $1, d, $3, r
+    }
+  '
+}
+
+_render_probe() {
+  awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v red=$C_RED '
+    NF < 2 { next }
+    {
+      if ($2 == "0") printf "  %s%-18s %s0 命中%s %s%s%s\n", b, $1, red, r, d, $3, r
+      else           printf "  %s%-18s %s%d 命中%s %s%s%s\n", b, $1, g, $2, r, d, $3, r
+    }
+  '
+}
+
+_section() {
+  echo "${C_BOLD}$1${C_RESET}"
+  echo "  ${C_DIM}───────────────────────────────────────────────────────${C_RESET}"
+}
+
+_render_human() {
+  [[ -t 1 ]] && printf '\033[?25l\033[2J\033[H'
+  echo "${C_BOLD}${C_CYAN}═══ Spotlight 索引 观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  if [[ -z $ONLY || $ONLY == 'volumes' ]]; then
+    _section "卷索引状态 (mdutil -as)"
+    if (( ${#J_VOL} == 0 )); then
+      echo "  ${C_DIM}(mdutil 无输出,可能命令被限制或系统版本不同)${C_RESET}"
+    else
+      print -rl -- $J_VOL | _render_volumes
+    fi
+    echo
+    _section "索引进程"
+    print -rl -- $J_PROC | _render_procs
+    echo
+  fi
+
+  if [[ -z $ONLY || $ONLY == 'excluded' ]]; then
+    _section "被排除索引的目录 (.metadata_never_index)"
+    if (( ${#J_EXCL} == 0 )); then
+      echo "  ${C_DIM}(没有发现排除标记,所有目录都在索引范围内)${C_RESET}"
+    else
+      print -rl -- $J_EXCL | _render_excluded
+    fi
+    echo
+  fi
+
+  if [[ -z $ONLY ]]; then
+    _section "试搜自检 (mdfind)"
+    print -rl -- $J_PROBE | _render_probe
+    echo
+    _section "结论"
+    _verdicts | _render_kv
+    echo
+  fi
+
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: mdutil, mdfind, pgrep, find(zsh glob)${C_RESET}"
+  echo "${C_DIM}  修复命令: 重建索引 sudo mdutil -E / · 开索引 sudo mdutil -a -i on · 状态 mdutil -s /${C_RESET}"
+}
+
+_render_json() {
+  print -r -- "meta${_TAB}${SCRIPT_NAME}${_TAB}${VERSION}${_TAB}$(date '+%Y-%m-%d %H:%M:%S')"
+  print -r -- "root${_TAB}${J_ROOT_STATE}"
+  print -r -- "data${_TAB}${J_DATA_STATE}"
+  print -r -- "mds_running${_TAB}${J_MDS_RUNNING}"
+  local row
+  for row in $J_VOL;   do print -r -- "volume${_TAB}${row}"; done
+  for row in $J_PROC;  do print -r -- "proc${_TAB}${row}"; done
+  for row in $J_EXCL;  do print -r -- "excluded${_TAB}${row}"; done
+  for row in $J_PROBE; do print -r -- "probe${_TAB}${row}"; done
+  _verdicts | while IFS=$'\t' read -r a b c d; do print -r -- "verdict${_TAB}${a}${_TAB}${b}${_TAB}${c}${_TAB}${d}"; done
+}
+
+if [[ -t 1 && $AS_JSON == false ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+_cleanup() { [[ -t 1 ]] && printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+# --json 时 trap 不能往 stdout 写东西(实测会把第一行 JSON/TSV 冲掉)
+if $AS_JSON; then
+  trap - EXIT INT TERM
+  _collect_volumes; _collect_procs; _collect_excluded; _collect_probe
+  _render_json
+  exit 0
+fi
+
+_collect_volumes
+_collect_procs
+_collect_excluded
+_collect_probe
+_render_human
