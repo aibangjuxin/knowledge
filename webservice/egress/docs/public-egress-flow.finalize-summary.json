@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "sequence",
+  "quality": "showcase",
+  "specification": {
+    "path": "/Users/lex/git/knowledge/webservice/egress/docs/.archify/sequence-public-egress-flow-20261002-123643/candidate.json",
+    "sha256": "e080d113d5784724a391214e2a0ee63089e01e4c105adfefb3ff40c5a3324c85",
+    "bytes": 5726
+  },
+  "artifact": {
+    "path": "/Users/lex/git/knowledge/webservice/egress/docs/public-egress-flow.html",
+    "sha256": "e0a12934448cdfcee3fa5213dbd7895a74e62c50dda3fe88217c87f80bef0e24",
+    "bytes": 759705
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/Users/lex/git/knowledge/webservice/egress/docs/public-egress-flow.finalize.json",
+    "summaryReceipt": "/Users/lex/git/knowledge/webservice/egress/docs/public-egress-flow.finalize-summary.json",
+    "browserCheckReceipt": "/Users/lex/git/knowledge/webservice/egress/docs/public-egress-flow.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.0.1",
+    "availableVersion": "3.0.1",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-02T04:36:56.375Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 1782
+}
