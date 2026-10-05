@@ -1,0 +1,71 @@
+# =============================================================================
+# 05-lex-listenerset.yaml
+# =============================================================================
+# ListenerSet for lex 团队 — wildcard *.lex.caep.uk
+#
+# 类比参考: Lex 线上配置 (plat-abjx-lex-testing-ingress HTTPRoute 的 parentRef)
+#
+# 设计依据 (Lex 实际线上配置):
+#   - ListenerSet 在 业务 ns 内 (ba000000-lex-int), NOT 平台层独立 ns
+#     (线上 HTTPRoute parentRef.namespace = ba000000-lex-int, 与业务 ns 同 ns)
+#   - hostname wildcard: *.lex.caep.uk 覆盖所有团队子域名 (含 http.lex.caep.uk)
+#   - TLS cert: *.lex.caep.uk wildcard, 由 cert-manager 生成在 ba000000-lex-int ns
+#   - allowedRoutes 用 Selector, 限定为有 gateway-access: ba000000-lex-int label 的 ns
+#   - parentRef 指向 Gateway "lex-gw-int" (lex-gw-int ns)
+#
+# 严格定义 (K8s Gateway API ListenerSet docs):
+#   "ListenerSet allows cluster operators to delegate HTTP routing
+#    configuration on a Gateway to teams in a multi-tenant environment.
+#    Each ListenerSet may have its own hostname, TLS, and allowedRoutes."
+#
+# Gateway API 实验特性:
+#   - ListenerSet 是 K8s Gateway API v1.5+ 的实验资源 (experimental)
+#   - 需安装 experimental-install.yaml (见 k8s-gateway/01-platform/install-gateway-api-crds.sh)
+#
+# Lex 线上样例关键字段:
+#   parentRef (HTTPRoute 里):
+#     - group: gateway.networking.k8s.io
+#     - kind: ListenerSet
+#     - name: lex-team-listenerset
+#     - namespace: ba000000-lex-int     ← 与业务 ns 同 ns
+# -----------------------------------------------------------------------------
+apiVersion: gateway.networking.k8s.io/v1
+kind: ListenerSet
+metadata:
+  name: lex-team-listenerset
+  namespace: ba000000-lex-int            # ← 移到业务 ns (线上真实配置)
+  labels:
+    # 标识这个 ListenerSet 服务的 wildcard FQDN (类比 abjx 体系)
+    gateway.aibang.com/listener-for: "lex.caep.uk"
+    businessId: ba000000
+    team: ba000000
+spec:
+  # ---- parentRef: 挂载到 Gateway ----
+  parentRef:
+    name: lex-gw-int                  # ← 指向 Gateway 资源 (lex-gw-int ns)
+    namespace: lex-gw-int             # ← Gateway 在 lex-gw-int ns
+    kind: Gateway
+    group: gateway.networking.k8s.io
+  # ---- listeners ----
+  listeners:
+    - name: https
+      port: 443
+      protocol: HTTPS
+      # wildcard hostname: 覆盖 *.lex.caep.uk (含 http.lex.caep.uk 等)
+      hostname: "*.lex.caep.uk"
+      tls:
+        mode: Terminate
+        # cert-manager 自动生成的 Secret 名 (按 cluster-issuer 约定)
+        # Secret 必须在 ListenerSet 同一 ns (ba000000-lex-int)
+        # K8s 不允许跨 ns 引用 Secret
+        certificateRefs:
+          - name: lex-caep-uk-tls
+            kind: Secret
+      # ---- allowedRoutes: 限定哪些 ns 的 HTTPRoute 能挂上来 ----
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              # 业务 ns 的 label (00-namespace-ba000000-lex-int.yaml 里已打)
+              gateway-access: ba000000-lex-int

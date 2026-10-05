@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "4aea8a98-4fd1-4989-960c-017d79a7670f",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/Users/lex/git/gcp/gateway-2.0/k8s-gateway-ambient/case-lex/.archify/architecture-case-lex-public-egress-20261002-124434/candidate.json",
+  "output": "/Users/lex/git/gcp/gateway-2.0/k8s-gateway-ambient/case-lex/case-lex-public-egress.html",
+  "specification": {
+    "sha256": "425c2f0a05a45be856afc78dca4698e52714a3a9a8e44a7c76c3dcba3107cc5d",
+    "bytes": 8196
+  },
+  "artifact": {
+    "sha256": "2fd81f7fd16569d83543ba77fdac95d6fd21e44f0cd608b08650dc84d4a48d38",
+    "bytes": 782792
+  }
+}

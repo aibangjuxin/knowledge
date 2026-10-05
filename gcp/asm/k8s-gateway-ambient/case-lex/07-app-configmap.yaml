@@ -1,0 +1,48 @@
+# =============================================================================
+# 07-app-configmap.yaml
+# =============================================================================
+# nginx 配置 — /healthz + 简单 backend
+#
+# 简化 (Lex 答复 Q1): Gateway TLS 终止 → plain HTTP/8080 给 pod
+#   → nginx listen 8080, 不需要 SSL, 不需要挂 cert
+#
+# 类比参考: k8s-gateway/06-runtime/deployment.yaml + nginx-https.conf
+#           但去掉了 SSL 段, 简化为 HTTP backend
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-nginx-config
+  namespace: ba000000-lex-int
+  labels:
+    app: app
+    app.kubernetes.io/name: app
+data:
+  default.conf: |
+    server {
+        listen 8080;
+        server_name _;
+
+        # /healthz 给 readiness/liveness/startup probe 用
+        location /healthz {
+            default_type text/plain;
+            return 200 "ok\n";
+        }
+
+        # 简单 echo, 用 X-* 头返回调用信息
+        location / {
+            default_type text/plain;
+            return 200 "Hello from app (ba000000-lex-int)\n";
+            add_header X-Backend-Server $hostname always;
+            add_header X-Backend-Service "app" always;
+            # Gateway TLS 终止后注入的头, 用于审计 / 调试
+            add_header X-Tenant "ba000000" always;
+            add_header X-Gateway-Source "lex-team-listenerset" always;
+        }
+
+        # 简单 404 fallback
+        location /404 {
+            default_type text/plain;
+            return 404 "not found\n";
+        }
+    }

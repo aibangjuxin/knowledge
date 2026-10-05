@@ -1,0 +1,151 @@
+# =============================================================================
+# 08-app-deployment.yaml
+# =============================================================================
+# 业务 Deployment — nginx + 8080 + 3 个 probe + KSA + Workload Identity
+#
+# 类比参考: k8s-gateway/06-runtime/newapi-deployment.yaml
+#           但简化为:
+#             - 8080 (plain HTTP, Gateway TLS 已终止)
+#             - nginxinc/nginx-unprivileged 镜像 (非 root, listen 8080 不需要 setcap)
+#             - KSA + Workload Identity 绑 GSA (Lex Q2: 业务要调 GCS/BigQuery)
+#             - 3 个 probe 都打 /healthz
+#
+# 严格定义 (K8s Pod docs):
+#   "serviceAccountName is the name of the ServiceAccount to use when running
+#    this pod. Workload Identity requires that automountServiceAccountToken=true
+#    and the iam.gke.io/gcp-service-account annotation on the SA be set."
+#
+# ambient 兼容性:
+#   - 不需要 istio-proxy sidecar (ambient 用 ztunnel)
+#   - 不需要特殊的 ambient SA (ztunnel 用节点级身份)
+#   - Pod SA 仅用于 GCP API 调用 (Workload Identity)
+# -----------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  namespace: ba000000-lex-int
+  labels:
+    app: app
+    app.kubernetes.io/name: app
+    app.kubernetes.io/part-of: ba000000-lex-int
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: app
+  template:
+    metadata:
+      labels:
+        app: app
+        app.kubernetes.io/name: app
+      # ambient 标签 (业务 pod 由 ztunnel 拦截 mesh 流量)
+      # 这些 label 不需要打 (ns 级 dataplane-mode=ambient 已生效),
+      # 但打 pod 级 label 便于 NetPol 选中特定 pod
+    spec:
+      # ---- KSA + Workload Identity (Lex Q2 答复: 业务调 GCS/BigQuery) ----
+      serviceAccountName: app-ksa
+      automountServiceAccountToken: true
+
+      containers:
+        - name: app
+          image: nginxinc/nginx-unprivileged:1.27-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d
+              readOnly: true
+          # nginx-unprivileged 默认以非 root (UID 101) 启动, listen 8080 (< 1024 不需要特权)
+          args:
+            - /bin/sh
+            - -c
+            - |
+              nginx -g 'daemon off;'
+
+          # ---- 3 个 probe (liveness / readiness / startup) ----
+          # 严格定义 (K8s Pod docs):
+          #   "livenessProbe: when fails, container is restarted"
+          #   "readinessProbe: when fails, pod is removed from Service endpoints"
+          #   "startupProbe: when succeeds, liveness/readiness checks begin"
+          #
+          # 全部打 /healthz, scheme HTTP (Gateway TLS 终止后是 plaintext)
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 12   # 允许 60s 启动
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 101            # nginx-unprivileged 镜像的默认 UID
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              # 不需要 NET_BIND_SERVICE (8080 > 1024, 不需要特权)
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: app-nginx-config
+---
+# Service (ClusterIP) — Gateway 后端
+# 类比: k8s-gateway/06-runtime/newapi-service.yaml
+#       简化为: HTTP (不是 HTTPS)
+#
+# Service 命名: 贴 Lex 平台业务命名约定
+#   模式: plat-abjx-lex-<env>-<version>-service
+#   例:   plat-abjx-lex-testing-0-0-0-service
+# 改这个名会影响: HTTPRoute backendRefs[0].name (09 / 09-01 都已同步改)
+apiVersion: v1
+kind: Service
+metadata:
+  name: plat-abjx-lex-testing-0-0-0-service
+  namespace: ba000000-lex-int
+  labels:
+    app: app
+    app.kubernetes.io/name: plat-abjx-lex-testing-0-0-0-service
+  annotations:
+    description: "Backend for http.lex.caep.uk (HTTP 8080, Gateway TLS terminated, plaintext to pod)"
+spec:
+  type: ClusterIP
+  selector:
+    app: app
+  ports:
+    - name: http
+      port: 80               # Service port (HTTPRoute backendRefs.port 引用这个)
+      targetPort: 8080       # 容器端口
+      protocol: TCP
+      appProtocol: http      # 提示 Gateway 后端是 plaintext HTTP

@@ -1,0 +1,60 @@
+# =============================================================================
+# 00-namespace-ba000000-lex-int.yaml
+# =============================================================================
+# 业务 namespace: ba000000-lex-int
+# 角色: ambient 模式下的应用 namespace
+#     - ingress 流量入口: lex-gw-int (Sidecar 模式 K8s Gateway API Gateway)
+#     - 东西向 L7 拦截: 本 ns 的 waypoint-int (per-namespace waypoint)
+#     - 东西向 L4 mTLS: ztunnel (节点 DaemonSet, istio-system ns)
+#     - 配置下发: istiod (istio-system ns)
+#
+# 设计文档参考:
+#   - 同仓库 03-waypoint-design.md §9 "本场景的 waypoint 蓝图"
+#   - 同仓库 06-policy-capabilities.md §11 "ambient 下 waypoint 的特殊角色"
+#   - 同仓库 08-ambient-networkpolicy.md §1 "K8s NetworkPolicy 与 ztunnel 协同规则"
+#   - 同仓库 10-waypoint-gateway-coexistence.md §1.3 "入口流量走 waypoint"
+# -----------------------------------------------------------------------------
+#
+# ★ 严格定义 vs 简化解释(标签语义)
+# ----------------------------------------------------------------
+# | 标签                              | 简化                    | 严格来源                                |
+# | istio.io/dataplane-mode=ambient   | "本 ns 走 ambient"      | Istio: ns 级 ambient 启用开关            |
+# | istio.io/ingress-use-waypoint=waypoint | "ingress 也走 waypoint" | "ingress-use-waypoint takes a value |
+# |                                   |                         | naming a waypoint" — Istio Waypoint docs |
+# |                                  |                         | (旧式 true 也兼容)                       |
+# | gateway-access=ba000000-lex-int   | "本 ns 标签,业务元数据" | 你自定义(便于 Gateway 路由/审计)        |
+# | ingress=int                       | "本 ns 接受 int 入口"   | 你自定义(配合 Gateway 路由)             |
+# | pod-security.kubernetes.io/enforce=baseline | "PSA baseline"  | K8s PSA(1.25+ 弃用,1.29 移除;        |
+# |                                   |                         | 新集群建议迁移到 PSA namespace label)    |
+# ----------------------------------------------------------------
+#
+# 注: istio.io/use-waypoint 这个 label 是 "namespace-wide enroll" 用的,
+#     由 istioctl waypoint apply --enroll-namespace 自动加,或手动加
+#     `kubectl label ns <ns> istio.io/use-waypoint=<waypoint-name>`。
+#     本场景里我们在 01-waypoint-int.yaml 显式创建 Gateway + 给 ns 打
+#     use-waypoint 标签(见 §02 步骤)。若不打算 enroll 整个 ns,
+#     也可在 Service 上单独加 use-waypoint label。
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ba000000-lex-int
+  labels:
+    # custom label
+    businessId: ba000000
+    runtime: "true"
+    team: ba000000
+    # ---- Istio ambient 控制 ----
+    # 启用 ambient 模式: istio-cni 给 pod 注入 iptables,ztunnel 拦截 mesh 流量
+    istio.io/dataplane-mode: ambient
+    # 让 ingress Gateway (lex-gw-int) 进来的流量也走本 ns 的 waypoint,
+    # 否则默认绕过 waypoint 不受 L7 AuthZ 控制 — 见 10-...-coexistence.md §1.1
+    istio.io/ingress-use-waypoint: waypoint
+    # enroll 整个 ns 到 waypoint(让 ns 内所有服务的 L7 流量经 waypoint)
+    # 也可不加,改为在 Service 上单独加 — 粒度更细
+    istio.io/use-waypoint: waypoint
+    # ---- 业务元数据(自定义)----
+    gateway-access: ba000000-lex-int
+    ingress: int
+    # ---- PSA baseline(注意: K8s 1.29+ 已弃用,长期需迁移到 namespace PSA)----
+    pod-security.kubernetes.io/enforce: baseline

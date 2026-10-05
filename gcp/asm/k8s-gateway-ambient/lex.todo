@@ -1,0 +1,162 @@
+TODO:
+
+# Done 
+✔ 我现在模拟操作成功了3种模式 @done(26-10-02 10:36)
+  ✔  namespace Leve Support @done(26-10-02 10:36)
+     ✔ ~~一种是非常典型的No TLS 走的HTTP  也就是ztunel这种模式  其实 这种是完全的mTLS 这种模式 [case-lex](./case-lex/)~~ @done(26-10-02 10:36)
+     ✔ 一种是混杂模式 让 能 部署 类似TLS 的 https的Deploy Levles 的 deployment 和相关资源 @done(26-10-02 10:36)
+     ✔ the flow directly through KongDP 443 ==> the Runtime TLS  8443 @done(26-10-02 10:36)
+     ✔ 如果可以的话，我应该把这 3 种类型里面的资源给补充起来，让他做一个明显的对比关系 @done(26-10-02 10:36)
+     ✔ 也可以换一句话说，就是第一种方式里面，我肯定是实现了一个 Base 的基础型的一个 NameSpace 的 Leve 去做一些独立的控制，让它本身是一个完全的  MTLS 模式 @done(26-10-02 10:36)
+
+# waypoint 
+☐ replicas: 2 + PodDisruptionBudget minAvailable: 1 ==> need to enhance resouces 
+☐ opt+ enter
+☐ press esc to leave 
+
+
+# version 
+- about Version ==> no license => 
+    - /Users/lex/git/gcp/gateway-2.0/k8s-gateway-ambient/18-solo-distribution-vs-upstream-istio-comparison.md
+    - https://docs.solo.io/istio/1.30.x/ambient/about/images/overview/
+    - 1.30.3-distroless = Standard 发行版 + distroless 基础镜像
+    - Solo 分发的 Standard 镜像
+      - 仓库:us-docker.pkg.dev/soloio-img/istio
+      - tag:1.30.3-distroless
+      - 不带 -solo 后缀 = 不需要 license
+      - 但拿到 Solo 的 n-4 支持 + CVE 修复
+      - Solo 分发的 Istio 镜像,无 license
+    - no support
+      - 1.30.3-solo-distroless = Solo 分发 + 额外 Envoy filters(为 Solo 企业功能准备)
+      - 无 license 跑 = 跟 1.30.3-distroless 完全等价(额外 Envoy filters 不生效)
+      2. Solo 分发的镜像 vs 上游 Istio 镜像(对比表)
+- gatewayClassName ==> using which one ?
+        - waypoint support L7 ==> setup ? ==> 很明显，我们可以看到我们这个 可以 工作
+        - 这里我们可以确认，我们将排除这种模式，因为这个是企业版，所以不存在这种切换问题。 enterprise-agentgateway 我们不会使用这个模式
+        - waypoint need install hpa and need to enhance resouces 
+          - [reference](./case-lex/01-waypoint-int.yaml#L80-L81)
+
+```text
+Distributions 
+Solo provides two main distributions of Istio as follows.
+
+Standard: A copy of the community Istio distribution. This distribution does not contain Solo.io’s enterprise features or extended Istio support. Example: 1.30.5
+Solo: An enterprise distribution of the community Istio project with additional security patches, as well as certain Envoy filters to enable Solo Enterprise for Istio features, such as support for deploying Istio service meshes in ambient mode. You must use the solo image to use these features. Example: 1.30.5-solo
+
+Both Solo’s standard and solo distributions of Istio come in the following optional varieties.
+
+FIPS: An image that is tagged with fips complies with NIST FIPS, for use cases that require federal information processing capabilities. For more information, see About Solo FIPS distribution of Istio. Examples: 1.30.5-fips, 1.30.5-solo-fips
+Distroless: An image that is tagged with distroless is a slimmed down distribution with the minimum set of binary dependencies to run the image, for enhanced performance and security. Note that if your app relies on package management, shell, or other operating system tools such as pip, apt, ls, grep, or bash, you must find another way to install these dependencies. Examples: 1.30.5-distroless, 1.30.5-solo-distroless
+
+
+
+分布
+Solo提供了Istio的两个主要发行版，如下所示。
+标准：社区Istio发行版的副本。此发行版不包含Solo.io的企业功能或扩展的Istio支持。示例：1.30.5
+Solo：社区Istio项目的企业版，带有额外的安全补丁，以及某些Envoy过滤器，用于启用Solo enterprise的Istio功能，例如支持在环境模式下部署Istio服务网格。您必须使用独奏图像才能使用这些功能。示例：1.30.5-solo
+
+Solo的Istio标准版和独奏版都有以下可选版本。
+
+FIPS：标记有FIPS的图像符合NIST FIPS，适用于需要联邦信息处理能力的用例。有关更多信息，请参阅Istio的Solo FIPS发行版。示例：1.30.5像素、1.30.5像素
+Distrioles：标记为无发行版的映像是一种精简的发行版，具有运行映像的最小二进制依赖关系集，可提高性能和安全性。请注意，如果你的应用程序依赖于包管理、shell或其他操作系统工具，如pip、apt、ls、grep或bash，你必须找到另一种方法来安装这些依赖关系。示例：1.30.5无杆，1.30.5无色
+
+
+```
+
+# migration
+- /Users/lex/git/gcp/gateway-2.0/k8s-gateway-ambient/11-l7-zero-downtime-constraint.md
+- 通过简单的分析来看，要做到平滑迁移看起来不太可能。所以说我们有没有平滑迁移的机会？应该怎么去做？
+
+# solo
+- enable ambient
+  - will no destination rule for traffic management
+  - Ambient 模式让 DestinationRule 彻底消失,集群内加密被 ztunnel 透明接管,业务代码/镜像彻底解耦 TLS。
+  - DestinationRule 资源调整（非常关键）
+    - 旧模式：必须配置 TLS mode: SIMPLE 或 MUTUAL 来指引 Istio Gateway/Sidecar 向下游 Pod 发起 TLS 请求。
+    - Ambient 模式：
+        - 删除针对 Runtime 端口的 TLS 设置（或将其设为 DISABLE）。因为底层 ztunnel 会接管 L4 加密，应用层只需发送标准 HTTP。
+        - 如果应用了 Ambient，Istio 控制面 (Pilot) 会通过 WDS 自动通知 Gateway 使用 HBONE 协议连接到 Ambient 节点。
+
+
+- /Users/lex/git/knowledge/gcp/asm/serviceEntry-capabilities-and-use-cases.md
+- /Users/lex/git/knowledge/gcp/asm/authorizationPolicy-capabilities-and-use-cases.md  
+- /Users/lex/git/knowledge/gcp/asm/peerAuthentication-capabilities-and-use-cases.md
+
+
+
+# ingress 
+- internal 
+- public ingress tls && mTLS 
+
+# Kong 
+- /Users/lex/git/gcp/gateway-2.0/k8s-gateway-ambient/20-solo-ambient-kong.md
+  - 这里我增加了一个模式定义概念 也就是对我们旧的模式和新的模式做了一个简单的总结:
+    - 原来的这套 Istio Gateway + ListenerSet + HTTPRoute 模式，在现代 Cloud Native / Gateway API 的体系下，属于标准的“多租户声明式应用网关”模式（Multi-Tenant Declarative Application Gateway Model），具体可以从以下几个维度来精确定义和总结：
+    - 1. 架构与控制面维度：多租户网关与责任分离模式 (Multi-Tenant Gateway with Separation of Concerns)
+  这是基于 Kubernetes Gateway API 标准构建的高级多租户架构：
+      - 基础设施层 (Infra Team)：负责部署管理 Gateway 资源及底层控制器（Istio Pilot），定义全局的入口基础设施（如 IP、TLS 证书、全局网络等）。
+      - 业务团队/租户层 (Tenant Teams)：通过 ListenerSet（或 Gateway API 的跨 Namespace 挂载能力）在各自的逻辑/应用隔离区内声明属于该 Team 的入口规则（域名通配符、端口、TLS 终止点等）。
+      - API / 服务开发者 (Service Owners)：在自己的租户 Namespace 中编写 HTTPRoute，通过 parentRefs 将路由精准绑定到团队的 ListenerSet 上。
+      - 这种架构打破了传统“单块集中式网关配置”的瓶颈，实现了控制面的声明式自治与多租户隔离。
+    - 新的架构模式
+      - 在 Ambient 模式下，Pod 间传输已被 ztunnel 自动加密 (HBONE / mTLS)，原本应用层（如应用自建 TLS 或 Envoy TLS Sidecar）的 HTTPS 需求被彻底解耦。
+针对您的架构（KongDP 未开启 Ambient / 属于 Mesh 外或未打标 Pod，而 Runtime Pod 位于 Ambient 纳管的 Namespace 下，监听明文端口如 80 或 8443），
+      - 下面是推荐的两个方案
+      - 在这里，我已经在我们的环境里面实现了这个 部分 流程已经跑通了
+      - ~~方案 A：KongDP 位于 Ambient Mesh 外部（推荐，架构最清晰, 这部分我已经实现~~
+        ```text
+        2. KongDP 与 Ambient 结合的核心机制
+        当 Runtime 卸载了应用层 HTTPS 改用明文端口（例如 80 或 8443）后，Kong 与 Ambient 的对接关键在于将 Kong 视作网关边界提供者（Client-to-Mesh Edge）：
+
+        ~~方案 A：KongDP 位于 Ambient Mesh 外部（推荐，架构最清晰）~~
+        KongDP 的配置：Kong 保持部署在未标记 istio.io/dataplane-mode=ambient 的 Namespace 中。
+        Upstream 目标：KongDP 的 upstream 直接填 Runtime 的 Kubernetes Service 域名与明文端口（例如 [http://app-service.110139-int.svc:80](http://app-service.110139-int.svc:80)）。
+        流量穿透路径：
+        Kong 发出普通的明文 HTTP 请求到 app-service:80。===> 对于这种模式来说，在我们的环境里面，其实就是在明文传输，这个安全风险是需要知晓的。
+        流量离开 Kong 节点或进入 Runtime 宿主机时，Runtime 所在节点的 ztunnel 劫持入站流量。
+        ztunnel 在入口自动将明文 HTTP 包打上 HBONE (mTLS) 隧道包，解密后投递给 Runtime 的 80 或 8443 端口。
+        结果：Kong 自身完全无需关注任何 TLS/mTLS 逻辑，由 ztunnel 在节点侧静默完成加密与身份校验。
+        方案 B：KongDP 也加入 Ambient Mesh
+        如果将 KongDP 所在 Namespace 也打上 istio.io/dataplane-mode=ambient 标签：
+        Kong 节点侧的 ztunnel 会建立 Kong ztunnel ➔ Runtime ztunnel 的直接 L4 HBONE 隧道。
+        Kong 内部上游同样只需配置 http://app-service:80，所有节点间的传输将获得全透明的零信任 mTLS 保护。
+
+        方案 B：KongDP 也加入 Ambient Mesh
+        如果将 KongDP 所在 Namespace 也打上 istio.io/dataplane-mode=ambient 标签：
+        Kong 节点侧的 ztunnel 会建立 Kong ztunnel ➔ Runtime ztunnel 的直接 L4 HBONE 隧道。
+        Kong 内部上游同样只需配置 http://app-service:80，所有节点间的传输将获得全透明的零信任 mTLS 保护。
+        ```
+
+# egress 
+- 我们传统的 egress 流量控制配置/Users/lex/git/gcp/linux/networking/nhf-flow.html
+- /Users/lex/git/gcp/gateway-2.0/k8s-gateway-ambient/21-solo-ambient-egress-architecture.html
+  - serviceEntry 资源
+  - authorizationPolicy 资源
+- 所以上面两个HTML的页面其实是值得分析的 可能让我更好的理解我们这个组合模式下，它是如何出局访问的
+  - 关于这一部分，我已经保存了一个简单的文档，是关于 Egress verify 
+  ☐ https://docs.solo.io/istio/1.30.x/ambient/traffic-management/egress/ ==> 这里看到一个表格，有一个对应的版本支持，比如说企业版支持什么，移动版支持什么
+  ☐ https://docs.solo.io/istio/1.30.x/ambient/traffic-management/egress/overview/
+  ☐ https://docs.solo.io/istio/1.30.x/ambient/traffic-management/egress/egress/ ==> 那如果要支持我们的场景研究，这个文档基本就够了 主要是核对一下对应资源的创建，它的 level 会不会高于我们的 L3 或者 L4 看起来这是一个 L7 的，所以说这个是可以去做个尝试的
+  ☐ https://docs.solo.io/istio/1.30.x/ambient/traffic-management/egress/ztunnel-egress/ ==> 我们的版本不支持这个
+  ☐ L4 ztunnel-native egress [Enterprise]
+  ☐
+- public 
+  ☐ 问题:Squid 若入 mesh,ztunnel 会拦截,CONNECT 隧道被破坏;且 Squid ACL 依赖源 IP,语义会变[/Users/lex/git/gcp/gateway-2.0/k8s-gateway-ambient/case-lex/base-lex-ServiceEntry.md]
+  ☐ 推荐:ServiceEntry + egress waypoint 替代第一级 GKE Squid,保留第二级 GCE VM Squid(§7.5)
+
+
+# feature
+- file upload ==> dependency Envoy filter configuration?
+- custom filter ==> 我们当前的一个解决方案，对于mTLS 的 CN 的校验是在这个里面实现的
+- Here, each API is independent. To prevent drift between APIs, we’ve added an additional layer of validation that uses CN-based checks to route different APIs to their respective backends
+- timeout
+- websockets for internal and public ingress TLS or public ingress mTLS
+   ☐ /Users/lex/git/knowledge/webservice/egress/docs/public-egress-flow.html ☐ 
+
+
+# networkpolicy 
+- /Users/lex/git/gcp/gateway-2.0/k8s-gateway-ambient/08-ambient-networkpolicy.md
+
+
+# secret and configmap ? for migration 
+- /Users/lex/git/gcp/gateway-2.0/k8s-gateway-ambient/22-ztunnel-mtls-and-cert-rotation.md

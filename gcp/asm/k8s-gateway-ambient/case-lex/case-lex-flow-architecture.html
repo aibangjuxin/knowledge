@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>case-lex — ambient Gateway Flow</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #020617;
+    --grid: #1e293b;
+    --text: #ffffff;
+    --text-muted: #94a3b8;
+    --text-dim: #475569;
+    --mask: #0f172a;
+    --frontend-fill:    rgba(8, 51, 68, 0.4);
+    --frontend-stroke:  #22d3ee;
+    --backend-fill:     rgba(6, 78, 59, 0.4);
+    --backend-stroke:   #34d399;
+    --database-fill:    rgba(76, 29, 149, 0.4);
+    --database-stroke:  #a78bfa;
+    --cloud-fill:       rgba(120, 53, 15, 0.3);
+    --cloud-stroke:     #fbbf24;
+    --security-fill:    rgba(136, 19, 55, 0.4);
+    --security-stroke:  #fb7185;
+    --messagebus-fill:  rgba(251, 146, 60, 0.3);
+    --messagebus-stroke:#fb923c;
+    --external-fill:    rgba(30, 41, 59, 0.5);
+    --external-stroke:  #94a3b8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .header-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--backend-stroke);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0;
+  }
+  .header .subtitle {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: 8px;
+  }
+  .svg-card {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 24px;
+    overflow: auto;
+  }
+  .grid-pattern { stroke: #1e293b; stroke-width: 0.5; fill: none; }
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .card {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .card-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+  .card-dot.cyan { background: var(--frontend-stroke); }
+  .card-dot.green { background: var(--backend-stroke); }
+  .card-dot.amber { background: var(--cloud-stroke); }
+  .card-dot.rose { background: var(--security-stroke); }
+  .card h3 { font-size: 13px; margin: 0; }
+  .card ul { list-style: none; padding: 0; margin: 0; font-size: 11px; color: var(--text-muted); }
+  .card li { padding: 2px 0; }
+  .footer {
+    text-align: center;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 16px;
+  }
+  text { font-family: 'JetBrains Mono', monospace; fill: var(--text); }
+  .t-name { font-size: 12px; font-weight: 600; }
+  .t-sub { font-size: 9px; fill: var(--text-muted); }
+  .t-anno { font-size: 8px; fill: var(--text-muted); }
+  .t-tiny { font-size: 7px; fill: var(--text-muted); }
+  .t-dim { font-size: 9px; fill: var(--text-dim); }
+  .arrow { stroke: #64748b; stroke-width: 1.5; fill: none; }
+  .arrow-emph { stroke: var(--backend-stroke); stroke-width: 1.8; fill: none; }
+  .arrow-mesh { stroke: var(--messagebus-stroke); stroke-width: 1.5; fill: none; stroke-dasharray: 4,3; }
+  .legend { font-size: 9px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-dot"></div>
+  <h1>case-lex — Ambient Gateway Request Flow</h1>
+  <span class="subtitle">ba000000-lex-int business ns · Istio ambient · two-tier gateway pattern</span>
+</div>
+
+<div class="svg-card">
+<svg width="1600" height="900" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg">
+  <!-- Grid background -->
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrowhead-emph" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#34d399"/>
+    </marker>
+    <marker id="arrowhead-mesh" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#fb923c"/>
+    </marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#grid)"/>
+
+  <!-- ==================== ROW 1: External / GCP edge ==================== -->
+
+  <!-- External Client -->
+  <g>
+    <rect x="40" y="60" width="160" height="80" rx="6" fill="#0f172a"/>
+    <rect x="40" y="60" width="160" height="80" rx="6" fill="var(--external-fill)" stroke="var(--external-stroke)" stroke-width="1.5"/>
+    <text x="120" y="92" text-anchor="middle" class="t-name">External Client</text>
+    <text x="120" y="108" text-anchor="middle" class="t-sub">browser / mobile / API</text>
+    <text x="120" y="124" text-anchor="middle" class="t-anno">https://http.lex.caep.uk</text>
+  </g>
+
+  <!-- GCP HTTPS LB -->
+  <g>
+    <rect x="280" y="60" width="180" height="80" rx="6" fill="#0f172a"/>
+    <rect x="280" y="60" width="180" height="80" rx="6" fill="var(--cloud-fill)" stroke="var(--cloud-stroke)" stroke-width="1.5"/>
+    <text x="370" y="86" text-anchor="middle" class="t-name">GCP HTTPS LB</text>
+    <text x="370" y="103" text-anchor="middle" class="t-sub">Global External LB</text>
+    <text x="370" y="118" text-anchor="middle" class="t-anno">managed cert + WAF</text>
+  </g>
+
+  <!-- PSC -->
+  <g>
+    <rect x="540" y="60" width="160" height="80" rx="6" fill="#0f172a"/>
+    <rect x="540" y="60" width="160" height="80" rx="6" fill="var(--security-fill)" stroke="var(--security-stroke)" stroke-width="1.5"/>
+    <text x="620" y="86" text-anchor="middle" class="t-name">PSC</text>
+    <text x="620" y="103" text-anchor="middle" class="t-sub">Private Service Connect</text>
+    <text x="620" y="118" text-anchor="middle" class="t-anno">cross-VPC secure channel</text>
+  </g>
+
+  <!-- arrow External → LB -->
+  <line x1="200" y1="100" x2="280" y2="100" class="arrow" marker-end="url(#arrowhead)"/>
+  <text x="240" y="94" text-anchor="middle" class="t-tiny">HTTPS 443</text>
+
+  <!-- arrow LB → PSC -->
+  <line x1="460" y1="100" x2="540" y2="100" class="arrow" marker-end="url(#arrowhead)"/>
+  <text x="500" y="94" text-anchor="middle" class="t-tiny">TCP</text>
+
+  <!-- ==================== ROW 2: Istio Gateway + ListenerSet ==================== -->
+
+  <!-- Region: lex-gw-int ns -->
+  <g>
+    <rect x="40" y="200" width="660" height="160" rx="12" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8,4"/>
+    <text x="60" y="220" class="t-name" fill="#fbbf24">📦 lex-gw-int ns (platform)</text>
+  </g>
+
+  <!-- Istio Gateway (envoy sidecar) -->
+  <g>
+    <rect x="80" y="250" width="240" height="90" rx="6" fill="#0f172a"/>
+    <rect x="80" y="250" width="240" height="90" rx="6" fill="var(--frontend-fill)" stroke="var(--frontend-stroke)" stroke-width="1.5"/>
+    <text x="200" y="278" text-anchor="middle" class="t-name">Istio Gateway</text>
+    <text x="200" y="294" text-anchor="middle" class="t-sub">name: lex-gw-int</text>
+    <text x="200" y="310" text-anchor="middle" class="t-anno">gatewayClassName: istio</text>
+    <text x="200" y="324" text-anchor="middle" class="t-anno">sidecar envoy</text>
+  </g>
+
+  <!-- ListenerSet -->
+  <g>
+    <rect x="380" y="250" width="280" height="90" rx="6" fill="#0f172a"/>
+    <rect x="380" y="250" width="280" height="90" rx="6" fill="var(--messagebus-fill)" stroke="var(--messagebus-stroke)" stroke-width="1.5"/>
+    <text x="520" y="275" text-anchor="middle" class="t-name">ListenerSet</text>
+    <text x="520" y="291" text-anchor="middle" class="t-sub">lex-team-listenerset</text>
+    <text x="520" y="307" text-anchor="middle" class="t-anno">listener: https:443</text>
+    <text x="520" y="321" text-anchor="middle" class="t-anno">hostname: *.lex.caep.uk</text>
+  </g>
+
+  <!-- arrow PSC → Gateway -->
+  <path d="M 620 140 Q 620 200 200 250" class="arrow" marker-end="url(#arrowhead)"/>
+  <text x="630" y="200" class="t-tiny">HBONE / TCP</text>
+
+  <!-- arrow Gateway → ListenerSet -->
+  <line x1="320" y1="295" x2="380" y2="295" class="arrow" marker-end="url(#arrowhead)"/>
+  <text x="350" y="289" text-anchor="middle" class="t-tiny">parentRef</text>
+
+  <!-- ==================== ROW 3: business ns ba000000-lex-int ==================== -->
+
+  <!-- Region: ba000000-lex-int ns (ambient) -->
+  <g>
+    <rect x="760" y="200" width="800" height="600" rx="12" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="8,4"/>
+    <text x="780" y="220" class="t-name" fill="#34d399">📦 ba000000-lex-int ns (business ns · ambient)</text>
+    <text x="780" y="236" class="t-anno" fill="#34d399">labels: dataplane-mode=ambient · use-waypoint=waypoint · ingress-use-waypoint=waypoint</text>
+  </g>
+
+  <!-- HTTPRoute 1: app-route-ingress (attached to ListenerSet) -->
+  <g>
+    <rect x="800" y="260" width="280" height="80" rx="6" fill="#0f172a"/>
+    <rect x="800" y="260" width="280" height="80" rx="6" fill="var(--frontend-fill)" stroke="var(--frontend-stroke)" stroke-width="1.5"/>
+    <text x="940" y="282" text-anchor="middle" class="t-name">HTTPRoute 1</text>
+    <text x="940" y="297" text-anchor="middle" class="t-sub">app-route-ingress</text>
+    <text x="940" y="312" text-anchor="middle" class="t-anno">parentRef: ListenerSet</text>
+    <text x="940" y="325" text-anchor="middle" class="t-anno">hostnames: http.lex.caep.uk</text>
+  </g>
+
+  <!-- arrow ListenerSet → HTTPRoute 1 -->
+  <path d="M 660 295 Q 730 295 800 300" class="arrow-emph" marker-end="url(#arrowhead-emph)"/>
+  <text x="730" y="285" text-anchor="middle" class="t-tiny" fill="#34d399">edge L7</text>
+
+  <!-- HTTPRoute 2: app-route-waypoint (attached to Service) -->
+  <g>
+    <rect x="800" y="500" width="280" height="80" rx="6" fill="#0f172a"/>
+    <rect x="800" y="500" width="280" height="80" rx="6" fill="var(--frontend-fill)" stroke="var(--frontend-stroke)" stroke-width="1.5"/>
+    <text x="940" y="522" text-anchor="middle" class="t-name">HTTPRoute 2</text>
+    <text x="940" y="537" text-anchor="middle" class="t-sub">app-route-waypoint</text>
+    <text x="940" y="552" text-anchor="middle" class="t-anno">parentRef: Service</text>
+    <text x="940" y="565" text-anchor="middle" class="t-anno">(no hostnames — intercepts all ingress)</text>
+  </g>
+
+  <!-- waypoint-int (L7 proxy) -->
+  <g>
+    <rect x="1140" y="380" width="180" height="100" rx="6" fill="#0f172a"/>
+    <rect x="1140" y="380" width="180" height="100" rx="6" fill="var(--messagebus-fill)" stroke="var(--messagebus-stroke)" stroke-width="1.5"/>
+    <text x="1230" y="404" text-anchor="middle" class="t-name">waypoint-int</text>
+    <text x="1230" y="420" text-anchor="middle" class="t-sub">per-ns ambient</text>
+    <text x="1230" y="436" text-anchor="middle" class="t-anno">L7 AuthZ + headers</text>
+    <text x="1230" y="450" text-anchor="middle" class="t-anno">HA 2 replicas</text>
+    <text x="1230" y="465" text-anchor="middle" class="t-anno">port 15008 / HBONE</text>
+  </g>
+
+  <!-- ztunnel src side -->
+  <g>
+    <rect x="1140" y="260" width="180" height="80" rx="6" fill="#0f172a"/>
+    <rect x="1140" y="260" width="180" height="80" rx="6" fill="var(--security-fill)" stroke="var(--security-stroke)" stroke-width="1.5"/>
+    <text x="1230" y="282" text-anchor="middle" class="t-name">ztunnel (src)</text>
+    <text x="1230" y="297" text-anchor="middle" class="t-sub">node-level L4 mTLS</text>
+    <text x="1230" y="312" text-anchor="middle" class="t-anno">DaemonSet</text>
+    <text x="1230" y="325" text-anchor="middle" class="t-anno">encrypt + HBONE forward</text>
+  </g>
+
+  <!-- ztunnel dst side -->
+  <g>
+    <rect x="1140" y="500" width="180" height="80" rx="6" fill="#0f172a"/>
+    <rect x="1140" y="500" width="180" height="80" rx="6" fill="var(--security-fill)" stroke="var(--security-stroke)" stroke-width="1.5"/>
+    <text x="1230" y="522" text-anchor="middle" class="t-name">ztunnel (dst)</text>
+    <text x="1230" y="537" text-anchor="middle" class="t-sub">node-level L4 mTLS</text>
+    <text x="1230" y="552" text-anchor="middle" class="t-anno">HBONE unpack</text>
+    <text x="1230" y="565" text-anchor="middle" class="t-anno">→ routes to waypoint / pod</text>
+  </g>
+
+  <!-- Service -->
+  <g>
+    <rect x="1380" y="430" width="180" height="100" rx="6" fill="#0f172a"/>
+    <rect x="1380" y="430" width="180" height="100" rx="6" fill="var(--backend-fill)" stroke="var(--backend-stroke)" stroke-width="1.5"/>
+    <text x="1470" y="454" text-anchor="middle" class="t-name">Service</text>
+    <text x="1470" y="469" text-anchor="middle" class="t-sub">plat-abjx-lex-testing</text>
+    <text x="1470" y="482" text-anchor="middle" class="t-sub">-0-0-0-service</text>
+    <text x="1470" y="497" text-anchor="middle" class="t-anno">ClusterIP port:80</text>
+    <text x="1470" y="510" text-anchor="middle" class="t-anno">targetPort: 8080</text>
+  </g>
+
+  <!-- Pod (nginx) -->
+  <g>
+    <rect x="1380" y="600" width="180" height="120" rx="6" fill="#0f172a"/>
+    <rect x="1380" y="600" width="180" height="120" rx="6" fill="var(--backend-fill)" stroke="var(--backend-stroke)" stroke-width="1.5"/>
+    <text x="1470" y="624" text-anchor="middle" class="t-name">Pod "app"</text>
+    <text x="1470" y="639" text-anchor="middle" class="t-sub">nginx:1.27-alpine</text>
+    <text x="1470" y="654" text-anchor="middle" class="t-anno">containerPort: 8080</text>
+    <text x="1470" y="669" text-anchor="middle" class="t-anno">SA: app-ksa (WI)</text>
+    <text x="1470" y="684" text-anchor="middle" class="t-anno">3 probe → /healthz</text>
+    <text x="1470" y="699" text-anchor="middle" class="t-anno">2 replicas</text>
+  </g>
+
+  <!-- arrows in business ns -->
+
+  <!-- HR1 → ztunnel (src) -->
+  <path d="M 1080 300 Q 1110 300 1140 300" class="arrow-emph" marker-end="url(#arrowhead-emph)"/>
+  <text x="1110" y="294" text-anchor="middle" class="t-tiny" fill="#34d399">HBONE 15008</text>
+
+  <!-- ztunnel src → waypoint (vertical-ish curve) -->
+  <path d="M 1230 340 L 1230 380" class="arrow-mesh" marker-end="url(#arrowhead-mesh)"/>
+  <text x="1245" y="364" class="t-tiny" fill="#fb923c">mTLS</text>
+
+  <!-- waypoint → ztunnel dst -->
+  <path d="M 1230 480 L 1230 500" class="arrow-mesh" marker-end="url(#arrowhead-mesh)"/>
+
+  <!-- ztunnel dst → HR2 (feedback loop) -->
+  <path d="M 1140 540 Q 1110 540 1080 540" class="arrow-mesh" marker-end="url(#arrowhead-mesh)"/>
+  <text x="1110" y="534" text-anchor="middle" class="t-tiny" fill="#fb923c">waypoint L7</text>
+
+  <!-- HR2 → ztunnel (re-bound) -->
+  <path d="M 940 580 Q 1100 600 1140 555" class="arrow-mesh" marker-end="url(#arrowhead-mesh)"/>
+
+  <!-- ztunnel dst → Service -->
+  <path d="M 1320 540 Q 1350 510 1380 480" class="arrow" marker-end="url(#arrowhead)"/>
+  <text x="1340" y="500" class="t-tiny">HTTP</text>
+
+  <!-- Service → Pod -->
+  <line x1="1470" y1="530" x2="1470" y2="600" class="arrow" marker-end="url(#arrowhead)"/>
+  <text x="1485" y="568" class="t-tiny">8080</text>
+
+  <!-- ==================== ROW 4: east-west + Workload Identity ==================== -->
+
+  <!-- east-west annotation -->
+  <g>
+    <rect x="800" y="620" width="280" height="80" rx="6" fill="#0f172a"/>
+    <rect x="800" y="620" width="280" height="80" rx="6" fill="none" stroke="#64748b" stroke-width="1" stroke-dasharray="4,4"/>
+    <text x="940" y="642" text-anchor="middle" class="t-sub" fill="#94a3b8">east-west (pod → pod)</text>
+    <text x="940" y="657" text-anchor="middle" class="t-anno">→ HR2 alone fires</text>
+    <text x="940" y="672" text-anchor="middle" class="t-anno">HR1 not involved</text>
+    <text x="940" y="687" text-anchor="middle" class="t-anno">(waypoint intercept)</text>
+  </g>
+
+  <!-- Workload Identity -->
+  <g>
+    <rect x="800" y="730" width="280" height="60" rx="6" fill="#0f172a"/>
+    <rect x="800" y="730" width="280" height="60" rx="6" fill="var(--cloud-fill)" stroke="var(--cloud-stroke)" stroke-width="1.5"/>
+    <text x="940" y="752" text-anchor="middle" class="t-sub">Workload Identity</text>
+    <text x="940" y="768" text-anchor="middle" class="t-anno">KSA app-ksa → GSA app-gsa</text>
+    <text x="940" y="783" text-anchor="middle" class="t-anno">→ GCS / BigQuery</text>
+  </g>
+
+  <!-- arrow Pod → WI -->
+  <path d="M 1380 660 Q 1100 730 1080 760" class="arrow" marker-end="url(#arrowhead)" stroke-dasharray="4,4"/>
+
+  <!-- ==================== Legend ==================== -->
+  <g transform="translate(40, 820)">
+    <rect x="0" y="0" width="1520" height="60" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+    <text x="14" y="20" class="legend" fill="#94a3b8">Legend:</text>
+
+    <rect x="80" y="10" width="14" height="14" rx="2" fill="var(--external-fill)" stroke="var(--external-stroke)" stroke-width="1.2"/>
+    <text x="100" y="22" class="legend">External client</text>
+
+    <rect x="200" y="10" width="14" height="14" rx="2" fill="var(--cloud-fill)" stroke="var(--cloud-stroke)" stroke-width="1.2"/>
+    <text x="220" y="22" class="legend">GCP-managed</text>
+
+    <rect x="320" y="10" width="14" height="14" rx="2" fill="var(--security-fill)" stroke="var(--security-stroke)" stroke-width="1.2"/>
+    <text x="340" y="22" class="legend">Security / mesh</text>
+
+    <rect x="450" y="10" width="14" height="14" rx="2" fill="var(--frontend-fill)" stroke="var(--frontend-stroke)" stroke-width="1.2"/>
+    <text x="470" y="22" class="legend">L7 routing layer</text>
+
+    <rect x="580" y="10" width="14" height="14" rx="2" fill="var(--messagebus-fill)" stroke="var(--messagebus-stroke)" stroke-width="1.2"/>
+    <text x="600" y="22" class="legend">waypoint / listener</text>
+
+    <rect x="730" y="10" width="14" height="14" rx="2" fill="var(--backend-fill)" stroke="var(--backend-stroke)" stroke-width="1.2"/>
+    <text x="750" y="22" class="legend">Backend service</text>
+
+    <line x1="850" y1="17" x2="900" y2="17" class="arrow-emph" marker-end="url(#arrowhead-emph)"/>
+    <text x="908" y="22" class="legend">L7 route data</text>
+
+    <line x1="1010" y1="17" x2="1060" y2="17" class="arrow-mesh" marker-end="url(#arrowhead-mesh)"/>
+    <text x="1068" y="22" class="legend">HBONE / mTLS</text>
+
+    <line x1="1190" y1="17" x2="1240" y2="17" class="arrow" marker-end="url(#arrowhead)"/>
+    <text x="1248" y="22" class="legend">Standard forward</text>
+
+    <line x1="1340" y1="17" x2="1390" y2="17" stroke="#64748b" stroke-width="1" stroke-dasharray="4,4"/>
+    <text x="1398" y="22" class="legend">Authenticated call</text>
+
+    <text x="14" y="48" class="legend" fill="#94a3b8">Constraint:</text>
+    <text x="80" y="48" class="legend">• HTTPRoute 1 must reside in the business ns (ba000000-lex-int), NOT a separate platform ns</text>
+    <text x="80" y="62" class="legend" fill="#fbbf24">• ENABLE_INGRESS_WAYPOINT_ROUTING=true is a prerequisite (yaml-assessment.md H-1)</text>
+  </g>
+
+</svg>
+</div>
+
+<div class="summary">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot cyan"></div>
+      <h3>Edge tier (lex-gw-int ns)</h3>
+    </div>
+    <ul>
+      <li>• GCP HTTPS LB → PSC → Istio Gateway (sidecar envoy)</li>
+      <li>• Gateway name: <code>lex-gw-int</code></li>
+      <li>• Platform Gateway terminates client TLS and routes on hostname</li>
+      <li>• Cannot be omitted — without it clients have no entry point</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot green"></div>
+      <h3>Routing tier (business ns)</h3>
+    </div>
+    <ul>
+      <li>• ListenerSet <code>lex-team-listenerset</code> lives in <code>ba000000-lex-int</code></li>
+      <li>• Listens on *.lex.caep.uk / 443; cert: <code>lex-caep-uk-tls</code></li>
+      <li>• HTTPRoute 1 (edge L7): hostname + correlation + HSTS</li>
+      <li>• HTTPRoute 2 (waypoint L7): tenant + waypoint identity headers</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot amber"></div>
+      <h3>Backend tier (ambient mesh)</h3>
+    </div>
+    <ul>
+      <li>• ztunnel (src) HBONE encrypt → waypoint-int L7 processing</li>
+      <li>• waypoint-int L7 AuthZ + response-header injection</li>
+      <li>• ztunnel (dst) unpack → Service → Pod:8080</li>
+      <li>• Pod KSA → GSA → GCS/BigQuery (Workload Identity)</li>
+    </ul>
+  </div>
+</div>
+
+<div class="footer">
+  case-lex-flow-architecture.html · generated by architect-gcp Bot · 2026-09-25 · 9 YAML + 4 MD all schema-validated
+</div>
+
+</body>
+</html>

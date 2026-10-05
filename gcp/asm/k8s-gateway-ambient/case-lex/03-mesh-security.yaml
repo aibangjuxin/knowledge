@@ -1,0 +1,187 @@
+# =============================================================================
+# 03-mesh-security.yaml
+# =============================================================================
+# ba000000-lex-int namespace 的 mesh 安全策略
+# 包含: PeerAuthentication + AuthorizationPolicy
+#
+# 设计依据:
+#   - 同仓库 06-policy-capabilities.md (ambient 下能力矩阵, 必读)
+#   - 同仓库 03-waypoint-design.md §1 (waypoint 角色)
+#
+# ★ ambient 下的关键差异 ★
+# ----------------------------------------
+# 1. PeerAuthentication DISABLE 不支持(ambient 默认 mTLS, 无明文模式)
+#    — 见 06-policy-capabilities.md §3.1
+# 2. PeerAuthentication STRICT 语义变化: = "必须走 mesh"
+#    — 见 06-policy-capabilities.md §1
+# 3. 推荐写法: targetRefs 绑 Service / Gateway(waypoint)
+#    — 取代 selector.matchLabels
+#    — 见 06-policy-capabilities.md §1
+# 4. portLevelMtls 在 ambient 下无效(不报错但不生效)
+#    — 见 06-policy-capabilities.md §3.2
+# ----------------------------------------
+#
+# 推荐策略:
+#   - PA: 全 ns STRICT (强制走 mesh, 用 mTLS)
+#   - AuthZ: DENY all + 白名单
+#     1. allow ingress-gateway-to-waypoint
+#        (允许 ingress Gateway SA 调用本 ns waypoint)
+#     2. allow from waypoint-int SA
+#        (允许本 ns waypoint 调用业务 pod,完成 L7 拦截的最后一跳)
+# =============================================================================
+
+---
+# -----------------------------------------------------------------------------
+# PA-1: default-strict-mtls
+# 全 ns 强制 STRICT mTLS
+# ambient 下 STRICT 语义 = "必须走 mesh 加密"(ztunnel 已强制 mTLS, 这是兜底)
+# 若有端口需要明文, 用 NetworkPolicy + DestinationRule 控制, 不能用 PA DISABLE
+# -----------------------------------------------------------------------------
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default-strict-mtls
+  namespace: ba000000-lex-int
+  labels:
+    gateway-access: ba000000-lex-int
+spec:
+  # 默认无 selector = 整个 ns
+  mtls:
+    mode: STRICT
+
+---
+# -----------------------------------------------------------------------------
+# AuthZ-1: deny-all (L7 兜底)
+# 在 ns 上 deny-all,任何跨服务的 L7 调用都需要后续白名单 AuthZ 显式放行
+# 严格来源:
+#   "A deny-all AuthorizationPolicy on a namespace blocks all traffic
+#    unless an allow policy matches."
+#   — Istio AuthorizationPolicy docs
+# -----------------------------------------------------------------------------
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: deny-all
+  namespace: ba000000-lex-int
+  labels:
+    gateway-access: ba000000-lex-int
+spec:
+  # 无 selector + action=DENY + 无 rules = deny all
+  # 但 Istio 要求至少有一个空规则占位
+  action: DENY
+  rules:
+    - {}    # 匹配所有请求
+
+---
+# -----------------------------------------------------------------------------
+# AuthZ-2: allow-ingress-gateway-to-waypoint
+# 允许 ingress Gateway (lex-gw-int ns 的 SA) 调用本 ns 业务服务
+# 通过 waypoint 转发,所以 source principal = ingress gateway SA
+#
+# 严格定义 (principal 格式):
+#   "cluster.local/ns/<namespace>/sa/<service-account-name>"
+#   — Istio AuthorizationPolicy docs
+#
+# 注: 入口流量若未设 istio.io/ingress-use-waypoint=true,
+#     本 AuthZ 的 from.source.principals 不会匹配 (因为流量不经过 waypoint)
+# -----------------------------------------------------------------------------
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-ingress-gateway-to-waypoint
+  namespace: ba000000-lex-int
+  labels:
+    gateway-access: ba000000-lex-int
+spec:
+  # targetRefs: 绑 waypoint Gateway (L7 策略执行点)
+  # 这是 ambient 推荐写法 — 见 06-policy-capabilities.md §3.3
+  targetRefs:
+    - kind: Gateway
+      group: gateway.networking.k8s.io
+      name: waypoint-int
+  action: ALLOW
+  rules:
+    # 允许来自 ingress Gateway SA 的请求
+    # 原 prompt 提到: cluster.local/ns/lex-gw-int/sa/istio-ingressgateway-service-account
+    # 这是 Istio 默认 ingressgateway 部署的 SA 命名约定
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/lex-gw-int/sa/istio-ingressgateway-service-account"
+              # 备选: 若 ingressgateway 用了自定义 SA, 用实际 SA 名替换
+              # - "cluster.local/ns/lex-gw-int/sa/<your-ingress-sa>"
+
+# -----------------------------------------------------------------------------
+# AuthZ-3: allow-from-waypoint-sa
+# 允许本 ns waypoint SA 调用业务 pod
+# (waypoint 解密 HBONE 后, 以自己的身份向后端业务 pod 发起请求)
+#
+# 严格定义:
+#   "When a waypoint proxies traffic to a backend service, the request
+#    carries the waypoint's service account identity (not the original
+#    caller's), unless chain mode is configured."
+#   — Istio Ambient Security docs
+# -----------------------------------------------------------------------------
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-from-waypoint-to-workloads
+  namespace: ba000000-lex-int
+  labels:
+    gateway-access: ba000000-lex-int
+spec:
+  action: ALLOW
+  rules:
+    # 允许来自本 ns waypoint SA 的请求
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/ba000000-lex-int/sa/waypoint-int"
+
+---
+# -----------------------------------------------------------------------------
+# AuthZ-4 (推荐模板): allow-waypoint-to-<your-service>
+# 上面 AuthZ-3 用 selector 兜底所有 Service,
+# 实际生产推荐每个 Service 单独一条 AuthZ (粒度更细,便于审计)
+#
+# 模板 (复制本块,改 <your-service-name> 为实际 Service 名,去掉 #):
+# ------------------------------------------------------------
+# apiVersion: security.istio.io/v1beta1
+# kind: AuthorizationPolicy
+# metadata:
+#   name: allow-waypoint-to-<your-service-name>
+#   namespace: ba000000-lex-int
+# spec:
+#   targetRefs:
+#     - kind: Service
+#       group: ""
+#       name: <your-service-name>
+#   action: ALLOW
+#   rules:
+#     - from:
+#         - source:
+#             principals:
+#               - "cluster.local/ns/ba000000-lex-int/sa/waypoint-int"
+# ------------------------------------------------------------
+# 注意: 本块全部为注释行 (以 # 起首), 不会被 kubectl apply 创建
+
+---
+# =============================================================================
+# ★ 补充说明: waypoint 的 SA 命名约定
+# =============================================================================
+# 严格来源 (Istio Waypoint 安装流程):
+#   - istioctl waypoint apply --enroll-namespace
+#     → 自动创建 ServiceAccount "waypoint" (在 target ns)
+#   - Gateway name = waypoint-int
+#     → ServiceAccount 默认名 = "waypoint-int" (与 Gateway name 同)
+#     → 但 Helm chart 安装的可能不同, 取决于 values
+#
+# 如何确认实际 SA 名:
+#   kubectl get sa -n ba000000-lex-int -l app.kubernetes.io/name=waypoint
+#   # 或
+#   kubectl get deploy -n ba000000-lex-int -l gateway.networking.k8s.io/gateway-name=waypoint-int \
+#     -o jsonpath='{.items[0].spec.template.spec.serviceAccountName}'
+#
+# 推荐: 在 waypoint Deployment 上显式声明 SA, 避免 controller 默认值变化
+# (Waypoint controller 1.27+ 默认用 "default" SA, 需手动改)
+# =============================================================================

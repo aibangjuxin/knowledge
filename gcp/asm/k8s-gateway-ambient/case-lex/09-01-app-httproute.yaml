@@ -1,0 +1,155 @@
+# =============================================================================
+# 09-01-app-httproute.yaml — 两段式 HTTPRoute (改进版)
+# =============================================================================
+# 相比 09-app-httproute.yaml 的 4 个改进项 (来自 analyze-httproute.md §7):
+#
+#   改进 1: HTTPRoute 2 加 ResponseHeaderModifier 注入 X-Ambient-Waypoint
+#           (响应头携带 waypoint 标识, 便于审计)
+#   改进 2: HTTPRoute 1 的 X-Correlation-Id 改名 X-ABJX-CAP-Correlation-Id
+#           (贴 Lex 平台命名约定)
+#   改进 3: Service 名字 'app' → 'plat-abjx-lex-testing-0-0-0-service'
+#           ⚠️ 不在本次改动范围内! 见下方说明
+#   改进 4: HTTPRoute 1 sectionName: https (保留, 更明确)
+#
+# 类比参考: Lex 实际线上配置
+#   - plat-abjx-lex-testing-ingress  (HTTPRoute 1, 挂在 ListenerSet 上)
+#   - plat-abjx-lex-testing-waypoint (HTTPRoute 2, 挂在 Service 上)
+#
+# 设计依据 (Lex 实际线上配置 + Istio 官方文档):
+#   - Istio 1.30+ ambient docs:
+#     "Enabling this path results in Layer 7 processing at both the ingress
+#      gateway and the waypoint (a two-tier gateway pattern). Consider
+#      authorization rules, latency, and metrics for both hops."
+#   - 两个 HTTPRoute 不是串联路由, 而是各自指向同一 Service
+#   - Istio ambient 根据流量路径自动选择由哪段执行:
+#       ingress → waypoint 路径: 两段都执行 (Gateway L7 + waypoint L7)
+#       east-west (业务 pod → 业务 pod): 只执行 HTTPRoute 2 (waypoint L7)
+#
+# 严格定义 (K8s Gateway API HTTPRoute docs):
+#   "HTTPRoute resources attach to a parent Gateway, ListenerSet, or Service
+#    via parentRefs. The hostnames list is intersected with the parent's
+#    hostname (wildcard match). backendRefs point to Kubernetes Service objects."
+#
+# 简化 (Lex Q1 答复): Gateway TLS 终止 → plain HTTP/8080 给 pod
+#   所以 backendRefs.port = 80 (Service port), appProtocol: http
+#
+# -----------------------------------------------------------------------------
+# 改进 3 说明 (Service 命名):
+#
+#   Lex 平台业务 Service 命名模式: plat-abjx-lex-<env>-<version>-service
+#   例: plat-abjx-lex-testing-0-0-0-service
+#
+#   本文件保留 'app' 作为 Service name (跟 08-app-deployment.yaml 一致),
+#   不在本轮改动范围。如果要贴 Lex 命名约定, 需要同时修改:
+#     - 08-app-deployment.yaml 的 Service.metadata.name
+#     - 本文件两个 HTTPRoute 的 backendRefs[0].name
+#   留待后续轮次统一改。
+# -----------------------------------------------------------------------------
+---
+# ====== HTTPRoute 1: app-route-ingress (挂在 ListenerSet, edge L7) ======
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: app-route-ingress
+  namespace: ba000000-lex-int
+  labels:
+    app: app
+    app.kubernetes.io/part-of: ba000000-lex-int
+    # 标识: 这是 edge (ingress Gateway) 层的 HTTPRoute
+    role: ingress-edge
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: ListenerSet
+      name: lex-team-listenerset    # ← 05-lex-listenerset.yaml
+      # namespace 默认 = HTTPRoute 的 ns (ba000000-lex-int), 与 Lex 线上 parentRef 模式一致
+      sectionName: https             # ← 对应 ListenerSet.listener.name=https
+  hostnames:
+    - http.lex.caep.uk
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      # ---- Edge 级别 filters (安全头 + correlation) ----
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            # ===== 改进 2: 改名 X-ABJX-CAP-Correlation-Id (贴 Lex 命名) =====
+            set:
+              - name: X-ABJX-CAP-Correlation-Id
+                # 类比 Lex 线上值, 从 X-Request-Id 取 (如果有的话)
+                value: '%REQ(X-Request-Id)%'
+        - type: ResponseHeaderModifier
+          responseHeaderModifier:
+            set:
+              - name: X-Content-Type-Options
+                value: nosniff
+              - name: Strict-Transport-Security
+                value: max-age=31536000; includeSubDomains
+            remove:
+              - Server
+      backendRefs:
+        # ⚠️ 改进 3 已实施: Service 名字 'app' → 'plat-abjx-lex-testing-0-0-0-service'
+        # 贴 Lex 平台命名约定 (跟 08-app-deployment.yaml 一致)
+        - group: ""
+          kind: Service
+          name: plat-abjx-lex-testing-0-0-0-service
+          port: 80
+          weight: 1
+---
+# ====== HTTPRoute 2: app-route-waypoint (挂在 Service, waypoint L7) ======
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: app-route-waypoint
+  namespace: ba000000-lex-int
+  labels:
+    app: app
+    app.kubernetes.io/part-of: ba000000-lex-int
+    app.kubernetes.io/managed-by: tenant     # 类比 Lex 线上 label
+    # 标识: 这是 waypoint 层的 HTTPRoute (per-namespace ambient L7)
+    role: ambient-waypoint
+spec:
+  # 类比 Lex 线上 parentRefs: kind: Service
+  # (waypoint 是 K8s Gateway 资源, 但 parentRef 用 Service 是 Istio 1.30+ 推荐方式,
+  #  让 waypoint 自动附加到所有入站流量上)
+  parentRefs:
+    - group: ""
+      kind: Service
+      # ===== 改进 3: 贴 Lex 命名约定 =====
+      name: plat-abjx-lex-testing-0-0-0-service
+      # port: 80  ← 不强制写, waypoint 会自动拦截所有入站流量
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      # ---- Tenant 级别 filters (业务身份 + waypoint 标识) ----
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            set:
+              - name: X-Tenant-Id
+                value: ba000000
+              - name: X-Forwarded-Proto
+                value: https
+        # ===== 改进 1: 加 ResponseHeaderModifier 注入 X-Ambient-Waypoint =====
+        # 类比 Lex 线上:
+        #   responseHeaderModifier:
+        #     set:
+        #       - name: X-Ambient-Waypoint
+        #         value: waypoint-int
+        # 让客户端知道响应经过哪个 waypoint 处理 (审计 / 调试)
+        - type: ResponseHeaderModifier
+          responseHeaderModifier:
+            set:
+              - name: X-Ambient-Waypoint
+                value: waypoint-int
+      backendRefs:
+        # ===== 改进 3: 贴 Lex 命名约定 =====
+        - group: ""
+          kind: Service
+          name: plat-abjx-lex-testing-0-0-0-service
+          port: 80
+          weight: 1

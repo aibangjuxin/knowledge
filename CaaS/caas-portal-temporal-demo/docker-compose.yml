@@ -1,0 +1,99 @@
+# Docker Compose for the CaaS Portal Temporal demo.
+#
+# Brings up:
+#   - postgres (Temporal datastore)
+#   - temporal (server, configured against postgres)
+#   - temporal-ui (browser UI for inspecting workflows)
+#   - api (FastAPI submit/status/SSE)
+#   - worker (Temporal worker that runs the workflow + activities)
+#   - k8s_stub (mock CaaS Controller)
+#   - nginx (serves frontend + reverse-proxies /api to api:8000)
+#
+# Open http://localhost:8080 once everything is up.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres
+      DB_PORT: "5432"
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+      POSTGRES_SEEDS: postgres
+      DYNAMIC_CONFIG_FILE_PATH: /etc/temporal/config/dynamicconfig.yaml
+      TEMPORAL_ADDRESS: "temporal:7233"
+    ports:
+      - "7233:7233"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "temporal operator cluster health --address temporal:7233"]
+      interval: 10s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      TEMPORAL_ADDRESS: "temporal:7233"
+    ports:
+      - "8081:8080"
+
+  api:
+    build: .
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file: .env
+    environment:
+      TEMPORAL_ADDRESS: "temporal:7233"
+    depends_on:
+      temporal:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  worker:
+    build: .
+    command: ["python", "-m", "workflow.worker"]
+    env_file: .env
+    environment:
+      TEMPORAL_ADDRESS: "temporal:7233"
+    depends_on:
+      temporal:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  k8s_stub:
+    build: .
+    command: ["uvicorn", "k8s_stub.main:app", "--host", "0.0.0.0", "--port", "8010"]
+    ports:
+      - "8010:8010"
+
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
