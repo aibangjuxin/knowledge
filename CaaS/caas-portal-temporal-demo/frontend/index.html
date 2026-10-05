@@ -143,10 +143,13 @@
       <label for="region">region</label>
       <input id="region" value="asia-east1" />
       <label for="tier">tier</label>
-      <select id="tier">
-        <option value="autopilot">autopilot (golden path)</option>
-        <option value="standard">standard (escape hatch)</option>
+      <!-- ⚠️ C3 修复(2026-10-05):Autopilot 已从 CRD 移除,tier 锁死 standard。
+           这里不给用户选择权 —— 让用户在 UI 里选一个后端必然拒绝的值是设计缺陷。
+           若将来某画像要支持 Autopilot,应新增"画像选择"入口,而非在 tier 下拉框加选项。 -->
+      <select id="tier" disabled>
+        <option value="standard" selected>standard (DC 画像,平台锁定)</option>
       </select>
+      <small>集群模式由平台画像决定;申请 Autopilot 需走新画像流程。</small>
     </fieldset>
 
     <fieldset>
@@ -157,7 +160,7 @@
     </fieldset>
 
     <fieldset>
-      <legend>Network (Autopilot golden path requires private)</legend>
+      <legend>Network (DC 画像要求 private)</legend>
       <label for="network-mode">mode</label>
       <select id="network-mode">
         <option value="private">private</option>

@@ -46,8 +46,10 @@ docker compose ps
 - name: `bbuk-team-a-prod`
 - cloudProvider: `gcp`
 - region: `asia-east1`
-- tier: `autopilot`
-- network: `private` (重要 — Autopilot 必须 private,这里有 CEL 规则)
+- tier: `standard` (⚠️ C3 修复后已锁定,UI 上不可选)
+- environment: `prod`
+- versionStrategy: channel `STABLE` / eolNoticeDays `60`(C9 修复)
+- network: `private`
 - frameworks: 默认勾了 `baseline` (不能取消,这是硬约束)
 - teams: `team-a,team-b`
 
@@ -103,13 +105,22 @@ curl -s http://localhost:8010/status/caas-gcp-asia-east1-xxxxxxxx | jq .
 
 ## 步骤 7 — 试试失败路径
 
-**a) 提交一个 CE 校验就会失败的请求**(Autopilot + public 网络):
+**a) 提交一个校验就会失败的请求**(production + EOL 紧急 exclusion,2026-10-05 C9 修复后):
 
-- name: `bbuk-team-a-public-bad`
-- tier: `autopilot`
-- network.mode: `public`
+> ⚠️ **本节原为"Autopilot + public 网络"**。C3 修复后 `tier` 已锁死 `standard`,
+> Autopilot 相关校验全部不可达 —— 原例程已失效。
+> 现改为演示 **C9 的生产侧规则**(这条在 Standard 下依然成立):
 
-提交,观察:`VALIDATING` 直接变 `failed`,workflow 立刻返回 `rejected_by:validation`。这是 CEL 规则的实战验证(参考 `gke-caas.md` CRD 的 `x-kubernetes-validations`)。
+- name: `bbuk-team-a-bad`
+- environment: `prod`
+- version_strategy.allow_eol_emergency_exclusion: `true`
+
+提交,观察:`VALIDATING` 直接变 `failed`。这是 C9 CEL 规则的实战验证
+(参考 `gke-caas.md` CRD 的 `x-kubernetes-validations`)。
+
+> **想验证原 Autopilot 规则?** 已不能 —— 这正是 C3 修复想要的效果。
+> 见 `tests/test_models.py::test_clusterrequest_spec_rejects_autopilot`:
+> autopilot 现在在模型层就被拒绝,进不到 workflow。
 
 **b) 在 K8S stub 侧模拟失败**:
 

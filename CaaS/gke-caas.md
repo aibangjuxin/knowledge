@@ -4,7 +4,7 @@
 
 结合你已有的技术栈，这条线要解决四个层面的问题：
 
-1. **集群本身怎么标准化创建**（Autopilot golden path、私有集群、VPC-native）
+1. **集群本身怎么标准化创建**（Standard 私有集群、VPC-native；节点层配置由 DC/CaaS 负责）
 2. **网络基线怎么自动注入**（Gateway API、mTLS、Ingress 接入你现有的 Gloo/Istio Ambient 体系）
 3. **多租户模型怎么定义**（Namespace 隔离 vs 独立集群，这直接关系到你正在处理的 **Gateway API URL Map 配额瓶颈** —— 如果 CaaS 从一开始就按 Gateway-per-namespace 分片设计，可以规避未来大规模迁移再踩同一个坑）
 4. **怎么用 GitOps 交付而不是脚本裸跑**（Config Sync / Fleet 统一策略下发）
@@ -22,7 +22,7 @@ graph TD
     B --> B2[配额预检查 Gateway URL Map size]
     B --> B3[网络模式校验 VPC-native/Private]
     B --> C[Terraform Module 层]
-    C --> C1[GKE Autopilot 集群创建]
+    C --> C1[GKE Standard 集群创建]
     C --> C2[Workload Identity 绑定]
     C --> C3[私有集群 + 授权网络]
     C --> D[GitOps 策略注入层 Config Sync/Fleet]
@@ -40,8 +40,9 @@ graph TD
 
 | 决策点                | 选择                                                                             | 理由                                                                   |
 | --------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Autopilot vs Standard | 默认 Autopilot（golden path）                                                    | 免节点运维，符合"自助式服务"定位；有特殊 GPU/合规需求才逃逸到 Standard |
-| 集群粒度              | 团队级共享集群 + Namespace 隔离为主，Autopilot Standard 版逃逸舱口用于强隔离需求 | 结合你正处理的 ~1000 API 迁移，独立集群成本过高                        |
+| Autopilot vs Standard | **锁死 `standard`**（C3 修复，2026-10-05）                                   | DC 立场确认全量 Standard；且 RFC §5 要求"默认值来自画像，不是 schema"。Autopilot 能力降级为**未来画像候选**，不进 schema |
+| **Release channel** 🆕 | **`STABLE`（enum 锁死，无逃逸）**                                                 | 生产环境；官方明示 RAPID 排除在 GKE SLA 外，且 Extended 与 DC 基线冲突。C9 修复 |
+| **集群粒度**          | 团队级共享集群 + Namespace 隔离为主，独占集群作为强隔离逃逸舱口                   | 结合你正处理的 ~1000 API 迁移，独立集群成本过高                        |
 | 网关配额治理          | **CaaS 交付集群时强制预置 Gateway-per-namespace 分片模板**，不等到超限再补       | 直接对应你已知的 URL Map size limit 阻塞项，从设计上前置规避           |
 | 策略下发方式          | GKE Fleet + Config Sync（GitOps），不用裸 kubectl apply                          | 保证多集群策略一致性、可审计                                           |
 | 网络接入              | 集群创建时即挂载到统一 GatewayClass / Gloo Gateway 数据面                        | 避免"集群交付了但网络没打通"的割裂                                     |
@@ -61,7 +62,17 @@ metadata:
 spec:
   cloudProvider: gcp
   region: asia-east1
-  tier: autopilot # autopilot | standard
+  tier: standard # ⚠️ C3 修复:enum 锁死 ["standard"],Autopilot 不再是选项
+  environment: prod # prod | staging | dev
+  # ⚠️ C9(2026-10-05):生产环境固定 Stable,业务方无需理解 release channel 概念。
+  # 保留该字段是为了让"版本策略"在 CRD 层可见可审计,而不是散落在 Terraform 里。
+  versionStrategy:
+    channel: STABLE # enum 锁死,无逃逸选项
+    minorUpgradePolicy: auto
+    eolNoticeDays: 60
+    cdb:
+      patchIntervalDays: 1
+      minorIntervalDays: 30 # 不要配到 90
   network:
     mode: private # private | public
     vpc: shared-vpc-prod
@@ -79,14 +90,21 @@ spec:
     costLabel: "bbuk-team-a"
 ```
 
-## 2. Terraform Module 骨架（Autopilot Golden Path）
+## 2. Terraform Module 骨架（Standard Golden Path）
+
+> ⚠️ **C3 修复(2026-10-05)**:本节原标题为 "Autopilot Golden Path",骨架里写着
+> `enable_autopilot = true`。现 DC 全量 Standard,该骨架与 `spec.tier` 锁死值矛盾,
+> 已改为 Standard 形态。**Autopilot 模块不再作为 golden path** ——
+> 若将来某个画像需要它,应作为**独立 module** 新增,而不是把 golden path 改回去。
 
 ```hcl
-# modules/gke-autopilot/main.tf
+# modules/gke-standard/main.tf
 resource "google_container_cluster" "this" {
   name             = var.cluster_name
   location         = var.region
-  enable_autopilot = true
+  # ⚠️ C3 修复(2026-10-05):原为 enable_autopilot = true。
+  # Standard 模式下不设该字段(或置 false)即为标准集群。
+  enable_autopilot = false
 
   network    = var.vpc_self_link
   subnetwork = var.subnet_self_link
@@ -97,9 +115,37 @@ resource "google_container_cluster" "this" {
     master_ipv4_cidr_block  = var.master_cidr
   }
 
+  # ⚠️ C3 + Standard 的后果:节点层归 DC/CaaS 负责(Autopilot 时代不需要这些)。
+  # 这是"锁死 standard"真正的成本所在 —— 不是 CRD 少一个 enum 值,
+  # 而是 CaaS 必须补齐节点生命周期编排。详见文末「Standard 模式的责任转移」章节。
+  # remove_default_node_pool = true
+  # initial_node_count = 0   # 节点池由独立的 node_pool resource 管理
+
+  # ⚠️ C9 修复(2026-10-05):原为 channel = "REGULAR",与 DC 立场冲突。
+  # DC 全量生产集群 → Stable。理由见文末「版本与升级策略」章节。
+  # 注意:这不是"默认值",是 CaaS 强制值 —— RAPID 排除在 GKE SLA 之外,
+  # 业务方不得自行选择。逃逸舱口见 ClusterRequest.spec.versionStrategy.
   release_channel {
-    channel = "REGULAR"
+    channel = "STABLE"
   }
+
+  # ⚠️ 生产集群必须配置维护窗口(时区/频次由 CaaS 按 DC 画像统一注入)。
+  # 缺这一项 = 升级在任意时刻发生,变更不在流程内。
+  maintenance_policy {
+    daily_maintenance_window {
+      start_time = var.maintenance_window_start  # 例 "03:00"
+      duration   = var.maintenance_window_duration # 例 "4h0m0s"
+    }
+  }
+
+  # ⚠️ 标准支持期内禁止 minor 升级(EOL 前由 CaaS 主动通告并编排,不靠 exclusion 拖时间)。
+  # 官方:GKE 会在 end of support 时无视 exclusion 强制升级。
+  # 该字段仅作为 CaaS 编排的产物写入,不由业务方填写。
+  # maintenance_exclusions {
+  #   exclusion {
+  #     # 仅在 CaaS 编排的升级窗口内使用
+  #   }
+  # }
 
   workload_identity_config {
     workload_pool = "${var.project_id}.svc.id.goog"
@@ -139,7 +185,7 @@ fi
 
 1. **配额问题要设计前置，不是事后补救**：你已经在处理的 ~1000 API 迁移遇到的 Gateway API URL Map size limit，说明"网关分片策略"必须是 CaaS 交付集群时的**默认能力**，而不是后期补丁——建议在 ClusterSpec 里把 `gatewayStrategy.initialShards` 设为必填项。
 2. **Preview 配额扩容是临时解**：GCP 的配置大小限制 Preview 程序能缓解但不是长期方案，CaaS 的分片能力才是根本解法，两者可以并行推进。
-3. **Autopilot 逃逸舱口要预留**：并非所有场景都适合 Autopilot（比如需要 DaemonSet 特殊调度、GPU 精细控制的场景），CaaS Schema 里 `tier: standard` 分支要留好。
+3. **⚠️ Standard 锁死后,节点层编排从"可选"变"必需"(C3 修复 2026-10-05)**：本条原为"Autopilot 逃逸舱口要预留"，现已翻转 —— **Autopilot 不再是选项，Standard 是唯一模式**。真实后果是：节点升级策略、Cluster Autoscaler 边界、节点池数量收敛、NAP 都要由 DC/CaaS 负责。见文末「Standard 模式的责任转移」章节。
 4. **执行 Terraform apply 前务必 `terraform plan` 并检查 IAM 权限**，尤其是 Shared VPC 场景下的跨项目网络管理员权限。
 5. **部署 GatewayClass/Fleet 策略前用 `kubectl apply --dry-run=server` 校验 YAML**，避免 Config Sync 同步失败导致集群交付中断。
 
@@ -232,6 +278,8 @@ spec:
                   "cloudProvider",
                   "region",
                   "tier",
+                  "environment",
+                  "versionStrategy",
                   "network",
                   "gatewayStrategy",
                   "multiTenancy",
@@ -247,8 +295,84 @@ spec:
                   pattern: "^[a-z0-9-]+$"
                 tier:
                   type: string
-                  enum: ["autopilot", "standard"]
-                  default: "autopilot"
+                  # ⚠️ C3 修复(2026-10-05):删掉 default: "autopilot" → enum 单值锁死 standard。
+                  #
+                  # 三条独立理由,任何一条都足以否定原来的 default:
+                  #  1) DC 立场(2026-09-29 确认):全部 Standard。default 会让第一份
+                  #     纳管请求就走错分支,而且错得没有任何提示。
+                  #  2) RFC §5 "Declare intent; resolve provider details from approved
+                  #     profiles" —— default 的本质是"消费方没选时系统替他选",
+                  #     恰是 §5 禁止的行为。默认值应来自画像,不是来自 schema。
+                  #  3) 锁死 = 删掉一个没人用的选项。DC 不用 Autopilot,
+                  #     而"默认走 Autopilot"会静默继承它的限制
+                  #     (禁 privileged / hostPath 写 / hostNetwork)。
+                  #
+                  # ⚠️ 为什么不 enum: ["autopilot","standard"] 保留选项?
+                  #   因为 14 号文件 C3 建议"若 DC 只支持 Standard,enum 锁死即可"。
+                  #   其它团队若将来要用 Autopilot,是新增一个**画像**,
+                  #   不是把一个未论证的默认值放回 schema。
+                  #   画像扩容 = 加版本化 profile;CaaS 不为没签过的立场预留后门。
+                  enum: ["standard"]
+                # ⚠️ C9 配套(2026-10-05):environment 是版本策略规则的判据,
+                # 也是 BYOC 分类自查(21 号文件)要求的第一项事实。
+                # 此前 CRD 无此字段 → 无法区分生产与非生产,
+                # 导致"生产不得开 EOL 紧急 exclusion"这类规则无从校验。
+                environment:
+                  type: string
+                  enum: ["prod", "staging", "dev"]
+                  description: "环境标识;prod 触发更严格的版本与 EOL 规则"
+                # ⚠️ C9 修复(2026-10-05):release channel 从隐式 Terraform 默认值
+                # 提升为 CRD 强字段。理由:版本策略是 WP-3 的 P0 交付物,
+                # 且 9 份底稿此前无一处定义它 —— 定义缺失会直接变成实现偏差。
+                # DC 立场(2026-10-05 确认):全量生产集群 → Stable。
+                versionStrategy:
+                  type: object
+                  required: ["channel"]
+                  properties:
+                    channel:
+                      type: string
+                      # ⚠️ 不含 RAPID:官方明示 Rapid 排除在 GKE SLA 之外。
+                      # 不含 EXTENDED:其官方禁用清单含 Config Sync 与 Policy Controller,
+                      #   而 DC 的 CaaS 基线依赖这两者(见 20-wp3-version-policy.md §2.4)。
+                      # 不含 UNSPECIFIED / NO_CHANNEL:官方标注 deprecated,将被移除。
+                      enum: ["STABLE"]
+                      default: "STABLE"
+                    # 逃逸舱口:仅允许向"更保守"方向偏移,不允许向"更激进"方向。
+                    # 业务方可以要求更长的 minor soak / 更大的 CDB,但不能要求更快的通道。
+                    minorUpgradePolicy:
+                      type: string
+                      enum: ["auto", "manual-soak"]
+                      default: "auto"
+                      description: "auto=GKE 自主编排(24h soak);manual-soak=CaaS 编排 6h–7d soak"
+                    # CDB(cluster disruption budget)。⚠️ 建议保留默认值:
+                    # 配到 90 天上限会提高 EOL 时刻被强制升级的概率。
+                    cdb:
+                      type: object
+                      properties:
+                        patchIntervalDays:
+                          type: integer
+                          minimum: 0
+                          maximum: 90
+                          default: 1 # 官方默认 24h
+                        minorIntervalDays:
+                          type: integer
+                          minimum: 0
+                          maximum: 90
+                          default: 30 # 官方默认 30 天;不要配到 90
+                    # EOL 提前通告义务:业务方承诺的响应窗口。
+                    # CaaS 在 EOL 前 N 天主动通告;N 由 DC 统一配置,业务方只确认"知悉"。
+                    eolNoticeDays:
+                      type: integer
+                      minimum: 30
+                      maximum: 180
+                      default: 60
+                      description: "EOL 提前通告天数;不得小于 30,保证业务方有准备时间"
+                    # 显式承认"急事可以不等":官方允许 EOL 后用 No upgrades scope
+                    # 延迟至多 90 天,但明确不推荐。默认 false = 需走 break-glass。
+                    allowEolEmergencyExclusion:
+                      type: boolean
+                      default: false
+                      description: "官方不推荐;置 true 需在 break-glass 记录中留痕"
                 network:
                   type: object
                   required: ["mode", "vpc", "subnet"]
@@ -310,8 +434,35 @@ spec:
                       type: string
                       pattern: "^[a-z0-9-]+$"
               x-kubernetes-validations:
-                - rule: "self.tier != 'autopilot' || self.network.mode == 'private'"
-                  message: "Autopilot 集群按 golden path 要求必须使用 private 网络模式"
+                # ⚠️ C3 修复(2026-10-05):原第 1 条 Autopilot 规则已删除。
+                #   原规则:self.tier != 'autopilot' || self.network.mode == 'private'
+                #   删除理由:tier 已 enum 锁死 ["standard"] → autopilot 永不可达,
+                #   该规则成了永远为真的死代码。**留着比删掉更糟** ——
+                #   它会让人误以为"autopilot 是支持的,只是有条件"。
+                #
+                # ⚠️ C6(2026-10-05 同步修复):Autopilot 时代的 multiTenancy
+                #   兼容性规则失去判据,故改为对 Standard 的**实际**约束。
+                #   标准集群同样有隔离要求,且这一条与 C3 的锁死方向一致:
+                #   把"租户隔离"从文档约定变成 API Server 强制。
+                # 1) per-cluster 隔离必须显式给出 teams(一个集群也要知道归谁管)
+                - rule: "self.multiTenancy.isolationLevel != 'per-cluster' || (has(self.multiTenancy.teams) && size(self.multiTenancy.teams) > 0)"
+                  message: "isolationLevel 为 per-cluster 时必须指定 teams:独占集群同样需要明确责任人"
+                # 2) ⚠️ C9(2026-10-05):版本策略的三条硬规则,全部以 CEL 强制。
+                # ⚠️ CEL 语义提醒:CEL **没有可选链**,has() 也不会自动向下传播。
+                #   规则必须逐层 has() 守卫,否则字段缺省时会触发 runtime error
+                #   而不是返回 false。下面每条规则的多层 !has() 不是啰嗦,是必需的。
+                #   2.1) EOL 通告义务不得低于 30 天 —— 否则业务方毫无预警被强升。
+                - rule: "!has(self.versionStrategy) || !has(self.versionStrategy.eolNoticeDays) || self.versionStrategy.eolNoticeDays >= 30"
+                  message: "eolNoticeDays 不得小于 30:GKE 强制升级不可拦截,提前通告是唯一补救手段"
+                # 2.2) minor CDB 不得配到 90 天上限。
+                #    官方明示:配到上限会增大 EOL 时刻被强制升级的概率,
+                #    且 EOL 时 GKE 改用 7 天预算并不遵守任何已配置的 CDB。
+                - rule: "!has(self.versionStrategy) || !has(self.versionStrategy.cdb) || !has(self.versionStrategy.cdb.minorIntervalDays) || self.versionStrategy.cdb.minorIntervalDays <= 30"
+                  message: "minorIntervalDays 不得超过 30:配到 90 会提高 EOL 被强制升级的概率,且 EOL 时该配置不生效"
+                # 2.3) EOL 紧急 exclusion 不允许与"生产环境"共存。
+                #    官方明确不推荐;若确需,必须走 break-glass 留痕而非默认开启。
+                - rule: "!has(self.versionStrategy) || !has(self.versionStrategy.allowEolEmergencyExclusion) || self.versionStrategy.allowEolEmergencyExclusion == false || !has(self.environment) || self.environment != 'prod'"
+                  message: "生产集群不得开启 allowEolEmergencyExclusion:官方不推荐该做法,紧急情况走 break-glass 流程"
             status:
               type: object
               properties:
@@ -363,7 +514,7 @@ kubectl get clusterrequest -A
 
 ```text
 NAMESPACE   NAME                PROVIDER   TIER        GATEWAYSHARDS   PHASE     AGE
-bbuk        bbuk-team-a-prod    gcp        autopilot   3               Ready     2h
+bbuk        bbuk-team-a-prod    gcp        standard   3               Ready     2h
 ```
 
 ---
@@ -843,5 +994,172 @@ func (m *gatewayShardManager) migrateRoutes(
 4. **`probeShardHealth` 的具体实现要真实发流量验证**（比如带 Host header 的 curl 探测，可以复用你现有的 `k8s-gateway-fqdn-claude.sh` 思路做 E2E 验证），只看 K8S status 的 `Accepted=True` 不代表 GCP LB 侧真的把流量转发通了。
 5. **Step 5 失败要走告警而不是回滚**：因为此时新 shard 已经在服务流量了，回滚会造成二次风险，正确做法是记录告警、人工介入清理旧挂载，控制器不做自动回滚。
 6. **`initialShards` 触顶后的人工介入路径要打通**：建议对接告警系统（比如 PagerDuty/企业内部 IM），`ShardBudgetExceeded` condition 一旦出现就主动通知负责人去评估是否提升 `spec.gatewayStrategy.initialShards`。
+
+---
+
+# 🆕 Standard 模式的责任转移（C3 修复 · 2026-10-05）
+
+> **这一节是 C3 修复的"另一半"，也是更重要的一半。**
+> 删掉 `default: autopilot` 只用了 3 行；把 Standard 锁死之后**CaaS 要多干的活**才是真正的工作量。
+> **只锁死 tier 而不补这部分，等于把 Autopilot 省的活悄悄推给了 DC 平台组。**
+
+## 1. 为什么不能只改 CRD
+
+Autopilot 的核心价值是**没有节点层**。锁死 Standard 意味着：
+
+| 原本由 GKE 托管            | 锁死后归谁      | 若无人编排会怎样                     |
+| -------------------------- | --------------- | ------------------------------------ |
+| 节点池版本与扩缩            | **DC / CaaS**   | 伸缩失控，成本泄漏                   |
+| 节点升级策略选择            | **DC / CaaS**   | 升级时业务中断                       |
+| 节点池数量                  | **DC / CaaS**   | **长期成本泄漏，最隐蔽**             |
+| NAP(节点自动预配)           | **DC / CaaS**   | 容量与成本都不可预测                 |
+| 节点镜像与补丁              | **DC / CaaS**   | 节点层漏洞窗口拉长                   |
+
+> **但也要说清另一半**:DC 现有做法(Standard + auto-upgrade + 维护窗口 + 强制自动升级要求)
+> **完全是 GKE 标准用法,升级执行仍由 GKE 完成,CaaS 不需要重做编排。**
+>
+> 正确定位:**CaaS 提供安全默认值与边界,不接管执行。**
+> 详见 [`03-gcp-capability-profile.md` §3.1](./dc-owner-feedback/03-gcp-capability-profile.md) 与
+> [`09-p0-execution-pack.md` §3.1](./dc-owner-feedback/09-p0-execution-pack.md) 的修正说明。
+
+## 2. 因此 CaaS 必须补的四件事
+
+| #   | 能力                       | 落地形态                                     | 优先级 |
+| --- | -------------------------- | -------------------------------------------- | ------ |
+| 1   | **节点层配置基线**          | Day-0 按画像注入 min/max、升级策略、镜像基线   | **P0** |
+| 2   | **节点池数量收敛**          | 定期对账 + `ShardsBudgetExceeded` 同类的告警   | **P0** ⚠️ 最易被忽略 |
+| 3   | **升级编排**                | 复用 GKE auto-upgrade,只编排窗口与顺序        | P1     |
+| 4   | **节点层成本归集**          | 与 `caas-finops.md` 的 CostObject 对齐         | P1     |
+
+> **第 2 条值得单独强调**:节点池数量膨胀是所有四项里**最隐蔽**的 ——
+> 没有任何一次变更会报错,账单只是慢慢涨。Autopilot 时代不存在这个问题(CaaS 不管节点池)。
+
+## 3. 需要补的 CRD 字段（本节不写实,只列清单）
+
+> ⚠️ **这些字段本节刻意没给出完整 schema** —— 因为它们依赖 DC 对
+> 节点机型/容量/成本的实际决策,现在定下来没有约束力(同 C9 的判断)。
+> 建议与 SRE 开一次会定稿,再落到 CRD。
+
+| 字段                                | 说明                                        | 待定内容                     |
+| ----------------------------------- | ------------------------------------------- | ---------------------------- |
+| `nodePoolProfile`                   | 节点池画像引用(按业务分级)                 | 机型、min/max、升级策略      |
+| `autoscaling`                       | Cluster Autoscaler 边界                     | 是否 CaaS 托管,还是业务方自配 |
+| `napEnabled`                        | 是否启用节点自动预配                        | 成本 vs 弹性取舍             |
+| `nodeImageBaseline`                 | 节点镜像基线与补丁窗口                      | COS milestone 策略           |
+| `maxNodePools`                      | **节点池数量上限(硬约束)**                  | 按成本倒推                   |
+
+> **`maxNodePools` 建议做成 CEL 硬约束而非建议值** ——
+> 与 C9 的 `minorIntervalDays <= 30` 同理:**能被绕过的治理等于没有治理。**
+
+## 4. 与其它文件的关系
+
+| 冲突 ID | 状态    | 说明                                                        |
+| ------- | ------- | ----------------------------------------------------------- |
+| **C3**  | ✅ 本次修复 | `default: autopilot` → `enum: ["standard"]`                |
+| **C6**  | ✅ 同步修复 | Autopilot 兼容性规则失去判据,改为 Standard 的实际隔离约束  |
+| C4      | ⬜ 未修   | 缺 `dataClassification` 字段                               |
+| C5      | ⬜ 未修   | 缺 `Cluster` CRD                                           |
+
+> ⚠️ **C3 与 C6 必须一起修** —— 只锁死 `tier` 而留着 Autopilot 的 CEL 规则,
+> 会得到一条永远为真的死规则,以及一个"autopilot 好像还能用"的错觉。
+
+---
+
+# 🆕 版本与升级策略（C9 修复 · 2026-10-05）
+
+> **为什么补这一节**：`14-doc-conflict-review.md` 的 C9 判定原文是"9 份文档里没有任何一处提到 GKE release channel"。
+> 修复前的实际情况更糟一点——`gke-caas.md` 的 Terraform 骨架里**写死了 `channel = "REGULAR"`**，
+> 那是一个从未被论证过的值，与 DC 立场（生产用 Stable）直接冲突。
+>
+> **本节事实依据**：`dc-owner-feedback/20-wp3-version-policy.md`，9 条 GKE 官方文档来源，查阅日期 2026-10-05。
+
+## 1. 决策:生产 = Stable,且没有讨论空间
+
+| 维度          | 结论                                                                              |
+| ------------- | --------------------------------------------------------------------------------- |
+| **环境范围**  | **CaaS 交付的全部生产集群**。dev/staging 可另议，但**不通过本 CRD 的 `channel` 字段**——它是 enum 锁死的 |
+| **选择 Stable** | 生产环境优先稳定性；官方对生产集群明确推荐 Stable                                  |
+| **RAPID**     | **明确禁令**（非"不推荐"）。官方明示 Rapid 及其 patch 版本**排除在 GKE SLA 之外** |
+| **Extended**  | **不可用**。其官方禁用清单含 Config Sync 与 Policy Controller，而 DC 的 CaaS 基线依赖这两者 |
+| **No channel**| 官方标注 deprecated 且将被移除；且**不支持 rollout sequencing**，无灰度能力          |
+
+> **把决定固化为 `enum: ["STABLE"]` 而不是 `default: "STABLE"`** —— 这是本次修复的要点。
+> `default` 允许业务方显式改成别的值；`enum` 单值则**在 API Server 层就拒绝**。
+> 版本策略不是"默认值"，是**平台承诺**。用 `default` 等于把承诺变成建议。
+
+## 2. GKE 强制的三条规则 —— CaaS 必须硬编码，不可协商
+
+| 规则                     | 内容                                                                                | CaaS 的义务                                    |
+| ------------------------ | ----------------------------------------------------------------------------------- | ---------------------------------------------- |
+| **控制面 90 天 patch 底线** | 控制面至少每 90 天升一次 patch/minor；超时 GKE **无视所有策略强制升级**            | 纳管校验检查 patch 时间戳，超期拒绝；CRD 强字段  |
+| **EOL 强制升级**         | 到达 end of standard support 时自动升级，maintenance exclusion **无法阻止**          | **提前 60 天主动通告业务方**（唯一补救手段）   |
+| **节点 skew ≤ 2 minor**  | 节点最多落后控制面 2 个 minor；不得跑已 EOL 的 minor                                 | 纳管校验检查 skew，**原 RFC §9.1 准入条件缺此条** |
+
+> **第 3 条是本次修复的意外收获。** 它原本不在 C9 范围内，是查 `20` 号文件时发现的：
+> 一个 skew 超限的集群，控制面一升级就连带触发节点池重建 —— 这是"纳管后突然出事"最典型的来源，
+> **而 RFC §9.1 的 BYOC 准入条件里没有这一条。** 建议单独提给 RFC。
+
+## 3. 逃逸舱口：只允许向"更保守"方向偏
+
+平台的价值是**约束**，不是提供选项。因此 `versionStrategy` 的所有可调项都刻意设计成单向下调：
+
+| 字段                       | 可调范围            | 不可调的原因                                              |
+| -------------------------- | ------------------- | --------------------------------------------------------- |
+| `channel`                  | **锁死 STABLE**     | RAPID 无 SLA；Extended 与基线冲突                          |
+| `minorUpgradePolicy`       | `auto` / `manual-soak` | 只能更保守（更长 soak），不能更激进                       |
+| `cdb.minorIntervalDays`    | ≤ **30**（CEL 强制） | 官方明示配到 90 会提高 EOL 被强升的概率                   |
+| `eolNoticeDays`            | ≥ **30**（CEL 强制） | 低于 30 天等于没有通告                                     |
+| `allowEolEmergencyExclusion` | **prod 下禁止**（CEL 强制） | 官方不推荐；紧急情况走 break-glass 留痕      |
+
+> ⚠️ **CDB 那一行值得单独说**：很多团队会想把 minor 间隔配到 90 天"减少打扰"。
+> 官方明确指出这会**增大 EOL 时刻被强制升级的概率**，而且 **EOL 时 GKE 改用 7 天预算、
+> 不遵守你配置的任何 CDB**。所以这条 CEL 不是洁癖，是拦住一个真实且常见误配。
+
+### 3.1 CEL 写法上必须注意的一个坑
+
+上面三条规则里，每条都带了**多层 `!has()` 守卫**，这不是冗余：
+
+> **CEL 没有可选链，`has()` 也不会自动向下传播。**
+> 写 `!has(self.versionStrategy) || self.versionStrategy.eolNoticeDays >= 30` 时，
+> 如果一个请求填了 `versionStrategy` 但**省略** `eolNoticeDays`，
+> CEL 会去访问一个不存在的字段 → **runtime error，而不是返回 false**。
+> 正确写法必须逐层守卫：
+> `!has(vs) || !has(vs.eolNoticeDays) || vs.eolNoticeDays >= 30`
+
+已用 8 个用例验证（含"完全省略 versionStrategy""只填 channel""cdb 缺 minorIntervalDays" 等缺省场景）：
+
+| 用例                                  | 结果   |
+| ------------------------------------- | ------ |
+| 完全不填 `versionStrategy`             | PASS   |
+| 只填 `channel`                         | PASS   |
+| 标准生产配置                           | PASS   |
+| `eolNoticeDays: 10`                   | REJECT |
+| `minorIntervalDays: 90`               | REJECT |
+| `prod` + `allowEolEmergencyExclusion: true` | REJECT |
+| `dev` + `allowEolEmergencyExclusion: true`  | PASS   |
+| `cdb` 缺 `minorIntervalDays`          | PASS（守卫生效，未 crash） |
+
+## 4. ⚠️ 已标注的推断与未验证项（诚实留白）
+
+| 项                                                       | 状态                | 说明                                                                              |
+| -------------------------------------------------------- | ------------------- | --------------------------------------------------------------------------------- |
+| **Standard 模式是否真可加入 Extended**                     | `⬜ 待实测`          | 官方禁用清单只明示 Autopilot，Standard 未被点名。**推测可行，但不影响结论**——DC 基线特性无论如何都被禁 |
+| **Control Plane 默认是 1 个还是 3 个（zonal/regional）**     | `⬜ 待确认`          | 需查 `google_container_cluster` 默认值与 `master_ipv4_cidr_block` 互斥关系           |
+| **CDB 的 gcloud flag 与 Terraform 字段对应关系**           | `⬜ 待确认`          | 官方给的是 CLI flag（`--maintenance-minor-version-disruption-interval`）；需确认 Terraform provider 字段名，**本节未写对应 HCL** |
+| **Accelerated patch auto-upgrades 是否启用**              | `⬜ 待决策`          | 更快拿安全补丁，但**跳过 qualification 步骤**且所有 patch 都提前升                 |
+
+> **纪律**：这四项在写进 `03-gcp-capability-profile.md` 之前必须实测或查证。
+> **不实测就不写** —— 否则就是我自己在犯"尚未评估被当已支持"的错。
+
+## 5. 与其它文件的衔接
+
+| 相关文件                                                | 衔接点                                                              |
+| ------------------------------------------------------ | ------------------------------------------------------------------ |
+| [`dc-owner-feedback/20-wp3-version-policy.md`](./dc-owner-feedback/20-wp3-version-policy.md) | 本节全部 GKE 事实的来源（9 条官方引用）                           |
+| [`dc-owner-feedback/21-byoc-classification-toolkit.md`](./dc-owner-feedback/21-byoc-classification-toolkit.md) | §2 第 3 条 skew 约束应加入 BYOC 准入判定                          |
+| [`dc-owner-feedback/09-p0-execution-pack.md`](./dc-owner-feedback/09-p0-execution-pack.md) | §3 的 WP-3 交付即本节                                                |
+| [`dc-owner-feedback/14-doc-conflict-review.md`](./dc-owner-feedback/14-doc-conflict-review.md) | C9 在此关闭；建议新增 C10（skew 缺失）                          |
+
+---
 
 需要我接着把 `probeShardHealth` 的具体探活实现（结合你现有的 FQDN 追踪脚本思路）细化出来，还是先把 `frontRouterUpdater.SwitchHostMapping` 对接 Kong/Gloo 的具体配置方式写出来？

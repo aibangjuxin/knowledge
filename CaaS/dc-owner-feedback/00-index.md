@@ -64,7 +64,9 @@ B 部分如果 DC 已有存量集群,那就是 BYOC 路径的入口条件,不交
 | 16  | 🆕 [**16-backfill-from-dc-experience.md**](./16-backfill-from-dc-experience.md) | **DC 实战回填 ①** —— 用你的 GCP 知识库把 `03` 的 `🔶` 变成实证                  |
 | 17  | 🆕 [**17-backfill-round2.md**](./17-backfill-round2.md) | **DC 实战回填 ②** —— 服务两分类 / 跨区 PSC / WI 边界 / 镜像实践(10 条)         |
 | 18  | 🆕 [**18-gpu-ai-assessment.md**](./18-gpu-ai-assessment.md) | **GPU / AI 架构评估** —— DC 不支持;为什么;扩展位模板;N10–N12(缺失者视角) |
-| 19  | 🆕 [**19-observability-backfill.md**](./19-observability-backfill.md) | **可观测性回填** —— logs/ 28 篇实证;Log Scopes 选型;N13–N15                |
+| 19  | 🆕 [19-observability-backfill.md](./19-observability-backfill.md) | **可观测性回填** —— logs/ 28 篇实证;Log Scopes 选型;N13–N15 |
+| 20  | 🆕 [**20-wp3-version-policy.md**](./20-wp3-version-policy.md) | **WP-3 交付** —— 版本/升级策略能力表,9 条官方来源;发现 Extended 冲突 |
+| 21  | 🆕 [**21-byoc-classification-toolkit.md**](./21-byoc-classification-toolkit.md) + `scripts/` | **BYOC 分类自查** —— 采集脚本 + 分类引擎(未执行采集,交付工具非结论) |
 
 ---
 

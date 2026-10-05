@@ -208,8 +208,13 @@ const clusterRequestForm = {
       }
     },
     tier: {
-      "ui:widget": "select",
-      "ui:help": "默认 Autopilot,GPU/特殊节点选 Standard"
+      # ⚠️ C3 修复(2026-10-05):原为 "ui:widget": "select" +
+      #   "ui:help": "默认 Autopilot,GPU/特殊节点选 Standard"。
+      # tier 已 enum 锁死 ["standard"](./gke-caas.md),表单不再暴露该字段的选择权 ——
+      # 让用户在 UI 里选一个后端会拒绝的值,是设计缺陷,不是灵活性。
+      # 如需 Autopilot,走"新画像"申请路径,而非在现有下拉框里加选项。
+      "ui:widget": "readonly",
+      "ui:help": "集群模式由平台画像决定(DC 当前画像:Standard)"
     },
     compliance: {
       "ui:widget": "multiCheckbox",

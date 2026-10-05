@@ -97,7 +97,7 @@ Managed → {NonCompliant | Retiring} ...
 
 ---
 
-## 🟠 C3 · `default: autopilot` 与 DC 现实相反(已升级为设计缺陷)
+## ✅ C3 · `default: autopilot` 与 DC 现实相反 —— 已修复(2026-10-05)
 
 > **⚠️ 2026-09-29 更新**:DC 已确认**全部使用 Standard 模式**。
 > 因此本条**不是"设计原则问题",而是"设计与现实直接矛盾"** —— 严重度实际上更高。
@@ -106,6 +106,34 @@ Managed → {NonCompliant | Retiring} ...
 L43 亦称"默认 Autopilot(golden path)"。`caas-portal.md` L212 帮助文案也写"默认 Autopilot"。
 
 **但 DC 实际全部用 Standard。** 也就是说:**这份设计从第一天起就和 DC 的现实用法相反。**
+
+### 修复记录(2026-10-05)
+
+| 项                | 内容                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| 决策依据          | DC 立场确认全量 Standard                                                                     |
+| CRD               | `tier` → `enum: ["standard"]`,**删掉 default**                                              |
+| Terraform         | 章节标题 "Autopilot Golden Path" → "Standard Golden Path";`enable_autopilot = true` → `false` |
+| 同步修复的连锁     | ① 删掉 Autopilot CEL 规则(锁死后成为死代码)<br>② C6 改为 Standard 实际隔离约束<br>③ `caas-portal.md` 表单 `select` → `readonly`<br>④ demo 4 处(models/activities/frontend/walkthrough)|
+| 新增章节          | 「Standard 模式的责任转移」—— 记录锁死后的**真实成本**                                      |
+| 验证              | CRD YAML 解析通过;demo 测试 **5 → 10 passed**(新增 5 条回归测试)                          |
+
+> **为什么用 `enum` 而不是 `default`(或干脆删字段)**
+>
+> - 删 `default` 而保留 `enum: [a, b]` → 业务方仍可选 autopilot,而 DC 不用它
+> - 彻底删字段 → 破坏请求结构,且失去"平台已审计过"的可读性
+> - **`enum: ["standard"]`** → API Server 直接拒绝,意图在 schema 里可见
+>
+> 若将来某画像确需 Autopilot,应新增**版本化画像 + 独立 Terraform module**,
+> 而非把未论证的默认值放回 schema。**CaaS 不为没签过的立场预留后门。**
+
+### 🆕 修复暴露的更重要问题:Standard 的责任成本
+
+> **删 `default` 只用了 3 行,但它指向的工作量在文末新章节里。**
+> 只锁死 `tier` 而不补节点层编排,等于把 Autopilot 省的活悄悄推给 DC 平台组。
+>
+> 已在 `gke-caas.md`「Standard 模式的责任转移」章节列出 4 项 P0/P1 能力
+> + 5 个待定 CRD 字段(刻意没给 schema,理由同 C9:现在定没有约束力)。
 
 ### 三个层面的问题
 
@@ -300,7 +328,7 @@ self.multiTenancy != 'per-cluster-node' || self.tier != 'autopilot'
 
 ---
 
-## 🟡 C9 · 版本策略缺失
+## ✅ C9 · 版本策略缺失 —— 已修复(2026-10-05)
 
 搜索结果:**9 份文档里没有任何一处提到 GKE release channel**。
 
@@ -310,7 +338,37 @@ self.multiTenancy != 'per-cluster-node' || self.tier != 'autopilot'
 - RFC §6.3 契约项 5(备份恢复 DR)
 - 存量集群的 EOL 风险
 
-**9 份文档假设集群会自己保持在支持版本上,但没有任何设计处理"版本会过期"**。
+**9 份文档假设集群会自己保持在支持版本上,但没有任何设计处理"版本会过期"。**
+
+### 修复记录(2026-10-05)
+
+| 项              | 内容                                                                     |
+| --------------- | ------------------------------------------------------------------------ |
+| 决策依据        | DC 立场确认:**全量生产集群 → Stable**                                     |
+| 实际缺口(比原判更严重) | `gke-caas.md` Terraform 骨架**写死了 `channel = "REGULAR"`** —— 不是"缺失",是"填了一个从未论证过的值" |
+| 改动            | ① Terraform 改 `STABLE` + 补 `maintenance_policy`<br>② CRD 新增 `versionStrategy`(5 字段,`channel` 为 `enum: ["STABLE"]` 单值锁死)<br>③ CRD 新增 `environment` 字段(C9 配套)<br>④ 3 条 CEL 规则 + 决策表新增一行 + 文末新增专章 |
+| 依据            | [`20-wp3-version-policy.md`](./20-wp3-version-policy.md),9 条 GKE 官方来源 |
+| 验证            | CRD YAML 解析通过;`channel` enum/default/CDB 默认值已核对;8 个 CEL 用例(5 PASS / 3 REJECT)逐条评估 |
+
+> **关键判断:用 `enum: ["STABLE"]` 而不是 `default: "STABLE"`。**
+> `default` 允许业务方显式改值;`enum` 单值在 API Server 层就拒绝。
+> **版本策略不是默认值,是平台承诺** —— 用 `default` 等于把承诺降级成建议。
+
+### 🆕 顺带发现(建议新增 C10)
+
+修复过程中确认了一条**原 RFC §9.1 BYOC 准入条件里没有**的约束:
+
+> **节点版本 skew ≤ 2 个 minor,且不得跑已 EOL 的 minor**(GKE 官方硬约束)。
+
+一个 skew 超限的集群,控制面一升级就连带触发节点池重建 ——
+**这是"纳管后突然出事"最典型的来源。**
+
+| 建议 ID | 严重度 | 问题                       | 谁该改                              | 改法                     |
+| ------- | ------ | -------------------------- | ----------------------------------- | ------------------------ |
+| **C10** | 🟠     | **BYOC 准入缺节点 skew 校验** | `rfc.md` §9.1 + `05-byoc-onboarding-pack.md` | 准入条件加 skew ≤ 2 检查 |
+
+⚠️ **本条与 C9 同源但影响面不同**:C9 是"新建集群时选什么版本",
+C10 是"存量集群纳管时什么版本算合格"。**两个问题都要解,不能只解一个。**
 
 ---
 
@@ -320,13 +378,18 @@ self.multiTenancy != 'per-cluster-node' || self.tier != 'autopilot'
 | --- | ------ | ------------------------------- | ----------------- | ----------------------------- |
 | C1  | 🔴     | onprem 必填字段自相矛盾         | `gke-caas.md`     | 拆两个 CRD 或加 oneOf          |
 | C2  | 🔴     | 状态机与 RFC §6.2 不重叠         | `gke-caas.md`     | 分两层状态                     |
-| C3  | 🟠 → **实际更高** | `default: autopilot` **与 DC 现实相反** | `gke-caas.md` | **删 default;DC 全 Standard,enum 可锁死 `["standard"]`** |
+| C3  | ✅     | ~~`default: autopilot`~~ **已修复 2026-10-05** | ~~`gke-caas.md`~~ | `enum: ["standard"]` + Standard 责任转移章节 |
 | C4  | 🟠     | 缺 `dataClassification` 字段     | `gke-caas.md`     | 加 spec 字段                   |
 | C5  | 🟠     | **缺 `Cluster` CRD(汇合点)**   | `gke-caas.md`     | 补资源定义                     |
-| C6  | 🟠     | multiTenancy × Autopilot 未验证 | `gke-caas.md`     | 定义清楚 + CEL 校验            |
+| C6  | ✅     | ~~multiTenancy × Autopilot 未验证~~ **已修复 2026-10-05** | ~~`gke-caas.md`~~ | Autopilot 规则失效,改为 Standard 隔离约束 |
 | C7  | 🟡     | `ack` vs `aliyun`               | 全部含 CRD 的     | 定死一个                       |
 | C8  | 🟡     | **缺 IKP 整个 Provider**        | 全部              | 评审会上问清楚                 |
-| C9  | 🟡     | 缺版本策略                      | `gke-caas.md`     | 补 channel 策略                |
+| C9  | ✅     | ~~缺版本策略~~ **已修复 2026-10-05** | ~~`gke-caas.md`~~ | 已补 `versionStrategy` + 3 条 CEL |
+| **C10** | 🟠  | **BYOC 准入缺节点 skew 校验**  | `rfc.md` §9.1      | 准入条件加 skew ≤ 2 检查(C9 修复时发现) |
+
+> **C9 为何标 ✅**:`gke-caas.md` 已补 release channel 策略(enum 锁死 STABLE)+ 3 条 CEL 规则
+> + 决策表 + 专章,依据 9 条 GKE 官方来源,CRD 与 CEL 均已验证。
+> **C10 为何新增**:C9 修的是"新建集群选什么版本",C10 是"存量纳管什么版本算合格" —— **不同的问题,不能互相顶替。**
 
 ### 我建议的处理顺序
 

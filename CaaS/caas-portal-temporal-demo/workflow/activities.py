@@ -131,14 +131,10 @@ async def validate_compliance_and_cost(
     )
     parsed = ClusterRequestSpec(**spec)
 
-    # demo: fail-fast on autopilot + public network (mirrors CEL rule)
-    if parsed.tier.value == "autopilot" and parsed.network.mode.value == "public":
-        _update_status(
-            name, workflow_id, started_at, 45.0,
-            WorkflowStage.VALIDATING, StageState.FAILED,
-            detail="Autopilot + public network is not allowed (mirror CEL rule)",
-        )
-        raise ValueError("autopilot+public network disallowed by ClusterSpec validation")
+    # ⚠️ C3 修复(2026-10-05):原此处有 "autopilot + public network" 的 fail-fast,
+    # 镜像 CRD 里的 Autopilot CEL 规则。tier 已 enum 锁死 ["standard"],
+    # autopilot 永不可达 → 该分支成为死代码。**已删除**,理由同 `gke-caas.md`:
+    # 留着比删掉更糟 —— 它会让人误以为 autopilot 仍受支持。
 
     # demo cost estimate using same logic as api/main.py
     estimated = (
