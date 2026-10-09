@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GKE NEG Finalizer 阻塞链路 — Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'JetBrains Mono', 'PingFang SC', 'Microsoft YaHei', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+
+    .container { max-width: 1280px; margin: 0 auto; }
+
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+
+    .pulse-dot {
+      width: 12px; height: 12px;
+      background: #fb7185;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+
+    svg { width: 100%; min-width: 1000px; display: block; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.45rem; }
+    .card li b { color: #e2e8f0; font-weight: 600; }
+
+    code {
+      background: rgba(148, 163, 184, 0.12);
+      color: #7dd3fc;
+      padding: 0.1rem 0.3rem;
+      border-radius: 3px;
+      font-size: 0.7rem;
+    }
+
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>GKE NEG Finalizer 阻塞链路</h1>
+      </div>
+      <p class="subtitle">Namespace 为何卡在 Terminating &nbsp;·&nbsp; networking.gke.io/neg-finalizer 如何把 K8s 对象删除绑定到 GCE 资源删除</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1000 845">
+        <defs>
+          <marker id="arrow" markerWidth="9" markerHeight="7" refX="8.5" refY="3.5" orient="auto">
+            <polygon points="0 0, 9 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrowRose" markerWidth="9" markerHeight="7" refX="8.5" refY="3.5" orient="auto">
+            <polygon points="0 0, 9 3.5, 0 7" fill="#fb7185" />
+          </marker>
+          <marker id="arrowAmber" markerWidth="9" markerHeight="7" refX="8.5" refY="3.5" orient="auto">
+            <polygon points="0 0, 9 3.5, 0 7" fill="#fbbf24" />
+          </marker>
+          <marker id="arrowEmerald" markerWidth="9" markerHeight="7" refX="8.5" refY="3.5" orient="auto">
+            <polygon points="0 0, 9 3.5, 0 7" fill="#34d399" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- ================= ARROWS (behind boxes) ================= -->
+
+        <!-- A1 trigger -> namespace controller -->
+        <line x1="210" y1="96" x2="246" y2="96" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="228" y="89" fill="#94a3b8" font-size="8" text-anchor="middle">delete</text>
+
+        <!-- A2 controller -> namespace object -->
+        <path d="M 350 127 L 350 150 L 100 150 L 100 196" fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="196" y="144" fill="#94a3b8" font-size="8">① 生命周期管理</text>
+
+        <!-- A3 service -> svcneg (ownerRef cascade) -->
+        <line x1="237" y1="320" x2="271" y2="320" stroke="#64748b" stroke-width="1.2" stroke-dasharray="3,2" marker-end="url(#arrow)"/>
+        <text x="254" y="312" fill="#94a3b8" font-size="7" text-anchor="middle">ownerRef</text>
+
+        <!-- A4 svcneg -> neg controller -->
+        <line x1="425" y1="345" x2="425" y2="446" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowRose)"/>
+        <text x="433" y="378" fill="#fb7185" font-size="8">③ GC 轮询</text>
+        <text x="433" y="392" fill="#94a3b8" font-size="8">前置条件：GCE NEG 已删</text>
+
+        <!-- A5 neg controller -> GCE NEG (compute API) -->
+        <path d="M 520 500 L 560 500 L 560 457 L 641 457" fill="none" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowAmber)"/>
+        <text x="596" y="450" fill="#fbbf24" font-size="8" text-anchor="middle">④ 调 Compute API</text>
+        <text x="596" y="440" fill="#94a3b8" font-size="8" text-anchor="middle">删除 NEG</text>
+
+        <!-- A6 backend service -> NEG : BLOCKED reference -->
+        <line x1="790" y1="545" x2="790" y2="502" stroke="#fb7185" stroke-width="2" marker-end="url(#arrowRose)"/>
+        <text x="800" y="528" fill="#fb7185" font-size="8" font-weight="600">✗ 仍被引用</text>
+
+        <!-- A7 referrer -> backend service -->
+        <line x1="790" y1="665" x2="790" y2="632" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowAmber)"/>
+        <text x="800" y="652" fill="#94a3b8" font-size="8">创建 / 持有</text>
+
+        <!-- A8 success path -->
+        <path d="M 300 542 L 300 552 L 148 552 L 148 566" fill="none" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrowEmerald)"/>
+        <text x="215" y="546" fill="#34d399" font-size="7" text-anchor="middle">delete 成功</text>
+
+        <!-- A9 failure -> stuck box -->
+        <path d="M 641 492 L 600 492 L 600 600 L 524 600" fill="none" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowRose)"/>
+        <text x="594" y="546" fill="#fb7185" font-size="8" text-anchor="end">delete 失败</text>
+
+        <!-- ================= BOUNDARIES ================= -->
+
+        <!-- Namespace boundary -->
+        <rect x="40" y="160" width="560" height="250" rx="12" fill="rgba(8,51,68,0.10)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="282" y="180" fill="#22d3ee" font-size="10" font-weight="600">Namespace: my-ns   phase: Terminating</text>
+
+        <!-- GCE boundary -->
+        <rect x="620" y="380" width="340" height="390" rx="12" fill="rgba(120,53,15,0.10)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="632" y="398" fill="#fbbf24" font-size="10" font-weight="600">Google Cloud (Compute Engine API)</text>
+
+        <!-- ================= COMPONENTS ================= -->
+
+        <!-- trigger -->
+        <rect x="55" y="70" width="155" height="52" rx="6" fill="#0f172a"/>
+        <rect x="55" y="70" width="155" height="52" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="132" y="92" fill="white" font-size="11" font-weight="600" text-anchor="middle">kubectl delete ns</text>
+        <text x="132" y="108" fill="#94a3b8" font-size="9" text-anchor="middle">用户操作</text>
+
+        <!-- namespace controller -->
+        <rect x="250" y="65" width="200" height="62" rx="6" fill="#0f172a"/>
+        <rect x="250" y="65" width="200" height="62" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="350" y="86" fill="white" font-size="11" font-weight="600" text-anchor="middle">Namespace Controller</text>
+        <text x="350" y="103" fill="#94a3b8" font-size="9" text-anchor="middle">发现 → 清空 → 等待</text>
+        <text x="350" y="118" fill="#475569" font-size="8" text-anchor="middle">kube-controller-manager</text>
+
+        <!-- namespace object -->
+        <rect x="62" y="200" width="175" height="72" rx="6" fill="#0f172a"/>
+        <rect x="62" y="200" width="175" height="72" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="149" y="222" fill="white" font-size="11" font-weight="600" text-anchor="middle">Namespace</text>
+        <text x="149" y="240" fill="#22d3ee" font-size="8" text-anchor="middle">finalizers: [kubernetes]</text>
+        <text x="149" y="258" fill="#94a3b8" font-size="8" text-anchor="middle">等内部资源全部清空</text>
+
+        <!-- service / ingress -->
+        <rect x="62" y="300" width="175" height="62" rx="6" fill="#0f172a"/>
+        <rect x="62" y="300" width="175" height="62" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="149" y="325" fill="white" font-size="11" font-weight="600" text-anchor="middle">Service / Ingress</text>
+        <text x="149" y="345" fill="#94a3b8" font-size="8" text-anchor="middle">ownerRef → SvcNeg CR</text>
+
+        <!-- SvcNeg CR : the special setting -->
+        <rect x="275" y="215" width="300" height="130" rx="6" fill="#0f172a"/>
+        <rect x="275" y="215" width="300" height="130" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="2"/>
+        <text x="425" y="238" fill="white" font-size="11" font-weight="700" text-anchor="middle">ServiceNetworkEndpointGroup</text>
+        <text x="425" y="255" fill="#94a3b8" font-size="8" text-anchor="middle">CRD networking.gke.io/v1beta1 · status-only</text>
+        <text x="425" y="276" fill="#a78bfa" font-size="9" font-weight="600" text-anchor="middle">finalizers:</text>
+        <rect x="297" y="282" width="256" height="18" rx="4" fill="rgba(136,19,55,0.55)" stroke="#fb7185" stroke-width="1"/>
+        <text x="425" y="295" fill="#fda4af" font-size="9" font-weight="600" text-anchor="middle">[networking.gke.io/neg-finalizer]</text>
+        <text x="425" y="316" fill="#94a3b8" font-size="8" text-anchor="middle">status.networkEndpointGroups → GCE NEG selfLink</text>
+        <text x="425" y="333" fill="#fbbf24" font-size="8" text-anchor="middle">已带 deletionTimestamp，但仍存活</text>
+
+        <!-- neg controller -->
+        <rect x="250" y="450" width="270" height="90" rx="6" fill="#0f172a"/>
+        <rect x="250" y="450" width="270" height="90" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="385" y="472" fill="white" font-size="11" font-weight="600" text-anchor="middle">NEG Controller (ingress-gce)</text>
+        <text x="385" y="491" fill="#94a3b8" font-size="9" text-anchor="middle">GC 循环 · 约 2 分钟/轮</text>
+        <text x="385" y="508" fill="#475569" font-size="8" text-anchor="middle">processNEGDeletionCandidate()</text>
+        <text x="385" y="526" fill="#fbbf24" font-size="8" text-anchor="middle">先删 GCE NEG，才清 finalizer</text>
+
+        <!-- GCE NEG -->
+        <rect x="645" y="415" width="290" height="85" rx="6" fill="#0f172a"/>
+        <rect x="645" y="415" width="290" height="85" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="790" y="438" fill="white" font-size="11" font-weight="600" text-anchor="middle">GCE NEG (zonal GCE_VM_IP_PORT)</text>
+        <text x="790" y="456" fill="#94a3b8" font-size="9" text-anchor="middle">k8s1-xxxx-my-svc-80-ab12cd</text>
+        <text x="790" y="476" fill="#fb7185" font-size="8" text-anchor="middle">delete 失败 → Event NegCRError</text>
+        <text x="790" y="492" fill="#fb7185" font-size="8" text-anchor="middle">deleteNegOrReportErr → false</text>
+
+        <!-- Backend Service -->
+        <rect x="645" y="545" width="290" height="85" rx="6" fill="#0f172a"/>
+        <rect x="645" y="545" width="290" height="85" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="790" y="570" fill="white" font-size="11" font-weight="600" text-anchor="middle">Backend Service</text>
+        <text x="790" y="590" fill="#94a3b8" font-size="9" text-anchor="middle">backend → NEG</text>
+        <text x="790" y="614" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">✗ 引用未解除</text>
+
+        <!-- referrers -->
+        <rect x="645" y="665" width="290" height="90" rx="6" fill="#0f172a"/>
+        <rect x="645" y="665" width="290" height="90" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="790" y="688" fill="white" font-size="10" font-weight="600" text-anchor="middle">引用方（任一即可阻塞）</text>
+        <text x="790" y="708" fill="#94a3b8" font-size="8" text-anchor="middle">• Ingress / Gateway 托管的 BS</text>
+        <text x="790" y="722" fill="#94a3b8" font-size="8" text-anchor="middle">• standalone 手工 / IaC 建的 BS</text>
+        <text x="790" y="736" fill="#94a3b8" font-size="8" text-anchor="middle">• 跨项目 backend service</text>
+
+        <!-- SUCCESS outcome -->
+        <rect x="55" y="570" width="185" height="150" rx="8" fill="#0f172a"/>
+        <rect x="55" y="570" width="185" height="150" rx="8" fill="rgba(6,78,59,0.25)" stroke="#34d399" stroke-width="1.5" stroke-dasharray="5,3"/>
+        <text x="147" y="596" fill="#34d399" font-size="11" font-weight="700" text-anchor="middle">解除引用后</text>
+        <text x="147" y="622" fill="#e2e8f0" font-size="8" text-anchor="middle">1. NEG delete 成功</text>
+        <text x="147" y="641" fill="#e2e8f0" font-size="8" text-anchor="middle">2. 清 neg-finalizer</text>
+        <text x="147" y="660" fill="#e2e8f0" font-size="8" text-anchor="middle">3. 删 SvcNeg CR</text>
+        <text x="147" y="679" fill="#e2e8f0" font-size="8" text-anchor="middle">4. Namespace 消失</text>
+        <text x="147" y="700" fill="#64748b" font-size="7" text-anchor="middle">仅多等约 1 轮 GC</text>
+        <text x="147" y="712" fill="#64748b" font-size="7" text-anchor="middle">≈ 几分钟 · 属正常延迟</text>
+
+        <!-- STUCK outcome -->
+        <rect x="265" y="570" width="255" height="150" rx="8" fill="#0f172a"/>
+        <rect x="265" y="570" width="255" height="150" rx="8" fill="rgba(136,19,55,0.25)" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="5,3"/>
+        <text x="392" y="596" fill="#fb7185" font-size="11" font-weight="700" text-anchor="middle">永久卡死</text>
+        <text x="392" y="620" fill="#e2e8f0" font-size="8" text-anchor="middle">① NEG 被 Backend Service 引用</text>
+        <text x="392" y="637" fill="#e2e8f0" font-size="8" text-anchor="middle">② delete 失败 → 返回 false</text>
+        <text x="392" y="654" fill="#e2e8f0" font-size="8" text-anchor="middle">③ shouldDeleteNegCR = false</text>
+        <text x="392" y="671" fill="#e2e8f0" font-size="8" text-anchor="middle">④ 不清 neg-finalizer</text>
+        <text x="392" y="688" fill="#e2e8f0" font-size="8" text-anchor="middle">⑤ SvcNeg CR 永存于 Namespace</text>
+        <text x="392" y="707" fill="#fda4af" font-size="8" font-weight="600" text-anchor="middle">⑥ Namespace 永 Terminating</text>
+
+        <!-- ================= LEGEND ================= -->
+        <text x="40" y="798" fill="white" font-size="10" font-weight="600">Legend</text>
+
+        <rect x="40" y="806" width="16" height="10" rx="2" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="62" y="815" fill="#94a3b8" font-size="8">SvcNeg CR / finalizer</text>
+
+        <rect x="230" y="806" width="16" height="10" rx="2" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="252" y="815" fill="#94a3b8" font-size="8">控制器</text>
+
+        <rect x="330" y="806" width="16" height="10" rx="2" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="352" y="815" fill="#94a3b8" font-size="8">K8s 对象</text>
+
+        <rect x="450" y="806" width="16" height="10" rx="2" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="472" y="815" fill="#94a3b8" font-size="8">GCE 资源</text>
+
+        <line x1="580" y1="811" x2="596" y2="811" stroke="#fb7185" stroke-width="1.8" marker-end="url(#arrowRose)"/>
+        <text x="604" y="815" fill="#94a3b8" font-size="8">阻塞 / 失败路径</text>
+
+        <rect x="730" y="806" width="16" height="10" rx="2" fill="transparent" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="752" y="815" fill="#94a3b8" font-size="8">集群 / LB 边界</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>NEG 的「特殊设置」到底是什么</h3>
+        </div>
+        <ul>
+          <li>• 在 Namespace 内建 CRD <b>ServiceNetworkEndpointGroup</b>（SvcNeg），status-only</li>
+          <li>• 创建时即打上 <b>finalizer</b> <code>networking.gke.io/neg-finalizer</code></li>
+          <li>• 语义 = <b>「GCE 侧 NEG 删成功，才放行这个 CR 删」</b></li>
+          <li>• 所以 Namespace 不是被禁止删除，而是<b>被顺延</b>了</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>卡死的唯一真凶</h3>
+        </div>
+        <ul>
+          <li>• 官方：NEG 被 backend service 引用时 <b>不会</b>被 GC</li>
+          <li>• Compute API 硬规则：NEG 作为 backend 时<b>不可删除</b></li>
+          <li>• 源码：<code>deleteNegOrReportErr</code> 失败只发 Event、返回 false</li>
+          <li>• <code>shouldDeleteNegCR = false</code> → 不清 finalizer → 无限重试，<b>无放弃上限</b></li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>慢 vs 卡死：怎么区分</h3>
+        </div>
+        <ul>
+          <li>• <b>正常延迟</b>：几分钟到十几分钟，最终自己消失 = GC 周期（~2min/轮）</li>
+          <li>• <b>永久卡死</b>：几小时/几天不消失 = GCE NEG 删不掉</li>
+          <li>• 决定性检查：<code>kubectl get svcneg -n &lt;ns&gt; -o yaml</code> 看有无 <b>NegCRError</b> 事件</li>
+          <li>• <code>kubectl get all</code> <b>看不到</b> SvcNeg（它是 CRD）</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>根治手段（架构层）</h3>
+        </div>
+        <ul>
+          <li>• 不逐个解 finalizer，而是把<b>拆除顺序</b>写进 IaC teardown</li>
+          <li>• 正确顺序：<b>拆 backend service 引用 → 删 Service/Ingress → 最后删 Namespace</b></li>
+          <li>• 适用 Ingress 托管 / standalone 手工 / 跨项目<b>全部三类</b>引用方</li>
+          <li>• 不涉及任何集群策略，纯编排层改造</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      GKE NEG Finalizer 阻塞链路 · companion of namespace-stuck-terminating-neg-root-cause.md · architect-gcp · 2026-10-09
+    </p>
+  </div>
+</body>
+</html>
