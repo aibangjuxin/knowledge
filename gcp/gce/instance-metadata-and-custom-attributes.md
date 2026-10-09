@@ -13,8 +13,6 @@
 | Metadata 是什么 | 每台 GCE VM 有一个本地 metadata server，`169.254.169.254` / `metadata.google.internal`，VM 内**无需任何凭据**即可读取自己实例的信息 + 自定义 key/value |
 | 自定义 Key/Value 怎么写 | `gcloud compute instances add-metadata VM --metadata=k1=v1,k2=v2`；读用 `--format`；删用 `remove-metadata --keys=` |
 | 限制 | 总计 **512 KB**；单个 key **128 bytes**；单个 value **256 KB**；key 大小写敏感，必须匹配 `[a-zA-Z0-9-_]+` |
-| 你给的 curl 命令 | 有两处笔误，见 §6.1；正确写法是 `-H`（不是 `=H`）、`computeMetadata`（不是 `cmputeMetadata`） |
-| **在 GKE Pod 里能不能验证？** | ⚠️ **自定义 instance attributes 在 Pod 里读不到**。GKE metadata server 只暴露 `cluster-name` / `cluster-location` / `cluster-uid` 三个 attribute，其余一律 `404`。这是最关键的一条，见 §6 |
 | 你想要的"Image + 不同入参启动"怎么做 | ✅ 标准做法：instance template 定义 image + startup script，per-instance metadata 提供差异化入参，脚本启动时读 metadata 渲染配置。见 §5 |
 | 最大的坑 | ① 项目级 metadata 会下发到该 Project 全部 VM，**别放密钥**；② Pod 里读不到自定义 attributes；③ 实例重启后 metadata 变化不会重跑 startup script |
 
@@ -406,15 +404,11 @@ key 换成 `startup-script-url`，guest agent 会从该公网可访问位置拉�
 
 ## 6. 在 GKE Pod 里验证 Metadata ⚠️
 
-### 6.1 先修正你的 curl 命令
+### 6.1 curl 命令
 
 你给的两处笔误：
 
 ```bash
-# ❌ 你写的（两处错）
-curl -s =H "Metadata-Flavor: Google" \
-     "http://metadata.google.internal/cmputeMetadata/v1/instance/attributes/key"
-
 # ✅ 正确
 curl -s -H "Metadata-Flavor: Google" \
      "http://metadata.google.internal/computeMetadata/v1/instance/attributes/key"
