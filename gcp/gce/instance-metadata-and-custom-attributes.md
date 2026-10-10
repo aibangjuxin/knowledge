@@ -412,8 +412,6 @@ key 换成 `startup-script-url`，guest agent 会从该公网可访问位置拉�
 # ✅ 正确
 curl -s -H "Metadata-Flavor: Google" \
      "http://metadata.google.internal/computeMetadata/v1/instance/attributes/key"
-#                              ↑ 是 -H，不是 =H
-#                                    ↑ 是 computeMetadata，不是 cmputeMetadata
 ```
 
 ### 6.2 GKE 里能不能读到？—— 不能（自定义 attributes）
