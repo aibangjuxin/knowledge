@@ -31,6 +31,10 @@ network/
 ### reports/ - 报告
 - `domain_report_*.txt`: 域名分析报告
 
+### 根目录
+- `nhf-flow.html` / `nhf-flow-enhance.html`: NHF 出网机制可视化架构图
+- `smtp-egress-nhf-squid-analysis.md`: GKE 公网出网发邮件的可行性分析（NHF 三层路由 + Squid 代理边界）；结论：邮件服务器 IP 不在 `128.0.0.0/2` 内，Squid 是 HTTP 代理无法承载 SMTP
+
 ### wrk/ - 压力测试
 - WRK压力测试工具相关内容
 
