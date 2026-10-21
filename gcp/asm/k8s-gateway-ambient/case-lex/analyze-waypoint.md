@@ -1094,7 +1094,9 @@ kubectl get deploy -n ba000000-lex-int waypoint-int \
 **OSS Istio 1.27+ 也支持**这个机制 (无 Solo 依赖), 核心字段是:
 - `gateway.istio.io/defaults-for-class: istio-waypoint` (cluster-level)
 - `spec.infrastructure.parametersRef` (gateway-level)
-- `data: { deployment: |, hpa: |, pdb: | }` (config format)
+- `data: { deployment: |, service: |, serviceAccount: |, horizontalPodAutoscaler: |, podDisruptionBudget: | }` (config format)
+  - ⚠️ overlay 的合法 key 只有这 5 个,写 `hpa:` / `pdb:` 这类简称会让 istiod 报
+    `unsupported overlay "hpa"`,整个 Gateway 渲染失败。
 
 ---
 
