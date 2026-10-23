@@ -345,11 +345,153 @@ PYEOF
     printf '%s' "$msg"
 }
 
+# ── AI Body Sanitizer ──────────────────────────────────────────────────────────
+#
+# gemma-3-1b-it 在 "write a concise body" 这个指令下的典型输出（实测 24 行）：
+#   1  Okay, here's a commit message, following the conventional commit format...
+#   3  ```
+#   4  feat: Deploy Strategy - Default Node Pool Deployment     ← 自己编的主题行
+#   6  This commit updates the `xxx.md` file to reflect...
+#   8  *   **Default Deployment...:**  We've implemented...
+#  12  ```
+#  14  **Explanation of Choices & Why This Works:**
+#  16  *   **`feat:` Prefix:**  Using `feat:` is standard...
+#  24  Would you like me to refine this further, perhaps by...
+#
+# 所以 sanitizer 不是「删几行」，而是「按结构提取 bullet 段」。
+# 策略：优先取围栏代码块内的内容（那里的 bullet 才是正文）；
+# 找不到围栏时，退而取第一组连续的 * / - bullet。
+
 sanitize_ai_body() {
-    local body="$1"
-    body=$(printf '%s\n' "$body" | sed '/^[[:space:]]*$/N;/^\n$/D')
-    body=$(printf '%s\n' "$body" | sed '/^[[:space:]]*git commit message[[:space:]]*$/Id')
-    printf '%s' "$body"
+    local raw="$1"
+
+    # 1) 归一化：去掉 Windows 换行、去掉每行行尾空白
+    raw="${raw//$'\r'/}"
+    local line
+    local -a lines=()
+    while IFS= read -r line; do
+        lines+=("${line%"${line##*[![:space:]]}"}")
+    done <<< "$raw"
+
+    local -a out=()
+    local i n=${#lines[@]}
+
+    # 2) 定位 markdown 围栏代码块（取第一个有 bullet 的块）
+    # 正则放变量：[[ ]] 内联反引号在 bash 3.2 下解析不可靠
+    local re_fence_open='^[[:space:]]*`{3}'
+    local fence_open=-1 fence_close=-1
+    local depth=0
+    for ((i = 0; i < n; i++)); do
+        if [[ "${lines[i]}" =~ $re_fence_open ]]; then
+            if (( depth == 0 )); then
+                fence_open=$i
+                depth=1
+            else
+                fence_close=$i
+                break
+            fi
+        fi
+    done
+
+    local -a candidates=()
+    if (( fence_open >= 0 && fence_close > fence_open )); then
+        candidates=( "${lines[@]:$((fence_open+1)):$((fence_close-fence_open-1))}" )
+    else
+        candidates=( "${lines[@]}" )
+    fi
+
+    # 3) 从候选里截取「第一段连续 bullet」—— 即模型真正写的正文
+    #    起点：第一个以 * / - / + 开头的行
+    #    终点：下一个非 bullet 的非空行（含小标题 / 解释段）
+    local in_bullets=0
+    for line in "${candidates[@]}"; do
+        if [[ "$line" =~ ^[[:space:]]*([-*+])[[:space:]]+ ]]; then
+            in_bullets=1
+            out+=("$(normalize_bullet "$line")")
+        elif (( in_bullets == 1 )); then
+            # 允许 bullet 之间的空行与续行（缩进）
+            if [[ -z "${line// /}" ]]; then
+                out+=("")
+            elif [[ "$line" =~ ^[[:space:]]{2,} ]]; then
+                out+=("${line#"${line%%[![:space:]]*}"}")
+            else
+                break   # 遇到新段落 = bullet 段结束
+            fi
+        elif [[ -z "${line//[[:space:]]/}" ]]; then
+            continue  # bullet 之前的空行直接丢
+        else
+            # bullet 之前遇到实质内容（模型的开场白 / feat: 主题行），跳过它继续找
+            continue
+        fi
+    done
+
+    # 4) 兜底：整段没有 bullet 时，取模型的第一段实质文本并强制转成 bullet
+    if [[ ${#out[@]} -eq 0 ]]; then
+        # 注意：正则放变量，不要直接写在 [[ =~ ]] 里。
+        # bash 3.2（macOS 自带）在 [[ ]] 内解析含 ! 与分组的正则会报语法错。
+        local re_fence='^[[:space:]]*```'
+        local re_subject='^[[:space:]]*(feat|fix|docs|chore|refactor|style|test|ci|build|perf|revert)(\([a-z0-9/_.-]+\))?(!)?:[[:space:]]'
+        local re_meta='(Explanation of Choices|Justification|Why This|Why this|Here is a commit message|here is a commit message)'
+        # 开场白模式要宽：模型会写 Okay/ Sure / Certainly / Below 等各种变体，
+        # 且不一定在行首（可能带 markdown 强调符号）。
+        local re_chat='^[[:space:]]*[*_#>[:space:]]*(okay|ok|sure|certainly|absolutely|below|here|alright|great|excellent|of course|i (h|ha)ve)[[:space:]]'
+        local started=0
+        for line in "${candidates[@]}"; do
+            # 跳过开场白、主题行、围栏、小标题
+            [[ -z "${line//[[:space:]]/}" ]] && continue
+            [[ "$line" =~ $re_fence ]] && continue
+            [[ "$line" =~ $re_subject ]] && continue
+            [[ "$line" =~ $re_meta ]] && continue
+            [[ "$line" =~ $re_chat ]] && continue
+            started=1
+            out+=("- $line")
+            [[ ${#out[@]} -ge 4 ]] && break
+        done
+        [[ $started -eq 0 ]] && return 1
+    fi
+
+    # 5) 去除常见的 LLM 元评论尾巴（"Would you like me to..."）
+    local re_tail='^[[:space:]]*(Would you like|Let me know if|I hope this|Feel free to|If you)'
+    local -a clean=()
+    for line in "${out[@]}"; do
+        [[ "$line" =~ $re_tail ]] && continue
+        clean+=("$line")
+    done
+
+    # 6) 压缩连续空行 + 限制最多 6 条 bullet
+    local -a final=()
+    local bullets=0 prev_blank=1
+    for line in "${clean[@]}"; do
+        if [[ -z "${line//[[:space:]]/}" ]]; then
+            [[ $prev_blank -eq 0 ]] && final+=("")
+            prev_blank=1
+            continue
+        fi
+        prev_blank=0
+        if [[ "$line" =~ ^- ]]; then
+            bullets=$((bullets + 1))
+            (( bullets > 6 )) && break
+        fi
+        final+=("$line")
+    done
+    # 去掉尾部空行
+    while [[ ${#final[@]} -gt 0 && -z "${final[-1]// /}" ]]; do
+        unset 'final[-1]'
+    done
+
+    [[ ${#final[@]} -eq 0 ]] && return 1
+    printf '%s\n' "${final[@]}"
+}
+
+# 把 * / + / - 开头统一成 "- "
+# 注意：模型常输出 "*   **Bold:** text"（星号后多个空格），
+# 只剥一个空格会留下 "- *   **..." 双前缀，所以要用 [[:space:]]+ 剥净。
+normalize_bullet() {
+    local l="$1"
+    l="${l#"${l%%[![:space:]]*}"}"                 # 去行首空白
+    l="${l#[-+*]}"                                   # 去掉一个列表符号
+    l="${l#"${l%%[![:space:]]*}"}"                 # 去符号后的空白
+    printf '%s' "- $l"
 }
 
 compose_final_message() {
