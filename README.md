@@ -49,6 +49,7 @@
 | `sre/` | SRE practices: SLOs, error budgets, incident response |
 | `monitor/` | Observability: logging, metrics, tracing, alerting |
 | `logs/` | Log analysis: patterns, grep tricks, log diving |
+| `devops/` | Delivery & automation: CI/CD pipelines, GitOps vs Operator paradigms, `devops/kubeops/` |
 
 ### Reference & Productivity
 
