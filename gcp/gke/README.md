@@ -28,6 +28,9 @@ gke/
 - `multi-tenant-cluster.md`: 多租户集群
 - `Multi-tenant.md`: 多租户相关
 - `node-pool-describe.md`: 节点池描述
+- `gke-job-runner.md`: GKE 上的 Job/CronJob 任务执行概念入门
+- `universal-control-plane-argocd-crossplane.md`: Argo CD + Crossplane + GKE 通用控制平面
+- `knative-on-gke.md`: Knative Serving/Eventing 在 GKE 上的基础概念
 
 ## 快速检索
 - 蓝绿部署: 查看 `docs/` 目录中的 `Blue-Green*.md` 和 `gke-blue-green.md`
@@ -36,3 +39,6 @@ gke/
 - 多租户: 查看 `docs/` 目录中的 `multi-tenant*.md` 文件
 - 节点管理: 查看 `docs/` 目录中的 `gke-node-version.md`, `node-pool-describe.md`
 - 监控: 查看 `docs/` 目录中的 `grafana-gke.md`
+- 批处理任务: 查看 `docs/` 目录中的 `gke-job-runner.md`
+- 控制平面 / GitOps: 查看 `docs/` 目录中的 `universal-control-plane-argocd-crossplane.md`
+- Serverless: 查看 `docs/` 目录中的 `knative-on-gke.md`

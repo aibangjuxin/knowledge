@@ -1,0 +1,133 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nginx-egress-proxy
+  namespace: platform-net
+  labels:
+    app.kubernetes.io/name: nginx-egress-proxy
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-egress-proxy
+  namespace: platform-net
+  labels:
+    app.kubernetes.io/name: nginx-egress-proxy
+    app.kubernetes.io/component: egress-proxy
+spec:
+  replicas: 3
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nginx-egress-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nginx-egress-proxy
+        app.kubernetes.io/component: egress-proxy
+    spec:
+      serviceAccountName: nginx-egress-proxy
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: nginx-egress-proxy
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: nginx-egress-proxy
+      containers:
+        - name: nginx
+          image: nginxinc/nginx-unprivileged:stable-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: stream
+              containerPort: 8080
+            - name: health
+              containerPort: 8081
+            - name: http
+              containerPort: 8082
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+            - name: nginx-secrets
+              mountPath: /etc/nginx/secrets
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            # 覆盖官方 entrypoint 的脚本目录，配合 readOnlyRootFilesystem 使用
+            - name: docker-entrypoint-override
+              mountPath: /docker-entrypoint.d
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-egress-proxy-config
+            items:
+              - key: nginx.conf
+                path: nginx.conf
+        - name: nginx-secrets
+          projected:
+            sources:
+              - secret:
+                  name: nginx-egress-proxy-credentials
+                  optional: true
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+        - name: docker-entrypoint-override
+          emptyDir: {}

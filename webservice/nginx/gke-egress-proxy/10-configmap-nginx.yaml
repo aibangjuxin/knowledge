@@ -1,0 +1,143 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-egress-proxy-config
+  namespace: platform-net
+  labels:
+    app.kubernetes.io/name: nginx-egress-proxy
+data:
+  nginx.conf: |
+    # ==============================================================================
+    # Nginx 出口代理（Egress Proxy）配置
+    #
+    # ⚠️ 官方 nginx 镜像（nginx:alpine / nginxinc/nginx-unprivileged）把 stream
+    #    编译成【动态模块】，因此本行必须是整个配置的第一条【指令】
+    #    （注释可以写在它前面），并且必须出现在 stream {} 块之前。
+    #    如果镜像是自建的静态编译版本，请删除本行，否则 nginx 无法启动。
+    #
+    # 验证镜像内是否存在该模块：
+    #   kubectl exec -n platform-net deploy/nginx-egress-proxy -c nginx -- \
+    #     ls -l /etc/nginx/modules/ngx_stream_module.so
+    # ==============================================================================
+    load_module modules/ngx_stream_module.so;
+
+    user 101 101;
+    worker_processes auto;
+    worker_rlimit_nofile 65535;
+    pid /tmp/nginx.pid;
+    error_log /dev/stderr warn;
+
+    events {
+        worker_connections 8192;
+        multi_accept on;
+    }
+
+    http {
+        access_log /dev/stdout;
+
+        # readOnlyRootFilesystem 下所有临时目录必须落到可写卷
+        client_body_temp_path /tmp/client_temp;
+        proxy_temp_path       /tmp/proxy_temp;
+        fastcgi_temp_path     /tmp/fastcgi_temp;
+        uwsgi_temp_path       /tmp/uwsgi_temp;
+        scgi_temp_path        /tmp/scgi_temp;
+
+        default_type application/octet-stream;
+        sendfile on;
+        keepalive_timeout 65;
+        server_tokens off;
+
+        # K8s 内的 DNS（CoreDNS），变量型 upstream 动态解析时必需
+        resolver kube-dns.kube-system.svc.cluster.local valid=30s ipv6=off;
+        resolver_timeout 5s;
+
+        # ---------- 0. 健康检查（OSS stream 没有 return 指令，另开 http 端口做）----------
+        server {
+            listen 8081;
+            access_log off;
+            location = /healthz {
+                add_header Content-Type text/plain;
+                return 200 "ok\n";
+            }
+        }
+
+        # ---------- 凭证（可选）：nginx → 内部中间服务的共享令牌 ----------
+        # Secret 以文件形式挂载在 /etc/nginx/secrets，内容形如：
+        #     set $internal_token "真实令牌";
+        # Secret 缺失时该目录为空，include 匹配不到文件，不影响启动。
+        set $internal_token "";
+        include /etc/nginx/secrets/*.conf;
+
+        map $internal_token $internal_auth {
+            ""      "";
+            default "Bearer $internal_token";
+        }
+
+        # 按调用方 IP 限流（真实场景可换成按调用方身份，见文档 5.3 节）
+        limit_req_zone $binary_remote_addr zone=per_caller:10m rate=20r/s;
+
+        # ---------- 1. L7 出口代理（模式 B，推荐主方案）----------
+        # 链路：Pod → nginx:8082 → 集群内中间服务 → 外部 API
+        server {
+            listen 8082;
+            server_name _;
+
+            location = /proxy {
+                limit_req zone=per_caller burst=40 nodelay;
+
+                # 集群内中间服务（本文档 25-partner-service.yaml 提供示例）
+                set $target_host "egress-partner-client.platform-net.svc.cluster.local";
+
+                proxy_pass http://$target_host;
+                proxy_http_version 1.1;
+
+                # --- 这里的 header 就是"流转"发生的地方 ---
+                proxy_set_header Host              $target_host;
+                proxy_set_header Connection        "";
+                proxy_set_header X-Real-IP         $remote_addr;
+                proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_set_header X-Caller-Identity $http_x_caller_identity;
+                proxy_set_header X-Platform-Auth   $internal_auth;
+
+                proxy_connect_timeout 5s;
+                proxy_send_timeout    60s;
+                proxy_read_timeout    60s;
+                proxy_next_upstream   error timeout http_502 http_504;
+            }
+        }
+    }
+
+    # ---------- 2. L4 stream 定向出口（模式 A，可选）----------
+    # 链路：Pod → nginx:8080 → 外部 API:443（nginx 直接出网）
+    # 若只需要模式 B，删除整个 stream 块，并把 Service 的 8080 端口一并删除。
+    stream {
+        log_format main '$remote_addr [$time_local] $protocol $status '
+                        'bytes_sent=$bytes_sent sni="$ssl_preread_server_name" '
+                        'upstream=$upstream_addr';
+        access_log /dev/stdout main;
+
+        resolver kube-dns.kube-system.svc.cluster.local valid=30s ipv6=off;
+        resolver_timeout 5s;
+
+        # OSS stream 没有 set 指令，变量型 upstream 只能用 map 实现
+        map $ssl_preread_server_name $l4_upstream {
+            default            "fallback.partner.example.com:443";
+            "api.partner.com"  "api.partner.com:443";
+            "auth.partner.com" "auth.partner.com:443";
+        }
+
+        server {
+            listen 8080;
+            proxy_pass $l4_upstream;
+
+            # 在不终结 TLS 的前提下读取 ClientHello 里的 SNI
+            ssl_preread on;
+            # 上游支持 PROXY protocol 时才打开
+            # proxy_protocol on;
+
+            proxy_connect_timeout 5s;
+            proxy_timeout 300s;
+            proxy_responses 1;
+        }
+    }

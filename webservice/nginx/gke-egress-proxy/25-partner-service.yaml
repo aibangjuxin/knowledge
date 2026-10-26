@@ -1,0 +1,174 @@
+# ==============================================================================
+# 集群内"中间服务"示例（你的 case 里的"另外一个服务"）
+#
+# 职责：持有第三方 API 凭证，由它带领请求最终出网。
+# nginx 只负责收口 + 身份透传 + 限流 + 审计，不持有第三方凭证。
+#
+# ⚠️ 这是最小可运行示例（Python 标准库）。生产环境请替换为你的真实服务，
+#    但要保留的契约是：监听 8080、GET /fetch 返回上游结果、凭证从环境变量读。
+# ==============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: egress-partner-client
+  namespace: platform-net
+  labels:
+    app.kubernetes.io/name: egress-partner-client
+data:
+  server.py: |
+    import json
+    import os
+    import urllib.request
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    TARGET_URL = os.environ.get("TARGET_URL", "https://api.partner.example.com/v1/status")
+    PARTNER_TOKEN = os.environ.get("PARTNER_TOKEN", "")
+
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def _respond(self, status, body):
+            payload = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def do_GET(self):
+            if self.path == "/healthz":
+                # 探针专用：不触碰外部 API，避免外部抖动影响自身存活判定
+                self._respond(200, {"status": "ok"})
+                return
+            if self.path not in ("/fetch", "/"):
+                self._respond(404, {"error": "not found"})
+                return
+            request = urllib.request.Request(TARGET_URL)
+            if PARTNER_TOKEN:
+                request.add_header("Authorization", "Bearer " + PARTNER_TOKEN)
+            # 把调用方身份透传给第三方，便于对账
+            caller = self.headers.get("X-Caller-Identity", "")
+            if caller:
+                request.add_header("X-Caller-Identity", caller)
+            try:
+                with urllib.request.urlopen(request, timeout=15) as response:
+                    raw = response.read().decode("utf-8", "replace")
+                    self._respond(response.status, {"upstream": raw})
+            except Exception as exc:  # noqa: BLE001
+                self._respond(502, {"error": str(exc)})
+
+        def log_message(self, fmt, *args):
+            print("%s - %s" % (self.address_string(), fmt % args), flush=True)
+
+
+    ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: egress-partner-client
+  namespace: platform-net
+  labels:
+    app.kubernetes.io/name: egress-partner-client
+    app.kubernetes.io/component: egress-partner
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: egress-partner-client
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: egress-partner-client
+        app.kubernetes.io/component: egress-partner
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: partner
+          image: python:3.12-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "/app/server.py"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: TARGET_URL
+              value: "https://api.partner.example.com/v1/status"
+            - name: PARTNER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: partner-credentials
+                  key: token
+                  optional: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: app
+              mountPath: /app
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: app
+          configMap:
+            name: egress-partner-client
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: egress-partner-client
+  namespace: platform-net
+  labels:
+    app.kubernetes.io/name: egress-partner-client
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: egress-partner-client
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

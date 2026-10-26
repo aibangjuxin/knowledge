@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform-net
+  labels:
+    app.kubernetes.io/part-of: egress-proxy
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+# 示例：业务工作负载所在命名空间。
+# 生产环境请替换成你真实的业务 namespace。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: app-workload
+  labels:
+    app.kubernetes.io/part-of: egress-proxy
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

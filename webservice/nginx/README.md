@@ -10,6 +10,7 @@ nginx/
 ├── config/                           # 配置文件
 ├── docs/                             # Markdown文档
 ├── gce-nginx-l4-enhance/             # GCE Nginx L4增强相关
+├── gke-egress-proxy/                 # GKE 出口代理可部署清单（ClusterIP + NetworkPolicy）
 ├── ingress-control/                  # 入口控制相关
 ├── nginx-logs/                       # Nginx日志相关
 ├── tools/                            # 工具和资源文件
@@ -29,6 +30,8 @@ nginx/
 - `nginx-proxy-buffer.md`: 代理缓冲区
 - `upstream.md`: Upstream配置
 - `L7+L4.md`: 7层和4层负载均衡
+- `nginx-l4-stream-explorer.md`: Nginx L4 (stream) 能力探索: TCP处理、SNI/ssl_preread分流、PROXY protocol与GCP选型
+- `nginx-l4-user-case.md`: 出口代理 User Case 落地方案: 集群内Pod经Nginx统一出网、三种模式选型、GKE部署与验证回滚
 - `nginx-mtls.md`: mTLS双向认证
 - `nginx-safe.md`: 安全配置
 - `ssl_client_certificate_chain.md`: SSL客户端证书链
@@ -39,6 +42,10 @@ nginx/
 ### config/ - 配置文件
 - YAML配置文件
 
+### gke-egress-proxy/ - GKE 出口代理清单
+- `00-namespace.yaml` ~ `50-pdb-hpa.yaml`: 按序 apply 的命名空间/配置/工作负载/中间服务/Service/网络策略/弹性
+- `examples/`: 凭证模板与验证客户端 Pod
+
 ### tools/ - 工具和资源
 - 图片资源
 
@@ -46,6 +53,8 @@ nginx/
 - Nginx基础: 查看 `docs/` 目录中的 `nginx-conf.md`, `nginx-feature.md`
 - 性能优化: 查看 `docs/` 目录中的 `nginx-enhance*.md`, `nginx-size*.md` 文件
 - 代理配置: 查看 `docs/` 目录中的 `nginx-proxy*.md` 文件
+- L4/stream 分流: 查看 `docs/` 目录中的 `nginx-l4-stream-explorer.md`, `nginx-l4-proxy.md`, `L7+L4.md` 文件
+- 集群统一出网: 查看 `docs/` 目录中的 `nginx-l4-user-case.md` 与 `gke-egress-proxy/` 目录
 - 错误处理: 查看 `docs/` 目录中的 `nginx-502.md`, `nginx-499-502.md`, `nginx-error.md`
 - 安全配置: 查看 `docs/` 目录中的 `nginx-mtls.md`, `nginx-safe.md`
 - 日志管理: 查看 `docs/` 目录中的 `nginx-log.md` 及 `nginx-logs/` 目录

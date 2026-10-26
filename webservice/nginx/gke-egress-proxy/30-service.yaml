@@ -1,0 +1,38 @@
+# ==============================================================================
+# Nginx 出口代理 Service
+#
+# ⚠️ 必须是 ClusterIP：这是"集群内 Pod 用的出口代理"，不是公网入口。
+#    如果确实需要外部用户访问，那是另一个场景（External LB / GCLB），
+#    不要把它和本方案混在一起，否则会变成绕过管控的公网代理。
+# ==============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-egress-proxy
+  namespace: platform-net
+  labels:
+    app.kubernetes.io/name: nginx-egress-proxy
+  annotations:
+    # 若集群启用了 Dataplane V2 + container-native load balancing，
+    # 受影响的 Service 需要显式声明 NEG 行为，否则走 NEG 的流量会异常。
+    # cloud.google.com/neg: '{"ingress": true}'
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: nginx-egress-proxy
+  ports:
+    # 模式 B：L7 HTTP 出口代理（推荐主方案）
+    - name: http
+      port: 8082
+      targetPort: http
+      protocol: TCP
+    # 模式 A：L4 stream 定向出口（可选，不需要可删除）
+    - name: stream
+      port: 8080
+      targetPort: stream
+      protocol: TCP
+    # 健康检查：供集群内探针与人工核对使用
+    - name: health
+      port: 8081
+      targetPort: health
+      protocol: TCP
