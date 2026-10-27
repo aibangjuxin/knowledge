@@ -31,6 +31,7 @@ gke/
 - `gke-job-runner.md`: GKE 上的 Job/CronJob 任务执行概念入门
 - `universal-control-plane-argocd-crossplane.md`: Argo CD + Crossplane + GKE 通用控制平面
 - `knative-on-gke.md`: Knative Serving/Eventing 在 GKE 上的基础概念
+- `intra-namespace-call.md`: 同 Namespace 内部调用(Intra-namespace call)—— 版本解耦 + svc DNS + HTTPS 证书(纯 K8s 方案;已装 ambient/ASM 时看 `../asm/k8s-gateway-ambient/23-intra-namespace-call-versioning-and-mtls.md`)
 
 ## 快速检索
 - 蓝绿部署: 查看 `docs/` 目录中的 `Blue-Green*.md` 和 `gke-blue-green.md`
@@ -42,3 +43,4 @@ gke/
 - 批处理任务: 查看 `docs/` 目录中的 `gke-job-runner.md`
 - 控制平面 / GitOps: 查看 `docs/` 目录中的 `universal-control-plane-argocd-crossplane.md`
 - Serverless: 查看 `docs/` 目录中的 `knative-on-gke.md`
+- Namespace 内服务互调(版本解耦 + mTLS/证书): 查看 `docs/` 目录中的 `intra-namespace-call.md`

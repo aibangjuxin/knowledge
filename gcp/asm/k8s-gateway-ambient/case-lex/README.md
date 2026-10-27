@@ -243,6 +243,10 @@ kubectl apply -f 09-01-app-httproute.yaml                       # 9. 两段 HTTP
 - `../06-policy-capabilities.md` — AuthZ/PA 在 ambient 下的能力矩阵
 - `../08-ambient-networkpolicy.md` — NetPol 与 ztunnel 协同规则
 - `../10-waypoint-gateway-coexistence.md` §1 — ingress 与 waypoint 默认行为
+- `../23-intra-namespace-call-versioning-and-mtls.md` — **ns 内 A→B 直连调用**:版本解耦(稳定 Service + x-api-version 路由)+ svc DNS 合法形式 + mesh mTLS vs 应用层 HTTPS 选型,含 case-lex 现状对照
+
+**同目录的兄弟场景(独立 ns,不影响本目录)**:
+- `../case-lex-intra-call/` — **ns 内 A→B 调用 PoC**(独立 ns `ba000000-lex-intra-call`):稳定 Service + 版本专属 Service + HTTPRoute header 版本路由 + 调用方 ConfigMap 注入
 
 **同目录**:
 - `assessment-ingress.md` — ingress 流量完整路径分析

@@ -1,0 +1,219 @@
+# =============================================================================
+# 03-api2-workloads.yaml
+# =============================================================================
+# 被调方 API B(lex-api2) 的两个版本 —— 用 nginx 回显版本 + 回显收到的请求头
+#
+# 关键设计:
+#   - 版本信息放在 Deployment 的 label(version=v1 / v2),**不放进 Service 名**
+#   - Service 名保持稳定(见 04-services.yaml)
+#   - 回显里带 api_version_header,用来证明"调用方通过 header 选版本"确实生效
+#
+# 严格定义 (K8s Deployment selector 是 immutable):
+#   "The .spec.selector field is an immutable field."
+#   — kubernetes.io/docs/concepts/workloads/controllers/deployment/
+#   → 所以 selector.matchLabels 必须和 template.metadata.labels 完全一致
+# -----------------------------------------------------------------------------
+
+---
+# =============================================================================
+# API B — v1
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lex-api2-v1-nginx
+  namespace: ba000000-lex-intra-call
+  labels:
+    app: lex-api2
+    version: v1
+data:
+  default.conf: |
+    server {
+        listen 8080;
+        server_name _;
+
+        # 探针端点
+        location = /healthz {
+            default_type application/json;
+            return 200 '{"status":"ok","service":"lex-api2","version":"v1"}\n';
+        }
+
+        # 主端点:回显版本 + 回显收到的 x-api-version 头
+        # nginx 变量说明:
+        #   $http_x_api_version = 请求头 x-api-version 的值(nginx 把 - 转 _)
+        #   $host                = 请求的 Host 头
+        #   $request_uri         = 原始请求 URI
+        #   $hostname            = 处理该请求的 pod 名
+        location / {
+            default_type application/json;
+            return 200 '{"service":"lex-api2","version":"v1","api_version_header":"$http_x_api_version","host":"$host","uri":"$request_uri","backend_pod":"$hostname"}\n';
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lex-api2-v1
+  namespace: ba000000-lex-intra-call
+  labels:
+    app: lex-api2
+    version: v1
+    app.kubernetes.io/name: lex-api2
+    app.kubernetes.io/part-of: ba000000-lex-intra-call
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: lex-api2
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: lex-api2
+        version: v1        # ← 版本信息在这里,不在 Service 名里
+        app.kubernetes.io/name: lex-api2
+    spec:
+      serviceAccountName: lex-api2-ksa
+      automountServiceAccountToken: true
+      containers:
+        - name: app
+          image: nginxinc/nginx-unprivileged:1.27-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          args:
+            - /bin/sh
+            - -c
+            - |
+              nginx -g 'daemon off;'
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d
+              readOnly: true
+          # 3 个探针都打 /healthz
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTP
+            failureThreshold: 30
+            periodSeconds: 2
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: lex-api2-v1-nginx
+
+---
+# =============================================================================
+# API B — v2
+# 与 v1 唯一差异:ConfigMap 里的 version 字段 = v2
+# 这样可以用同一个镜像演示"版本切换",验证时看返回的 version 字段
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lex-api2-v2-nginx
+  namespace: ba000000-lex-intra-call
+  labels:
+    app: lex-api2
+    version: v2
+data:
+  default.conf: |
+    server {
+        listen 8080;
+        server_name _;
+
+        location = /healthz {
+            default_type application/json;
+            return 200 '{"status":"ok","service":"lex-api2","version":"v2"}\n';
+        }
+
+        location / {
+            default_type application/json;
+            return 200 '{"service":"lex-api2","version":"v2","api_version_header":"$http_x_api_version","host":"$host","uri":"$request_uri","backend_pod":"$hostname"}\n';
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lex-api2-v2
+  namespace: ba000000-lex-intra-call
+  labels:
+    app: lex-api2
+    version: v2
+    app.kubernetes.io/name: lex-api2
+    app.kubernetes.io/part-of: ba000000-lex-intra-call
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: lex-api2
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: lex-api2
+        version: v2
+        app.kubernetes.io/name: lex-api2
+    spec:
+      serviceAccountName: lex-api2-ksa
+      automountServiceAccountToken: true
+      containers:
+        - name: app
+          image: nginxinc/nginx-unprivileged:1.27-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          args:
+            - /bin/sh
+            - -c
+            - |
+              nginx -g 'daemon off;'
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+              scheme: HTTP
+            failureThreshold: 30
+            periodSeconds: 2
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: lex-api2-v2-nginx

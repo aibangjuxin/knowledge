@@ -1,0 +1,137 @@
+# =============================================================================
+# 02-network-policies.yaml
+# =============================================================================
+# 本 ns 的 NetworkPolicy —— 默认 deny + 白名单
+#
+# ★ ambient 必读规则 ★(来源: ../../08-ambient-networkpolicy.md)
+# ----------------------------------------
+# 1. 15008 (HBONE 隧道) 必须显式 allow,否则 mesh 流量被 CNI 拦截
+#    istio-cni 在 pod 内 iptables 重定向 TCP → ztunnel 15008
+#    K8s NetPol 在主机网络命名空间(iptables 层)生效,早于 pod 内重定向
+# 2. kubelet 探针走 link-local 169.254.7.127/32
+#    istio-cni 会把探针包 SNAT 成该 link-local,NetPol 必须放行,
+#    否则 readiness 永远失败 → pod 一直 NotReady
+#
+# 与老场景的差异: 老 ns 的 NP 有 "allow 公网 128.0.0.0/2" 这类宽松规则,
+# 本 PoC 不需要出网,全部收敛 —— 只放 DNS + 同 ns + 探针。
+# =============================================================================
+
+---
+# -----------------------------------------------------------------------------
+# NP-1: default-deny-all
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: ba000000-lex-intra-call
+  labels:
+    gateway-access: ba000000-lex-intra-call
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  # 无 ingress / egress 规则 = deny all
+
+---
+# -----------------------------------------------------------------------------
+# NP-2: default-allow-egress-dns
+# 业务 pod → CoreDNS(kube-system ns, UDP/TCP 53)
+# 不放行 DNS → 整 ns 的名字解析全挂
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-egress-dns
+  namespace: ba000000-lex-intra-call
+  labels:
+    gateway-access: ba000000-lex-intra-call
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# -----------------------------------------------------------------------------
+# NP-3: default-allow-same-namespace
+# 同 ns 内 pod 互相访问(东西向基础)
+# 本 ns 打了 businessId=ba000000 标签,用它做 namespaceSelector
+# 严格定义 (K8s NetPol spec):
+#   "Each defined port/protocol combination must be allowed.
+#    If ports are empty, all ports are allowed from matching sources."
+# 这里 ports 留空 = 允许所有端口 → 业务端口 + HBONE 端口都覆盖
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-same-namespace
+  namespace: ba000000-lex-intra-call
+  labels:
+    gateway-access: ba000000-lex-intra-call
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              businessId: ba000000
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              businessId: ba000000
+
+---
+# -----------------------------------------------------------------------------
+# NP-4: allow-kubelet-probes-http
+# 探针放行: kubelet 通过 link-local 169.254.7.127/32 打业务端口 8080
+#
+# 严格来源 (../../08-ambient-networkpolicy.md §1.2):
+#   "ambient uses the link-local addresses 169.254.7.127 (IPv4) and
+#    fd16:9254:7127:1337:ffff:ffff:ffff:ffff (IPv6) to identify and
+#    correctly allow kubelet health probe packets."
+#   — Istio Ambient NetworkPolicy docs
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kubelet-probes-http
+  namespace: ba000000-lex-intra-call
+  labels:
+    gateway-access: ba000000-lex-intra-call
+spec:
+  podSelector: {}    # 所有业务 pod
+  policyTypes:
+    - Ingress
+  ingress:
+    # IPv4 link-local
+    - from:
+        - ipBlock:
+            cidr: 169.254.7.127/32
+      ports:
+        - protocol: TCP
+          port: 8080    # 业务端口 —— 与 03/07 的容器端口一致
+    # IPv6 link-local(若集群启用 IPv6)
+    #- from:
+    #    - ipBlock:
+    #        cidr: fd16:9254:7127:1337:ffff:ffff:ffff:ffff/128
+    #  ports:
+    #    - protocol: TCP
+    #      port: 8080

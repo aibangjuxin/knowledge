@@ -59,9 +59,12 @@
 | `21-solo-ambient-egress.md` + `21-solo-ambient-egress-architecture.html` | **Ambient 模式下 GKE Pod Egress**(Internal NHF 兼容 + Public L7 waypoint 迁移 + Namespace-level 出网白名单) + archify 架构图 | 全局 | **场景化 + 架构图** |
 | `22-ztunnel-mtls-and-cert-rotation.md` + `22-ztunnel-mtls-and-cert-rotation.html` | **ztunnel L4 mTLS 工作机制与证书轮转深度探索**(HBONE 协议 + SecretManager 三优先级 + Background 50% TTL 续期 + impersonation 检查 + 与 sidecar SDS 的本质差异) + 架构图。**已合并** `ztunnel-l4-mtls.md` 草稿的:SCM_RIGHTS/ZDS、TokenRequest API、CSR SAN 不被信任、RBAC ClusterRole、客户端反向验证服务端 SAN、15053/15020 端口、HBONE 报文示例、ztunnel/waypoint 能力分工、TTL 撤销 = 短 TTL、Root CA 自动分发、故障速查表、Prometheus 监控、一页速记 | 全局 | **深度探测 + 架构图** |
 | `ztunnel-l4-mtls.md` | **ztunnel L4 mTLS 内部机制详解**(setns / ZDS / TokenRequest / 双向验证 / 轮转时序 + 故障对照表,与你们链路 Kong → Runtime 段的加密归属)。**内容已合并到 22-**,本文档保留作为早期草稿(包含未正式归档的本地视角),可作快速 reference | 全局 | **深度探测(草稿,内容已并入 22-)** |
+| `23-intra-namespace-call-versioning-and-mtls.md` | **Intra-Namespace Call:版本解耦 + svc DNS + HTTPS/TLS**(同 ns 内 A→B 不绕 internal ingress 的 hairpin 代价与 ambient 直连数据流;`svc.local` 为何非法与 4 种合法 svc DNS 形式;**DNS=身份 / 路由=版本 / 契约=header** 三层解耦原则;版本解耦 M1–M4 机制矩阵 + 6 条反模式;T1 mesh mTLS / T2 应用层 HTTPS / T3 waypoint TLS origination 三方案与 SAN 清单;V1–V3 落地步骤含验证与回滚;9 套可 copy 的 YAML / 命令模板;waypoint HTTPRoute header 版本路由 + 权重灰度;cert-manager 自建 CA;风险登记 R1–R9) | 全局 | **实操 + 架构图** |
 | `ADR-LOCAL-001-migrate-minimal-to-ambient.md` | 从 minimal 迁 ambient 的架构决策记录 | 全局 | **ADR 草稿** |
 | `PERSONAL-FOCUS-LIST.md` | **Lex 个人关注清单**(本目录所有"个人关切"的集中追踪) | 全局 | **关注追踪** |
 | `values/` | 02 文涉及的 4 个 Helm values 文件 | 配套 | 配置 |
+| `case-lex/` | 南北向 ingress + waypoint 的实际落地配置(ns `ba000000-lex-int`) | 配套 | 配置 |
+| `case-lex-intra-call/` | **Intra-Namespace Call 可运行 PoC**(独立 ns `ba000000-lex-intra-call`,不碰老场景):稳定 Service + 版本专属 Service + HTTPRoute header 版本路由 + 调用方 ConfigMap 注入 + mesh mTLS;含 09-verify.sh / 90-teardown.sh 与 `optional/` 应用层 HTTPS 备选路径 | 配套 | **实操** |
 
 ## 1.1 探索类型说明
 

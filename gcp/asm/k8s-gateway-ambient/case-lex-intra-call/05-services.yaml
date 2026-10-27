@@ -1,0 +1,128 @@
+# =============================================================================
+# 05-services.yaml
+# =============================================================================
+# ★ 本 PoC 的核心:Service 名与版本解耦 ★
+#
+# 三个 Service:
+#   lex-api2-service      ← 稳定入口,调用方代码里唯一出现的常量
+#   lex-api2-service-v1   ← 版本专属,只作为 HTTPRoute 的 backendRef,没人直接调
+#   lex-api2-service-v2   ← 同上
+#
+# 反例(不要这么干):
+#   lex-api2-service-1.0.0 / lex-api2-service-2.0.0
+#   ① DNS 名变 → 证书 SAN 要重签 → 调用方要改
+#   ② K8s Service 名遵循 DNS-1035 label 规则,**不允许含 "."**
+#      所以 "1.0.0" 根本建不出来,只能写 "1-0-0" —— 既丑又不解决版本漂移
+#   严格定义 (K8s Service metadata.name):
+#     "must be a DNS-1035 label" — kubernetes.io/docs/concepts/overview/working-with-objects/names/
+#
+# 稳定 Service 的 selector 两种写法(按需二选一):
+#   (a) app=lex-api2            → 两个版本都在 endpoints 里
+#       实际流量由 HTTPRoute 决定走哪个版本 —— 本 PoC 用这个
+#   (b) app=lex-api2 + version=v1 → 钉死"当前生效版本",改一行即可切版本
+#       适合"没有 L7 路由、只想要个稳定入口"的简单场景
+# -----------------------------------------------------------------------------
+
+---
+# -----------------------------------------------------------------------------
+# S-1: 稳定入口(调用方唯一认知的对象)
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: lex-api2-service
+  namespace: ba000000-lex-intra-call
+  labels:
+    app: lex-api2
+    app.kubernetes.io/name: lex-api2
+    app.kubernetes.io/part-of: ba000000-lex-intra-call
+  annotations:
+    description: "稳定入口 —— DNS 名、证书 SAN、调用方配置全部只认这一个;版本由 HTTPRoute 按 x-api-version 头路由"
+spec:
+  type: ClusterIP
+  # (a) 写法:两个版本都在 endpoints,真实去向由 06-httproute-version.yaml 决定
+  selector:
+    app: lex-api2
+  ports:
+    - name: http
+      port: 80              # Service port(HTTPRoute backendRefs.port 引用这个)
+      targetPort: 8080      # 容器端口
+      protocol: TCP
+      appProtocol: http     # 告诉 Gateway 后端是 plaintext HTTP
+
+---
+# -----------------------------------------------------------------------------
+# S-2: 版本专属 Service — v1
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: lex-api2-service-v1
+  namespace: ba000000-lex-intra-call
+  labels:
+    app: lex-api2
+    version: v1
+    app.kubernetes.io/name: lex-api2
+    app.kubernetes.io/part-of: ba000000-lex-intra-call
+spec:
+  type: ClusterIP
+  selector:
+    app: lex-api2
+    version: v1
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+      appProtocol: http
+
+---
+# -----------------------------------------------------------------------------
+# S-3: 版本专属 Service — v2
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: lex-api2-service-v2
+  namespace: ba000000-lex-intra-call
+  labels:
+    app: lex-api2
+    version: v2
+    app.kubernetes.io/name: lex-api2
+    app.kubernetes.io/part-of: ba000000-lex-intra-call
+spec:
+  type: ClusterIP
+  selector:
+    app: lex-api2
+    version: v2
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+      appProtocol: http
+
+---
+# -----------------------------------------------------------------------------
+# S-4: 调用方 Service(API A)
+# 只为让调用方 pod 有个稳定的身份 / 可被探活,不参与版本路由
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: lex-api1-service
+  namespace: ba000000-lex-intra-call
+  labels:
+    app: lex-api1
+    app.kubernetes.io/name: lex-api1
+    app.kubernetes.io/part-of: ba000000-lex-intra-call
+spec:
+  type: ClusterIP
+  selector:
+    app: lex-api1
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+      appProtocol: http

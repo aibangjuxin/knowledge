@@ -1,0 +1,107 @@
+# =============================================================================
+# 06-httproute-version.yaml
+# =============================================================================
+# ★ 本 PoC 的版本路由核心 ★
+#
+# 严格定义 (GAMMA — Gateway API for Mesh):
+#   "HTTPRoute resources attach to a parent Gateway, ListenerSet, or Service
+#    via parentRefs."
+#   — gateway.networking.k8s.io HTTPRoute docs
+#
+#   parentRefs.kind = Service → 这条 route 只对"直连该 Service 的东西向流量"生效,
+#   不影响南北向 ingress(那是 case-lex 里 ListenerSet 上挂的那条)
+#
+# 严格定义 (Istio ambient 下为什么不能用 DestinationRule subset):
+#   ambient 不支持 DestinationRule 的 subset 切流,版本切换必须落到
+#   "不同的 backendRef 指向不同的版本 Service" 这条路上。
+#   → 这就是 05-services.yaml 里要建 -v1 / -v2 两个 Service 的原因
+#
+# 严格定义 (匹配优先级):
+#   Gateway API 的匹配是"最具体优先";Istio 实现上把具体规则排在前面、
+#   兜底规则放最后,行为最确定。
+#
+# 严格定义 (header match):
+#   "HeaderMatch specifies how to match against HTTP headers. If multiple
+#    headers are specified, the request must match all of them."
+#   — gateway-api.sigs.k8s.io HTTPRoute docs
+# -----------------------------------------------------------------------------
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: lex-api2-version-route
+  namespace: ba000000-lex-intra-call
+  labels:
+    app: lex-api2
+    app.kubernetes.io/part-of: ba000000-lex-intra-call
+    # 标识这是 waypoint 层的 L7 route
+    role: ambient-waypoint
+spec:
+  # ---- GAMMA:直接挂 Service,不挂 Gateway ----
+  parentRefs:
+    - group: ""
+      kind: Service
+      name: lex-api2-service
+  rules:
+    # ---- 规则 1:显式指定 1.0.0 → v1 ----
+    - matches:
+        - headers:
+            - name: x-api-version
+              value: "1.0.0"
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: lex-api2-service-v1
+          port: 80
+          weight: 1
+
+    # ---- 规则 2:显式指定 2.0.0 → v2 ----
+    - matches:
+        - headers:
+            - name: x-api-version
+              value: "2.0.0"
+      backendRefs:
+        - group: ""
+          kind: Service
+          name: lex-api2-service-v2
+          port: 80
+          weight: 1
+
+    # ---- 规则 3(可选):Accept 媒体类型协商 ----
+    # 相比自定义头,媒体类型更标准,适合对外 API
+    # 用法: Accept: application/vnd.lex.api2.v1+json
+    # ⚠️ 启用前请先确认业务侧的 HTTP client 允许自定义 Accept
+    #- matches:
+    #    - headers:
+    #        - name: accept
+    #          value: "application/vnd.lex.api2.v1+json"
+    #  backendRefs:
+    #    - group: ""
+    #      kind: Service
+    #      name: lex-api2-service-v1
+    #      port: 80
+    #      weight: 1
+
+    # ---- 规则 4(兜底):不带版本头 → 默认版本 ----
+    # 这条必须放最后。默认 100% v1,保证行为确定
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: lex-api2-service-v1
+          port: 80
+          weight: 100
+
+    # ---- 规则 5(可选):灰度切流 ----
+    # 不带版本头的流量 → 90% v1 / 10% v2
+    # 验证:连续 curl 20 次,统计 version 字段分布 ≈ 18/2
+    # ⚠️ 与规则 4 互斥,同时存在时哪条生效取决于匹配优先级 —— 二选一
+    #- backendRefs:
+    #    - group: ""
+    #      kind: Service
+    #      name: lex-api2-service-v1
+    #      port: 80
+    #      weight: 90
+    #    - group: ""
+    #      kind: Service
+    #      name: lex-api2-service-v2
+    #      port: 80
+    #      weight: 10

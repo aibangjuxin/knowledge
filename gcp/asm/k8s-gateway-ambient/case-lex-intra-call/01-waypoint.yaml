@@ -1,0 +1,85 @@
+# =============================================================================
+# 01-waypoint.yaml
+# =============================================================================
+# per-namespace waypoint —— 本 ns 东西向流量的 L7 拦截点
+#
+# 严格定义 (来源: Istio Waypoint docs):
+#   "A waypoint is an Envoy proxy deployed per-namespace or per-service
+#    that handles L7 processing for traffic between workloads opted into
+#    the ambient mesh."
+#
+#   "A Gateway with istio.io/waypoint-for: all label enrolls all services
+#    in the namespace; waypoint-for: service enrolls a single service."
+#
+# 与老场景的关系:
+#   - 老 ns 里的 waypoint-int 属于 ba000000-lex-int,服务对象是那边
+#   - 本文件在 ba000000-lex-intra-call 建自己的 waypoint-intra
+#   - 两者互不干扰(不同 ns、不同 ServiceAccount、不同 Gateway)
+#
+# 严格定义 (HBONE):
+#   "HBONE (HTTP-Based Overlay Network Environment) is the HTTP/2
+#    CONNECT-based tunneling protocol used by ztunnel."
+#   — Istio Ambient docs
+# -----------------------------------------------------------------------------
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: waypoint-intra
+  namespace: ba000000-lex-intra-call
+  labels:
+    # 关键: 标记这是 waypoint,且 enroll 本 ns 所有 service
+    # 严格来源: Istio Waypoint docs
+    istio.io/waypoint-for: all
+    # 业务标签(便于审计 / NetPol 选中)
+    gateway-access: ba000000-lex-intra-call
+    ingress: int
+  annotations:
+    # 可选: 让 controller 给 Deployment 加 podAntiAffinity
+    # (Istio controller 1.27+ 已默认加,显式声明便于审计)
+    # "service.beta.kubernetes.io/annotations": 见 ../../values/istio-waypoint.yaml
+spec:
+  # 关键: 必须用 istio-waypoint GatewayClass — 由 istio 安装时自动注册
+  # 严格来源:
+  #   "The istio-waypoint GatewayClass is registered by Istio when ambient
+  #    components are installed." — Istio Ambient Install docs
+  gatewayClassName: istio-waypoint
+
+  # HA 标准: 2 副本 —— 滚动升级 / 节点维护时不丢 L7 拦截能力
+  replicas: 2
+
+  infrastructure:
+    labels:
+      gateway-access: ba000000-lex-intra-call
+      ingress: int
+
+  listeners:
+    - name: istio
+      # 15008 = HBONE 监听端口 (Istio 强制,不可改)
+      port: 15008
+      protocol: HBONE
+      # 不配 TLS —— HBONE 本身由 ztunnel 用 mTLS 承载
+      # 严格来源: "waypoint 不配 TLS,这是 mesh 内部协议" — 见 ../../03-waypoint-design.md
+      allowedRoutes:
+        # "Same" = 只允许本 ns 的 route(多租户隔离默认)
+        # 多租户安全默认 = Same
+        namespaces:
+          from: Same
+---
+# -----------------------------------------------------------------------------
+# PDB — 与 waypoint 配套
+# -----------------------------------------------------------------------------
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: waypoint-intra
+  namespace: ba000000-lex-intra-call
+  labels:
+    gateway-access: ba000000-lex-intra-call
+    ingress: int
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      # istio controller 自动给 waypoint pod 加这个 label
+      # 见 ../../03-waypoint-design.md §5.3
+      gateway.networking.k8s.io/gateway-name: waypoint-intra

@@ -1,0 +1,114 @@
+# =============================================================================
+# optional/app-tls-cert-manager.yaml
+# =============================================================================
+# ⚠️ 可选 —— 默认 **不要 apply**。先读 optional/README.md 再决定。
+#
+# 场景:合规明确要求"**应用层 TLS 终结**"(Pod 自己持证书、自己跑 HTTPS)。
+# 在这个场景下才需要本文件。
+#
+# ★ 最重要的代价(必须让业务方知道)★
+#   应用自己做 TLS → ztunnel 按 **passthrough** 处理该端口
+#   → waypoint 解不开明文 → **HTTPRoute 的版本路由失效、L7 AuthZ 失效**
+#   → 你会退回到"应用内自己判断版本"或"L4 级策略"
+#   详见 ../../23-intra-namespace-call-versioning-and-mtls.md §6.4 / R2
+#
+# ★ 前置条件 ★
+#   1. 集群已装 cert-manager(含 ca-injector)
+#      kubectl get pods -n cert-manager
+#   2. 先在测试集群验证"waypoint L7 是否真的失效"再上生产
+#
+# 严格定义 (cert-manager Issuer):
+#   "An Issuer represents a certificate issuing authority, and can be
+#    thought of as a class of CA that can sign certificates."
+#   — cert-manager.io/docs/concepts/issuer/
+#
+# 严格定义 (Certificate):
+#   "Certificate is a custom resource that represents an X.509 certificate."
+#   "dnsNames is a list of DNS names that the certificate will be valid for."
+#   — cert-manager.io/docs/concepts/certificate/
+#
+# ★ SAN 必须覆盖调用方实际使用的 DNS 名 ★
+#   本 PoC 调用方用的是 FQDN → SAN 至少要有 FQDN
+#   短名 / .ns / .svc 三种形式建议一并覆盖(成本只是多几个 SAN)
+# -----------------------------------------------------------------------------
+
+---
+# -----------------------------------------------------------------------------
+# CA-1: 自建内部 CA(self-signed)
+# -----------------------------------------------------------------------------
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: lex-internal-ca
+  namespace: ba000000-lex-intra-call
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: lex-internal-ca
+  namespace: ba000000-lex-intra-call
+spec:
+  isCA: true
+  commonName: lex-internal-ca
+  secretName: lex-internal-ca-tls
+  duration: 8760h          # 1 年
+  renewBefore: 720h        # 提前 30 天续期
+  privateKey:
+    algorithm: RSA
+    size: 2048
+
+---
+# -----------------------------------------------------------------------------
+# CA-2: 用 CA 签发叶子证书
+# -----------------------------------------------------------------------------
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: lex-ca-issuer
+  namespace: ba000000-lex-intra-call
+spec:
+  ca:
+    secretName: lex-internal-ca-tls
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: lex-api2-tls
+  namespace: ba000000-lex-intra-call
+spec:
+  secretName: lex-api2-tls
+  duration: 8760h
+  renewBefore: 720h
+  issuerRef:
+    name: lex-ca-issuer
+    kind: Issuer
+  commonName: lex-api2-service.ba000000-lex-intra-call.svc.cluster.local
+  dnsNames:
+    # ---- 必填:调用方用的 FQDN ----
+    - lex-api2-service.ba000000-lex-intra-call.svc.cluster.local
+    # ---- 建议:覆盖其他解析形式,避免客户端写法不同导致校验失败 ----
+    - lex-api2-service.ba000000-lex-intra-call.svc
+    - lex-api2-service.ba000000-lex-intra-call
+    - lex-api2-service
+  usages:
+    - server auth
+    - client auth
+
+---
+# -----------------------------------------------------------------------------
+# SAN 清单(照抄,按自己的 ns / svc 名替换)
+# -----------------------------------------------------------------------------
+# | 调用方写法                              | 是否需要进 SAN | 说明                        |
+# # |--------------------------------------|---------------|-----------------------------|
+# # | lex-api2-service.<ns>.svc.cluster.local | ✅ 必填        | 本 PoC 用的就是这一种         |
+# # | lex-api2-service.<ns>.svc               | ✅ 建议        | 跨集群可移植写法              |
+# # | lex-api2-service.<ns>                   | ⚪ 可选        | 同 ns 相对写法                |
+# # | lex-api2-service                         | ⚪ 可选        | 同 ns 短名                    |
+# # | ClusterIP / Pod IP                       | ❌ 不要        | ClusterIP 会漂移,写了必过期   |
+#
+# ⚠️ 证书签发后请核对实际 SAN:
+#    kubectl get secret lex-api2-tls -n ba000000-lex-intra-call \
+#      -o jsonpath='{.data.tls\.crt}' | base64 -d \
+#      | openssl x509 -noout -ext subjectAltName
