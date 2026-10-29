@@ -33,6 +33,7 @@ network/
 
 ### 根目录
 - `nhf-flow.html` / `nhf-flow-enhance.html`: NHF 出网机制可视化架构图
+- `nhf-egress-ip.md`: NHF 出网源 IP 定位 —— 给 on-prem 邮件服务器(`128.171.x.x`)授权白名单该填什么;结论:出局 IP = NHF 实例 Shared VPC 主网卡地址(`10.72.x.x`,子网 `10.72.0.0/18`),须按网段授权并确认回程路由
 - `smtp-egress-nhf-squid-analysis.md`: GKE 公网出网发邮件的可行性分析（NHF 三层路由 + Squid 代理边界）；结论：邮件服务器 IP 不在 `128.0.0.0/2` 内，Squid 是 HTTP 代理无法承载 SMTP
 
 ### wrk/ - 压力测试
