@@ -1,6 +1,6 @@
 # ArgoCD × Crossplane 集成链路详解
 
-> 配套文档：`poc-minimax.md`（PoC 总体方案）。
+> 配套文档：`poc-minimax.md`（PoC 总体方案）、`poc-argocd-git-to-apply-trigger.md`（Git 变更 → ArgoCD → apply 的逐阶段触发链路下钻）。
 > 本文专门回答一个问题：**Git 仓库里提交的 XR YAML，是怎么"流"到 Crossplane Core 并变成云上集群的？**
 >
 > 所有版本、字段、API 路径均已在线核实（核实来源见附录 A）。标注 `【待核实】` 的为环境相关项。
