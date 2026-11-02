@@ -1,0 +1,33 @@
+# 例 6 · 忽略不该归 Argo CD 管的差异
+# 关键：必须同时加 RespectIgnoreDifferences=true，否则忽略只停留在 UI 显示层。
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: team-a-project-a
+  namespace: argocd
+spec:
+  project: team-a
+  source:
+    repoURL: git@github.com:YOUR_ORG/ucp-platform.git
+    targetRevision: main
+    path: teams/team-a/project-a
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: project-a
+  syncPolicy:
+    automated:
+      enabled: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+    ignoreDifferences:
+      - group: platform.example.org
+        kind: GKECluster
+        jqPathExpressions:
+          - '.status'
+      - group: apps
+        kind: Deployment
+        jsonPointers:
+          - /spec/replicas

@@ -1,0 +1,38 @@
+# 例 7 · PreSync 冒烟门禁：失败则整个同步不执行
+# 单独 apply：kubectl -n argocd apply -f 07-hook-presync-smoke.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: team-a-project-a
+  namespace: argocd
+spec:
+  project: team-a
+  source:
+    repoURL: git@github.com:YOUR_ORG/ucp-platform.git
+    targetRevision: main
+    path: teams/team-a/project-a
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: project-a
+  syncPolicy:
+    automated:
+      enabled: true
+    syncOptions:
+      - CreateNamespace=true
+---
+# 这个 Job 放在被管资源所在的 Git 目录里，与其他 manifest 同目录
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: smoke-test
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: smoke
+          image: registry.example.org/smoke:1.0.0
+          args: ["--target", "https://app.example.com/healthz"]

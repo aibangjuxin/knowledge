@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Argo CD 图解 · ELI5</title>
+<style>
+  :root{--bg:#020617;--panel:#0b1220;--line:#1e293b;--fg:#e2e8f0;--dim:#94a3b8;--cyan:#22d3ee;--green:#34d399}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+  main{max-width:860px;margin:0 auto;padding:3rem 1.25rem 4rem}
+  h1{font-size:2rem;margin:0 0 .4rem;letter-spacing:0}
+  p.sub{color:var(--dim);margin:0 0 2rem}
+  a.card{display:block;text-decoration:none;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:1.1rem 1.2rem;margin-bottom:.9rem;transition:border-color .15s}
+  a.card:hover{border-color:var(--cyan)}
+  a.card b{color:var(--cyan);font-size:1.1rem}
+  a.card span{display:block;color:var(--dim);font-size:.95rem;margin-top:.3rem}
+</style>
+</head>
+<body>
+<main>
+  <h1>Argo CD 图解</h1>
+  <p class="sub">用讲给五岁小孩的方式，看懂 Argo CD 与 Crossplane 的链路</p>
+
+  <a class="card" href="argocd-crossplane-eli5.html">
+    <b>Git 里写一行 YAML，怎么变成真的云集群？</b>
+    <span>Argo CD 与 Crossplane 之间没有连线，只有同一个 K8s API Server</span>
+  </a>
+  <a class="card" href="argocd-merge-to-apply-eli5.html">
+    <b>我改了 Git，集群怎么知道？</b>
+    <span>一次 merge 到 apply 的三段接力，以及三条触发路径的延迟</span>
+  </a>
+  <a class="card" href="argocd-three-friends-eli5.html">
+    <b>三个名字很像的朋友，谁是谁？</b>
+    <span>三个 controller、Application 与 ApplicationSet 的职责边界</span>
+  </a>
+  <a class="card" href="argocd-team-boundary-eli5.html">
+    <b>团队的地盘怎么划？</b>
+    <span>AppProject 闸门、命名一致性与 prune 风险</span>
+  </a>
+</main>
+</body>
+</html>

@@ -314,6 +314,10 @@ data:
       - ProviderConfigUsage
 
   # 3) 为 Upbound / Crossplane CRD 定义健康检查
+  #    注意：本目录基线是 Argo CD v3.5.6，其镜像已内置
+  #    resource_customizations/_.upbound.io 与 _.crossplane.io 的 health.lua，
+  #    这一项仅对 Argo CD < 3.x 才是必须手工贴的（见 poc-argocd-integration.md §3.8）。
+  #    保留此段不影响运行（显式配置优先），但请按实际版本确认后再决定是否删掉。
   resource.customizations: |
     "*.upbound.io/*":
       health.lua: |
@@ -340,11 +344,16 @@ spec:
           value: "300"
 ```
 
-**ArgoCD 版本要求**：≥ **2.4.8**（官方推荐的下限）。
+**ArgoCD 版本要求**：本目录基线为 **v3.5.6**（与 `install.yaml`、`argocd-api.md`、
+`argocd-cli-guide.md` 一致）。官方 Crossplane 指南给出的下限是 2.4.8，
+但该下限是针对 Crossplane 侧配置项成立的**最低要求**，不是本项目的目标版本。
+本项目一切字段、CLI、API 均以 **v3.5.6** 为准。
 
-> ArgoCD health.lua 完整脚本较长，建议直接从
-> `crossplane/docs` 仓库 `content/v2.4/guides/crossplane-with-argo-cd.md`
-> 抄取 `*.upbound.io/*` 与 `*.crossplane.io/*` 两段，落到 `argocd-cm`。
+> **本项目基线是 v3.5.6，不需要手工贴 health.lua**：该版本镜像已内置
+> `_.upbound.io` / `_.crossplane.io` 的健康检查（核实来源见
+> `poc-argocd-integration.md` §3.8 与附录 A）。
+> 仅当降级到 Argo CD < 3.x 时，才需要从 `crossplane/docs` 仓库
+> `content/v2.4/guides/crossplane-with-argo-cd.md` 抄取那两段 lua 落到 `argocd-cm`。
 
 ### 3.5 阶段路线与退出标准
 

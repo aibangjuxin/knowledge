@@ -1,0 +1,29 @@
+# 例 3 · 从 Helm chart 仓库拉取
+# 注意：填了 chart 就不再有 path；targetRevision 在这里是 chart 版本。
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nginx-ingress
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://charts.helm.sh/stable
+    chart: nginx-ingress
+    targetRevision: 1.24.3
+    helm:
+      releaseName: nginx-ingress
+      valueFiles:
+        - values-prod.yaml
+      parameters:
+        - name: replicaCount
+          value: "3"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ingress
+  syncPolicy:
+    automated:
+      enabled: true
+      prune: false
+    syncOptions:
+      - CreateNamespace=true

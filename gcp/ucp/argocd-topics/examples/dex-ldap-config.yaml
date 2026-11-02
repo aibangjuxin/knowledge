@@ -1,0 +1,184 @@
+# Argo CD · Dex + LDAP 身份配置
+#
+# 用途：让 Argo CD 通过嵌入式 Dex 连接企业 LDAP，并让 LDAP 组出现在 ID Token 中。
+# 应用：kubectl apply -f dex-ldap-config.yaml
+#
+# ⚠️ 本文件不含任何真实凭据。所有密码、私钥、token 一律为 [REDACTED]，
+#    请通过 Secret + 环境变量注入，切勿把明文提交进 Git。
+#
+# 前置条件（见 ../03-dex-ldap-sso.md）：
+#   ① ldapsearch 已验证 userSearch / groupSearch 配置正确
+#   ② argocd-dex-ldap Secret 已创建（提供 bindPW）
+#
+# 注意：本文件**不**包含 admin.enabled: "false"。
+#      禁用内置 admin 是独立动作，必须在验证组映射生效之后单独执行。
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argocd-dex-ldap
+  namespace: argocd
+type: Opaque
+stringData:
+  # LDAP 服务账号的绑定密码。
+  # 含 $ 时必须用这种环境变量方式，不能直接写进 dex.config。
+  # ⚠️ 替换为真实值，且不要提交进 Git（用 Sealed Secrets / SOPS / External Secrets）
+  bindPW: "[REDACTED]"
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: argocd
+    app.kubernetes.io/name: argocd-cm
+data:
+  # Argo CD 自身的访问地址
+  url: https://argocd.example.com
+
+  # ---------------------------------------------------------------------------
+  # Dex 配置
+  # ---------------------------------------------------------------------------
+  dex.config: |
+    connectors:
+    # ---- LDAP connector ----------------------------------------------------
+    - type: ldap
+      id: ldap
+      name: Corporate LDAP
+      config:
+        # host[:port]。不写端口时按 startTLS / insecureNoSSL 推断（389 或 636）
+        host: ldap.corp.example.com:636
+
+        # TLS 配置（三选一，按你的 LDAP 服务器实际情况）
+        insecureNoSSL: false        # 纯明文（389）。会泄露密码，不建议
+        insecureSkipVerify: false   # 跳过证书校验。仅限探索期
+        startTLS: false             # false = 用 ldaps://；true = ldap:// + StartTLS
+        # rootCA: /etc/dex/ldap-ca.crt       # CA 证书文件路径
+        # rootCAData: [REDACTED_BASE64_PEM]   # 或直接给证书内容
+
+        # 服务账号绑定（用于搜索用户和组）
+        bindDN: cn=svc-argocd,ou=services,dc=corp,dc=example,dc=com
+        # 密码用环境变量引用，值在上面的 argocd-dex-ldap Secret 里
+        bindPW: $dex.ldap.bindPW
+
+        # 登录框提示
+        usernamePrompt: Email Address
+
+        # ---- 用户搜索 ----
+        userSearch:
+          baseDN: ou=people,dc=corp,dc=example,dc=com
+          filter: "(objectClass=person)"
+          username: mail           # 登录时输入的属性
+          idAttr: uid              # 用户唯一标识
+          emailAttr: mail          # → Email claim。映射不到就没有 email
+          nameAttr: cn             # 显示名
+          preferredUsernameAttr: uid   # 登录名
+
+        # ---- 组搜索（关键！）------------------------------------------------
+        groupSearch:
+          baseDN: ou=groups,dc=corp,dc=example,dc=com
+          filter: "(objectClass=groupOfNames)"
+          # userAttr 与 groupAttr 必须匹配 LDAP 里实际存的成员属性形式。
+          # 组里存完整 DN  → userAttr: DN,   groupAttr: member
+          # 组里存 uid     → userAttr: uid,  groupAttr: memberUid
+          userMatchers:
+          - userAttr: DN
+            groupAttr: member
+          # nameAttr 的值就是 Argo CD 里看到的组名（大小写敏感）
+          nameAttr: cn
+          # 递归查找嵌套组时用：
+          # recursionGroupAttr: memberOf
+
+    # ---------------------------------------------------------------------------
+    # ↓↓↓ 关键开关：让 LDAP 组出现在 ID Token 里 ↓↓↓
+    # 不开这两项 → g, devops-admin, role:admin 永远不会生效
+    # ---------------------------------------------------------------------------
+    insecureEnableGroups: true
+
+    scopes:
+    - profile
+    - email
+    - groups
+
+    # 如果组仍然不在 ID Token 里（可能被 Dex 过滤），打开这个从 UserInfo 端点再取一次：
+    # getUserInfo: true
+
+    # ---- 可选：静态客户端（仅当需要非 Web 流程时）----
+    # staticClients:
+    # - id: argo-cd
+    #   name: Argo CD
+    #   redirectURIs:
+    #   - https://argocd.example.com/auth/callback
+    #   secret: [REDACTED]
+
+    # ---- Dex 存储后端 ----
+    # 用 Kubernetes CRD 后端时，Argo CD 内置的 dex ServiceAccount 需要额外 RBAC
+    # （见 ../03-dex-ldap-sso.md §6.2），且**修改后必须重启 dex-server**。
+    # storage:
+    #   type: kubernetes
+    #   config:
+    #     inCluster: true
+
+---
+# Argo CD 内置的 dex-server 需要能读到 LDAP 密码
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-dex-server
+  namespace: argocd
+
+---
+# Dex 的 Kubernetes CRD 存储后端所需 RBAC（只在启用 kubernetes 后端时需要）
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argocd-dex-server
+rules:
+# Dex CRD：AuthCodes / RefreshTokens / SigningKeys
+- apiGroups: ["argoproj.io"]
+  resources: ["authcodes", "refreshtokens", "signingkeys"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Dex 的 ConfigMap / Secret
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argocd-dex-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-dex-server
+subjects:
+- kind: ServiceAccount
+  name: argocd-dex-server
+  namespace: argocd
+
+---
+# 把 bindPW 注入 dex-server（与 argocd-cm 里的 $dex.ldap.bindPW 对应）
+# ⚠️ 这个 patch 会改写 Deployment，建议在测试集群先验证
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-dex-server
+  namespace: argocd
+spec:
+  template:
+    spec:
+      containers:
+      - name: dex
+        env:
+        - name: dex.ldap.bindPW
+          valueFrom:
+            secretKeyRef:
+              name: argocd-dex-ldap
+              key: bindPW

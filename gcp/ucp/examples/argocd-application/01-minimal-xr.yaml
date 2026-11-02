@@ -1,0 +1,29 @@
+# 例 1 · 最小 XR 应用（UCP 日常形态）
+# 用途：一个团队的一个项目，Argo CD 只把 XR 写进集群，Crossplane 接手建云资源。
+# 解释见 ../argocd-application-guide.md 第 2 节
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: team-a-project-a
+  namespace: argocd
+  finalizers:
+    # 删掉 Application 时连带删掉它创建的资源。不需要级联删除就删掉这行。
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: team-a
+  source:
+    repoURL: git@github.com:YOUR_ORG/ucp-platform.git
+    targetRevision: main
+    path: teams/team-a/project-a
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: project-a
+  syncPolicy:
+    automated:
+      enabled: true
+      prune: false        # PoC 阶段关闭：Git 删文件 = 删集群，先别开
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - PruneLast=true

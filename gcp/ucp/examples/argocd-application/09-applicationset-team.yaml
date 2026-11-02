@@ -1,0 +1,35 @@
+# 例 9 · ApplicationSet：按目录批量生成 Application（UCP 正式做法）
+# generator 扫 teams/team-a/*，每个子目录生成一个 Application。
+# 目录名即 namespace 名：{{path.basename}} —— 这是"三处命名一致"的机械保证。
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: team-a-xr
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: git@github.com:YOUR_ORG/ucp-platform.git
+        revision: main
+        directories:
+          - path: teams/team-a/*
+  template:
+    metadata:
+      name: 'team-a-{{path.basename}}'
+    spec:
+      project: team-a
+      source:
+        repoURL: git@github.com:YOUR_ORG/ucp-platform.git
+        targetRevision: main
+        path: '{{path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{path.basename}}'
+      syncPolicy:
+        automated:
+          prune: false
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - PruneLast=true

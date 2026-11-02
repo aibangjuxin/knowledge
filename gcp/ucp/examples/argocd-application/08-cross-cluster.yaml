@@ -1,0 +1,25 @@
+# 例 8 · 跨集群：Argo CD 在 A 集群，同步到 B 集群
+# 三个前提缺一不可：
+#   1) A 集群上有 argocd.argoproj.io/secret-type: cluster 的 Secret，name= crossplane-control-plane
+#   2) B 集群建了受限 SA + RBAC
+#   3) AppProject 的 destinations 放行 B 集群（server + namespace 都要写）
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: team-a-project-a
+  namespace: argocd
+spec:
+  project: team-a
+  source:
+    repoURL: git@github.com:YOUR_ORG/ucp-platform.git
+    targetRevision: main
+    path: teams/team-a/project-a
+  destination:
+    name: crossplane-control-plane
+    namespace: project-a
+  syncPolicy:
+    automated:
+      enabled: true
+      prune: false
+    syncOptions:
+      - CreateNamespace=true

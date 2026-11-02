@@ -1,0 +1,237 @@
+# Argo CD · ApplicationSet 批量分发示例
+#
+# 用途：用 ApplicationSet 替代「每个环境手工建一个 Application」。
+# 应用：kubectl -n argocd apply -f applicationset-matrix.yaml
+#
+# 关键点（见 ../05-appset.md）：
+#   ① template.spec.project **必须显式写**。不写就是 default 项目（最宽松）→ 严重风险
+#   ② 用 goTemplate: true + missingkey=error，避免变量名写错时静默渲染成空字符串
+#   ③ Merge 的每个生成器必须写在独立的数组元素里（写在同一个元素里 controller 会报错）
+#   ④ Matrix / Merge 组合型生成器只能嵌套一层
+#   ⑤ 只有管理员能创建/修改 ApplicationSet（上游 Security 文档要求）
+
+# ===========================================================================
+# 示例 1：Git 目录 × 集群（Matrix）
+#
+# Git 仓库结构（假设）：
+#   apps/
+#     api/
+#       kustomization.yaml
+#     web/
+#       kustomization.yaml
+#
+# 结果：2 个应用 × N 个打了 env=dev 标签的集群 = 2N 个 Application
+# ===========================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-apps
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+  - matrix:
+      generators:
+      # 子生成器 1：Git 目录 → 产出 .path.path / .path.basename
+      - git:
+          repoURL: https://github.com/example/platform.git
+          revision: main
+          directories:
+          - path: apps/*
+          # 也可以指定多个 glob：
+          # - path: apps/*
+          # - path: infra/*
+          # 以及排除：
+          # - path: apps/*
+          #   exclude: true
+
+      # 子生成器 2：Argo CD 已注册集群 → 产出 .name / .server
+      - clusters:
+          selector:
+            matchLabels:
+              env: dev
+              argocd.argoproj.io/secret-type: cluster
+
+  template:
+    metadata:
+      name: '{{.path.basename}}-{{.name}}'
+      labels:
+        app.kubernetes.io/part-of: platform
+        # 方便用 label selector 批量查
+        env: '{{.name}}'
+    spec:
+      # ⭐ 必须显式指定项目。不写就是 default（最宽松）→ 安全风险
+      project: platform-dev
+
+      source:
+        repoURL: https://github.com/example/platform.git
+        # ⭐ 目标分支在这里改（批量改就改这一处）
+        targetRevision: main
+        path: '{{.path.path}}'
+
+      destination:
+        server: '{{.server}}'
+        namespace: '{{.path.basename}}'
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - PruneLast=true
+        - RespectIgnoreDifferences=true
+
+      # 删除 Application 时保留集群里的资源（生产环境强烈建议开）
+      preserveResourcesOnDeletion: true
+
+      # 健康检查超时
+      progressDeadlineSeconds: 300
+
+---
+# ===========================================================================
+# 示例 2：Git 应用目录 × 环境（List）
+#
+# 假设 Git 结构：
+#   apps/api/kustomization.yaml
+#   apps/web/kustomization.yaml
+#   envs/dev/values.yaml
+#   envs/prod/values.yaml
+#
+# 结果：2 个应用 × 2 个环境 = 4 个 Application
+# ===========================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-env-apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+  # 子生成器 1：Git 目录 → .path.path / .path.basename
+  - git:
+      repoURL: https://github.com/example/platform.git
+      revision: main
+      directories:
+      - path: apps/*
+
+  # 子生成器 2：环境清单（静态，可控）
+  - list:
+      elements:
+      - env: dev
+        namespace: platform-dev
+        project: platform-dev
+        valuesPath: envs/dev/values.yaml
+        prune: 'true'
+        selfHeal: 'true'
+      - env: prod
+        namespace: platform-prod
+        project: platform-prod
+        valuesPath: envs/prod/values.yaml
+        prune: 'false'
+        selfHeal: 'false'
+
+  template:
+    metadata:
+      name: '{{.path.basename}}-{{.env}}'
+      labels:
+        env: '{{.env}}'
+    spec:
+      project: '{{.project}}'
+
+      source:
+        repoURL: https://github.com/example/platform.git
+        targetRevision: main
+        path: '{{.path.path}}'
+        helm:
+          # ⚠️ 注意 '${{' 的双 $ 写法：
+          #    这是「把 $ 传给 Helm 自己处理」，
+          #    避免 Argo CD 的 Go template 把它当自己的变量渲染掉。
+          valueFiles:
+          - '${{.valuesPath}}'
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{.namespace}}'
+
+      syncPolicy:
+        automated:
+          # List 里的值是字符串，模板渲染后需要转成布尔
+          prune: '{{.prune}}'
+          selfHeal: '{{.selfHeal}}'
+        syncOptions:
+        - CreateNamespace=true
+
+      preserveResourcesOnDeletion: true
+
+---
+# ===========================================================================
+# 示例 3：Merge（基础 + 覆盖）
+#
+# 基础：所有集群
+# 覆盖：只有 staging 集群额外带参数
+#
+# ⚠️ 每个生成器必须是独立的数组元素：
+#     - merge:
+#         generators:
+#         - clusters: ...
+#         - list: ...
+#    写成 generators: [{clusters:...}, {list:...}] 会被 controller 报错。
+# ⚠️ Merge 的子生成器不支持 template 覆盖。
+# ⚠️ 组合型生成器只能嵌套一层。
+# ===========================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-merged
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+  - merge:
+      mergeKeys:
+      - name
+      generators:
+      # 基础：所有已注册集群
+      - clusters:
+          selector:
+            matchLabels:
+              argocd.argoproj.io/secret-type: cluster
+      # 覆盖：staging 集群的额外参数（按 name 合并）
+      - list:
+          elements:
+          - name: staging
+            extraReplicas: '3'
+            logLevel: debug
+
+  template:
+    metadata:
+      name: '{{.name}}'
+    spec:
+      project: platform
+      source:
+        repoURL: https://github.com/example/platform.git
+        targetRevision: main
+        path: 'deploy/{{.name}}'
+        helm:
+          parameters:
+          - name: extraReplicas
+            value: '{{default "1" .extraReplicas}}'
+      destination:
+        server: '{{.server}}'
+        namespace: '{{.name}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+      preserveResourcesOnDeletion: true

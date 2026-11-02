@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Argo CD 怎么给每个团队划地盘（讲给五岁小孩）</title>
+<style>
+  :root{--bg:#020617;--panel:#0b1220;--line:#1e293b;--fg:#e2e8f0;--dim:#94a3b8;--cyan:#22d3ee;--green:#34d399;--amber:#fbbf24}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+  main{max-width:960px;margin:0 auto;padding:3rem 1.25rem 4rem}
+  h1{font-size:2.1rem;line-height:1.25;margin:0 0 .5rem;letter-spacing:0}
+  .sub{color:var(--dim);margin:0 0 2.5rem;font-size:1.05rem}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:1.75rem 1.5rem;margin-bottom:1.75rem}
+  .panel h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.12em;color:var(--cyan);margin:0 0 .75rem}
+  .panel p{margin:0 0 .75rem;font-size:1.08rem}
+  .panel p:last-child{margin-bottom:0}
+  .cap{color:var(--dim);font-size:.95rem;margin-top:.9rem !important}
+  .big{font-size:1.3rem;font-weight:650}
+  .ok{color:var(--green);font-weight:650}
+  .no{color:var(--amber);font-weight:650}
+  .gate{background:#0f1c33;border:1px solid var(--line);border-radius:8px;padding:1rem 1.1rem;margin-bottom:.75rem}
+  .gate:last-child{margin-bottom:0}
+  .gate b{color:var(--cyan)}
+  .aside{border-left:3px solid var(--cyan);padding:.35rem 0 .35rem .9rem;color:var(--dim)}
+  .aside b{color:var(--fg)}
+  svg{display:block;max-width:100%;height:auto}
+</style>
+</head>
+<body>
+<main>
+  <h1>团队的地盘怎么划？</h1>
+  <p class="sub">AppProject 和命名空间 · 讲给五岁小孩</p>
+
+  <section class="panel">
+    <h2>问题</h2>
+    <p class="big">团队 A 想偷偷建集群级权限，<span class="no">不让。</span></p>
+    <p class="cap">Git 里什么都能写，但闸门不点头就进不来。</p>
+  </section>
+
+  <section class="panel">
+    <h2>闸门查三件事</h2>
+    <div class="gate"><b>从哪来？</b> 哪个 Git 仓库允许。</div>
+    <div class="gate"><b>去哪儿？</b> 哪个集群、哪个房间（namespace）。</div>
+    <div class="gate"><b>带什么？</b> 只准带一种东西：GKECluster 这张申请单。</div>
+  </section>
+
+  <section class="panel">
+    <h2>名字必须一样</h2>
+    <svg viewBox="0 0 640 120" role="img" aria-label="三处名称必须一致">
+      <rect x="10" y="20" width="180" height="52" rx="8" fill="#0f1c33" stroke="#1e293b"/>
+      <text x="100" y="42" fill="#94a3b8" font-size="11" text-anchor="middle">Git 文件夹名</text>
+      <text x="100" y="60" fill="#e2e8f0" font-size="13" text-anchor="middle">project-a</text>
+      <rect x="230" y="20" width="180" height="52" rx="8" fill="#0f1c33" stroke="#1e293b"/>
+      <text x="320" y="42" fill="#94a3b8" font-size="11" text-anchor="middle">要去进的房间</text>
+      <text x="320" y="60" fill="#e2e8f0" font-size="13" text-anchor="middle">project-a</text>
+      <rect x="450" y="20" width="180" height="52" rx="8" fill="#0f1c33" stroke="#1e293b"/>
+      <text x="540" y="42" fill="#94a3b8" font-size="11" text-anchor="middle">闸门允许名单</text>
+      <text x="540" y="60" fill="#e2e8f0" font-size="13" text-anchor="middle">project-a</text>
+      <path d="M190 46 H226" stroke="#34d399" stroke-width="2"/>
+      <path d="M410 46 H446" stroke="#34d399" stroke-width="2"/>
+      <text x="320" y="105" fill="#34d399" font-size="12" text-anchor="middle">三处必须一模一样，否则直接拒绝</text>
+    </svg>
+  </section>
+
+  <section class="panel">
+    <h2>还有一件事</h2>
+    <p class="aside"><b>prune</b>：Git 里的东西删了，云上也跟着删。<br>
+    开着它，一个手滑就可能把真的集群删掉。<b>PoC 先关着。</b></p>
+  </section>
+</main>
+<!-- cite: /Users/lex/git/gcp/ucp/poc-argocd-integration.md §3.5, §6.2, §6.3 -->
+<!-- cite: /Users/lex/git/gcp/ucp/poc-argocd-git-to-apply-trigger.md §12 -->
+</body>
+</html>

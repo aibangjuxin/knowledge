@@ -1,0 +1,236 @@
+# Argo CD · 多环境 AppProject
+#
+# 用途：按「团队 × 环境」划分资源边界，并授予项目级角色。
+# 应用：kubectl apply -f appproject-multi-env.yaml
+#
+# 关键点（见 ../04-appproject-rbac.md）：
+#   ① AppProject 是**资源约束边界**，不是 Kubernetes 权限边界。
+#      「谁能操作这里的 Application」由 argocd-rbac-cm 决定。
+#   ② 项目角色名必须严格是 proj:<project-name>:<role-name>，否则不生效。
+#   ③ 白名单是「不在里面就拒绝」，黑名单优先级更高。必须成对配置。
+#   ④ 命名里的 '-' 会触发 project inheritance（父项目继承）。
+#      本文件用 '-' 是有意的：platform-dev 继承 platform 的公共约束。
+#
+# ⚠️ 最后两个资源（收紧 default、加 finalizers）是有破坏性的操作，
+#    请先确认所有 Application 都已迁到正式项目。见 ../08-implementation-playbook.md 阶段 5。
+
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  finalizers:
+  # ⚠️ 有了这个 finalizer，删除 AppProject 会级联删除该项目的所有资源。
+  #    生产环境慎用。确认 GitOps 能完整恢复后再加。
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Platform team - shared constraints for all environments
+
+  # ---- 允许的源仓库 -------------------------------------------------------
+  # 支持 glob；`!` 前缀表示排除。
+  sourceRepos:
+  - 'https://github.com/example/platform.git'
+  - 'https://github.com/example/infra.git'
+  - '!https://github.com/example/platform-legacy.git'
+
+  # ---- 允许的源 namespace（Git 仓库内的目录作为 source 时用）---------------
+  sourceNamespaces:
+  - 'apps/platform'
+  - 'infra'
+
+  # ---- 允许的目标 ---------------------------------------------------------
+  destinations:
+  - server: 'https://kubernetes.default.svc'
+    namespace: 'platform-*'
+  # 沙箱允许到任意集群的指定 namespace
+  - server: '*'
+    namespace: 'platform-sandbox'
+
+  # ---- 集群级资源白名单 ---------------------------------------------------
+  # 不在白名单里的集群级资源默认被拒绝。
+  clusterResourceWhitelist:
+  - group: 'cert-manager.io'
+    kind: Certificate
+  - group: 'cert-manager.io'
+    kind: Issuer
+  - group: 'apiextensions.k8s.io'
+    kind: CustomResourceDefinition
+  - group: 'networking.k8s.io'
+    kind: IngressClass
+  - group: ''
+    kind: Namespace
+    name: 'platform-*'
+
+  # ---- 集群级资源黑名单 ---------------------------------------------------
+  # 黑名单优先级高于白名单。
+  clusterResourceBlacklist:
+  - group: ''
+    kind: Namespace
+    name: 'kube-*'
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRole
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRoleBinding
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRoleBindingList
+
+  # ---- 命名空间级资源白名单 ------------------------------------------------
+  namespaceResourceWhitelist:
+  - group: '*'
+    kind: '*'
+
+  # ---- 命名空间级资源黑名单（关键：堵住提权路径）--------------------------
+  namespaceResourceBlacklist:
+  - group: 'rbac.authorization.k8s.io'
+    kind: Role
+  - group: 'rbac.authorization.k8s.io'
+    kind: RoleBinding
+  # 禁止在业务 namespace 里创建 webhook（防止绕过 Gatekeeper）
+  - group: 'admissionregistration.k8s.io'
+    kind: ValidatingWebhookConfiguration
+  - group: 'admissionregistration.k8s.io'
+    kind: MutatingWebhookConfiguration
+
+  # ---- 项目角色 ------------------------------------------------------------
+  # 角色名必须是 proj:<project-name>:<role-name>。
+  # Argo CD 会据此动态生成 Casbin 规则：
+  #   p, proj:platform:admin, applications, *, platform/*, allow
+  #   g, <groups 里的组>, proj:platform:admin
+  roles:
+  - name: admin
+    description: Full control over platform project applications
+    policies:
+    - p, proj:platform:admin, applications, *, platform/*, allow
+    groups:
+    - my-org:devops-platform
+
+  - name: readonly
+    description: Read-only access to platform project applications
+    policies:
+    - p, proj:platform:readonly, applications, get, platform/*, allow
+    groups:
+    - my-org:devops-viewer
+
+---
+
+# ---------------------------------------------------------------------------
+# 开发环境项目：继承 platform 的 sourceRepos 等约束，覆盖 targets 与资源限制
+# ---------------------------------------------------------------------------
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-dev
+  namespace: argocd
+spec:
+  description: Platform dev environment
+  # ⚠️ 注意：'-' 会触发 project inheritance，
+  #    platform-dev 会继承 platform 的 sourceRepos / clusterResource*List 等约束。
+  #    如需完全独立，用 platform_dev（下划线）或显式写全所有字段。
+
+  destinations:
+  - server: 'https://kubernetes.default.svc'
+    namespace: 'platform-dev'
+  - server: '*'
+    namespace: 'platform-sandbox'
+
+  # dev 环境放宽：允许任意集群级资源
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'
+
+  # 但依然禁止提权
+  namespaceResourceBlacklist:
+  - group: 'rbac.authorization.k8s.io'
+    kind: Role
+  - group: 'rbac.authorization.k8s.io'
+    kind: RoleBinding
+
+  roles:
+  - name: admin
+    description: Dev operators
+    policies:
+    - p, proj:platform-dev:admin, applications, *, platform-dev/*, allow
+    groups:
+    - my-org:devops-dev
+    - my-org:devops-platform
+
+---
+
+# ---------------------------------------------------------------------------
+# 生产环境项目：最严格
+# ---------------------------------------------------------------------------
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-prod
+  namespace: argocd
+spec:
+  description: Platform production - strictest constraints
+  destinations:
+  - server: 'https://kubernetes.default.svc'
+    namespace: 'platform-prod'
+
+  clusterResourceWhitelist:
+  - group: 'cert-manager.io'
+    kind: Certificate
+  - group: 'cert-manager.io'
+    kind: Issuer
+  - group: ''
+    kind: Namespace
+    name: 'platform-prod'
+
+  clusterResourceBlacklist:
+  - group: ''
+    kind: Namespace
+    name: 'kube-*'
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRole
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRoleBinding
+
+  namespaceResourceWhitelist:
+  - group: '*'
+    kind: '*'
+
+  namespaceResourceBlacklist:
+  - group: 'rbac.authorization.k8s.io'
+    kind: Role
+  - group: 'rbac.authorization.k8s.io'
+    kind: RoleBinding
+  - group: 'admissionregistration.k8s.io'
+    kind: ValidatingWebhookConfiguration
+
+  roles:
+  - name: admin
+    description: Production operators
+    policies:
+    - p, proj:platform-prod:admin, applications, *, platform-prod/*, allow
+    groups:
+    - my-org:devops-sre
+
+---
+# ---------------------------------------------------------------------------
+# ⚠️ 收紧 default 项目 —— 破坏性操作
+#
+# default 项目是自动创建的，且默认最宽松：
+#   sourceRepos: ['*']  destinations: [{namespace: '*', server: '*'}]
+#   clusterResourceWhitelist: [{group: '*', kind: '*'}]
+#
+# 收紧后，**任何仍在 default 项目的 Application 都会被拒绝同步**。
+# 必须先把所有 Application 迁到正式项目。
+# 检查命令：
+#   kubectl -n argocd get applications -o custom-columns='NAME:.metadata.name,PROJECT:.spec.project'
+# ---------------------------------------------------------------------------
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: default
+  namespace: argocd
+spec:
+  description: Tightened default project - no direct use allowed
+  sourceRepos: []
+  sourceNamespaces: []
+  destinations: []
+  namespaceResourceBlacklist:
+  - group: '*'
+    kind: '*'

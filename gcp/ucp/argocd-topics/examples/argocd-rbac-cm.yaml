@@ -1,0 +1,77 @@
+# Argo CD · RBAC 组映射配置
+#
+# 用途：把 LDAP 组映射成 Argo CD 角色，控制谁能看到/同步哪些 Application。
+# 应用：kubectl apply -f argocd-rbac-cm.yaml
+#
+# 关键点（见 ../03-dex-ldap-sso.md、../04-appproject-rbac.md）：
+#   ① 本文件配置的是 **argocd-rbac-cm**，不是 argocd-cm
+#   ② scopes 必须包含 groups，否则 g, <组名>, <角色> 规则永不生效
+#   ③ policy.default 的权限**无法**用 deny 规则收回
+#   ④ 组名建议带命名空间前缀（如 my-org:devops-admin），避免与 SSO claim 撞名
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: argocd
+    app.kubernetes.io/name: argocd-rbac-cm
+data:
+  # ---------------------------------------------------------------------------
+  # 策略语法：
+  #   p, subject, resource, action, object, effect
+  #   g, subject, inherited-subject
+  #
+  # resource: applications | applicationsets | projects | repositories | clusters | logs | exec
+  # action:   get | create | update | delete | sync | override | *
+  # object:   * | <project>/* | <project>/<app> | <app>
+  # effect:   allow | deny
+  #
+  # 内置角色：role:readonly（只读全部）、role:admin（无限制）
+  # ---------------------------------------------------------------------------
+  policy.csv: |
+    # ---- 最小权限默认角色 --------------------------------------------------
+    # 所有已认证用户只能读。这是 policy.default 指向的角色。
+    p, role:authenticated, applications, get, *, allow
+    p, role:authenticated, projects, get, *, allow
+    p, role:authenticated, repositories, get, *, allow
+    p, role:authenticated, clusters, get, *, allow
+
+    # ---- 团队授权 ----------------------------------------------------------
+    # 平台管理员组 → 全局管理员
+    g, my-org:devops-admin, role:admin
+
+    # 只读组 → 继承上面的最小权限
+    g, my-org:devops-readonly, role:authenticated
+
+    # 开发组 → 可以同步 dev 项目下的 Application
+    p, my-org:devops-dev, applications, sync, dev/*, allow
+    g, my-org:devops-dev, role:authenticated
+
+    # 运维组 → 可以操作 prod 项目的 Application（含 sync）
+    p, my-org:devops-sre, applications, *, prod/*, allow
+    g, my-org:devops-sre, role:authenticated
+
+    # ---- 项目级角色（与 AppProject 的 roles 配合）--------------------------
+    # AppProject 里定义 roles[].policies 时，角色名必须严格符合
+    # proj:<project-name>:<role-name> 格式，否则不生效。
+    # 示例见 ../examples/appproject-multi-env.yaml
+
+  # ---------------------------------------------------------------------------
+  # 默认策略：所有已认证用户至少获得这份权限。
+  # ⚠️ 默认权限**不能**被 deny 规则阻止，所以不要用 role:readonly 当默认
+  #    （那会让所有人读到全部 Application），用上面的 role:authenticated。
+  # ---------------------------------------------------------------------------
+  policy.default: role:authenticated
+
+  # ---------------------------------------------------------------------------
+  # 决定 Argo CD 拿哪些 OIDC claim 去做 RBAC 匹配。
+  # ⚠️ 不含 groups 的话，所有 `g, <组名>, <角色>` 规则都不会生效。
+  #    上游默认是 '[groups]'；同时用 email 做主体时加上 email。
+  # ---------------------------------------------------------------------------
+  scopes: '[groups, email]'
+
+  # 策略匹配方式：glob（默认）或 regex。
+  # ⚠️ 切换会改变所有已有策略的解释方式，切换前用 `argocd rbac list` 对比。
+  policy.matchMode: 'glob'
