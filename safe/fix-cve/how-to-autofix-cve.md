@@ -2,7 +2,16 @@
 
 > 探索日期：2026-11-05
 > 目标读者：平台/安全工程团队
-> 关联文档：[cve-cwe.md](./cve-cwe.md)（CVE 与 CWE 的分工）、[../how-to-fix-violation/](../how-to-fix-violation/)（已有的检测工具与 CI 集成资料）
+>
+> **本目录的三份文档怎么配合看：**
+>
+> | 文档 | 回答什么问题 |
+> |---|---|
+> | **本文（how-to-autofix-cve.md）** | 总体方案：怎么把「检测 → 修复 → 验证」做成一个可信的闭环？验证契约怎么定？AI 该做什么、不该做什么？ |
+> | **[how-to-use-dependabot.md](./how-to-use-dependabot.md)** | 依赖层怎么自动化：Dependabot 装不装、怎么配、怎么和你们的 GAR/Artifact Analysis 闭环接起来（**含完整 CI 链**） |
+> | **[how-to-fix-dex-base-image.md](./how-to-fix-dex-base-image.md)** | 具体 case 的可执行 runbook：dex 的 alpine 3.21 EOL 到底怎么修（Phase 0–4、验证、回滚、防复发） |
+>
+> 关联：[cve-cwe.md](./cve-cwe.md)（CVE 与 CWE 的分工）、[../how-to-fix-violation/](../how-to-fix-violation/)（已有的检测工具与 CI 集成资料）
 >
 > 本文只做**方案**（流程 + 架构 + 工具选型 + 验证契约），**不含可执行脚本**。所有 gcloud 命令均在本机 `gcloud 526.0.1` 上验证过命令与参数存在性；标注「需实测」的表示效果需在你们项目里跑一次确认。
 
@@ -350,6 +359,8 @@ diff      = compare(baseline, candidate)
 
 ### 5.1 T1/T2：OS 与 Base Image（含 dex 实测案例）
 
+> 📄 **本节的完整可执行版本在 [how-to-fix-dex-base-image.md](./how-to-fix-dex-base-image.md)** —— 含现状盘点命令、三个候选方案对比、Phase 0–4 逐步执行、验证契约、回滚、防复发、以及"为什么 Dependabot 修不了这个 case"。本节只保留设计要点。
+
 #### 5.1.1 你们的 dex 案例，完整走一遍
 
 **输入（你给的）：**
@@ -616,6 +627,8 @@ skills/cve-fix/
 ---
 
 ### 6.2 其他候选 skill（skills.sh 检索结果）
+
+> 📄 **Dependabot 的完整使用手册（安装、配置、私有 registry、CI 集成、AI agent、选型决策）在 [how-to-use-dependabot.md](./how-to-use-dependabot.md)** —— 本节只做 skill 生态的横向对比。
 
 2026-11-05 用 `skills.sh` API 检索（`cve` / `vulnerability` / `dependency-fix` / `container security` / `osv` / `trivy` / `sbom` / `renovate` / `dependabot` / `supply chain` / `gcp` 等关键词）：
 
