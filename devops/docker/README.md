@@ -29,6 +29,7 @@
 | 加载方式 | `docker load -i xxx.tar`(不需要手动解压;老环境用 `zstd -dc xxx.tar \| docker load`) |
 | 兼容底线 | Docker ≥ 25 / containerd 镜像存储;更老的用 `--keep-gzip` 重新打包 |
 | 头号坑 | Apple Silicon 默认拉 arm64,传到 x86 服务器会 `exec format error` |
+| 第二个坑 | `docker save` 可能导出缺层的坏包(content store 被 GC 但快照还在),**必须自检** |
 
 ---
 

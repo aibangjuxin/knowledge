@@ -22,6 +22,9 @@
 | `docker save`(双平台原始 gzip) | 96 MB | 基线 |
 | `docker images` 显示 DISK USAGE | 207 MB | 本地 store 存的是**未压缩**层,不是传输体积 |
 
+四个包均已实测通过 `docker load` + `docker run`,且平台解析正确:
+单平台包只在该架构上可跑,双平台包在 amd64 / arm64 上都能跑。
+
 单层压缩算法对比(以 26.3MB 的 gomplate 层为例):
 
 | 层 | gzip(原始) | zstd -19 | xz -9e |
@@ -101,7 +104,12 @@ python3 scripts/repack-oci-layers.py oci /tmp/dex-amd64-zstd.tar \
 - 遍历 index → 找到目标平台的 manifest(跳过本机没有的悬空平台引用);
 - 每层 `gzip -dc` → `zstd -19 --long=27` 重压,重算 digest/size,改写 mediaType 为 `...tar+zstd`;
 - 重写 manifest blob、生成新的 `index.json`(带 `io.containerd.image.name` 等 annotation)、`manifest.json`、`oci-layout`;
-- 重新打成 tar。
+- 重新打成 tar;
+- **自检**:打包前后各验一次 blob 完整性,缺层直接报错中止(见第 7 节坑 6)。
+
+> 多平台包用**嵌套 OCI index**(外层 index → 内层各平台 manifest),和上游多架构镜像结构一致。
+> 如果把多个平台 manifest 平铺在同一个 index 里并共用同一个名字 annotation,
+> containerd 只会认其中一个 —— 表现为「包里明明有 amd64,`--platform linux/amd64` 却说找不到本地镜像」。
 
 ### 4.4 校验
 
@@ -186,6 +194,23 @@ docker load -i dex.tar.gz
 3. **"省了很多体积"的错觉**:`docker images` 的 DISK USAGE 是解压后的本地占用,别拿它跟 tar 包比。
 4. **别再套一层压缩**:zstd 层包外面再 gzip,只会多花 CPU 不省空间。
 5. **`--platform` 别写 `linux/arm`**:arm/v7 的层本机根本没有,写了会被跳过。
+6. **`docker save` 可能导出「缺层」的坏包(本次真实踩到)**:
+   Docker 29 的 containerd 内容库(content store)会把某些平台的**压缩层 blob** GC 掉,
+   但**快照(snapshot)还在** —— 于是镜像照常能跑,`docker save` 却只导出了 index 和部分平台的层,
+   产出一个**目标机上 load 会失败**的包。而且此时再 `docker pull --platform` 也补不回来
+   (puller 认为 manifest 已存在就跳过下载)。
+
+   识别方法:导出后检查各平台 manifest 引用的层是否都在 `blobs/sha256/` 下。
+   本仓库脚本已在打包前后做这个检查,缺层会直接报错并给出修复提示。
+
+   修复思路:
+   ```bash
+   # 办法 A: 用一个完整的包 docker load 回来,内容库就补齐了(本次用的就是这个)
+   docker load -i multi.tar
+   # 办法 B: 用 skopeo / crane 直接从 registry 取,绕开 docker 的内容库
+   skopeo copy --override-arch amd64 docker://dexidp/dex:latest docker-archive:dex.tar:dexidp/dex:latest
+   ```
+   **结论**:每次导出前先 `docker pull` 一次并用本脚本自检,别直接信 `docker save` 的输出。
 
 ---
 
