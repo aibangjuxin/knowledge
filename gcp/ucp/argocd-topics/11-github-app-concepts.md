@@ -377,6 +377,7 @@ Argo CD             = 消费者 + 执行器       → apply 到集群 = 真正�
 | Application 字段详解 | [`../argocd-application-guide.md`](../argocd-application-guide.md) |
 | ApplicationSet Git generator | [`05-appset.md`](./05-appset.md) |
 | 排障（凭据 / 同步类） | [`09-troubleshooting.md`](./09-troubleshooting.md) |
+| **自研 GitHub App 评估 + Go 实现骨架 + 时间窗口难点** | [`Develop-git-apps.md`](./Develop-git-apps.md) |
 
 ---
 ---
@@ -541,7 +542,7 @@ Argo CD             = 消费者 + 执行器       → apply 到集群 = 真正�
 | 位置 | 为什么不用 |
 |---|---|
 | **Argo Workflows + `suspend` 人工闸门** | 与 [`10-argo-workflows-evaluation.md`](./10-argo-workflows-evaluation.md) 的结论冲突（**不引入 Argo Workflows**）。人工审批用 Sync Window + RBAC + Extension 已能覆盖 |
-| **CI 流水线里校验** | 也能做（GitHub Actions），但 **Actions 无法阻止 merge**（required check 必须是 App/Action 创建的同名 check），且与 Argo CD 的部署链割裂，规则会散落两处 |
+| **CI 流水线里校验** | ✅ **能做，也能阻止 merge**（Actions 的 job 同样产生 status check，可设为 required）。短板是 **workflow 文件与被保护代码同仓库 → 可被同一 PR 绕过**、复杂规则难用 YAML 表达。详见 [`Develop-git-apps.md`](./Develop-git-apps.md) §6、§12.1 |
 | **Argo CD `syncPolicy.automated` 里写条件** | Argo CD **没有**"条件满足才同步"的原生表达式；要么用 Extension，要么用 AppProject / Sync Window / 手动 sync |
 
 ---
