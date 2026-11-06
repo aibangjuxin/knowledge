@@ -14,7 +14,7 @@ Kubernetes 原生 GitOps 落地指南 —— 从架构选型到生产运维的�
 ### 第一次看这套文档
 
 ```
-00 → 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10
+00 → 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10 → 11
 ```
 
 ### 只想解决一个具体问题
@@ -33,6 +33,8 @@ Kubernetes 原生 GitOps 落地指南 —— 从架构选型到生产运维的�
 | 从零到生产的实施顺序和回滚步骤？ | [08](./08-implementation-playbook.md) |
 | 出问题了怎么查？ | [09](./09-troubleshooting.md) |
 | 要不要引入 Argo Workflows？结论是什么？ | [10](./10-argo-workflows-evaluation.md) |
+| GitHub App 的 Public Link / Home URL / Webhook URL 是啥关系？源码在哪？ | [11](./11-github-app-concepts.md) |
+| **PR 合并到生产前必须有变更单（CR）——规则写在哪？GitHub App 能做吗？** | [11](./11-github-app-concepts.md) §11–§19 |
 
 ---
 
@@ -181,6 +183,53 @@ OPA / Diff / 权限 / Redis / HA。
 特性清单、局限性（controller 不能水平扩展 / v4 引入 DB / CRD 需 server-side apply / 双控制环风险）、
 「受治理发布执行器」12 项能力映射表、A/B/C 三个方案、
 复评触发条件清单、部署前验证项。
+
+---
+
+### [11 · GitHub App 概念梳理 ＋ 生产变更加闸](./11-github-app-concepts.md)
+
+**分两部分：**
+
+**Part A（§0–§10）概念**
+
+**直接回答**：「GitHub App 的 Public Link / Home URL / Webhook URL 是什么关系？
+App 的源代码在哪？Webhook 是不是就是发布的地方？」
+
+**GitHub App 不是"应用"，是"访问 GitHub 的身份（机器人）"。**
+
+含：App / Installation / Private Key 三件套、四个 URL 的职责对照表、
+"源码在哪"的三种含义辨析、「源代码管理在 Webhook 里配置」的四层拆解
+（Installation → Webhook 订阅 → Repository Secret → Application）、
+webhook 在发布链路里的真实位置（只影响延迟，不决定是否同步）、
+本仓库两套 webhook 端点（appset:7000 vs server:80/443）的取舍。
+
+**Part B（§11–§19）场景：GKE 生产变更加闸**
+
+**直接回答**：「PR merge 到生产前必须有一个合规的 Change Request，
+这套东西在哪实现？GitHub App 能不能做？」
+
+**GitHub App 能实现"卡合并"这一半，但它不是法官也不是狱警。**
+
+含：术语消歧（变更单 / CustomResource / ClusterRole）、
+需求拆解成 R0–R12 可编码规则、"在哪里实现"的五位置对比、
+**三层门禁架构**（GitHub 合并门 → Argo CD 同步门 → K8s 准入门）、
+GitHub App 实现清单（权限/事件/check 命名/幂等/验签）、
+变更单用 CRD 实现时的审批子资源与 CEL/Gatekeeper 约束、
+校验器部署形态（GKE Ingress vs Cloud Run）与"一个 App 一个 Webhook URL"的解法、
+规则与代码的分离（防"改规则绕过门禁"的递归问题）、
+11 个常见坑 + 五条绕过路径验收 + M0–M6 分阶段落地。
+
+**Part C（§20–§25）评估：Argo Workflows 能不能干这件事？**
+
+**直接回答**：「这件事是不是也该由 Argo Workflows 干？Workflows 和 GitHub App 怎么配合？」
+
+**Workflows 能顶"审批怎么流转"，顶不了"合不合规"和"卡不卡 merge"。**
+
+含：与 [`10`](./10-argo-workflows-evaluation.md) 结论的区分（发布执行器 vs 审批编排器）、
+三种方案对比（CRD+Gatekeeper / CRD+Workflows / Workflows 端到端）、
+R0–R12 能力映射、三方接线图与 9 个真实坑（CR 号=Workflow 名、resume 权限=suspend 挂数天、
+双控制环、每步一 Pod…）、审批复杂度 L1/L2/L3 分级决策、复评触发条件清单、
+以及 doc 10 T6 已命中的标注。
 
 ---
 

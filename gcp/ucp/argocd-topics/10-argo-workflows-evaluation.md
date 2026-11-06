@@ -476,6 +476,16 @@ spec:
 | T6 | Argo CD 侧出现**真正的审批工作流**需求（多级审批、SLA、审批留痕），且 Sync Window + 角色分离不够 | Argo Workflows（`suspend`）或流程系统 |
 | T7 | 出现**非 Knative 的裸 Deployment**，且需要复杂金丝雀分析（自动回滚 / 指标门禁） | Argo Rollouts（不是 Workflows） |
 
+> **⚠️ T6 已命中（生产变更加闸场景）**
+> 「PR merge 到生产前必须有合规的 Change Request（变更单）」这一需求，
+> 其审批复杂度已构成 T6。**分级评估见
+> [`11-github-app-concepts.md`](./11-github-app-concepts.md) §20–§25**。
+>
+> 复评结论（限定范围）：
+> - ✅ 允许把 Argo Workflows 引入为**变更单审批编排器**（多级/会签/SLA/超时/驳回重审）
+> - ❌ **本文 §0 的核心结论不变**：Workflows 仍**不**作为发布执行器、不进 CD 主链路
+> - ⏳ 触发条件：审批形态达 L3（§24.1 勾选项命中 ≥2 条）才引入；L1/L2 用 CRD 状态机即可
+
 ---
 
 ## 9. 风险与部署前验证项

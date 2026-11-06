@@ -9,7 +9,7 @@
 > `poc-argocd-integration.md`、`next-steps-roadmap.md` 等）仅作为
 > **已废弃方案的背景记录**保留，不代表当前方向。
 >
-> 👉 **当前有效方案见 [`argocd-topics/`](./argocd-topics/README.md)**（10 篇专题 + 7 个可复制示例）。
+> 👉 **当前有效方案见 [`argocd-topics/`](./argocd-topics/README.md)**（11 篇专题 + 7 个可复制示例）。
 
 本目录是 UCP（Unified Cloud Platform）的方案与知识沉淀，主题是
 **Argo CD（GitOps 交付）** 的生产化落地（跨云编排部分原设计基于 Crossplane，现已停用）。
@@ -43,7 +43,7 @@
 
 | 文档 | 定位 |
 |---|---|
-| **[`argocd-topics/`](./argocd-topics/README.md)** | **✅ 当前有效方案**：Argo CD 生产化落地 10 篇专题 + 7 个可复制示例（无 Crossplane） |
+| **[`argocd-topics/`](./argocd-topics/README.md)** | **✅ 当前有效方案**：Argo CD 生产化落地 11 篇专题 + 7 个可复制示例（无 Crossplane） |
 | [`requirement.md`](./requirement.md) | 平台方 / 开发方边界、ownership 表、跨云控制面原始需求 |
 | [`poc.md`](./poc.md) | Crossplane 最小 PoC：一个控制集群管理其他 Project 的 GKE |
 | [`poc-minimax.md`](./poc-minimax.md) | **主线**：UCP 总体方案（架构、版本矩阵、RACI、资源、9 步实施） |
