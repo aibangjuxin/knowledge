@@ -35,6 +35,7 @@
 | 搞懂 Argo CD 怎么用起来 | [`poc-argocd-integration.md`](./poc-argocd-integration.md) | [`poc-argocd-git-to-apply-trigger.md`](./poc-argocd-git-to-apply-trigger.md) |
 | 查 Argo CD 的管理、运维、排障 | [`argocd-admin-guide.md`](./argocd-admin-guide.md) | — |
 | **搞懂并创建一个 `Application`** | [`argocd-application-guide.md`](./argocd-application-guide.md) | [`examples/argocd-application/`](./examples/argocd-application/README.md) |
+| **`ApplicationSet` 和 `Application` 有什么区别** | [`argocd-applicationset-vs-application.md`](./argocd-applicationset-vs-application.md) | [`argocd-topics/05-appset.md`](./argocd-topics/05-appset.md) |
 | 查 CLI / REST API | [`argocd-cli-guide.md`](./argocd-cli-guide.md) | [`argocd-api.md`](./argocd-api.md) |
 | 给非工程师讲这件事 | [`eli5/index.html`](./eli5/index.html) | — |
 
@@ -52,6 +53,7 @@
 | [`argocd-cli-guide.md`](./argocd-cli-guide.md) | CLI 实战手册（v3.5.6） |
 | [`argocd-api.md`](./argocd-api.md) | REST / gRPC API 参考（v3.5.6） |
 | [`argocd-application-guide.md`](./argocd-application-guide.md) | **`Application` 资源详解**：字段逐个解释、9 个示例、四种创建方式、坑位速查 |
+| [`argocd-applicationset-vs-application.md`](./argocd-applicationset-vs-application.md) | **`ApplicationSet` vs `Application` 对比**：定位、生命周期、删除风险、何时用哪个 |
 | [`Kustomize.md`](./Kustomize.md) | **Kustomize × Argo CD**：Kustomize 做什么、Argo CD 四层集成机制、版本/buildOptions、10 个常见坑 |
 | [`examples/argocd-application/`](./examples/argocd-application/README.md) | 可直接改造的 `Application` / `ApplicationSet` 示例 YAML（9 个） |
 | [`argo-api-claude.md`](./argo-api-claude.md) | API 清单的另一份整理，与 `argocd-api.md` 内容高度重叠 |

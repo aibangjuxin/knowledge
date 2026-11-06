@@ -1,7 +1,7 @@
 # dex Base Image 修复 Runbook —— alpine 3.21 EOL
 
 > 编写日期：2026-11-05
-> 关联文档：[how-to-autofix-cve.md](./how-to-autofix-cve.md)（整体方案与验证契约）、[how-to-use-dependabot.md](./how-to-use-dependabot.md)（依赖层自动化）、[cve-cwe.md](./cve-cwe.md)
+> 关联文档：[how-to-autofix-cve.md](./how-to-autofix-cve.md)（整体方案与验证契约）、[how-to-use-dependabot.md](./how-to-use-dependabot.md)（依赖层自动化）、[cve-cwe.md](./cve-cwe.md)、[how-to-fix-cve-with-base-image-constraints.md](./how-to-fix-cve-with-base-image-constraints.md)（**当换 base 需要走内部准入流程、或想在 Dockerfile 里卸包消 CVE 时看这份**）
 >
 > **本文定位**：不是通用教程，是**你们这一个具体 case 的完整可执行方案**。
 > 目标镜像：`europe-west2-docker.pkg.dev/myproject/containers/dex@sha256:23f4f869a06398b79eceb5266ad6e522a894fc18163e5e37a810666e51aaf2ae`

@@ -497,4 +497,5 @@ kubectl -n argocd get applications -o jsonpath='{range .items[?(@.spec.project==
 | AppProject 与 RBAC 的三层边界 | [`04-appproject-rbac.md`](./04-appproject-rbac.md) |
 | Git 仓库凭据（Git generator 依赖） | [`07-repository-githubapp.md`](./07-repository-githubapp.md) |
 | `Application` 字段详解 | [`../argocd-application-guide.md`](../argocd-application-guide.md) |
+| `ApplicationSet` vs `Application` 概念对比（更简短） | [`../argocd-applicationset-vs-application.md`](../argocd-applicationset-vs-application.md) |
 | 已有 Application 示例 | [`../examples/argocd-application/09-applicationset-team.yaml`](../examples/argocd-application/09-applicationset-team.yaml) |

@@ -61,6 +61,7 @@ AI agent              =  「评审 + 处理 breaking change + 兜底修复」的
 | **要接自己的 GCP/GAR 闭环** | **§6.3（完整链 + 三个坑 + 最小可用版本）** |
 | 关心 AI 怎么参与 | §7（GitHub 原生 agent / 自建评审 / Dependabot CLI） |
 | 出问题了 | §8 排查速查 |
+| **base 镜像换不了（要走内部准入）/ 想靠卸包消 CVE** | **[how-to-fix-cve-with-base-image-constraints.md](./how-to-fix-cve-with-base-image-constraints.md)** |
 | 只想要一个 dex 的完整修复方案 | **[how-to-fix-dex-base-image.md](./how-to-fix-dex-base-image.md)** |
 
 ---

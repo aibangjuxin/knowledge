@@ -14,7 +14,7 @@ Kubernetes 原生 GitOps 落地指南 —— 从架构选型到生产运维的�
 ### 第一次看这套文档
 
 ```
-00 → 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09
+00 → 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10
 ```
 
 ### 只想解决一个具体问题
@@ -27,10 +27,12 @@ Kubernetes 原生 GitOps 落地指南 —— 从架构选型到生产运维的�
 | Dex 接 LDAP、组怎么进 Token、怎么禁用 admin？ | [03](./03-dex-ldap-sso.md) |
 | AppProject 边界、RBAC 角色、K8s ServiceAccount？ | [04](./04-appproject-rbac.md) |
 | ApplicationSet 批量分发怎么写？各 generator 边界？ | [05](./05-appset.md) |
+| ApplicationSet 和 Application 到底什么关系？ | [对比速查：ApplicationSet vs Application](../argocd-applicationset-vs-application.md) |
 | 用了 OPA/Gatekeeper 会影响 Argo CD 吗？ | [06](./06-opa-gatekeeper-impact.md) |
 | GitHub App 凭据怎么配？**想改分支改哪里？** | [07](./07-repository-githubapp.md) |
 | 从零到生产的实施顺序和回滚步骤？ | [08](./08-implementation-playbook.md) |
 | 出问题了怎么查？ | [09](./09-troubleshooting.md) |
+| 要不要引入 Argo Workflows？结论是什么？ | [10](./10-argo-workflows-evaluation.md) |
 
 ---
 
@@ -167,6 +169,18 @@ GitHub App 私钥的正确注入方式。
 OPA / Diff / 权限 / Redis / HA。
 
 附一键体检脚本 `argocd-health.sh`（见文末 §10）。
+
+---
+
+### [10 · Argo Workflows 概念梳理与引入评估](./10-argo-workflows-evaluation.md)
+
+**核心结论**：**不引入** Argo Workflows 作为我们 API 交付链路的发布执行器。
+
+含：Argo Workflows 的对象模型与 9 种模板类型、执行模型（每 step 一个 Pod）、
+组件拓扑、与 Argo CD 的正交关系（声明式收敛 vs 命令式执行）、
+特性清单、局限性（controller 不能水平扩展 / v4 引入 DB / CRD 需 server-side apply / 双控制环风险）、
+「受治理发布执行器」12 项能力映射表、A/B/C 三个方案、
+复评触发条件清单、部署前验证项。
 
 ---
 

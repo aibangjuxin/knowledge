@@ -10,6 +10,7 @@
 > | **本文（how-to-autofix-cve.md）** | 总体方案：怎么把「检测 → 修复 → 验证」做成一个可信的闭环？验证契约怎么定？AI 该做什么、不该做什么？ |
 > | **[how-to-use-dependabot.md](./how-to-use-dependabot.md)** | 依赖层怎么自动化：Dependabot 装不装、怎么配、怎么和你们的 GAR/Artifact Analysis 闭环接起来（**含完整 CI 链**） |
 > | **[how-to-fix-dex-base-image.md](./how-to-fix-dex-base-image.md)** | 具体 case 的可执行 runbook：dex 的 alpine 3.21 EOL 到底怎么修（Phase 0–4、验证、回滚、防复发） |
+> | **[how-to-fix-cve-with-base-image-constraints.md](./how-to-fix-cve-with-base-image-constraints.md)** | 当「直接换 base」走不通时：受管控 base 的准入引进流程，以及「在 Dockerfile 里卸掉用不到的包」这条替代路径 |
 >
 > 关联：[cve-cwe.md](./cve-cwe.md)（CVE 与 CWE 的分工）、[../how-to-fix-violation/](../how-to-fix-violation/)（已有的检测工具与 CI 集成资料）
 >
