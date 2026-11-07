@@ -1,0 +1,38 @@
+# Gatekeeper · Constraint：约束「实例」（策略作用到哪些资源上）
+#
+# ⚠️ enforcementAction 在 base 里默认 **dryrun**（只记录不拦截）。
+#    生产环境由 overlays/env/prod/ 改成 deny。
+#    改 deny 之前：先看违规统计（kubectl get constraints / kubectl get k8srequiredlabels -o yaml），
+#    并确认控制面 failurePolicy=Fail 且 ≥2 副本 + PDB。
+#
+# ⚠️ 这是**集群级**资源 → AppProject 白名单必须放行
+#    constraints.gatekeeper.sh/Constraint。
+
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: require-owner-label
+  labels:
+    app.kubernetes.io/part-of: platform
+    app.kubernetes.io/component: gatekeeper
+spec:
+  # base = 安全默认（观察期）
+  enforcementAction: dryrun
+
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+    # Namespace 是集群级资源 → scope 用 Cluster
+    scope: Cluster
+    excludedNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - gatekeeper-system
+      - argocd
+
+  parameters:
+    labels:
+      - owner
+      - cost-center

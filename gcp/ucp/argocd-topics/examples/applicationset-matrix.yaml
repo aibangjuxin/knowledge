@@ -9,6 +9,8 @@
 #   ③ Merge 的每个生成器必须写在独立的数组元素里（写在同一个元素里 controller 会报错）
 #   ④ Matrix / Merge 组合型生成器只能嵌套一层
 #   ⑤ 只有管理员能创建/修改 ApplicationSet（上游 Security 文档要求）
+#   ⑥ syncPolicy.automated.prune / selfHeal **不能模板化**（CRD 里是 boolean），
+#      按环境区分同步策略必须拆 ApplicationSet —— 见文件末尾「变体」
 
 # ===========================================================================
 # 示例 1：Git 目录 × 集群（Matrix）
@@ -128,14 +130,10 @@ spec:
         namespace: platform-dev
         project: platform-dev
         valuesPath: envs/dev/values.yaml
-        prune: 'true'
-        selfHeal: 'true'
       - env: prod
         namespace: platform-prod
         project: platform-prod
         valuesPath: envs/prod/values.yaml
-        prune: 'false'
-        selfHeal: 'false'
 
   template:
     metadata:
@@ -162,9 +160,13 @@ spec:
 
       syncPolicy:
         automated:
-          # List 里的值是字符串，模板渲染后需要转成布尔
-          prune: '{{.prune}}'
-          selfHeal: '{{.selfHeal}}'
+          # ⚠️ prune / selfHeal **不能模板化**。
+          #    ApplicationSet CRD 里这两个字段是 `boolean`（install.yaml:8015-8018，
+          #    v3.5.6 官方清单），写成 '{{.prune}}' 这样的字符串会被 API server
+          #    以 "must be of type boolean" 拒掉。
+          #    需要按环境区分同步策略 → 拆 ApplicationSet（见文件末尾「变体」）。
+          prune: true
+          selfHeal: true
         syncOptions:
         - CreateNamespace=true
 
@@ -234,4 +236,87 @@ spec:
           selfHeal: true
         syncOptions:
         - CreateNamespace=true
+      preserveResourcesOnDeletion: true
+
+---
+# ===========================================================================
+# 变体：按环境拆分 ApplicationSet（prod 不自动 selfHeal / 不 prune）
+#
+# 背景：syncPolicy.automated.prune / selfHeal 在 CRD 里是 boolean，
+#       **无法**用 '{{.env}}' 区分环境（写成字符串会被 API server 拒）。
+#       因此同步策略不同的环境，必须拆成不同的 ApplicationSet。
+#
+# 拆分方式：用 git 文件生成器的 selector 只取某一环境的清单。
+#
+#   bootstrap/envs/dev.yaml
+#     env: dev
+#     namespace: platform-dev
+#     project: platform-dev
+#     valuesPath: envs/dev/values.yaml
+#   bootstrap/envs/prod.yaml
+#     env: prod
+#     ...
+#
+# 代价：组件 × 环境多时，ApplicationSet 数量会线性增长。
+#       能统一策略就别拆（见上面的 platform-env-apps）。
+# ===========================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-prod-apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+  # 子生成器 1：Git 目录 → .path.path / .path.basename
+  - git:
+      repoURL: https://github.com/example/platform.git
+      revision: main
+      directories:
+      - path: apps/*
+
+  # 子生成器 2：只取 prod 的环境清单
+  - git:
+      repoURL: https://github.com/example/platform.git
+      revision: main
+      files:
+      - path: bootstrap/envs/*.yaml
+        # ⭐ selector：JMESPath 表达式，过滤出 prod
+        selector: 'env == "prod"'
+        flatten:
+        - env
+        - namespace
+        - project
+        - valuesPath
+
+  template:
+    metadata:
+      name: '{{.path.basename}}-{{.env}}'
+      labels:
+        env: '{{.env}}'
+    spec:
+      project: '{{.project}}'
+
+      source:
+        repoURL: https://github.com/example/platform.git
+        targetRevision: main
+        path: '{{.path.path}}'
+        helm:
+          valueFiles:
+          - '${{.valuesPath}}'
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{.namespace}}'
+
+      syncPolicy:
+        automated:
+          # prod：不自动 selfHeal（避免半夜自动改线上），prune 保留
+          prune: true
+          selfHeal: false
+        syncOptions:
+        - CreateNamespace=true
+
       preserveResourcesOnDeletion: true

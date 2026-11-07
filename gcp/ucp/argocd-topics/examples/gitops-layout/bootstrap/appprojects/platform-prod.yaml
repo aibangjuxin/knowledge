@@ -1,0 +1,85 @@
+# Argo CD · prod 环境项目（最严格）
+#
+# 与 dev 的差别：
+#   ① destinations 只允许 prod-01 + 固定 namespace
+#   ② clusterResourceWhitelist 是**白名单**（dev 是全放行）
+#   ③ 加了 preserveResourcesOnDeletion 相关的同步策略由 AppSet 模板控制
+#
+# ⚠️ 生产项目建议同步策略里不要开 selfHeal 自动改线上；
+#    这里的 automated 配置写在 ApplicationSet 模板里（按环境区分）。
+
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-prod
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform
+    app.kubernetes.io/environment: prod
+spec:
+  description: Platform prod 环境
+
+  # ---- 允许的目标：prod 集群，namespace 固定 ------------------------------
+  # ⚠️ destinations 必须**逐个集群**列出 server。
+  #    prod-01 在 acme-platform-prod-a，prod-02 在 acme-platform-prod-b
+  #    —— 两个不同的 GCP project，但属于**同一个环境**，所以共用本项目。
+  #    少一个 → 该集群的 Application 同步被拒：
+  #    "not match any of the allowed destinations"
+  destinations:
+  - server: 'https://prod-01.k8s.example.com'
+    namespace: 'platform-prod'
+  - server: 'https://prod-02.k8s.example.com'
+    namespace: 'platform-prod'
+
+  # ---- 集群级资源白名单：只放行必要类型 ------------------------------------
+  clusterResourceWhitelist:
+  - group: 'networking.k8s.io'
+    kind: IngressClass
+  - group: ''
+    kind: Namespace
+    name: 'platform-prod'
+  # ⭐ OPA / Gatekeeper 的策略资源是**集群级**的 → 必须显式放行，
+  #    否则 component-gatekeeper AppSet 同步被拒 "not permitted"。
+  #    （dev 项目是 group/kind: '*' 全放行，所以那边不用写。）
+  - group: 'constraints.gatekeeper.sh'
+    kind: ConstraintTemplate
+  - group: 'constraints.gatekeeper.sh'
+    kind: Constraint
+
+  clusterResourceBlacklist:
+  - group: ''
+    kind: Namespace
+    name: 'kube-*'
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRole
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRoleBinding
+
+  # ---- 命名空间级资源 ------------------------------------------------------
+  namespaceResourceWhitelist:
+  - group: '*'
+    kind: '*'
+
+  namespaceResourceBlacklist:
+  - group: 'rbac.authorization.k8s.io'
+    kind: Role
+  - group: 'rbac.authorization.k8s.io'
+    kind: RoleBinding
+  - group: 'admissionregistration.k8s.io'
+    kind: ValidatingWebhookConfiguration
+
+  # ---- 项目角色：只有 SRE 组能操作 ----------------------------------------
+  roles:
+  - name: admin
+    description: Prod SRE
+    policies:
+    - p, proj:platform-prod:admin, applications, *, platform-prod/*, allow
+    groups:
+    - my-org:devops-sre
+
+  - name: readonly
+    description: 只读审计
+    policies:
+    - p, proj:platform-prod:readonly, applications, get, platform-prod/*, allow
+    groups:
+    - my-org:audit

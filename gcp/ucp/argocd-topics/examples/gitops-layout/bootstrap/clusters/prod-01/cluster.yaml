@@ -1,0 +1,19 @@
+# 集群元信息：prod-01
+#
+# ⚠️ 不是 Argo CD 资源，不会被 apply。仅作为 Git 里的集群事实来源。
+#
+# 本集群：acme-platform-prod-a project / asia-northeast1 / vpc-prod-a
+# 另一个 GCP project 的 prod 集群：prod-02（见 ../prod-02/cluster.yaml）
+
+cluster: prod-01
+server: https://prod-01.k8s.example.com
+env: prod
+project: platform-prod
+namespace: platform-prod
+
+# ---- 以下字段仅供人/工具参考，不参与 ApplicationSet 展开 ----------------
+gcpProject: acme-platform-prod-a
+gcpRegion: asia-northeast1
+vpc: vpc-prod-a
+argocdClusterSecret: prod-01
+workloadIdentityServiceAccount: sa-argocd@acme-platform-prod-a.iam.gserviceaccount.com

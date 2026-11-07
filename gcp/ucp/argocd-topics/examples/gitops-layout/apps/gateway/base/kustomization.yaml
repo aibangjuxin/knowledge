@@ -1,0 +1,20 @@
+# gateway · base（Gateway / HTTPRoute 本体，所有集群共用）
+#
+# ⭐ 这里只放「数据面**声明**」：
+#    · Gateway   —— 监听器（端口、协议）
+#    · HTTPRoute —— 路由（域名 → 后端 Service）
+#
+# ⚠️ 不放数据面 Deployment：
+#    Solo / Gloo 控制面会**自己**生成数据面 Pod。
+#    如果把 Deployment 也写进 Git，Argo CD 和控制器会抢所有权，
+#    表现是两边互相 revert（Argo CD: "OutOfSync: extra resource"，
+#    控制器: "recreated"）。
+#
+# ⚠️ GatewayClass 由控制面（Helm）创建，本组件只**引用**它。
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - gateway.yaml
+  - httproute.yaml

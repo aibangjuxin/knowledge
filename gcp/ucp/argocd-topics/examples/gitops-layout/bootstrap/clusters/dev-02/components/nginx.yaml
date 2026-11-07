@@ -1,0 +1,11 @@
+# 组件启用清单：dev-02 × nginx
+#
+# dev-02 与 dev-01 同 env、同 AppProject、同 overlay，
+# 但组件清单是**各自独立**的目录 —— 一个集群的开关不影响另一个。
+
+component: nginx
+cluster: dev-02
+server: https://dev-02.k8s.example.com
+env: dev
+project: platform-dev
+namespace: platform-dev

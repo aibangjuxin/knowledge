@@ -1,0 +1,100 @@
+# Argo CD · 组件 ApplicationSet（gatekeeper）—— **集群级组件**示例
+#
+# ⭐ 与 nginx/api 的关键差别只有一处：
+#    source.path = 'apps/gatekeeper/overlays/cluster/{{.cluster}}'
+#    → 每个集群渲染**自己那一份** overlay（OPA 策略各自独立）
+#
+#    nginx/api 是**环境级**组件：path = 'apps/nginx/overlays/{{.env}}'
+#    同一环境的集群共用一份 overlay。
+#
+# overlay 的三层结构（base → env → cluster）：
+#    apps/gatekeeper/base/                        策略本体（所有集群共用）
+#    apps/gatekeeper/overlays/env/<env>/          环境层（dev=dryrun / prod=deny）
+#    apps/gatekeeper/overlays/cluster/<cluster>/   集群层（本集群的豁免名单）
+#
+# ⚠️ 集群级 overlay 目录必须**每个集群都建一份**，
+#    少一个 → 该集群的 gatekeeper Application 渲染失败。
+#    validate-clusters.py 会检查这件事。
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: component-gatekeeper
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform
+    app.kubernetes.io/component: gatekeeper
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+  - git:
+      repoURL: https://github.com/example/platform.git
+      revision: main
+      files:
+      - path: "bootstrap/clusters/*/components/gatekeeper.yaml"
+        flatten:
+        - component
+        - cluster
+        - server
+        - env
+        - project
+        - namespace
+
+  template:
+    metadata:
+      name: '{{.component}}-{{.cluster}}'
+      labels:
+        app.kubernetes.io/part-of: platform
+        app.kubernetes.io/component: '{{.component}}'
+        env: '{{.env}}'
+        cluster: '{{.cluster}}'
+    spec:
+      project: '{{.project}}'
+
+      source:
+        repoURL: https://github.com/example/platform.git
+        targetRevision: main
+        # ⭐ 集群级路径：带 {{.cluster}}
+        path: 'apps/gatekeeper/overlays/cluster/{{.cluster}}'
+
+      destination:
+        server: '{{.server}}'
+        namespace: '{{.namespace}}'
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - PruneLast=true
+        - ServerSideApply=true
+
+      preserveResourcesOnDeletion: true
+      progressDeadlineSeconds: 300
+
+# ===========================================================================
+# ⚠️ AppProject 白名单（否则同步被拒 "not permitted"）：
+#
+#   ConstraintTemplate / Constraint 是**集群级**资源，
+#   platform-prod 的 clusterResourceWhitelist 是白名单 → 必须显式放行：
+#
+#   clusterResourceWhitelist:
+#   - group: 'constraints.gatekeeper.sh'
+#     kind: ConstraintTemplate
+#   - group: 'constraints.gatekeeper.sh'
+#     kind: Constraint
+#
+#   本示例已把它加进 bootstrap/appprojects/platform-prod.yaml。
+#
+# ⚠️ 另：Gatekeeper 控制面（controller / webhook）由 Helm 装，**不在本 AppSet 里**。
+#    Argo CD 只管**策略**（ConstraintTemplate + Constraint）。
+#    若控制面也走 Argo CD，还需放行 ValidatingWebhookConfiguration /
+#    MutatingWebhookConfiguration（注意 platform-prod 默认**禁止**业务侧创建 webhook）。
+#
+# ⚠️ CR 健康检查：Constraint / ConstraintTemplate 有 status，Argo CD 不知道它死没死 →
+#    不配 resource.customizations.health.* 的话 selfHeal 会空转。
+#    详见 ../../../../06-opa-gatekeeper-impact.md §5
+# ===========================================================================

@@ -1,0 +1,16 @@
+# api · dev overlay
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+replicas:
+  - name: api
+    count: 1
+
+labels:
+  - pairs:
+      app.kubernetes.io/instance: api-dev
+      app.kubernetes.io/environment: dev
+    includeSelectors: false

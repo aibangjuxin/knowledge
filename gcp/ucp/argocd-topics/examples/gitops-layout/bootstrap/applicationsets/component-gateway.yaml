@@ -1,0 +1,88 @@
+# Argo CD · 组件 ApplicationSet（gateway）—— **集群级组件**示例
+#
+# ⭐ source.path 带 {{.cluster}}：每个集群渲染自己的 Gateway 声明
+#    apps/gateway/overlays/cluster/{{.cluster}}/
+#
+#    层级：base（Gateway/HTTPRoute 本体）→ env/<env>（环境参数）
+#          → cluster/<cluster>（本集群的域名、副本数、灰度）
+#
+# ⚠️ 控制面 vs 数据面：
+#    · 控制面（Solo / Gloo controller + CRD）由 Helm 装，**不在本 AppSet**
+#    · 数据面**声明**（Gateway / HTTPRoute）走 Argo CD
+#    · 数据面 **Pod**（Deployment）由控制器生成 → **不要**写进 Git，
+#      否则 Argo CD 和控制器抢所有权，互相 revert
+#
+# ⚠️ 蓝绿（blue-green）：
+#    Argo CD 的 `syncOptions: [BlueGreen=true]` 只对「本 Application 内
+#    恰好一个 Deployment + 一个 Service」生效。
+#    本组件没有 Deployment（Pod 由控制器生成）→ BlueGreen 用不了。
+#    数据面蓝绿要靠控制器自身的替换策略（Solo/Gloo 的 replacementMode 等），
+#    具体字段以你安装的 solo 版本文档为准。
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: component-gateway
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform
+    app.kubernetes.io/component: gateway
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+  - git:
+      repoURL: https://github.com/example/platform.git
+      revision: main
+      files:
+      - path: "bootstrap/clusters/*/components/gateway.yaml"
+        flatten:
+        - component
+        - cluster
+        - server
+        - env
+        - project
+        - namespace
+
+  template:
+    metadata:
+      name: '{{.component}}-{{.cluster}}'
+      labels:
+        app.kubernetes.io/part-of: platform
+        app.kubernetes.io/component: '{{.component}}'
+        env: '{{.env}}'
+        cluster: '{{.cluster}}'
+    spec:
+      project: '{{.project}}'
+
+      source:
+        repoURL: https://github.com/example/platform.git
+        targetRevision: main
+        # ⭐ 集群级路径：带 {{.cluster}}
+        path: 'apps/gateway/overlays/cluster/{{.cluster}}'
+
+      destination:
+        server: '{{.server}}'
+        namespace: '{{.namespace}}'
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - PruneLast=true
+        - ServerSideApply=true
+
+      preserveResourcesOnDeletion: true
+      progressDeadlineSeconds: 300
+
+# ===========================================================================
+# 版本与升级（详见 bootstrap/clusters/README.md §10）：
+#
+#   控制面升级  → Helm（不在 Argo CD 里）
+#   CRD 升级    → 单独 apply，Helm 不管 CRD
+#   数据面版本  → 改 Gateway/GatewayParameters 的版本字段 → 控制器滚动重建 Pod
+#   集群级参数  → apps/gateway/overlays/cluster/<cluster>/
+# ===========================================================================

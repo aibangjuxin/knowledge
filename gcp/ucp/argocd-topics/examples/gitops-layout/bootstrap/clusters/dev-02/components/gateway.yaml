@@ -1,0 +1,12 @@
+# 组件启用清单：dev-02 × gateway
+#
+# 每个集群的 Gateway 声明独立：
+#   apps/gateway/overlays/cluster/dev-02/
+# 例如 dev-02 的副本数、域名、灰度比例可以和 dev-01 不一样。
+
+component: gateway
+cluster: dev-02
+server: https://dev-02.k8s.example.com
+env: dev
+project: platform-dev
+namespace: platform-dev

@@ -1,0 +1,7 @@
+# 组件启用清单：dev-01 × api
+component: api
+cluster: dev-01
+server: https://dev-01.k8s.example.com
+env: dev
+project: platform-dev
+namespace: platform-dev

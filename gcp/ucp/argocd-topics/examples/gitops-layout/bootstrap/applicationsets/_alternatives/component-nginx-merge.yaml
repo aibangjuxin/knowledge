@@ -1,0 +1,110 @@
+# ===========================================================================
+# 【备选方案 · Phase 2】用 Merge 生成器消除元信息重复
+#
+# ⚠️ 本文件**不会被 apply**：
+#    bootstrap/kustomization.yaml 没有列它（那才是"根应用到底 apply 什么"的开关）。
+#    它是一份**可复制的备选模板**，供集群数/组件数变多后切换。
+#
+# ---------------------------------------------------------------------------
+# 现状（Phase 1，本仓库采用）：元信息在每个组件文件里**重复一遍**
+#
+#   clusters/dev-01/components/nginx.yaml
+#     component: nginx
+#     cluster: dev-01
+#     server:   https://dev-01.k8s.example.com     ← 重复
+#     env:      dev                                ← 重复
+#     project:  platform-dev                       ← 重复
+#     namespace: platform-dev                      ← 重复
+#
+#   问题：加一个集群 = 1 + N 个文件；集群换 project = 改 N 个文件；
+#         抄错一个字母 → 该 Application 指向错误的集群（且 AppProject 会拦下）。
+#
+# ---------------------------------------------------------------------------
+# 备选（Phase 2）：Merge 生成器把「集群元信息」和「组件开关」合并
+#
+#   clusters/dev-01/cluster.yaml          ← 元信息**唯一出处**
+#   clusters/dev-01/components/nginx.yaml  ← 只有两个字段
+#       component: nginx
+#       cluster: dev-01
+#
+#   切换时必须同步改两处：
+#     ① bootstrap/applicationsets/component-*.yaml 换成下面这个模板
+#     ② clusters/*/components/*.yaml 精简成 component + cluster 两个字段
+#
+#   代价：多一层生成器间接；某个集群缺 cluster.yaml 时 Merge 会报错
+#        （报错本身是好事：说明集群元信息不完整）。
+#   收益：元信息只写一遍 → **结构上**不可能漂移。
+#
+#   上游文档：https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/Generators-Merge/
+# ===========================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: component-nginx-merge
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform
+    app.kubernetes.io/component: nginx
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+  - merge:
+      # ⭐ 合并键：两个子生成器都按 cluster 配对
+      mergeKeys:
+      - cluster
+      generators:
+      # ---- 子生成器 1：集群元信息（每个集群一份 cluster.yaml）----------
+      - git:
+          repoURL: https://github.com/example/platform.git
+          revision: main
+          files:
+          - path: "bootstrap/clusters/*/cluster.yaml"
+            flatten:
+            - cluster
+            - server
+            - env
+            - project
+            - namespace
+      # ---- 子生成器 2：组件开关（每个 (集群 × 组件) 一份）----------------
+      - git:
+          repoURL: https://github.com/example/platform.git
+          revision: main
+          files:
+          - path: "bootstrap/clusters/*/components/nginx.yaml"
+            flatten:
+            - component
+            - cluster
+
+  template:
+    metadata:
+      name: '{{.component}}-{{.cluster}}'
+      labels:
+        app.kubernetes.io/part-of: platform
+        app.kubernetes.io/component: '{{.component}}'
+        env: '{{.env}}'
+        cluster: '{{.cluster}}'
+    spec:
+      project: '{{.project}}'
+
+      source:
+        repoURL: https://github.com/example/platform.git
+        targetRevision: main
+        path: 'apps/nginx/overlays/{{.env}}'
+
+      destination:
+        server: '{{.server}}'
+        namespace: '{{.namespace}}'
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - PruneLast=true
+        - ServerSideApply=true
+
+      preserveResourcesOnDeletion: true
+      progressDeadlineSeconds: 300

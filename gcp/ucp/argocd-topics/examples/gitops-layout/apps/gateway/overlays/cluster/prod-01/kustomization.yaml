@@ -1,0 +1,19 @@
+# gateway · cluster 层 · prod-01
+#
+# prod 集群的网关域名独立配置。
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../env/prod
+
+patches:
+  - target:
+      group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: nginx
+    patch: |-
+      - op: replace
+        path: /spec/hostnames/0
+        value: nginx.prod-01.example.com

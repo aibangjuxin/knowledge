@@ -1,0 +1,21 @@
+# Gateway API · Gateway（监听器）
+#
+# ⚠️ gatewayClassName 必须与控制面创建的 GatewayClass 一致：
+#    kubectl get gatewayclass
+#    solo / Gloo 的默认 class 名通常是 gloo-gateway（以你安装的版本为准）。
+#
+# ⚠️ 这是**命名空间级**资源 → 落在 destination.namespace（platform-<env>）。
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: edge-gateway
+  labels:
+    app.kubernetes.io/part-of: platform
+    app.kubernetes.io/component: gateway
+spec:
+  gatewayClassName: gloo-gateway
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 8080

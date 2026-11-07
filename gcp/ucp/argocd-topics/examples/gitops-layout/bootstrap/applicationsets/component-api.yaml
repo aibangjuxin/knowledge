@@ -1,0 +1,66 @@
+# Argo CD · 组件 ApplicationSet（api）
+#
+# 与 component-nginx 的差别只有三处：
+#   ① generator 的 path 指向 api.yaml
+#   ② template.source.path 指向 apps/api/overlays/{{.env}}
+#   ③ Application 名字用 api-{{.cluster}}
+#
+# 其余机制完全相同：**文件存在 = 该集群启用该组件**。
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: component-api
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform
+    app.kubernetes.io/component: api
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+  - git:
+      repoURL: https://github.com/example/platform.git
+      revision: main
+      files:
+      - path: "bootstrap/clusters/*/components/api.yaml"
+        flatten:
+        - component
+        - cluster
+        - server
+        - env
+        - project
+        - namespace
+
+  template:
+    metadata:
+      name: '{{.component}}-{{.cluster}}'
+      labels:
+        app.kubernetes.io/part-of: platform
+        app.kubernetes.io/component: '{{.component}}'
+        env: '{{.env}}'
+        cluster: '{{.cluster}}'
+    spec:
+      project: '{{.project}}'
+
+      source:
+        repoURL: https://github.com/example/platform.git
+        targetRevision: main
+        path: 'apps/api/overlays/{{.env}}'
+
+      destination:
+        server: '{{.server}}'
+        namespace: '{{.namespace}}'
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - PruneLast=true
+        - ServerSideApply=true
+
+      preserveResourcesOnDeletion: true
+      progressDeadlineSeconds: 300

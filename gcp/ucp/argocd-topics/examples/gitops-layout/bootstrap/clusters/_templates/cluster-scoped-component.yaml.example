@@ -1,0 +1,19 @@
+# 集群级组件开关模板 → 复制成 bootstrap/clusters/<cluster>/components/<component>.yaml
+#
+# 「集群级组件」= 每个集群的配置**不一样**的组件
+#   （本示例：gatekeeper = OPA 策略、gateway = Gateway/Solo Mesh）
+#
+# 与普通组件开关的**唯一区别**：它的 overlay 路径带 {{.cluster}}，
+#   apps/<component>/overlays/cluster/{{.cluster}}/
+# 所以这个组件的 overlay 目录必须**每个集群都建一份**：
+#   apps/<component>/overlays/cluster/<cluster>/kustomization.yaml
+#
+# 对应的 ApplicationSet 见 bootstrap/applicationsets/component-<component>.yaml
+# （source.path 与普通组件不同：路径里用 {{.cluster}} 而不是 {{.env}}）。
+
+component: gatekeeper
+cluster: dev-01
+server: https://dev-01.k8s.example.com
+env: dev
+project: platform-dev
+namespace: platform-dev

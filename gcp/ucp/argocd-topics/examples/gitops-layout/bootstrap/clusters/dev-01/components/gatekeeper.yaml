@@ -1,0 +1,16 @@
+# 组件启用清单：dev-01 × gatekeeper
+#
+# ⭐ 集群级组件：这个集群的 OPA 策略是**独立的一份**
+#    → overlay 路径带 {{.cluster}}：
+#      apps/gatekeeper/overlays/cluster/dev-01/
+#
+# 策略本体在 apps/gatekeeper/base/（共用）
+# 环境层在 apps/gatekeeper/overlays/env/dev/（dev = dryrun 观察期）
+# 集群层在 apps/gatekeeper/overlays/cluster/dev-01/（本集群的豁免名单）
+
+component: gatekeeper
+cluster: dev-01
+server: https://dev-01.k8s.example.com
+env: dev
+project: platform-dev
+namespace: platform-dev

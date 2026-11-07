@@ -216,6 +216,17 @@ spec:
 **注意 `valueFiles` 里的 `${{` 写法**——这是 Helm 变量和 Argo CD 模板变量的
 转义约定：双写 `$` 表示"这是 Helm 的模板，不是 Argo CD 的"。
 
+> ⚠️ **`syncPolicy.automated.prune` / `selfHeal` 不能模板化。**
+> ApplicationSet CRD 里这两个字段的类型是 `boolean`
+> （依据本仓库 `install.yaml:8007-8018`，v3.5.6 官方清单），
+> 写成 `prune: '{{.prune}}'` 会被 API server 以
+> “must be of type boolean” 拒绝。
+>
+> **后果**：无法用一个 ApplicationSet + 模板区分「dev 自动 selfHeal、prod 不自动」。
+> **解法**：同步策略不同的环境**拆成不同的 ApplicationSet**，
+> 用 git 文件生成器的 `selector`（JMESPath，如 `env == "prod"`）过滤环境清单。
+> 完整示例见 [`examples/applicationset-matrix.yaml`](./examples/applicationset-matrix.yaml) 末尾「变体」。
+
 ### 3.3 方案 C：Merge generator（基础 + 覆盖）
 
 ```yaml

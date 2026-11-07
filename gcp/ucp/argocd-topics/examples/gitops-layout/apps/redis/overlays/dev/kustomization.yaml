@@ -1,0 +1,16 @@
+# redis · dev overlay
+#
+# 只有 dev 集群有 redis：prod-01 没有 components/redis.yaml
+# → git 生成器匹配不到 prod → 不生成 redis-prod-01。
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+labels:
+  - pairs:
+      app.kubernetes.io/instance: redis-dev
+      app.kubernetes.io/environment: dev
+    includeSelectors: false

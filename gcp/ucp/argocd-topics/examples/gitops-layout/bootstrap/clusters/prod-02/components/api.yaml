@@ -1,0 +1,8 @@
+# 组件启用清单：prod-02 × api
+
+component: api
+cluster: prod-02
+server: https://prod-02.k8s.example.com
+env: prod
+project: platform-prod
+namespace: platform-prod

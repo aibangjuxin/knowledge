@@ -1,0 +1,27 @@
+# gatekeeper · cluster 层 · prod-02
+#
+# prod-02 在另一个 GCP project（acme-platform-prod-b），
+# 那边有一批历史 namespace 不满足新规范 → 单独豁免，
+# **不影响** prod-01。
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../env/prod
+
+patches:
+  - target:
+      group: constraints.gatekeeper.sh
+      kind: K8sRequiredLabels
+      name: require-owner-label
+    patch: |-
+      - op: replace
+        path: /spec/match/excludedNamespaces
+        value:
+          - kube-system
+          - kube-public
+          - kube-node-lease
+          - gatekeeper-system
+          - argocd
+          - legacy-prod-b

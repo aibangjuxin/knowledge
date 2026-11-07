@@ -1,0 +1,32 @@
+# gatekeeper · cluster 层 · dev-01
+#
+# ⭐ 集群层管「**本集群的例外**」。
+#    引用关系：cluster/dev-01 → env/dev → base
+#    （必须是**兄弟目录**；写成 overlays/dev/dev-01 且 resources: [..]
+#      会被 Kustomize 判定 cycle detected，见 bootstrap/clusters/README.md §6.3）
+#
+# ⚠️ 这里引用的环境层必须和 clusters/dev-01/cluster.yaml 的 env 字段一致
+#    （dev-01 → env/dev）。引错了 Kustomize 不报错，但策略会跑错环境。
+#    validate-clusters.py 会检查。
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../env/dev
+
+patches:
+  - target:
+      group: constraints.gatekeeper.sh
+      kind: K8sRequiredLabels
+      name: require-owner-label
+    patch: |-
+      - op: replace
+        path: /spec/match/excludedNamespaces
+        value:
+          - kube-system
+          - kube-public
+          - kube-node-lease
+          - gatekeeper-system
+          - argocd
+          - platform-dev

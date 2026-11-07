@@ -1,0 +1,34 @@
+# ⚠️ 示例用 emptyDir，**没有持久化**，重启即丢数据。
+#    生产请用 PersistentVolume / Filestore / AlloyDB / Memorystore，
+#    并注意 Argo CD 自身的 Redis（argocd-redis）**不要**持久化（见 ../../../../../01-redis-persistence.md）。
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/part-of: platform
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - name: redis
+          containerPort: 6379
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi

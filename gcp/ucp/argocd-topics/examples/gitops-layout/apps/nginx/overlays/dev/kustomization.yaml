@@ -1,0 +1,26 @@
+# nginx · dev overlay
+#
+# ⭐ 这就是「同一个组件、两套环境」的表达方式：
+#    ApplicationSet 的 source.path = apps/nginx/overlays/{{.env}}
+#    → dev 集群渲染这个，prod 集群渲染 overlays/prod/
+#
+# 组件定义只有一份（base/），环境差异全部在 overlay 里。
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+replicas:
+  - name: nginx
+    count: 1
+
+# ⭐ 用 labels（不是已弃用的 commonLabels）。
+#    includeSelectors: false → 只加标签，不改 Deployment/Service 的 selector。
+#    commonLabels 会改 selector，导致滚动升级时新旧 Pod 互相不匹配（经典坑）。
+labels:
+  - pairs:
+      app.kubernetes.io/instance: nginx-dev
+      app.kubernetes.io/environment: dev
+    includeSelectors: false

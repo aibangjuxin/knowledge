@@ -28,6 +28,7 @@ Kubernetes 原生 GitOps 落地指南 —— 从架构选型到生产运维的�
 | AppProject 边界、RBAC 角色、K8s ServiceAccount？ | [04](./04-appproject-rbac.md) |
 | ApplicationSet 批量分发怎么写？各 generator 边界？ | [05](./05-appset.md) |
 | ApplicationSet 和 Application 到底什么关系？ | [对比速查：ApplicationSet vs Application](../argocd-applicationset-vs-application.md) |
+| **先搞懂所有核心概念和 `bootstrap/` 目录是干嘛的** | [**argo-concept-sheet.md**](./argo-concept-sheet.md) |
 | 用了 OPA/Gatekeeper 会影响 Argo CD 吗？ | [06](./06-opa-gatekeeper-impact.md) |
 | GitHub App 凭据怎么配？**想改分支改哪里？** | [07](./07-repository-githubapp.md) |
 | 从零到生产的实施顺序和回滚步骤？ | [08](./08-implementation-playbook.md) |
@@ -39,6 +40,17 @@ Kubernetes 原生 GitOps 落地指南 —— 从架构选型到生产运维的�
 ---
 
 ## 文档清单
+
+### [概念速查表](./argo-concept-sheet.md)
+
+**先看这一篇**，一页看懂 Argo CD 核心对象与本方案的组织关系。
+
+含：11 个核心概念速查表（Application / AppSet / AppProject / Root App /
+Dex / OIDC / LDAP / Repository / Cluster Secret / RBAC）、
+三者关系图与生命周期、身份链路、本方案拓扑（中央 Argo CD + Root App +
+组件 × 集群矩阵）、**`bootstrap/` 目录能放什么**、变更链路、权限归属速查。
+
+---
 
 ### [00 · 架构选型：不使用 Crossplane](./00-architecture-no-crossplane.md)
 
@@ -245,6 +257,7 @@ R0–R12 能力映射、三方接线图与 9 个真实坑（CR 号=Workflow 名�
 | [`applicationset-matrix.yaml`](./examples/applicationset-matrix.yaml) | 批量分发（Matrix/List/Merge） | `template.spec.project` 必须显式写 |
 | [`argocd-repositories-githubapp.yaml`](./examples/argocd-repositories-githubapp.yaml) | Repository Secret | 目标分支**不在这里** |
 | [`redis-statefulset-pvc.yaml`](./examples/redis-statefulset-pvc.yaml) | 业务 Redis 持久化改造 | 这是**业务** Redis，不是 Argo CD 内部 Redis |
+| [`gitops-layout/`](./examples/gitops-layout/) | **完整 GitOps 仓库骨架**：`bootstrap/` + `apps/` + 集群组件清单 + 离线展开预览脚本 | `bootstrap/` 里的非资源清单必须用 `kustomization.yaml` 排除 |
 | [`ha-values-override.yaml`](./examples/ha-values-override.yaml) | HA 升级 values | `ARGOCD_API_SERVER_REPLICAS` 必须与副本数一致 |
 | [`argocd-health.sh`](./examples/argocd-health.sh) | 一键体检脚本（只读） | 退出码 0=正常，1=有异常，2=环境不可用 |
 | [`session-token-usage.md`](./session-token-usage.md) | 本次会话的 Token 用量报告 | 300 次 API 调用 / 约 16.4M token，含优化诊断 |

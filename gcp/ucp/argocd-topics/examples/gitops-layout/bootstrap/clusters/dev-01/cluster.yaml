@@ -1,0 +1,19 @@
+# 集群元信息：dev-01
+#
+# ⚠️ 不是 Argo CD 资源，不会被 apply。仅作为 Git 里的集群事实来源。
+#
+# 本集群：acme-platform-dev project / asia-east1 / vpc-dev
+# 同 project 的另一个集群：dev-02（见 ../dev-02/cluster.yaml）
+
+cluster: dev-01
+server: https://dev-01.k8s.example.com
+env: dev
+project: platform-dev
+namespace: platform-dev
+
+# ---- 以下字段仅供人/工具参考，不参与 ApplicationSet 展开 ----------------
+gcpProject: acme-platform-dev
+gcpRegion: asia-east1
+vpc: vpc-dev
+argocdClusterSecret: dev-01
+workloadIdentityServiceAccount: sa-argocd@acme-platform-dev.iam.gserviceaccount.com
