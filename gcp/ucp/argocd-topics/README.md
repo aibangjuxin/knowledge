@@ -267,6 +267,30 @@ R0–R12 能力映射、三方接线图与 9 个真实坑（CR 号=Workflow 名�
 
 ---
 
+## ⭐ 静态检查工具箱（提交前跑一遍）
+
+[`examples/`](./examples/) 里不只有示例，还有一整套**能把文档里的最佳实践变成可执行检查**的工具。
+它们**不需要集群**，纯靠 Git 里的文件就能跑 → 可以直接进 CI 的 PR 检查。
+
+```bash
+cd examples/gitops-layout
+./ci-check.sh          # ⭐ 一键跑完全部检查
+```
+
+| 工具 | 抓什么 |
+|---|---|
+| [`validate-examples.py`](./examples/validate-examples.py) | `policy.default=role:readonly`、`scopes` 少 `groups`、明文密码、HA 副本数不一致… |
+| [`appset-simulator.py`](./examples/gitops-layout/appset-simulator.py) | Application **重名**、project 不存在、destination 不被允许、模板变量缺失 |
+| [`render-check.py`](./examples/gitops-layout/render-check.py) | overlay 渲染失败（cycle detected）、selector 与 pod labels 对不上、镜像没打 tag |
+| [`validate-clusters.py`](./examples/gitops-layout/validate-clusters.py) | 集群清单字段漂移（`server` / `env` 抄错） |
+| [`check-doc-links.py`](./examples/check-doc-links.py) | 文档链接与**锚点**断裂 |
+| [`new-cluster.sh`](./examples/gitops-layout/new-cluster.sh) / [`enable-component.sh`](./examples/gitops-layout/enable-component.sh) | 加集群 / 开关组件的脚手架（自动保持字段一致） |
+| [`demo.sh`](./examples/gitops-layout/demo.sh) | 端到端 Demo：建集群 → 装 Argo CD → 建 AppProject/AppSet/App → 同步 → 验证 |
+
+完整说明见 [`examples/README.md`](./examples/README.md)。
+
+---
+
 ## 关键事实速查
 
 ### Argo CD 内部 Redis（`install.yaml:32441-32522`）

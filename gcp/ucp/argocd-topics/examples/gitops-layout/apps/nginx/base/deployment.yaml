@@ -21,6 +21,24 @@ spec:
         ports:
         - name: http
           containerPort: 80
+        # ⭐ 探针：没有 readinessProbe，Service 会把流量打到未就绪的 Pod；
+        #    没有 livenessProbe，Pod 假死时不会被重启。
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
         resources:
           requests:
             cpu: 50m

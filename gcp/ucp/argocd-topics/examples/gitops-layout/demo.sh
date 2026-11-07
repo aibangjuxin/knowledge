@@ -434,7 +434,10 @@ if os.path.exists(dst):
     shutil.rmtree(dst)
 shutil.copytree(src, dst, ignore=shutil.ignore_patterns('.git'))
 
-for junk in ('README.md', 'preview-appset.py', 'validate-clusters.py', 'demo.sh'):
+for junk in ('README.md', 'preview-appset.py', 'validate-clusters.py', 'demo.sh',
+             'appset-simulator.py', 'render-check.py', 'ci-check.sh',
+             'new-cluster.sh', 'enable-component.sh',
+             'render-check.policy.yaml', 'appset-simulator.policy.yaml'):
     p = os.path.join(dst, junk)
     if os.path.exists(p):
         os.remove(p)
