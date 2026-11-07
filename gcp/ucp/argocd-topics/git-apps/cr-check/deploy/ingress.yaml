@@ -1,0 +1,33 @@
+---
+# CR Check 的公网入口（GitHub 会 POST 到这里）
+#
+# ★ 三层端口必须一致：
+#   Ingress backend.service.port (80) → Service targetPort (8080) → containerPort (8080)
+#
+# ★ 域名与 TLS 证书必须与 GitHub App 里填的 Webhook URL 完全一致。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cr-check
+  namespace: cr-check
+  annotations:
+    kubernetes.io/ingress.class: gce
+spec:
+  rules:
+    - host: cr-check.example.com        # ← 与 GitHub App 的 Webhook URL 域名一致
+      http:
+        paths:
+          - path: /github/webhook       # ← 与 GitHub App 的 Webhook URL 路径一致
+            pathType: Prefix
+            backend:
+              service:
+                name: cr-check
+                port:
+                  number: 80
+  tls:
+    - hosts: [cr-check.example.com]
+      secretName: cr-check-tls           # Google 托管证书 或 cert-manager 签发
+---
+# 静态 IP（Webhook URL 不能变，IP 必须是固定的）
+# 用法：gcloud compute addresses create cr-check-ip --region=asia-east1
+# 资源：gcloud compute addresses describe cr-check-ip --region=asia-east1

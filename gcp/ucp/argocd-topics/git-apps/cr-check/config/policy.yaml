@@ -1,0 +1,172 @@
+# CR Check 策略配置
+#
+# ★ 分层原则：
+#   - 规则数据（阈值 / 名单 / 映射表 / 窗口）→ 本文件。改这里走 PR + Argo CD sync，分钟级生效。
+#   - 判定逻辑（怎么算"审批充分"）→ Go 代码。改这里要 CI + 发版。
+# 把逻辑写死在 YAML 里 → 复杂规则没法表达；把阈值写死在代码里 → 改一个数要发版。
+
+# ── 全局 ────────────────────────────────────────────────────
+# ★ 必须与 GitHub 分支保护里 required status check 的名字**逐字符一致**（含斜杠）
+checkName: cr/prod-validation
+
+# IANA 时区名。★ 不要用 UTC 偏移硬编码（会写死 DST 规则）
+timezone: Asia/Shanghai
+
+# ── 环境与分支 ──────────────────────────────────────────────
+# 环境口径：dev / prd / prod
+#   prd = 预发布（需求："部署到 PRD 必须经过 CR Check"）
+# ★ targetEnv 的字面量必须与 CR 管理平台对齐（prd? PRD? pre-prod? staging?）
+managedBranches:
+  - release/prd
+  - release/prod
+  # - main          # 若 main 直接对 PRD，需加入
+
+branchEnvMap:
+  release/prd: prd
+  release/prod: prod
+  main: prd
+  "": dev
+
+# ── 变更单（CR）规则 ────────────────────────────────────────
+cr:
+  # ★ 可执行状态白名单（需求："状态已经是可执行的 implement 状态"）
+  #   白名单之外的状态一律 fail-closed —— **未知状态 = 不通过**
+  allowedExecutableStatuses:
+    - approved
+    - implement
+
+  # 平台状态字符串 → 规范化状态（大小写不敏感）
+  # ★ 平台新增状态时必须同步这里；漏配 = 那个状态被判为 unknown = 不通过（这是安全的）
+  statusAliases:
+    draft: [Draft, 草稿, 拟稿]
+    reviewing: [Reviewing, 审批中, 待审批]
+    approved: [Approved, 已批准, 审核通过]
+    implement: [Implement, 实施中, 可执行, ApprovedForImplement]
+    rejected: [Rejected, 已驳回, 驳回]
+    cancelled: [Cancelled, 已取消, 取消]
+    expired: [Expired, 已过期, 过期]
+
+  minApprovals: 2
+  forbidSelfApproval: true
+
+  # 审批人白名单。
+  # ⚠️ 生产上这里应该来自 CR 平台的组信息；本地版本用静态名单近似。
+  allowedApprovers: [bob, carol, dave]
+
+  # CR 号的三个载体
+  labelPrefix: "cr/"
+  labelPattern: "^cr/[0-9A-Za-z._-]+$"
+  bodyMarker: "Change-Request:"
+
+# ── Maintenance Window（固定发布时段）────────────────────────
+# ★ 与 CR 平台返回的 validFrom/validTo 是**两个独立的时间条件**，两者都要判
+#   · windows        → "现在允许部署吗"（固定时段）
+#   · CR 的有效期    → "这张 CR 还能用吗"
+windows:
+  - env: prd
+    days: [Mon, Tue, Wed, Thu, Fri]
+    start: "02:00"
+    end: "04:00"        # ★ 左闭右开 [start, end)
+    tz: Asia/Shanghai
+  - env: prod
+    days: [Mon, Tue, Wed, Thu, Fri]
+    start: "02:00"
+    end: "04:00"
+    tz: Asia/Shanghai
+
+# ── webhook ────────────────────────────────────────────────
+webhook:
+  # ⚠️ 生产必须设置（用环境变量 WEBHOOK_SECRET 覆盖，不要写进 Git）
+  #    为空 = 不验签（仅限本地调试）
+  secret: ""
+  events:
+    - pull_request
+    - pull_request_review
+    - check_run
+    - merge_group
+    - installation
+  maxBodyBytes: 2097152
+
+# ── GitHub App ─────────────────────────────────────────────
+github:
+  # ⚠️ 生产用环境变量注入：GITHUB_APP_ID / GITHUB_APP_INSTALLATION_ID / GITHUB_APP_PRIVATE_KEY_PATH
+  appId: 0
+  installationId: 0
+  privateKeyPath: ""
+  apiURL: ""           # GitHub Enterprise: https://<host>/api/v3
+
+# ── CR 管理平台 ─────────────────────────────────────────────
+crPlatform:
+  # ⚠️ 生产用环境变量注入：CR_PLATFORM_URL / CR_PLATFORM_TOKEN
+  baseURL: ""
+  token: ""
+  path: "/api/change-requests/{number}"
+  timeoutSeconds: 5
+
+# ── 服务自身 ────────────────────────────────────────────────
+server:
+  addr: ":8080"
+  # ★ 生产必须 false —— 先 ACK 再异步判定，避免超过 GitHub 的 10 秒投递预算
+  syncEval: false
+  workers: 4
+  # ★ 定时重扫间隔（秒）。这是兜底：GitHub 不会自动重投失败的投递，
+  #   而且 required status check 不会在 merge 时刻重新判定。
+  recheckIntervalSeconds: 300
+
+# ── 本地 mock 数据（仅 mock 模式生效）──────────────────────
+mock:
+  enabled: true
+  crs:
+    # ✅ 合规：Implement 状态 + 2 位审批人 + 目标环境 prd + 长期有效
+    - number: "1234"
+      status: Implement
+      requester: alice
+      approvers: [bob, carol]
+      targetEnv: prd
+      validFrom: "2020-01-01T00:00:00+08:00"
+      validTo: "2035-12-31T23:59:59+08:00"
+      url: https://cr.example.com/cr/1234
+
+    # ❌ Draft 状态 → R3 不通过
+    - number: "5678"
+      status: Draft
+      requester: alice
+      approvers: [bob]
+      targetEnv: prd
+      validFrom: "2020-01-01T00:00:00+08:00"
+      validTo: "2035-12-31T23:59:59+08:00"
+      url: https://cr.example.com/cr/5678
+
+    # ❌ 目标环境是 prod，但 PR 目标是 prd → R5 不通过
+    - number: "1111"
+      status: Approved
+      requester: alice
+      approvers: [bob, carol]
+      targetEnv: prod
+      validFrom: "2020-01-01T00:00:00+08:00"
+      validTo: "2035-12-31T23:59:59+08:00"
+      url: https://cr.example.com/cr/1111
+
+    # ❌ 只审批了 1 位 → R4 不通过
+    - number: "2222"
+      status: Approved
+      requester: alice
+      approvers: [bob]
+      targetEnv: prd
+      validFrom: "2020-01-01T00:00:00+08:00"
+      validTo: "2035-12-31T23:59:59+08:00"
+      url: https://cr.example.com/cr/2222
+
+    # ❌ 已过期 → R6 不通过
+    - number: "3333"
+      status: Approved
+      requester: alice
+      approvers: [bob, carol]
+      targetEnv: prd
+      validFrom: "2020-01-01T00:00:00+08:00"
+      validTo: "2021-01-01T00:00:00+08:00"
+      url: https://cr.example.com/cr/3333
+
+    # ⚠️ 模拟"CR 平台故障" → 系统异常 → 必须 fail-closed（不得写 success）
+    - number: "9999"
+      error: "simulated CR platform timeout"

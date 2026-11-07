@@ -34,8 +34,13 @@ Kubernetes 原生 GitOps 落地指南 —— 从架构选型到生产运维的�
 | 从零到生产的实施顺序和回滚步骤？ | [08](./08-implementation-playbook.md) |
 | 出问题了怎么查？ | [09](./09-troubleshooting.md) |
 | 要不要引入 Argo Workflows？结论是什么？ | [10](./10-argo-workflows-evaluation.md) |
-| GitHub App 的 Public Link / Home URL / Webhook URL 是啥关系？源码在哪？ | [11](./11-github-app-concepts.md) |
-| **PR 合并到生产前必须有变更单（CR）——规则写在哪？GitHub App 能做吗？** | [11](./11-github-app-concepts.md) §11–§19 |
+| **Argo Events 是什么？它和 Workflows / Argo CD 什么关系？我们要不要它？** | [argo-event](./argo-event.md) |
+| GitHub App 的 Public Link / Home URL / Webhook URL 是啥关系？源码在哪？ | [11](./git-apps/11-github-app-concepts.md) |
+| **PR 合并到生产前必须有变更单（CR）——规则写在哪？GitHub App 能做吗？** | [11](./git-apps/11-github-app-concepts.md) §11–§19 |
+| **我要自己用 Go 写一个 GitHub App 后端，代码怎么跑起来？Webhook URL 和我的服务什么关系？** | [webhook-and-backend-service](./git-apps/webhook-and-backend-service.md) |
+| **装了 App / 配了 Webhook 之后，和 GitHub 的交互逻辑到底变了什么？** | [12](./git-apps/12-webhook-push-vs-pull.md) |
+| **CR Check（Go）的详细设计：包结构 / 接口 / 端点 / 里程碑 / 工作量** | [13](./git-apps/13-cr-check-go-design.md) |
+| **★ CR Check 的 Go 代码在哪？怎么本地跑起来验证？** | [cr-check](./git-apps/cr-check/) |
 
 ---
 
@@ -198,7 +203,25 @@ OPA / Diff / 权限 / Redis / HA。
 
 ---
 
-### [11 · GitHub App 概念梳理 ＋ 生产变更加闸](./11-github-app-concepts.md)
+### [argo-event · Argo Events 概念说明](./argo-event.md)
+
+**直接回答**：「Argo Events 是个什么东西？它和 Argo Workflows / Argo CD 怎么分工？」
+
+**Argo Events = K8s 原生的"事件总线 + 事件路由"：`EventSource → EventBus → Sensor → EventBus → Trigger`。**
+
+含：四个核心对象拆解（EventBus / EventSource / Sensor / Trigger）、
+一条事件的完整旅程、内置 GitHub 事件源与 `schedule` 事件源、
+与 Argo Workflows / Argo CD 的三方对照、官方文档的指向、
+最小可用 YAML（EventBus + GitHub EventSource + Sensor + HTTP Trigger）、
+落到 CR Check 场景的三种接线方式与"**为什么我们不需要它**"、
+8 条运维坑、决策表。
+
+**结论：本期不引入。** 它只做"事件路由"，替代不了业务逻辑；
+我们只有 1 个事件源 + 1 个消费者，普通 Go 服务更直接。
+
+---
+
+### [11 · GitHub App 概念梳理 ＋ 生产变更加闸](./git-apps/11-github-app-concepts.md)
 
 **分两部分：**
 
@@ -242,6 +265,34 @@ GitHub App 实现清单（权限/事件/check 命名/幂等/验签）、
 R0–R12 能力映射、三方接线图与 9 个真实坑（CR 号=Workflow 名、resume 权限=suspend 挂数天、
 双控制环、每步一 Pod…）、审批复杂度 L1/L2/L3 分级决策、复评触发条件清单、
 以及 doc 10 T6 已命中的标注。
+
+---
+
+### [git-apps/ · 自研 GitHub App（CR Check）专题](./git-apps/README.md)
+
+> **背景**：要在 GKE 上自研一个 Go 写的 GitHub App（**CR Check**），
+> 对“PR 是否有合规变更单（CR）”做门禁：PR 必须携带 CR 号，
+> CR 在内部 CR 管理平台上处于**可执行（implement/approved）状态**，
+> 且合并必须落在 **Maintenance Window** 内。
+>
+> **本目录 4 篇文档按这个顺序读：**
+
+| # | 文档 | 直接回答 |
+|---|---|---|
+| 1 | [`Develop-git-apps.md`](./git-apps/Develop-git-apps.md) | “要不要自研？自研要写多少代码？时间窗口难在哪？”<br>含：可行性评估（自研 vs Actions vs 纯配置）、R0–R13a 规则表、需求「6.1 合并门禁流程」八步映射、Go 技术栈与目录结构、24 条工程坑、实施路线图 M0–M7 |
+| 2 | [`webhook-and-backend-service.md`](./git-apps/webhook-and-backend-service.md) | “Webhook 到底是什么？我写的 Go 服务怎么变成一个 GitHub 能访问到的 URL？”<br>含：一页纸总结 + 完整流程图、Webhook vs 后端服务、**Git → 生效的完整 8 步**、K8s 清单、配置清单、故障速查、本地调试 |
+| 3 | [`12-webhook-push-vs-pull.md`](./git-apps/12-webhook-push-vs-pull.md) | “有了 Webhook 之后，和 GitHub 的交互逻辑到底变了什么？”<br>含：pull vs push 量化对比、**push 模式下的六个新契约**（幂等/乱序/10s 超时/不自动重试/暴露面/配额）、扇出拓扑、迁移路线 P0–P5、反模式清单 |
+| 4 | [`13-cr-check-go-design.md`](./git-apps/13-cr-check-go-design.md) | “Go 代码怎么组织？要写哪些接口？怎么测？要多久？”<br>含：需求边界（MVP）、架构图、包结构、**Go 接口定义**、数据模型与状态机映射、规则引擎、端点契约、`policy.yaml` 全量示例、测试策略、指标、**M0–M5 ≈ 17–25 人日**、10 条风险表 |
+| ★ | [`cr-check/`](./git-apps/cr-check/) | **★ 可运行的 Go 实现**（本文档集的代码部分）<br>CR Check 服务完整代码 + 策略配置 + K8s 清单 + 测试脚本<br>**30 秒跑起来** → [`cr-check/README.md`](./git-apps/cr-check/README.md) §0 |
+
+**三句话记住这套东西：**
+
+```
+① GitHub App = 身份（机器人） + 你自己服务器上的一个后端服务。
+② Webhook URL = 事件通知的收件地址；
+   自研场景下它**就是**你部署的 Go 服务的公网地址（Ingress + 域名 + TLS）。
+③ App 只是“哨兵 + 报数员”，真正拦住 merge 的是 GitHub 分支保护的 required status checks。
+```
 
 ---
 

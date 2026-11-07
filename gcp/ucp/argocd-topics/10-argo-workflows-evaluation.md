@@ -411,7 +411,7 @@ CNCF 毕业项目，Apache-2.0，官方仓库约 17k star。生态下游包括 A
 
 | 备选 | 适用阶段 | 说明 |
 |---|---|---|
-| **Argo Events** | 未来做事件驱动（Git push / GCS 事件 / 定时） | 官方把"基础设施自动化"指向它；比 Workflows 更贴合"事件 → 动作" |
+| **Argo Events** | 未来做事件驱动（Git push / GCS 事件 / 定时） | 官方把"基础设施自动化"指向它；比 Workflows 更贴合"事件 → 动作"。概念说明见 [`argo-event.md`](./argo-event.md)（**本期不引入**） |
 | **Cloud Build / GitHub Actions** | **CI 阶段** | 镜像构建、测试、扫描；产出镜像 tag 后由 Argo CD 侧触发同步（webhook / image updater）。**不要用 Argo Workflows 做 CI** |
 | **Terraform Cloud / Atlantis / Config Sync** | **云资源阶段**（KCC 之后） | Argo CD 只管 K8s API 能创建的资源；VPC/Subnet/Cloud SQL 属于 IaC 地盘（见 [`00-architecture-no-crossplane.md`](./00-architecture-no-crossplane.md) §3） |
 | **Argo Rollouts** | 出现非 Knative 裸工作负载 | 与 Knative 二选一，不要并存 |
@@ -472,14 +472,14 @@ spec:
 | T2 | 一次发布需要 **>5 个有依赖关系、且中间要传数据**的阶段 | 先试 Sync Waves；超过能力边界再考虑 Workflows |
 | T3 | 需要**跨步骤失败补偿**（某步失败 → 自动清理 → 走另一条路径） | Argo Workflows `exit handler` |
 | T4 | 需要把**运维剧本**（证书轮转 / 数据迁移 / 混沌）产品化成可自助触发的一次性任务 | Argo Workflows（独立 ns + Dex SSO + 受限 SA） |
-| T5 | 需要**事件驱动**（Git push / GCS 事件 → 动作） | Argo Events |
+| T5 | 需要**事件驱动**（Git push / GCS 事件 → 动作） | Argo Events（概念说明见 [`argo-event.md`](./argo-event.md)） |
 | T6 | Argo CD 侧出现**真正的审批工作流**需求（多级审批、SLA、审批留痕），且 Sync Window + 角色分离不够 | Argo Workflows（`suspend`）或流程系统 |
 | T7 | 出现**非 Knative 的裸 Deployment**，且需要复杂金丝雀分析（自动回滚 / 指标门禁） | Argo Rollouts（不是 Workflows） |
 
 > **⚠️ T6 已命中（生产变更加闸场景）**
 > 「PR merge 到生产前必须有合规的 Change Request（变更单）」这一需求，
 > 其审批复杂度已构成 T6。**分级评估见
-> [`11-github-app-concepts.md`](./11-github-app-concepts.md) §20–§25**。
+> [`11-github-app-concepts.md`](./git-apps/11-github-app-concepts.md) §20–§25**。
 >
 > 复评结论（限定范围）：
 > - ✅ 允许把 Argo Workflows 引入为**变更单审批编排器**（多级/会签/SLA/超时/驳回重审）
