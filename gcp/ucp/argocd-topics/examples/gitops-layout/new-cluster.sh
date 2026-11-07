@@ -57,7 +57,12 @@ warn() { printf '%s  !%s %s\n' "$C_YEL" "$C_RST" "$*" >&2; }
 die()  { printf '%s  ✗%s %s\n' "$C_RED" "$C_RST" "$*" >&2; exit 1; }
 run()  { if [[ $DRY_RUN -eq 1 ]]; then printf '    $ %s\n' "$*"; else "$@"; fi; }
 
-usage() { sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() {
+  # 打印本文件头部的注释块（到第一个非注释行为止）。
+  # 用 awk 而不是 `sed -n '2,40p'`：以后在头部加选项时，范围不用手动改
+  # （以前那个硬编码范围会把下面的代码也打印出来）。
+  awk 'NR == 1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "$0"
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -93,6 +98,8 @@ if [[ "$CLUSTER" != "$ENV_NAME"-* ]]; then
   die "集群名必须以环境开头：$ENV_NAME-*（当前 $CLUSTER）"
 fi
 
+# AppProject 的名字与 namespace 都按 `platform-<env>` 约定推导
+# （与 validate-clusters.py 里的校验规则保持一致）。
 NAMESPACE="${NAMESPACE:-platform-$ENV_NAME}"
 APPPROJECT="platform-$ENV_NAME"
 
@@ -132,6 +139,7 @@ if [[ $DRY_RUN -eq 0 ]]; then
   mkdir -p "$CLUSTERS_DIR/$CLUSTER/components"
   cluster_yaml > "$CLUSTERS_DIR/$CLUSTER/cluster.yaml"
 else
+  # dry-run：把要写的内容缩进打印出来，让人一眼看清会生成什么
   cluster_yaml | sed 's/^/    /'
 fi
 ok "cluster.yaml"
@@ -148,10 +156,17 @@ fi
 for comp in "${COMPONENTS[@]}"; do
   # 委托给 enable-component.sh —— 它还负责集群级组件（gatekeeper/gateway）
   # 需要的「每集群一份的 overlay」
+  #
+  # 四个字段在这里**直接传过去**，而不是让子脚本去读 cluster.yaml：
+  #   · --dry-run 时集群目录还不存在，子脚本读不到 cluster.yaml
+  #   · 传过去还能保证两边用的是同一份值（不会各抄一遍）
   if [[ $DRY_RUN -eq 1 ]]; then
-    bash "$SCRIPT_DIR/enable-component.sh" --cluster "$CLUSTER" --component "$comp" --dry-run
+    bash "$SCRIPT_DIR/enable-component.sh" --cluster "$CLUSTER" --component "$comp" \
+      --server "$SERVER" --env "$ENV_NAME" --project "$APPPROJECT" --namespace "$NAMESPACE" \
+      --dry-run
   else
-    bash "$SCRIPT_DIR/enable-component.sh" --cluster "$CLUSTER" --component "$comp"
+    bash "$SCRIPT_DIR/enable-component.sh" --cluster "$CLUSTER" --component "$comp" \
+      --server "$SERVER" --env "$ENV_NAME" --project "$APPPROJECT" --namespace "$NAMESPACE"
   fi
 done
 
@@ -167,6 +182,7 @@ if grep -qF "$SERVER" "$PROJECT_FILE"; then
   warn "$SERVER 已经在 $APPPROJECT 的 destinations 里了，跳过"
 else
   # 用 awk 在 destinations 块后面插入一条，保留原有注释和格式
+  # （比整段重写 YAML 安全：不会把注释、字段顺序弄丢）
   if [[ $DRY_RUN -eq 0 ]]; then
     tmp="$(mktemp)"
     awk -v srv="$SERVER" -v ns="$NAMESPACE" '

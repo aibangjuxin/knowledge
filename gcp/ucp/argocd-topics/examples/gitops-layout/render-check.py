@@ -30,10 +30,11 @@
 
 import argparse
 import difflib
+import fnmatch
 import os
-import re
 import subprocess
 import sys
+from shutil import which
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -74,18 +75,18 @@ OVERRIDES = {}        # {"<rule>": "error"/"warn"/"info"/"off"}
 
 
 def _ignored(relpath, rule):
+    """这条告警是否被策略文件 ignore 掉了。
+
+    忽略项格式："<glob>:<rule>"。glob 可以匹配**全路径**，
+    也可以只匹配**文件名**（写 "*.yaml" 这种）。
+    """
     for item in IGNORES:
         glob, _, ign_rule = item.partition(":")
         if ign_rule != rule:
             continue
-        if fnmatch(relpath, glob) or fnmatch(os.path.basename(relpath), glob):
+        if fnmatch.fnmatch(relpath, glob) or fnmatch.fnmatch(os.path.basename(relpath), glob):
             return True
     return False
-
-
-def fnmatch(name, pattern):
-    import fnmatch as fm
-    return fm.fnmatch(name, pattern)
 
 
 def report(rule, relpath, msg):
@@ -119,20 +120,15 @@ def find_kustomizations(root):
 
 
 def render(path):
-    """跑 kubectl kustomize，返回 (stdout, stderr, ok)。"""
-    if shutil_which("kubectl"):
+    """跑 kubectl kustomize（或 kustomize build），返回 (stdout, stderr, ok)。"""
+    if which("kubectl"):
         cmd = ["kubectl", "kustomize", path]
-    elif shutil_which("kustomize"):
+    elif which("kustomize"):
         cmd = ["kustomize", "build", path]
     else:
         return "", "找不到 kubectl 或 kustomize", False
     proc = subprocess.run(cmd, capture_output=True, text=True)
     return proc.stdout, proc.stderr, proc.returncode == 0
-
-
-def shutil_which(cmd):
-    from shutil import which
-    return which(cmd)
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +145,14 @@ def get(obj, *path, default=None):
 
 
 def check_workload(doc, relpath, ns_hint):
+    """检查单个工作负载（Deployment / StatefulSet / DaemonSet / Job）。
+
+    看四件事：
+      · selector 与 pod 模板的 labels 对不对得上（对不上 K8s 直接拒建）
+      · 镜像有没有固定 tag（latest = 每次同步可能拉到不同镜像）
+      · resources / probes 有没有配（缺了就是「能跑但不该上线」）
+      · prod 环境的副本数够不够（replicas=1 的 prod 不叫高可用）
+    """
     kind = doc.get("kind")
     spec = doc.get("spec") or {}
     name = get(doc, "metadata", "name", default="?")
@@ -228,7 +232,14 @@ def check_namespace(doc, relpath, ns_hint):
 
 
 def check_products(docs, relpath, ns_hint):
-    """对一次渲染的产物做整体检查。"""
+    """对一次渲染的产物做整体检查。
+
+    分三轮跑，顺序不能换：
+      第 1 轮 —— 收集所有资源的 (kind, name) 做查重，并先算出工作负载的 pod labels；
+      第 2 轮 —— 逐个检查工作负载（Deployment / StatefulSet / DaemonSet …）；
+      第 3 轮 —— 逐个检查 Service（需要第 1 轮的 labels 才知道能不能匹配上）。
+    Service 必须最后查，因为它要拿整个渲染结果里的 pod labels 做匹配。
+    """
     seen = set()
     workloads = {}
     for doc in docs:
@@ -300,7 +311,7 @@ def main():
     root = os.path.abspath(args.path)
     load_policy(root)
 
-    if not shutil_which("kubectl") and not shutil_which("kustomize"):
+    if not which("kubectl") and not which("kustomize"):
         print("找不到 kubectl 或 kustomize —— 无法渲染。")
         print("  macOS: brew install kubectl kustomize")
         print("  Linux: 见 https://kubectl.docs.kubernetes.io/installation/")

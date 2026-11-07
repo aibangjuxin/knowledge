@@ -1,7 +1,8 @@
 # bootstrap/clusters/ · 集群清单（Cluster Manifest）
 
 > 📌 **本目录是 `bootstrap/` 引导层的一部分**。
-> bootstrap 到底是什么、为什么需要它、完整时序 → 看 [`../README.md`](../README.md)。
+> bootstrap 到底是什么、为什么需要它、完整时序 → 看 [`../README.md`](../README.md)；
+> 整条链路（PR → 门禁 → 点火 → 同步）→ 看 [`../../bootstrap-flow.md`](../../bootstrap-flow.md)。
 >
 > **一句话**：这个目录是「**集群 × 组件**」的**事实来源**（source of truth），
 > 里面**没有任何一个文件是 Kubernetes 资源**，它们全部由 Argo CD 的

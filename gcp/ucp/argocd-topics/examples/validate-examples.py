@@ -27,6 +27,7 @@
 """
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -79,21 +80,11 @@ def is_placeholder(value):
     return False
 
 
-def walk(node, path=""):
-    """深度遍历 (dict, list) 结构，产出 (路径, 键, 值)。"""
-    if isinstance(node, dict):
-        for key, value in node.items():
-            here = f"{path}.{key}" if path else str(key)
-            yield here, str(key), value
-            yield from walk(value, here)
-    elif isinstance(node, list):
-        for idx, item in enumerate(node):
-            here = f"{path}[{idx}]"
-            yield here, "", item
-            yield from walk(item, here)
-
-
 def get(doc, *path, default=None):
+    """按路径取值：get(doc, "metadata", "name")。
+
+    任何一层不是字典或键不存在，都返回 default（不抛异常）。
+    """
     cur = doc
     for key in path:
         if not isinstance(cur, dict) or key not in cur:
@@ -114,7 +105,7 @@ CLUSTER_SCOPED_KINDS = {
 }
 
 
-def check_general(doc, name, path):
+def check_general(doc, name):
     """所有 K8s 资源都要满足的底线。"""
     if not isinstance(doc, dict):
         err(f"[{name}] 不是合法的 K8s 对象（解析结果不是字典）")
@@ -214,7 +205,6 @@ def check_repository_secret(doc, name):
         cfg = str(data.get("config", ""))
         if cfg:
             try:
-                import json
                 json.loads(cfg)
             except Exception as exc:
                 err(f"[{name}] cluster Secret 的 config 不是合法 JSON：{exc}")
@@ -509,7 +499,8 @@ def _looks_like_helm_values(doc):
     return bool(markers & set(doc.keys()))
 
 
-def dispatch(doc, name, path, fname=""):
+def dispatch(doc, name, fname=""):
+    """按 kind 把文档分发给对应的专项检查函数。"""
     kind = doc.get("kind")
     meta_name = get(doc, "metadata", "name", default="") or ""
     full = f"{name}::{meta_name}" if meta_name else name
@@ -564,10 +555,10 @@ def main():
             total_docs += 1
             label = fname if len(docs) == 1 else f"{fname}#{idx + 1}"
             if doc.get("apiVersion") or doc.get("kind"):
-                if check_general(doc, label, path):
-                    dispatch(doc, label, path, fname)
+                if check_general(doc, label):
+                    dispatch(doc, label, fname)
             else:
-                dispatch(doc, label, path, fname)
+                dispatch(doc, label, fname)
 
     print(f"检查了 {len(files)} 个文件、{total_docs} 个资源\n")
     for msg in WARNINGS:

@@ -257,7 +257,8 @@ R0–R12 能力映射、三方接线图与 9 个真实坑（CR 号=Workflow 名�
 | [`applicationset-matrix.yaml`](./examples/applicationset-matrix.yaml) | 批量分发（Matrix/List/Merge） | `template.spec.project` 必须显式写 |
 | [`argocd-repositories-githubapp.yaml`](./examples/argocd-repositories-githubapp.yaml) | Repository Secret | 目标分支**不在这里** |
 | [`redis-statefulset-pvc.yaml`](./examples/redis-statefulset-pvc.yaml) | 业务 Redis 持久化改造 | 这是**业务** Redis，不是 Argo CD 内部 Redis |
-| [`gitops-layout/`](./examples/gitops-layout/) | **完整 GitOps 仓库骨架**：`bootstrap/` + `apps/` + 集群组件清单 + 离线展开预览脚本 | `bootstrap/` 里的非资源清单必须用 `kustomization.yaml` 排除 |
+| [`gitops-layout/`](./examples/gitops-layout/) | **完整 GitOps 仓库骨架**：`bootstrap/` + `apps/` + 集群组件清单 + 静态检查工具箱 | `bootstrap/` 里的非资源清单必须用 `kustomization.yaml` 排除 |
+| [`gitops-layout/bootstrap-flow.md`](./examples/gitops-layout/bootstrap-flow.md) | **Bootstrap 完整流程图**：PR 门禁 → 点火 → 自举 → 生成 → 同步 → 巡查（七阶段 mermaid） | 手动只有阶段 0 和阶段 2 |
 | [`ha-values-override.yaml`](./examples/ha-values-override.yaml) | HA 升级 values | `ARGOCD_API_SERVER_REPLICAS` 必须与副本数一致 |
 | [`argocd-health.sh`](./examples/argocd-health.sh) | 一键体检脚本（只读） | 退出码 0=正常，1=有异常，2=环境不可用 |
 | [`session-token-usage.md`](./session-token-usage.md) | 本次会话的 Token 用量报告 | 300 次 API 调用 / 约 16.4M token，含优化诊断 |

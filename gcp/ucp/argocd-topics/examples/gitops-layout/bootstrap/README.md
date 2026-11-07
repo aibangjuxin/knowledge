@@ -416,6 +416,7 @@ argocd appset list
 | **本目录的详细说明** | 你正在读的这份 |
 | **集群清单**（命名约定 / 多 project / 每集群独立配置） | [`./clusters/README.md`](./clusters/README.md) |
 | **整体骨架与操作顺序** | [`../README.md`](../README.md) |
+| **整条链路流程图**（PR → 门禁 → 点火 → 同步） | [`../bootstrap-flow.md`](../bootstrap-flow.md) |
 | **命令行跑通全流程的 Demo** | [`../demo.sh`](../demo.sh) |
 | AppProject / RBAC 详解 | [`../../04-appproject-rbac.md`](../../../04-appproject-rbac.md) |
 | ApplicationSet 生成器选型 | [`../../05-appset.md`](../../../05-appset.md) |

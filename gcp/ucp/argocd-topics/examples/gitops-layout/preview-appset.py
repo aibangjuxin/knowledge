@@ -21,6 +21,7 @@ import os
 import sys
 
 # 与 bootstrap/applicationsets/*.yaml 里的 flatten 列表保持一致
+# （与 validate-clusters.py 里的同名常量重复 —— 两边都要改）
 REQUIRED_FIELDS = ["component", "cluster", "server", "env", "project", "namespace"]
 
 
@@ -97,7 +98,7 @@ def main():
 
     # ---- 反向视图：每个集群装了哪些组件 -----------------------------------
     by_cluster = {}
-    for path, data in items:
+    for _path, data in items:
         by_cluster.setdefault(data["cluster"], []).append(data["component"])
 
     print("集群视角（组件装在哪些集群）")

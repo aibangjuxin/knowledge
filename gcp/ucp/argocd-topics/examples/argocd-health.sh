@@ -14,6 +14,11 @@
 #   argocd-health.sh      ← **运行时**体检（要连集群，看的是活的状态）
 #   validate-examples.py  ← **静态**体检（不连集群，看的是配置文件本身）
 #   check-doc-links.py    ← 文档链接体检
+#
+# 注意：这里故意**不开** `set -e`。
+#   体检脚本的价值在于「一次性把所有问题都列出来」——
+#   如果开了 -e，第一条 kubectl 失败就退出了，后面的检查全跑不到。
+#   所以每条命令的失败都是显式判断的（`|| warn ...`）。
 # ---------------------------------------------------------------------------
 set -uo pipefail
 
@@ -25,6 +30,8 @@ hdr() { printf '\n=== %s ===\n' "$1"; }
 warn() { printf '⚠️  %s\n' "$1"; WARN=1; }
 ok()   { printf '✅ %s\n' "$1"; }
 
+# 前置条件：kubectl 必须在，且目标 namespace 必须存在。
+# 不存在就直接退出（退出码 2 = 环境问题，跟"体检不通过"（1）区分开）。
 command -v kubectl >/dev/null 2>&1 || { echo "kubectl not found"; exit 2; }
 kubectl get ns "$NS" >/dev/null 2>&1 || { echo "namespace '$NS' not found"; exit 2; }
 
@@ -39,6 +46,7 @@ SRV_ENV=$(kubectl -n "$NS" get deploy argocd-server \
   -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ARGOCD_API_SERVER_REPLICAS")].value}' 2>/dev/null)
 printf 'argocd-server replicas        = %s\n' "${SRV_REPL:-N/A}"
 printf 'ARGOCD_API_SERVER_REPLICAS   = %s\n' "${SRV_ENV:-N/A}"
+# 两个值都必须存在才能比对；只有「都拿到了且不相等」才是真问题。
 if [ -n "${SRV_REPL:-}" ] && [ -n "${SRV_ENV:-}" ] && [ "$SRV_REPL" != "$SRV_ENV" ]; then
   warn "两者不一致 → 登录会被限流误拒（上游 issue #11387 / #15223）"
 elif [ -n "${SRV_REPL:-}" ] && [ "$SRV_REPL" -gt 1 ] 2>/dev/null; then
@@ -87,6 +95,8 @@ fi
 hdr "Application 项目分布（落在 default 的应为空）"
 DEF_APPS=$(kubectl -n "$NS" get applications \
   -o jsonpath='{range .items[?(@.spec.project=="default")]}{.metadata.name}{"\n"}{end}' 2>/dev/null)
+# default 项目是最宽松的（没有任何 destination / sourceRepo 限制），
+# Application 落在 default = 边界形同虚设 → 要迁到具体的 platform-<env> 项目。
 if [ -z "${DEF_APPS:-}" ]; then
   ok "没有 Application 落在 default 项目"
 else
@@ -116,6 +126,7 @@ done
 # ---------------------------------------------------------------------------
 if [ -n "$APP" ]; then
   hdr "Application: $APP"
+  # 每一行是 "<jsonpath>:<显示名>"，用 ${f%%:*} / ${f##*:} 拆开
   for f in '.spec.project:project' '.spec.source.targetRevision:revision' \
            '.spec.source.repoURL:repoURL' '.status.sync.status:sync' \
            '.status.health.status:health' \

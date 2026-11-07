@@ -51,6 +51,9 @@ hr()   { printf '%s\n' "──────────────────�
 head2() { printf '\n%s%s%s\n' "$C_BLD" "$1" "$C_RST"; }
 
 # run_check <名称> <说明> <命令...>
+# 跑一条检查：成功计 PASSED，失败把输出缩进打印出来并记进 FAILED_NAMES。
+# 注意命令是在 `$( )` 里跑的 —— 这样能同时拿到 stdout 和 stderr，
+# 代价是命令在一个子 shell 里执行（环境变量传不回去，这里也不需要）。
 run_check() {
   local name="$1"; shift
   local desc="$1"; shift
@@ -113,6 +116,8 @@ run_check "check-doc-links" "文档链接与锚点" \
 head2 "YAML 语法"
 hr
 # 用 yamlmin 逐个解析（零依赖，不依赖 PyYAML）
+# 这里是 bash 里嵌 python：用 heredoc 把脚本喂给 python3，
+# 目录树作为 argv[1] 传进去（不是环境变量，避免转义问题）。
 yaml_bad="$(python3 - "$TOPICS_DIR" <<'PYEOF'
 import os, sys
 root = sys.argv[1]

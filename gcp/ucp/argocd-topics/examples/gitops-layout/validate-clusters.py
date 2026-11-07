@@ -122,28 +122,19 @@ def _iter_list_block(path, key):
 
 
 def parse_appproject_destinations(path):
-    """取出 destinations 里的 server 列表。"""
+    """取出 destinations 里的 server 列表。
+
+    destinations 的格式（列表项可以与 key 同缩进）：
+        destinations:
+        - server: 'https://dev-01.k8s.example.com'
+          namespace: 'platform-dev'
+    """
     servers = []
     for _, stripped in _iter_list_block(path, "destinations"):
         m = re.match(r"-\s*server:\s*'?([^'\s]+)'?", stripped)
         if m:
             servers.append(m.group(1))
     return servers
-
-
-def parse_appproject_cluster_whitelist(path):
-    """取出 clusterResourceWhitelist 的 (group, kind) 集合。"""
-    allowed = set()
-    cur_group = None
-    for _, stripped in _iter_list_block(path, "clusterResourceWhitelist"):
-        m = re.match(r"-\s*group:\s*'?([^'\s]+)'?", stripped)
-        if m:
-            cur_group = m.group(1)
-            continue
-        m = re.match(r"kind:\s*'?([^'\s]+)'?", stripped)
-        if m and cur_group:
-            allowed.add((cur_group, m.group(1)))
-    return allowed
 
 
 def kustomize_resources(path):
@@ -166,9 +157,52 @@ def kustomize_resources(path):
     return items
 
 
-def glob_to_regex(pattern):
-    """把 git generator 的 glob（只支持 *）转成正则。"""
-    return re.compile("^" + re.escape(pattern).replace("\\*", "[^/]*") + "$")
+# ---------------------------------------------------------------------------
+# 预留工具（当前**没有**任何检查调用它）
+# ---------------------------------------------------------------------------
+# 下面这个函数先把 AppProject 的 clusterResourceWhitelist 解析出来，
+# 留着是因为以后大概率要用得上 —— 但目前它**不参与任何判断**，
+# 不要误以为「白名单已经被校验过了」。
+#
+# 将来可以拿它做什么（一个具体的例子）：
+#   集群级组件（gatekeeper / gateway）会创建集群作用域的资源：
+#     · gatekeeper → ConstraintTemplate / Constraint
+#     · gateway    → Gateway（Gateway API）
+#   这些资源必须在对应 AppProject 的 clusterResourceWhitelist 里列出来，
+#   否则 Argo CD 同步时会报：
+#     "resource not allowed in project" / "cluster scoped resource is not allowed"
+#   也就是「装了个集群级组件，但 AppProject 没给它开门」——
+#   这是很容易漏、且报错信息完全不指向原因的一类问题。
+#
+# 用法示例（将来加检查时）：
+#   allowed = parse_appproject_cluster_whitelist(ppath)
+#   if ("gateway.networking.k8s.io", "Gateway") not in allowed:
+#       err(f"[{project}] 装了 gateway 组件，但白名单里没有 Gateway")
+# ---------------------------------------------------------------------------
+
+def parse_appproject_cluster_whitelist(path):
+    """取出 clusterResourceWhitelist 的 (group, kind) 集合。
+
+    clusterResourceWhitelist 的格式（列表项可以与 key 同缩进）：
+        clusterResourceWhitelist:
+        - group: 'gateway.networking.k8s.io'
+          kind: 'Gateway'
+        - group: '*'
+          kind: '*'
+
+    返回值是 (group, kind) 的集合；`*` 表示不限制。
+    """
+    allowed = set()
+    cur_group = None
+    for _, stripped in _iter_list_block(path, "clusterResourceWhitelist"):
+        m = re.match(r"-\s*group:\s*'?([^'\s]+)'?", stripped)
+        if m:
+            cur_group = m.group(1)
+            continue
+        m = re.match(r"kind:\s*'?([^'\s]+)'?", stripped)
+        if m and cur_group:
+            allowed.add((cur_group, m.group(1)))
+    return allowed
 
 
 # ------------------------------------------------------------------ 主流程 --
@@ -283,7 +317,11 @@ def check_appsets(root, clusters, appsets):
 
 
 def check_destinations(root, clusters):
-    """检查：集群的 server 在对应 AppProject 的 destinations 里。"""
+    """检查：集群的 server 在对应 AppProject 的 destinations 里。
+
+    同步被拒的典型报错就是 "not match any of the allowed destinations"，
+    根因几乎都在这里 —— cluster.yaml 里的 server 忘了同步到 AppProject。
+    """
     pp_dir = os.path.join(root, "bootstrap", "appprojects")
     cache = {}
     for name, c in clusters.items():
@@ -292,14 +330,9 @@ def check_destinations(root, clusters):
             continue
         if project not in cache:
             ppath = os.path.join(pp_dir, f"{project}.yaml")
-            if os.path.isfile(ppath):
-                cache[project] = (
-                    parse_appproject_destinations(ppath),
-                    parse_appproject_cluster_whitelist(ppath),
-                )
-            else:
-                cache[project] = (None, None)
-        servers, _ = cache[project]
+            cache[project] = (parse_appproject_destinations(ppath)
+                              if os.path.isfile(ppath) else None)
+        servers = cache[project]
         if servers is None:
             err(f"[clusters/{name}] project={project} 在 bootstrap/appprojects/ 里不存在")
             continue

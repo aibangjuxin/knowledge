@@ -42,6 +42,9 @@
 > **离线 vs 运行时**：左边 9 个工具**不需要**集群和 Argo CD，
 > 纯靠 Git 里的文件就能跑 → 可以直接进 CI 的 PR 检查。
 > 只有 `argocd-health.sh` 和 `demo.sh` 需要真实环境。
+>
+> 📖 想先理解**整条链路**（PR → 门禁 → 点火 → 同步 → 巡查）
+> → [`gitops-layout/bootstrap-flow.md`](./gitops-layout/bootstrap-flow.md)（全链路 mermaid 图）。
 
 ---
 
@@ -120,6 +123,14 @@ kubectl 不会帮你兜底**。
 - 相对链接指向的文件是否存在
 - **锚点**（`#标题`）在目标文件里是否存在（按 GitHub 的 slug 规则计算）
 - 代码块里引用的脚本路径是否存在
+- **反向检查**：仓库里的 `.md` / `.sh` / `.py` 有没有**完全没被任何文档提到**的
+  （新加了脚本却忘了写文档 → 会被列出来；⚠️ 只是提示，**不影响退出码**）
+
+```bash
+python3 check-doc-links.py                    # 全部检查
+python3 check-doc-links.py --no-anchors       # 只查文件，不查锚点
+python3 check-doc-links.py --no-orphans       # 不做反向检查
+```
 
 > 修过 14 个真实的断锚点（含 `Develop-git-apps.md` 和
 > `webhook-and-backend-service.md` 目录里的）。

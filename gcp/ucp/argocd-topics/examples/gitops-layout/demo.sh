@@ -116,6 +116,8 @@ run_sh() {
 have() { command -v "$1" >/dev/null 2>&1; }
 
 # base64 解码（从 stdin 读；macOS 的 base64 与 GNU 的参数不一样）
+# 依次尝试三种写法，哪种能用就用哪种 —— 因为 macOS 自带的 base64
+# 不认 --decode，而 GNU coreutils 的 base64 不认 -d。
 b64d() {
   local data; data="$(cat)"
   if printf '%s' "$data" | base64 -d 2>/dev/null; then return 0; fi
@@ -567,6 +569,7 @@ step_prepare_repo() {
   fi
 
   # 集群 → server 地址映射（JSON）
+  # 手工拼 JSON：集群名是 dev-01 这种形式，值是 URL，不含需要转义的字符。
   local map_json="" c first=1
   for c in $CLUSTERS; do
     if [[ $first -eq 1 ]]; then
@@ -596,6 +599,7 @@ step_prepare_repo() {
 
 ensure_port_forward() {
   # 端口转发是"验证"命令的前置条件；已存在就别重复起
+  # （重复起会占端口，报 "address already in use"）。
   if [[ -n "$PORTFWD_PID" ]] && kill -0 "$PORTFWD_PID" 2>/dev/null; then
     return 0
   fi

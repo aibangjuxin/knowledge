@@ -207,8 +207,11 @@ def git_file_params(root, gen, notes):
     return results
 
 
-def git_dir_params(root, gen, notes):
-    """git 目录生成器：产出 .path.path / .path.basename。"""
+def git_dir_params(root, gen):
+    """git 目录生成器：产出 .path.path / .path.basename。
+
+    对应 Argo CD 的 `git.directories` —— 每个匹配到的**目录**生成一组参数。
+    """
     results = []
     for spec in gen.get("directories") or []:
         pattern = spec.get("path", "")
@@ -251,7 +254,7 @@ def generate(root, generators, notes):
             if g.get("files"):
                 all_params.extend(git_file_params(root, g, notes))
             elif g.get("directories"):
-                all_params.extend(git_dir_params(root, g, notes))
+                all_params.extend(git_dir_params(root, g))
             else:
                 notes.append("git 生成器既没有 files 也没有 directories —— 未模拟")
         elif "list" in gen:
@@ -260,6 +263,7 @@ def generate(root, generators, notes):
             notes.append("clusters 生成器依赖**已注册的真实集群**，未模拟"
                          "（用 `argocd cluster list` 确认注册情况）")
         elif "matrix" in gen:
+            # matrix = 笛卡尔积：每个子生成器的结果两两组合
             matrix = gen["matrix"]
             combos = [[]]
             for sub in matrix.get("generators") or []:
@@ -273,6 +277,9 @@ def generate(root, generators, notes):
                 merged.append(params)
             all_params.extend(merged)
         elif "merge" in gen:
+            # merge = 串行叠加：后面的子生成器**不能**覆盖前面已有的同名字段
+            # （真实 Argo CD 里是反过来：子生成器覆盖父生成器）。
+            # 这里按"先到先得"实现，因为本仓库的示例里没有用到 merge。
             merge = gen["merge"]
             merged = []
             for sub in merge.get("generators") or []:
