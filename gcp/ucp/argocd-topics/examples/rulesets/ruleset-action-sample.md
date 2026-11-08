@@ -267,13 +267,229 @@ remote: Resolving deltas: 100% (7/7), completed with 7 local objects.
 remote: error: GH013: Repository rule violations found for refs/heads/feature/cr-prefix-verify.
 remote: Review all repository rules at https://github.com/aibangjuxin/knowledge/rules?ref=refs%2Fheads%2Ffeature%2Fcr-prefix-verify
 remote:
-remote: - Changes must be made through a pull request.
+remote: - Changes must be made through a pull request. ==>  ← 真正的原因（pull_request 规则）
 remote:
-remote: - Required status check "cr-prefix" is expected.
+remote: - Required status check "cr-prefix" is expected. " ← 因为没有 PR，就没有 check run
 remote:
 To github.com:aibangjuxin/knowledge.git
  ! [remote rejected]   feature/cr-prefix-verify -> feature/cr-prefix-verify (push declined due to repository rule violations)
 error: failed to push some refs to 'github.com:aibangjuxin/knowledge.git'
+
+ 原因找到了 —— pull_request 那条规则：受管分支不允许直接 push，任何改动必须走 PR。GitHub 把两条违规
+ 都列了出来：
+
+
+   remote: - Changes must be made through a pull request.      ← 真正的原因
+   remote: - Required status check "cr-prefix" is expected.     ← 因为没有 PR，就没有 check
+
+那么我按照下面这个计划来进行一次推送
+ Plan:
+ - git checkout -b docs/cr-prefix-lab (from current HEAD, carrying the commit) ==> 等于是新建一个 branch
+ - git push -u origin docs/cr-prefix-lab ==> 推送成功（docs/cr-prefix-lab 不受管 → 直接推）。
+- docs/cr-prefix-lab 后面我碰到了一个问题，就是在这个 Branch 里面，我在 Commit 的时候遇到一点问题。 
+```
+ Key message:
+ 分支保护/ruleset 跟 commit 没有任何关系。 commit 是纯本地动作，GitHub 根本看不到。拦住你的是你自己机器上的
+ .git/hooks/commit-msg —— 客户端 hook，对所有分支一视同仁，跟保护无关
+
+
+➜  knowledge git:(docs/cr-prefix-lab) ✗ git commit -m "CH013456 docs chore(git): merge origin/feature/cr-prefix-verify"
+
+❌ 提交被拦截：主题行不符合 Conventional Commits。
+
+   当前主题行：CH013456 docs chore(git): merge origin/feature/cr-prefix-verify
+
+   规则：<type>(<scope>): <祈使句摘要>
+   示例：
+     docs(gcp): add GKE metadata exploration doc
+     fix(auth): handle expired token refresh
+     chore(vscode): add todo-plus extension vsix
+
+   如需跳过此检查：git commit --no-verify
+
+➜  knowledge git:(docs/cr-prefix-lab) ✗ git commit -m "docs(git): merge origin/feature/cr-prefix-verify (CH013456)"
+[docs/cr-prefix-lab 24dcf4e] docs(git): merge origin/feature/cr-prefix-verify (CH013456)
+
+hook 校验的是主题行必须 以小写 type 开头：^[a-z]+(\([a-z0-9/_.-]+\))?!?: .+
+ 你的消息开头是大写 CH → 第一个字符就挂了 → 后面写得再规范也没用。
+
+ 解决办法（我实测了 4 种写法）
+
+ ┌──────────────────────────────────────────────────────┬──────────┬─────────────┬────────────────────────┐
+ │ 消息                                                 │ 本地     │ CI          │ 结论                   │
+ │                                                      │ hook     │ cr-prefix   │                        │
+ ├──────────────────────────────────────────────────────┼──────────┼─────────────┼────────────────────────┤
+ │ CH013456 docs chore(git): merge origin/...           │ ❌ 拦截  │ ✅ 通过     │ 两边过不去             │
+ ├──────────────────────────────────────────────────────┼──────────┼─────────────┼────────────────────────┤
+ │ docs(git): merge origin/feature/cr-prefix-verify     │ ✅ 放行  │ ✅ 通过     │ ★ 推荐                 │
+ │ (CH013456)                                           │          │             │                        │
+ ├──────────────────────────────────────────────────────┼──────────┼─────────────┼────────────────────────┤
+ │ chore(git): merge origin/feature/cr-prefix-verify    │ ✅ 放行  │ ✅ 通过     │ ✅ 也可以              │
+ │ CH013456                                             │          │             │                        │
+ ├──────────────────────────────────────────────────────┼──────────┼─────────────┼────────────────────────┤
+ │ docs: update ruleset-action-sample lab doc           │ ✅ 放行  │ ✅ 通过     │ ✅ 描述真实改动时用这  │
+ │ (CH013456)                                           │          │             │ 个                     │
+ └──────────────────────────────────────────────────────┴──────────┴─────────────┴────────────────────────┘
+
+ ### 四个选项
+
+ A. 把 CR 号挪到主题行末尾（推荐）
+
+ ```bash
+   git commit -m "docs(git): merge origin/feature/cr-prefix-verify (CH013456)"
+ ```
+
+ │ ★ 这就是 cr-prefix.yml 头注释里那句话的由来：
+ │ "It is CONTAINS, not 'must start with', on purpose: the repo also has a local Conventional Commits hook
+ │ requiring <type>(<scope>): <summary>... A 'must start with CH...' rule would conflict with that hook."
+ │ 两边唯一的交集写法：CR 号放在后面，不能放最前面。
+
+ 
+```
+ - `gh pr create --base feature/cr-prefix-verify --head docs/cr-prefix-lab --title "CH013456 docs: add ruleset x action lab docs" --body "把 ruleset × action 的实验手册与脚本通过 PR 合入受管分支（受管分支不允许直接 push）"`
+    - wait for cr-prefix check → should be success
+ - merge (squash or merge)
+ - then git checkout feature/cr-prefix-verify && git reset --hard origin/feature/cr-prefix-verify
+   (to sync local) — careful: after merge, the remote protected branch has the squashed commit;
+   local feature/cr-prefix-verify has 2ee959d0. Reset local to origin.
+ - delete docs/cr-prefix-lab (local + remo
+
+
+➜  knowledge git:(feature/cr-prefix-verify) git checkout -b docs/cr-prefix-lab
+Switched to a new branch 'docs/cr-prefix-lab'
+➜  knowledge git:(docs/cr-prefix-lab) git push -u origin docs/cr-prefix-lab ==> 推送到一个没有保护的分支 Push to the non-protected branch worked immediately. Now open the PR. 推送成功（docs/cr-prefix-lab 不受管 → 直接推）。
+Enumerating objects: 15, done.
+Counting objects: 100% (15/15), done.
+Delta compression using up to 10 threads
+Compressing objects: 100% (8/8), done.
+Writing objects: 100% (8/8), 1.52 KiB | 1.52 MiB/s, done.
+Total 8 (delta 7), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (7/7), completed with 7 local objects.
+remote:
+remote: Create a pull request for 'docs/cr-prefix-lab' on GitHub by visiting:
+remote:      https://github.com/aibangjuxin/knowledge/pull/new/docs/cr-prefix-lab
+remote:
+remote: GitHub found 60 vulnerabilities on aibangjuxin/knowledge's default branch (8 critical, 20 high, 32 moderate). To find out more, visit:
+remote:      https://github.com/aibangjuxin/knowledge/security/dependabot
+remote:
+To github.com:aibangjuxin/knowledge.git
+ * [new branch]        docs/cr-prefix-lab -> docs/cr-prefix-lab
+branch 'docs/cr-prefix-lab' set up to track 'origin/docs/cr-prefix-lab'.
+
+➜  knowledge git:(docs/cr-prefix-lab) gh pr create --base feature/cr-prefix-verify --head docs/cr-prefix-lab --title "CH013456 docs: add ruleset x action lab docs" --body "把 ruleset × action 的实验手册与脚本通过 PR 合入受管分支（受管分支不允许直接 push）" ==> 现在开 PR 走受管分支
+
+Creating pull request for docs/cr-prefix-lab into feature/cr-prefix-verify in aibangjuxin/knowledge
+
+https://github.com/aibangjuxin/knowledge/pull/233
+
+
+HEAD_SHA=$(gh api repos/aibangjuxin/knowledge/pulls/233 --jq .head.sha)
+
+gh api "repos/aibangjuxin/knowledge/commits/${HEAD_SHA}/check-runs" \
+  --jq '[.check_runs[] | select(.name == "cr-prefix")] | last | "\(.status) \(.conclusion)"'
+
+ 
+
+
+➜  knowledge git:(docs/cr-prefix-lab) gh pr view 233 --repo aibangjuxin/knowledge --json mergeStateStatus -q .mergeStateStatus
+➜  knowledge git:(docs/cr-prefix-lab) gh pr view 233 --repo aibangjuxin/knowledg
+
+CH013456 docs: add ruleset x action lab docs aibangjuxin/knowledge#233
+Open • aibangjuxin wants to merge 1 commit into feature/cr-prefix-verify from docs/cr-prefix-lab • about 2 minutes ago
++34 -0 • ✓ Checks passing
+
+
+  把 ruleset × action 的实验手册与脚本通过 PR 合入受管分支（受管分支不允许直接 push）
+
+
+View this pull request on GitHub: https://github.com/aibangjuxin/knowledge/pull/233
+我最终登录页面也能看到这个，而且也有这个对应的cr-prefix 也能看起来这个结果是成功的
+
+aibangjuxin
+wants to merge 1 commit into
+feature/cr-prefix-verify ==> 这个其实就是我受保护的这个 feature/cr-prefix-verify (base = protected branch).
+from
+docs/cr-prefix-lab
+
+
+这个时候再切回到这个受保护的 branch
+➜  knowledge git:(docs/cr-prefix-lab) git checkout feature/cr-prefix-verify
+Switched to branch 'feature/cr-prefix-verify'
+Your branch is ahead of 'origin/feature/cr-prefix-verify' by 1 commit.
+  (use "git push" to publish your local commits)
+
+ 「受控分支上是不是没法 pull？」 → 可以，完全可以。 pull 是纯本地操作，ruleset 只管"往远端推"，管不到拉取。
+
+ 「我理解我的远端已经 OK 了，本地拉取不受影响？」 → 对，但有个前提：本地不能有"远端没有"的 commit。这次正是
+ 因为你本地多了一个已被 squash 掉的重复 commit，两边历史分叉，pull 才被迫造 merge commit，才撞上 hook。
+
+
+➜  knowledge git:(feature/cr-prefix-verify) git pull
+remote: Enumerating objects: 1, done.
+remote: Counting objects: 100% (1/1), done.
+remote: Total 1 (delta 0), reused 0 (delta 0), pack-reused 0 (from 0)
+Unpacking objects: 100% (1/1), 903 bytes | 451.00 KiB/s, done.
+From github.com:aibangjuxin/knowledge
+   d40edeae..2a1f261a  feature/cr-prefix-verify -> origin/feature/cr-prefix-verify
+
+❌ 提交被拦截：主题行不符合 Conventional Commits。
+
+   当前主题行：Merge branch 'feature/cr-prefix-verify' of github.com:aibangjuxin/knowledge into feature/cr-prefix-verify
+
+   规则：<type>(<scope>): <祈使句摘要>
+   示例：
+     docs(gcp): add GKE metadata exploration doc
+     fix(auth): handle expired token refresh
+     chore(vscode): add todo-plus extension vsix
+
+   如需跳过此检查：git commit --no-verify
+Not committing merge; use 'git commit' to complete the merge
+
+### 方案 A（推荐）：本地直接对齐远端
+
+ 理由：已验证 git diff 275892cc 2a1f261a 为空 → 你本地那个 commit 的内容已经在远端了（squash 版），本地这份
+ 是冗余的。
+
+ ```bash
+   git merge --abort
+   git fetch origin
+   git reset --hard origin/feature/cr-prefix-verify
+ ```
+
+
+
+➜  knowledge git:(feature/cr-prefix-verify) git fetch origin
+➜  knowledge git:(feature/cr-prefix-verify) git reset --hard origin/feature/cr-prefix-verify
+HEAD is now at 2a1f261a feat(lab): commit 里写的是 CH013456 (#233)
+➜  knowledge git:(feature/cr-prefix-verify) git pull
+Already up to date.
+
+
+治本：怎么让它不再发生
+
+ ① 不要在受管分支上直接 commit，所有改动都在侧分支（docs/xxx）做。==> 其实这个就是我的原始初衷，我定义这个对应的/Users/lex/git/gcp/ucp/argocd-topics/examples/rulesets/06-repo-feature-conventions.json /Users/lex/git/knowledge/.github/workflows/cr-prefix.yml 规则就是不想让用户随意的在这个上面commit ==> 当然，我在这里测试的时候用了下面四个这样的规则，其实真正对我的生产环境来说，我可能仅仅是不让到main 或者dev 对于个人用户来说，你随便，但是你必须通过 PR 的形式默置到 dev Branch ==> 然后dev ==> main
+```yaml
+      "include": [
+        "refs/heads/feature/**",
+        "refs/heads/git-apps/**",
+        "refs/heads/fix/**",
+        "refs/heads/codex/**"
+      ],
+```
+ 
+
+ ② PR 合并后，用 fast-forward 同步受管分支：
+
+ ```bash
+   git checkout feature/cr-prefix-verify
+   git fetch origin
+   git pull --ff-only        # 只允许 FF
+ ```
+
+ │ 关键：只要本地没有"远端没有"的 commit，pull 本来就是 fast-forward，根本不会造 merge commit，hook也就没机
+ │ 会触发。 这次之所以出事，是因为你本地多了一个已被 squash 掉的重复 commit。
+
+
 ```
 
 
@@ -691,7 +907,6 @@ gh api repos/$REPO/rulesets/$RS --jq '"\(.enforcement) rules=\([.rules[].type]|j
 | 本地过了、CI 红了 | 两边正则不一致 | 统一 `PREFIX_REGEX` |
 | `git push` 报奇怪的错、`git log` 里没有自己的 commit | metadata 规则（本仓库没启用）→ 不适用 | — |
 | 强推 / 删分支被拒 | `deletion` / `non_fast_forward` 正常生效 | 要改就走逃生通道 |
-| `git push` 被拒，报 `Changes must be made through a pull request` | ★ **受管分支不允许直接 push**（`pull_request` 规则） | 走 PR：另开一条不受管分支 → push → 开 PR 合入（见[实验 0](#实验-0-·-准备受管分支)） |
 | 删不掉受管分支 | 同上 | 逃生通道（先 disabled） |
 | `gh` 命令要不停按 `q`/ESC | `gh` 自动用了 `less` 分页 | `export GH_PAGER=cat` |
 
