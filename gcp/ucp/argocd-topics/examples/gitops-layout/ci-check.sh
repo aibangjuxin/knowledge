@@ -2,7 +2,7 @@
 # =============================================================================
 #  ci-check.sh —— 一键跑完全部静态检查（提交前 / CI 入口）
 # -----------------------------------------------------------------------------
-#  这个仓库里现在有 8 个检查工具。它们各自负责一件事，但**要一起跑**才对：
+#  这个仓库里现在有 9 个检查工具。它们各自负责一件事，但**要一起跑**才对：
 #
 #    ① validate-examples.py    examples/ 里的静态配置片段有没有危险默认值
 #    ② validate-clusters.py    集群清单字段有没有漂移
@@ -11,7 +11,9 @@
 #    ⑤ render-check.py         每个 overlay 能不能 build、产物对不对
 #    ⑥ kubectl kustomize       根应用能不能 build
 #    ⑦ check-doc-links.py      文档里的链接还能不能跳
-#    ⑧ YAML 语法               所有 yaml 能不能解析
+#    ⑧ validate-rulesets.py    Ruleset 与 CR Check 的三条契约是否自洽
+#    ⑨ simulate-commit-gate.py commit message 的三层判定模拟
+#    ⑩ YAML 语法               所有 yaml 能不能解析
 #
 #  用法：
 #    ./ci-check.sh              # 跑全部
@@ -110,6 +112,12 @@ hr
 run_check "validate-examples" "配置片段的危险默认值" \
   python3 "$EXAMPLES_DIR/validate-examples.py"
 
+run_check "validate-rulesets" "Ruleset 与 CR Check 的契约" \
+  python3 "$EXAMPLES_DIR/rulesets/validate-rulesets.py"
+
+run_check "simulate-commit-gate" "commit message 三层判定模拟" \
+  python3 "$EXAMPLES_DIR/rulesets/simulate-commit-gate.py" --all
+
 run_check "check-doc-links" "文档链接与锚点" \
   python3 "$EXAMPLES_DIR/check-doc-links.py"
 
@@ -173,6 +181,7 @@ if [[ $FAILED -gt 0 ]]; then
     render-check        overlay 渲染失败 → 多半是引用路径写错或父子嵌套（cycle）
     validate-examples   危险默认值 → 照着错误提示改配置
     check-doc-links     链接断了 → 改链接或补文件
+    validate-rulesets   ruleset 与 CR Check 的契约断了 → 看 C1/C2/C3 哪条红了
     yaml-语法           缩进/引号问题 → 直接看报的行号
 EOF
   fi

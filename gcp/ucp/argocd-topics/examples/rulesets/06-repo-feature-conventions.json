@@ -1,0 +1,32 @@
+{
+  "name": "feature-branch-conventions",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/feature/**"],
+      "exclude": []
+    }
+  },
+  "bypass_actors": [],
+  "rules": [
+    {
+      "type": "branch_name_pattern",
+      "parameters": {
+        "name": "分支名必须以 feature/ 开头",
+        "negate": false,
+        "operator": "starts_with",
+        "pattern": "feature/"
+      }
+    },
+    {
+      "type": "commit_message_pattern",
+      "parameters": {
+        "name": "Conventional Commits：type(scope): 描述",
+        "negate": false,
+        "operator": "regex",
+        "pattern": "^(feat|fix|chore|docs|refactor|test|perf|build|ci)(\\([a-z0-9\\-]+\\))?: .{1,72}"
+      }
+    }
+  ]
+}

@@ -14,7 +14,11 @@
 | 3 | [`12-webhook-push-vs-pull.md`](./12-webhook-push-vs-pull.md) | 「**有了 Webhook 之后，和 GitHub 的交互逻辑到底变了什么？**」<br>pull vs push 量化对比、**push 模式下的六个新契约**、扇出拓扑、迁移路线、反模式清单 |
 | 4 | [`13-cr-check-go-design.md`](./13-cr-check-go-design.md) | 「**Go 代码怎么组织？要写哪些接口？怎么测？要多久？**」<br>需求边界与 MVP、架构图、包结构、**Go 接口定义**、数据模型与状态机映射、规则引擎、端点契约、`policy.yaml` 全量示例、测试策略、指标、**M0–M5 ≈ 17–25 人日**、风险表 |
 | 5 | [`11-github-app-concepts.md`](./11-github-app-concepts.md) | 「**GitHub App 的那几个 URL 什么关系？源码在哪？规则该写在哪？**」<br>App / Installation / Private Key、四个 URL 对照表、源码的三种含义、**§3.4 自研场景的源码与部署**、四层拆解、**三层门禁架构**、R0–R12 规则表、Argo Workflows 能不能干这件事 |
+| 6 | [`14-rulesets-and-gitapp-gate.md`](./14-rulesets-and-gitapp-gate.md) | 「**GitHub Rulesets 怎么配？怎么和 GitHub App 联合成合并门禁？**」<br>零基础 Ruleset 教程（分层/叠加/enforcement/bypass）、25 条 API 规则清单、**Ruleset ↔ App 的唯一耦合点 `integration_id`**、4 种静默失效、分层 ruleset 完整 JSON、与 release 流程 14 步的逐条映射、Merge Queue、18 条坑 |
+| 7 | [`15-commit-message-cr-prefix.md`](./15-commit-message-cr-prefix.md) | 「**commit message 必须以 `CR123456` 开头，Ruleset 怎么配？**」<br>最小可跑示例：两个例子（正/反）、三层判定模型（L1 本地 hook / L2 Ruleset / L3 CR Check App）、两条最小 ruleset JSON、**RE2 正则约束**、**squash merge 时到底校验谁**、本地模拟器、Enterprise 降级方案 |
+| 8 | [`16-ruleset-install-runbook.md`](./16-ruleset-install-runbook.md) | 「**JSON 怎么装上去才会生效？**」<br>组织级 vs 仓库级端点差异、**安装六步顺序**（App 先跑一次 check run）、UI 导入 / `gh api` / IaC / GitOps 四条路径、**PUT 是全量替换的坑**、**三层验证（配置+聚合+联调）**、熔断纪律、权限矩阵、**报错对照表** |
 | ★ | [`cr-check/`](./cr-check/) | **★ 可运行的 Go 实现**（本文档集的代码部分）<br>CR Check 服务的完整代码：`cmd/server` + 9 个 `internal` 包、策略配置、K8s 清单、测试脚本。<br>**30 秒跑起来** → 见 [`cr-check/README.md`](./cr-check/README.md) §0 |
+| ★ | [`../examples/rulesets/`](../examples/rulesets/) | **★ 可直接下发的 Ruleset 配置 ＋ 契约静态检查 ＋ commit 前缀模拟器**<br>8 份 ruleset JSON（org 基线 / feature 规范 / dev / release / prod / push / **CR 前缀 ×2**）+ `apply-rulesets.sh` + `validate-rulesets.py` + `simulate-commit-gate.py` |
 
 ## 三句话记住这套东西
 
@@ -29,6 +33,10 @@
 
 ③ App 只是「哨兵 + 报数员」；真正拦住 merge 的是 GitHub 分支保护的 required status checks。
    部署侧还需要 Argo CD 同步门 + K8s 准入门兜底（三层门禁）。
+
+④ GitHub Rulesets = 强制力那一层的现代写法。Ruleset 与 App 只有一个耦合点：
+   required_status_checks 里的 context（= policy.yaml 的 checkName）+ integration_id（来源 App）。
+   ★ 这条线接错 → 门禁**静默失效** → 见 doc 14 §4.5 + examples/rulesets/validate-rulesets.py。
 ```
 
 ## 核心链路（一图）

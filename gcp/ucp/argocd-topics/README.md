@@ -37,9 +37,13 @@ Kubernetes 原生 GitOps 落地指南 —— 从架构选型到生产运维的�
 | **Argo Events 是什么？它和 Workflows / Argo CD 什么关系？我们要不要它？** | [argo-event](./argo-event.md) |
 | GitHub App 的 Public Link / Home URL / Webhook URL 是啥关系？源码在哪？ | [11](./git-apps/11-github-app-concepts.md) |
 | **PR 合并到生产前必须有变更单（CR）——规则写在哪？GitHub App 能做吗？** | [11](./git-apps/11-github-app-concepts.md) §11–§19 |
+| **GitHub Rulesets 零基础 + 和 CR Check 怎么咬合 + 分支保护怎么分层配** | [14](./git-apps/14-rulesets-and-gitapp-gate.md) |
+| **commit message 必须以 `CR123456` 开头 —— 最小 Ruleset 示例（可模拟）** | [15](./git-apps/15-commit-message-cr-prefix.md) |
+| **JSON 怎么装到 GitHub 上才会生效？（安装 Runbook）** | [16](./git-apps/16-ruleset-install-runbook.md) |
 | **我要自己用 Go 写一个 GitHub App 后端，代码怎么跑起来？Webhook URL 和我的服务什么关系？** | [webhook-and-backend-service](./git-apps/webhook-and-backend-service.md) |
 | **装了 App / 配了 Webhook 之后，和 GitHub 的交互逻辑到底变了什么？** | [12](./git-apps/12-webhook-push-vs-pull.md) |
 | **CR Check（Go）的详细设计：包结构 / 接口 / 端点 / 里程碑 / 工作量** | [13](./git-apps/13-cr-check-go-design.md) |
+| **★ GitHub Rulesets 怎么配？怎么和 GitHub App 联合成合并门禁？** | [14](./git-apps/14-rulesets-and-gitapp-gate.md) |
 | **★ CR Check 的 Go 代码在哪？怎么本地跑起来验证？** | [cr-check](./git-apps/cr-check/) |
 
 ---
@@ -275,7 +279,7 @@ R0–R12 能力映射、三方接线图与 9 个真实坑（CR 号=Workflow 名�
 > CR 在内部 CR 管理平台上处于**可执行（implement/approved）状态**，
 > 且合并必须落在 **Maintenance Window** 内。
 >
-> **本目录 4 篇文档按这个顺序读：**
+> **本目录 6 篇文档按这个顺序读：**
 
 | # | 文档 | 直接回答 |
 |---|---|---|
@@ -283,15 +287,22 @@ R0–R12 能力映射、三方接线图与 9 个真实坑（CR 号=Workflow 名�
 | 2 | [`webhook-and-backend-service.md`](./git-apps/webhook-and-backend-service.md) | “Webhook 到底是什么？我写的 Go 服务怎么变成一个 GitHub 能访问到的 URL？”<br>含：一页纸总结 + 完整流程图、Webhook vs 后端服务、**Git → 生效的完整 8 步**、K8s 清单、配置清单、故障速查、本地调试 |
 | 3 | [`12-webhook-push-vs-pull.md`](./git-apps/12-webhook-push-vs-pull.md) | “有了 Webhook 之后，和 GitHub 的交互逻辑到底变了什么？”<br>含：pull vs push 量化对比、**push 模式下的六个新契约**（幂等/乱序/10s 超时/不自动重试/暴露面/配额）、扇出拓扑、迁移路线 P0–P5、反模式清单 |
 | 4 | [`13-cr-check-go-design.md`](./git-apps/13-cr-check-go-design.md) | “Go 代码怎么组织？要写哪些接口？怎么测？要多久？”<br>含：需求边界（MVP）、架构图、包结构、**Go 接口定义**、数据模型与状态机映射、规则引擎、端点契约、`policy.yaml` 全量示例、测试策略、指标、**M0–M5 ≈ 17–25 人日**、10 条风险表 |
+| 5 | [`14-rulesets-and-gitapp-gate.md`](./git-apps/14-rulesets-and-gitapp-gate.md) | “Rulesets 零基础 + 和 CR Check 怎么咬合 + 分支保护怎么分层配？”<br>含：Ruleset 五个组成部分与**分层叠加取最严**、25 条 API 规则清单、**唯一耦合点 `integration_id`**、**4 种静默失效**、分层 ruleset 完整 JSON、与 release 流程 14 步逐条映射、**Ruleset 表达不了的约束**、Merge Queue、18 条坑 |
+| 6 | [`15-commit-message-cr-prefix.md`](./git-apps/15-commit-message-cr-prefix.md) | “commit message 必须以 `CR123456` 开头 —— 最小示例怎么配？”<br>含：两个例子（正/反）、三层判定模型（L1 hook / L2 Ruleset / L3 App）、**两条最小 ruleset JSON**、RE2 正则约束、**★ squash merge 到底校验谁**、★ metadata 规则需 Enterprise、本地模拟器、降级方案 |
+| 7 | [`16-ruleset-install-runbook.md`](./git-apps/16-ruleset-install-runbook.md) | “JSON 怎么装上去才生效？”<br>含：组织级/仓库级端点差异、**安装六步顺序**、UI 导入 / `gh api` / IaC / GitOps 四条路径、**★ PUT 全量替换的坑**、**三层验证**、熔断纪律、权限矩阵、报错对照表 |
 | ★ | [`cr-check/`](./git-apps/cr-check/) | **★ 可运行的 Go 实现**（本文档集的代码部分）<br>CR Check 服务完整代码 + 策略配置 + K8s 清单 + 测试脚本<br>**30 秒跑起来** → [`cr-check/README.md`](./git-apps/cr-check/README.md) §0 |
+| ★ | [`examples/rulesets/`](./examples/rulesets/) | **★ 可直接下发的 Ruleset 配置 + 契约检查**<br>5 份 ruleset JSON + `apply-rulesets.sh` + `validate-rulesets.py`（C1/C2/C3 断言） |
 
-**三句话记住这套东西：**
+**四句话记住这套东西：**
 
 ```
 ① GitHub App = 身份（机器人） + 你自己服务器上的一个后端服务。
 ② Webhook URL = 事件通知的收件地址；
    自研场景下它**就是**你部署的 Go 服务的公网地址（Ingress + 域名 + TLS）。
 ③ App 只是“哨兵 + 报数员”，真正拦住 merge 的是 GitHub 分支保护的 required status checks。
+④ GitHub Rulesets = 强制力那一层的现代写法。它与 App 只有一个耦合点：
+   required_status_checks 的 context（= policy.yaml 的 checkName）+ integration_id（来源 App）。
+   ★ 接错 → 门禁静默失效 → 见 doc 14 §4.5 与 examples/rulesets/validate-rulesets.py。
 ```
 
 ---

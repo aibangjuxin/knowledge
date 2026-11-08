@@ -38,8 +38,9 @@
 | `enable-component.sh` | [`gitops-layout/`](./gitops-layout/enable-component.sh) | ❌ | **写入**：给集群开关组件 |
 | `demo.sh` | [`gitops-layout/`](./gitops-layout/demo.sh) | ✅ | 端到端 Demo（建集群→装 Argo CD→同步） |
 | `argocd-health.sh` | [本目录](./argocd-health.sh) | ✅ | **运行时**体检（纯只读） |
+| `validate-rulesets.py` | [`rulesets/`](./rulesets/validate-rulesets.py) | ❌ | Ruleset 与 CR Check 的**三条契约**（C1/C2/C3）是否自洽 |
 
-> **离线 vs 运行时**：左边 9 个工具**不需要**集群和 Argo CD，
+> **离线 vs 运行时**：左边 10 个工具**不需要**集群和 Argo CD，
 > 纯靠 Git 里的文件就能跑 → 可以直接进 CI 的 PR 检查。
 > 只有 `argocd-health.sh` 和 `demo.sh` 需要真实环境。
 >
@@ -221,6 +222,7 @@ cd examples/gitops-layout
 | [`redis-statefulset-pvc.yaml`](./redis-statefulset-pvc.yaml) | 业务 Redis 持久化改造 | 这是**业务** Redis，不是 Argo CD 内部 Redis |
 | [`ha-values-override.yaml`](./ha-values-override.yaml) | HA 升级 values | `ARGOCD_API_SERVER_REPLICAS` 必须与副本数一致 |
 | [`gitops-layout/`](./gitops-layout/) | **完整 GitOps 仓库骨架** | `bootstrap/` 里的非资源清单必须用 `kustomization.yaml` 排除 |
+| [`rulesets/`](./rulesets/) | **GitHub Rulesets 配置 + 契约检查** | `checkName` 必须等于 `policy.yaml`；`integration_id` 不能漏 |
 
 ---
 

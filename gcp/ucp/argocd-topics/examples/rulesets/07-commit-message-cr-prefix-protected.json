@@ -1,0 +1,31 @@
+{
+  "name": "commit-message-cr-prefix-protected",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "repository_name": {
+      "include": ["platform-*"],
+      "exclude": []
+    },
+    "ref_name": {
+      "include": [
+        "refs/heads/main",
+        "refs/heads/release/prd",
+        "refs/heads/release/prod"
+      ],
+      "exclude": []
+    }
+  },
+  "bypass_actors": [],
+  "rules": [
+    {
+      "type": "commit_message_pattern",
+      "parameters": {
+        "name": "commit message 必须以 CR<6位数字> 开头",
+        "negate": false,
+        "operator": "regex",
+        "pattern": "^CR[0-9]{6}(\\s|$)"
+      }
+    }
+  ]
+}
