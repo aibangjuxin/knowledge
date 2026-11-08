@@ -1,17 +1,12 @@
 {
-  "name": "commit-message-cr-prefix-protected",
+  "name": "main-branch-guard",
   "target": "branch",
-  "enforcement": "active",
+  "enforcement": "disabled",
   "conditions": {
-    "repository_name": {
-      "include": ["platform-*"],
-      "exclude": []
-    },
     "ref_name": {
       "include": [
         "refs/heads/main",
-        "refs/heads/release/prd",
-        "refs/heads/release/prod"
+        "refs/heads/*Release"
       ],
       "exclude": []
     }
@@ -19,12 +14,35 @@
   "bypass_actors": [],
   "rules": [
     {
-      "type": "commit_message_pattern",
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "pull_request",
       "parameters": {
-        "name": "commit message 必须以 CR<6位数字> 开头",
-        "negate": false,
-        "operator": "regex",
-        "pattern": "^CR[0-9]{6}(\\s|$)"
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false,
+        "allowed_merge_methods": [
+          "squash",
+          "merge"
+        ]
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "required_status_checks": [
+          {
+            "context": "cr-prefix"
+          }
+        ],
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": true
       }
     }
   ]

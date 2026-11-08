@@ -1,31 +1,50 @@
 {
-  "name": "feature-branch-conventions",
+  "name": "dev-branch-guard",
   "target": "branch",
-  "enforcement": "active",
+  "enforcement": "disabled",
   "conditions": {
     "ref_name": {
-      "include": ["refs/heads/feature/**"],
+      "include": [
+        "refs/heads/feature/**",
+        "refs/heads/git-apps/**",
+        "refs/heads/fix/**",
+        "refs/heads/codex/**"
+      ],
       "exclude": []
     }
   },
   "bypass_actors": [],
   "rules": [
     {
-      "type": "branch_name_pattern",
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "pull_request",
       "parameters": {
-        "name": "分支名必须以 feature/ 开头",
-        "negate": false,
-        "operator": "starts_with",
-        "pattern": "feature/"
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false,
+        "allowed_merge_methods": [
+          "squash",
+          "merge"
+        ]
       }
     },
     {
-      "type": "commit_message_pattern",
+      "type": "required_status_checks",
       "parameters": {
-        "name": "Conventional Commits：type(scope): 描述",
-        "negate": false,
-        "operator": "regex",
-        "pattern": "^(feat|fix|chore|docs|refactor|test|perf|build|ci)(\\([a-z0-9\\-]+\\))?: .{1,72}"
+        "required_status_checks": [
+          {
+            "context": "cr-prefix"
+          }
+        ],
+        "strict_required_status_checks_policy": false,
+        "do_not_enforce_on_create": true
       }
     }
   ]

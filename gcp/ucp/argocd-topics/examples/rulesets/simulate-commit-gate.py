@@ -44,7 +44,7 @@ import sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 RULESET_FILE = os.path.join(_HERE, "07-commit-message-cr-prefix-protected.json")
-FEATURE_RULESET_FILE = os.path.join(_HERE, "08-commit-message-cr-prefix-feature.json")
+WORKFLOW_FILE = os.path.join(_HERE, "workflows", "cr-prefix-check.yaml")
 
 # ── 内置例子 ────────────────────────────────────────────────────────────────
 EXAMPLES = [
@@ -93,17 +93,34 @@ MOCK_CR = {
 
 
 def load_pattern(path):
-    """从 ruleset JSON 里读出 commit_message_pattern 的正则。"""
-    if not os.path.exists(path):
-        print(f"找不到 {path}")
-        return None, None
-    with open(path, encoding="utf-8") as fh:
-        data = json.load(fh)
-    for rule in data.get("rules", []):
-        if rule.get("type") != "commit_message_pattern":
-            continue
-        params = rule.get("parameters") or {}
-        return params.get("pattern"), data.get("name")
+    """读出"CR 前缀"的正则。
+
+    优先从 ruleset JSON 的 commit_message_pattern 读（Enterprise 路线）；
+    没有就从 **CI workflow** 里读（通用路线 —— 个人账号只有这条路）。
+    ★ 两条路线共用同一个正则 → 不会出现"CI 拦一套、Ruleset 拦另一套"。
+    """
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+            for rule in data.get("rules", []):
+                if rule.get("type") != "commit_message_pattern":
+                    continue
+                params = rule.get("parameters") or {}
+                if params.get("pattern"):
+                    return params["pattern"], data.get("name")
+        except (OSError, ValueError):
+            pass
+
+    if os.path.exists(WORKFLOW_FILE):
+        with open(WORKFLOW_FILE, encoding="utf-8") as fh:
+            text = fh.read()
+        # 从 grep -Eq '...' 里抠出正则（CI 路线的事实来源）
+        m = re.search(r"grep -Eq\s+'([^']+)'", text)
+        if m:
+            return m.group(1), "workflows/cr-prefix-check.yaml"
+
+    print("读不到 CR 前缀正则（既没有 metadata 规则，也没有 CI workflow）")
     return None, None
 
 
@@ -225,7 +242,7 @@ def main():
     if rx is None:
         return 2
 
-    print(f"规则来源：{os.path.basename(RULESET_FILE)}  (ruleset: {ruleset_name})")
+    print(f"规则来源：{ruleset_name}")
     print(f"模式    ：{pattern}")
     print(f"★ 模拟器用 Python re 编译；GitHub 用 RE2（Go）。本模式不含 lookaround，两边等价。")
     print()

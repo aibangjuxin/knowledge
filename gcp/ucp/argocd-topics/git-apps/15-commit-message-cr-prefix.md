@@ -22,13 +22,13 @@
 | [§0](#0-tldr) | TL;DR：8 条结论 |
 | [§1](#1-需求与两个例子) | **需求 + 两个例子**（正例 / 反例） |
 | [§2](#2-三层判定模型l1--l2--l3) | 三层判定模型：L1 本地 hook / L2 Ruleset / L3 CR Check App |
-| [§3](#3-最小-ruleset两条) | **最小 Ruleset：两条 JSON**（受保护分支 + feature 分支） |
+| [§3](#3-怎么落地两条路线先选对再动手) | **怎么落地：两条路线**（metadata 规则 vs CI check）+ 两条 ruleset JSON |
 | [§4](#4-正则怎么写re2) | 正则怎么写：RE2 / `^` / `$` / 无 lookahead / `operator: regex` |
 | [§5](#5-三个必须知道的官方事实) | ★ **三个必须知道的官方事实**（计划限制 / squash 语义 / push 语义） |
 | [§6](#6-与-cr-check-app-的分工) | 与 CR Check App 的分工 + R1 解析器扩展（可选） |
 | [§7](#7-本地模拟不连-github-就能跑) | **本地模拟**：模拟器 + commit-msg hook |
 | [§8](#8-落地步骤与验收) | 落地步骤与验收 |
-| [§9](#9-没有-enterprise-计划时的降级方案) | 没有 Enterprise 计划时的降级方案 |
+| [§9](#9-没有-enterprise-时的降级方案★-个人账号直接看这里) | 没有 Enterprise 时的降级方案（★ 个人账号直接看这里） |
 | [§10](#10-坑清单) | 坑清单 |
 | [§11](#11-关联文档) | 关联文档 |
 
@@ -48,7 +48,7 @@
 
 4. **★ 第二个坑：这条规则需要 GitHub Enterprise 计划。**
    官方原文："Organizations on a GitHub Enterprise plan can access additional rules to control how commit metadata must be formatted."
-   → Team 计划请看 [§9 降级方案](#9-没有-enterprise-计划时的降级方案)（CI check / PR 标题模板 / label）。
+   → Team 计划请看 [§9 降级方案](#9-没有-enterprise-时的降级方案★-个人账号直接看这里)（CI check / PR 标题模板 / label）。
 
 5. **★ 第三个坑：push 不会被拒绝，是"分支指针不更新"。**
    官方原文：*"the push is not rejected, but the branch or tag they are targeting is not updated"*
@@ -174,91 +174,129 @@ git commit -m "CR999999 release: pfb-gcp-v0.1.0: github app"
 
 ---
 
-## 3. 最小 Ruleset（两条）
+## 3. 怎么落地：两条路线，先选对再动手
 
-### 3.1 Ruleset A · 受保护分支（`main` / `release/**`）
+> ★ **动手前先确认你在哪条路线上** —— 选错会白干：
+>
+> | | 路线 A · **metadata 规则** | 路线 B · **CI check**（通用） |
+> |---|---|---|
+> | 能力 | `commit_message_pattern` | GitHub Actions job |
+> | 可用条件 | ★ **Enterprise 计划 + 组织账号** | **所有计划 + 个人账号** |
+> | 拦截时机 | push（ref 不更新）/ merge | PR 打开/更新时（status check 变红） |
+> | 产出 | ruleset 直接含格式规则 | check `cr-prefix` → 被 `required_status_checks` 引用 |
+> | 状态 | 若不满足可用条件 → **UI 导入会静默丢弃**（ruleset 变空壳） | 总是可用 |
+>
+> ★ **实测结论（非 Enterprise 个人账号）**：
+> `commit_message_pattern` / `branch_name_pattern` / `merge_queue` / push ruleset
+> → API 直接 `422 Invalid rule`；**UI 导入则静默丢弃** → ruleset 显示 active 但 `rules: []` → 什么都不拦。
+> 详见 [`16-ruleset-install-runbook.md`](./16-ruleset-install-runbook.md) §2.5。
 
-文件：[`examples/rulesets/07-commit-message-cr-prefix-protected.json`](../examples/rulesets/07-commit-message-cr-prefix-protected.json)
+### 3.1 路线 B（通用，推荐先走这条）· CI check + required_status_checks
 
-```json
+三件套：
+
+```
+① CI workflow   → examples/rulesets/workflows/cr-prefix-check.yaml
+② ruleset       → examples/rulesets/06-repo-feature-conventions.json（功能分支）
+                   examples/rulesets/07-commit-message-cr-prefix-protected.json（主分支）
+③ 绑定          → ruleset 的 required_status_checks 写 {"context": "cr-prefix"}
+```
+
+**为什么这样组合**：
+
+| 层 | 谁实现 | 权威性 |
+|---|---|---|
+| 格式（`^CR[0-9]{6}`） | CI 的 `cr-prefix` check | ✅ 服务端、不可绕过（PR 不绿就合不了） |
+| 真实性（CR 存在/已批准） | CR Check App 的 `cr/prod-validation` | ✅ 服务端 |
+
+> ★ 两条 required status check 各管一件事，互不替代：
+> `cr-prefix` 管**格式**，`cr/prod-validation` 管**真假**。
+
+**一键安装（CI workflow + PR）**：
+
+```bash
+cd examples/rulesets
+
+# ⚠️ 需要 workflow scope（GitHub 不允许用没有该 scope 的 token 创建 .github/workflows/）
+gh auth refresh -s workflow
+
+# 建分支 + 提交 workflow + 开 PR
+./install-ci-check.sh --owner <owner> --repo <repo>
+```
+
+**两条 ruleset 的关键内容**（完整文件见上面的链接）：
+
+```jsonc
+// 07-commit-message-cr-prefix-protected.json（主分支）
+{
+  "name": "main-branch-guard",
+  "target": "branch",
+  "enforcement": "disabled",              // ★ 先 disabled，CI 进 main 后再 active
+  "conditions": { "ref_name": { "include": ["refs/heads/main"], "exclude": [] } },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    { "type": "pull_request", "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false,
+        "allowed_merge_methods": ["squash", "merge"] } },
+    { "type": "required_status_checks", "parameters": {
+        "required_status_checks": [ { "context": "cr-prefix" } ],
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": true } }
+  ]
+}
+```
+
+> ★ **`pull_request.parameters` 的字段必须齐全**（少一个 → API 422，报错信息完全看不出缺什么）。
+> 上面这 5 个字段是官方 schema 里的必填项。
+
+### 3.2 路线 A（Enterprise 组织）· metadata 规则
+
+如果你们有 Enterprise 组织账号，直接用 metadata 规则（更省事、不用维护 CI）：
+
+```jsonc
+// 组织级 ruleset（★ conditions 必须同时含 repository_name + ref_name）
 {
   "name": "commit-message-cr-prefix-protected",
   "target": "branch",
   "enforcement": "active",
   "conditions": {
     "repository_name": { "include": ["platform-*"], "exclude": [] },
-    "ref_name": {
-      "include": ["refs/heads/main", "refs/heads/release/prd", "refs/heads/release/prod"],
-      "exclude": []
-    }
+    "ref_name": { "include": ["refs/heads/main"], "exclude": [] }
   },
-  "bypass_actors": [],
   "rules": [
-    {
-      "type": "commit_message_pattern",
-      "parameters": {
+    { "type": "commit_message_pattern", "parameters": {
         "name": "commit message 必须以 CR<6位数字> 开头",
         "negate": false,
         "operator": "regex",
-        "pattern": "^CR[0-9]{6}(\\s|$)"
-      }
-    }
+        "pattern": "^CR[0-9]{6}(\\s|$)" } }
   ]
 }
 ```
 
-### 3.2 Ruleset B · feature 分支（提前拦）
-
-文件：[`examples/rulesets/08-commit-message-cr-prefix-feature.json`](../examples/rulesets/08-commit-message-cr-prefix-feature.json)
-
-```json
-{
-  "name": "commit-message-cr-prefix-feature",
-  "target": "branch",
-  "enforcement": "active",
-  "conditions": {
-    "repository_name": { "include": ["platform-*"], "exclude": [] },
-    "ref_name": { "include": ["refs/heads/feature/**"], "exclude": [] }
-  },
-  "bypass_actors": [],
-  "rules": [
-    {
-      "type": "commit_message_pattern",
-      "parameters": {
-        "name": "commit message 必须以 CR<6位数字> 开头",
-        "negate": false,
-        "operator": "regex",
-        "pattern": "^CR[0-9]{6}(\\s|$)"
-      }
-    }
-  ]
-}
-```
-
-### 3.3 为什么是两条而不是一条
-
-| | Ruleset A（受保护分支） | Ruleset B（feature 分支） |
-|---|---|---|
-| 作用时机 | **合并前**（校验最终 commit message） | **push 时**（校验每个新 commit） |
-| 拦的是谁 | 想直接合 main 的人 | 手滑忘写前缀的开发者 |
-| 官方建议 | 官方推荐的基础配置 | 官方提醒"会增加摩擦，只施加在有限分支" |
-| 我们的取舍 | 必配 | 建议配（配合 L1 hook，摩擦可接受） |
-
-### 3.4 下发
+下发（组织级端点）：
 
 ```bash
 cd examples/rulesets
-
-# 先看 payload（不连 GitHub）
-CR_CHECK_APP_ID=<App ID> \
-  ./apply-rulesets.sh --dry-run --scope org --owner <org>
-
-# 真正下发（★ metadata 规则是组织级能力 → 必须用 --scope org）
-CR_CHECK_APP_ID=<App ID> \
-  ./apply-rulesets.sh --scope org --owner <org>
+CR_CHECK_APP_ID=<App ID> ./apply-rulesets.sh --scope org --owner <org>
 ```
 
-> ⚠️ **组织级 ruleset 需要 GitHub Enterprise 计划**（见 §5.1）。
+### 3.3 两条路线的对比
+
+| | 路线 A（metadata） | 路线 B（CI） |
+|---|---|---|
+| 拦截"本地提交" | ❌ 拦不到（本地 commit 是纯本地动作） | ❌ 同样拦不到 |
+| 拦截"不合规 push" | ✅ ref 不更新 | ⚠️ 不拦 push（CI 只在 PR 上跑）→ 靠 `pull_request` 规则保证只能经 PR 合入 |
+| 拦"不合规的 PR" | ✅ merge 被拒 | ✅ check 变红，merge 被拒 |
+| 需要额外维护 | 无 | 一个 workflow 文件 |
+| 需要什么权限 | Enterprise 组织 owner | 仓库 admin + `workflow` scope |
+
+> ★ **建议两条一起上**：
+> 路线 A 拦 push，路线 B 拦 PR；两者都失效时，L1 本地 hook 兜底。
 
 ---
 
@@ -310,13 +348,21 @@ CR           字面量，大写
 
 > *"Organizations on a GitHub Enterprise plan can access additional rules to control how commit metadata must be formatted."*
 
-| 能力 | Team 计划 | Enterprise 计划 |
-|---|---|---|
-| 仓库级 ruleset（PR / status check / 禁直推…） | ✅ | ✅ |
-| **组织级 ruleset** | ✅（部分） | ✅ |
-| **commit message / 分支名 / tag 名 元数据规则** | ❌ | ✅ |
+| 能力 | 个人账号（User） | Team 计划（组织） | Enterprise 计划（组织） |
+|---|---|---|---|
+| 仓库级 ruleset（PR / status check / 禁直推…） | ✅ | ✅ | ✅ |
+| **组织级 ruleset** | ❌（个人账号没有组织） | ✅ | ✅ |
+| **commit message / 分支名 / tag 名 元数据规则** | ❌ | ❌ | ✅ |
+| **merge queue 规则** | ❌ | ❌ | ✅（私有仓库） |
+| **push ruleset（禁密钥扩展名…）** | ❌ | ❌ | ✅ |
 
-> ★ **这是本方案最大的前置条件**。没有 Enterprise → 走 [§9 降级方案](#9-没有-enterprise-计划时的降级方案)。
+> ★ **实测（个人账号，非 Enterprise）**：
+> `commit_message_pattern` / `branch_name_pattern` / `merge_queue` / push ruleset
+> → API 直接 `422 Invalid rule`；
+> **UI 导入则静默丢弃** → ruleset 显示 `active` 但 `rules: []` → **什么都不拦**。
+> → 所以个人账号请走 [§3.1 路线 B（CI check）](#31-路线-b通用推荐先走这条--ci-check--required_status_checks)。
+
+> ★ **这是本方案最大的前置条件**。没有 Enterprise → 走 [§9 降级方案](#9-没有-enterprise-时的降级方案★-个人账号直接看这里)。
 
 ### 5.2 事实二：squash merge 时到底校验谁（★ 最容易踩）
 
@@ -533,11 +579,11 @@ git push -u origin feature/CAEP-0001-test-cr-prefix
 
 ---
 
-## 9. 没有 Enterprise 计划时的降级方案
+## 9. 没有 Enterprise 时的降级方案（★ 个人账号直接看这里）
 
 | 方案 | 做法 | 强度 | 成本 |
 |---|---|---|---|
-| **A. CI check**（推荐） | GitHub Actions 里一个 job 遍历 PR 的 commit message，不合规就 `exit 1` → 产生 status check → 用 `required_status_checks` 强制 | ★ 与 Ruleset 等价（服务端、不可绕过） | 一个 20 行的 workflow |
+| **A. CI check**（★ 个人账号的唯一可行路径） | GitHub Actions 里一个 job 遍历 PR 的 commit message，不合规就 `exit 1` → 产生 status check → 用 `required_status_checks` 强制 | ★ 与 Ruleset 等价（服务端、不可绕过） | 一个 20 行的 workflow |
 | **B. PR 标题模板** | 组织级 PR 模板把标题前缀写死；不靠机器校验，靠流程 | 弱（人可改） | 零 |
 | **C. label 载体** | 沿用现有 R1 的 `cr/1234` label，不动 commit message | 中（label 也能被改，但改动会在 PR 里留痕） | 零 |
 | **D. 本地 hook 单独用** | 只有 L1，无服务端强制 | 弱（可绕过） | 零 |

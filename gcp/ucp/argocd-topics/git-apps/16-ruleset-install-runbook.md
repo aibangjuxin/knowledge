@@ -21,6 +21,7 @@
 | [§0](#0-tldr) | TL;DR：7 条结论 |
 | [§1](#1-先分清两种装（组织级-vs-仓库级）) | 先分清两种"装"：组织级 vs 仓库级 |
 | [§2](#2-★-安装顺序（六步）与每一步的验收) | ★ **安装顺序（6 步）** 与每一步的验收 |
+| [§2.5](#25-★-实测诊断规则装上了却什么都不拦) | ★ **实测诊断**：装上了却什么都不拦（三个根因 + 两条只读检查） |
 | [§3](#3-路径-a-·-ui-导入-json（点鼠标，10-分钟）) | 路径 A · UI 导入 JSON |
 | [§4](#4-路径-b-·-gh-api--一键脚本（★-推荐）) | 路径 B · `gh api` / 一键脚本（★ 推荐） |
 | [§5](#5-路径-c-·-iac（声明式）) | 路径 C · IaC（Terraform/local-exec） |
@@ -120,6 +121,110 @@ gh api repos/<org>/<repo>/commits/<sha>/check-runs \
 # ⑥ 看 ruleset 有没有被绕过（★ 审计）
 gh api repos/<org>/<repo>/rulesets/<id>/history --jq '.[] | "\(.created_at)\t\(.actor)\t\(.version)"'
 ```
+
+---
+
+## 2.5 ★ 实测诊断：规则"装上了"却什么都不拦
+
+> **这一节来自一次真实排障**（个人账号 `aibangjuxin/knowledge` 仓库）。
+> 现象：UI 导入 3 条 ruleset，状态都是 **active**，但新建分支、提交、推送**全都不拦**。
+> 根因有**三个**，而且**叠加**在一起。
+
+### 2.5.1 先做这两个只读检查（30 秒出真相）
+
+```bash
+# ① ★ ruleset 到底有没有装上规则？（★ list 接口不返回 rules，必须按 id 查）
+gh api repos/<org>/<repo>/rulesets | jq -r '.[] | "\(.id)\t\(.name)\t\(.enforcement)"'
+for id in <上面列出的 id>; do
+  gh api repos/<org>/<repo>/rulesets/$id | jq -r '"\(.name): rules=\([.rules[]?.type]|join(","))"'
+done
+#    ★ 如果 rules= 是空的 → 这条 ruleset 就是"装饰品"，一条都不执行
+
+# ② ★ 目标分支上实际生效了哪些规则？（★ 这才是权威）
+gh api repos/<org>/<repo>/rules/branches/main | jq -r '.[].type'
+#    ★ 返回 [] → 没有任何规则命中这个分支
+```
+
+### 2.5.2 根因一：metadata 规则在非 Enterprise 组织上**不存在**
+
+**实测（个人账号 / 非 Enterprise）**：
+
+| rule type | API 结果 |
+|---|---|
+| `commit_message_pattern` | ❌ `422 Invalid rule 'commit_message_pattern'` |
+| `branch_name_pattern` | ❌ `422` |
+| `merge_queue` | ❌ `422` |
+| push ruleset（`file_extension_restriction` 等） | ❌ `422` |
+| `pull_request` / `deletion` / `non_fast_forward` / `required_linear_history` / `required_status_checks` / `required_deployments` | ✅ 可用 |
+
+**★ 最坑的地方**：用 **UI 导入 JSON** 时，GitHub **不报错**，但会把不认识的 rule type **静默丢弃**：
+
+```
+导入前：rules = [ commit_message_pattern ]
+导入后：rules = []            ← 什么都没了，但状态显示 active
+```
+
+→ **你的 ruleset "看起来装好了"，实际是一条规则都不执行。**
+→ 这就是"建了 active 却什么都不拦"的直接原因。
+
+> ★ **对策**：
+> - 有 Enterprise 组织 → 用 metadata 规则（最省事）。
+> - 没有 → **格式校验改由 CI（GitHub Actions）做**，再用 `required_status_checks` 强制
+>   （`required_status_checks` 是仓库级能力，**所有计划都有**）。
+>   → 可直接用 [`examples/rulesets/workflows/cr-prefix-check.yaml`](../examples/rulesets/workflows/cr-prefix-check.yaml)
+>   + [`install-ci-check.sh`](../examples/rulesets/install-ci-check.sh)。
+
+### 2.5.3 根因二：`pull_request` 的 parameters **必须字段齐全**
+
+**实测**：只写一部分参数 → `422 Invalid property /rules/N: data matches no possible input`。
+错误信息**完全看不出是哪缺了字段**。
+
+```jsonc
+// ❌ 422 —— 只写了一个字段
+{ "type": "pull_request", "parameters": { "required_approving_review_count": 1 } }
+
+// ✅ 200 —— 必填字段全在
+{ "type": "pull_request", "parameters": {
+    "required_approving_review_count": 1,
+    "dismiss_stale_reviews_on_push": true,
+    "require_code_owner_review": false,
+    "require_last_push_approval": false,
+    "required_review_thread_resolution": false,
+    "allowed_merge_methods": ["squash"]
+} }
+```
+
+> ★ **必填字段集**（官方 schema 标 `isRequired: true`）：
+> `required_approving_review_count` · `dismiss_stale_reviews_on_push` ·
+> `require_code_owner_review` · `require_last_push_approval` ·
+> `required_review_thread_resolution`（+ `allowed_merge_methods`）。
+>
+> → `validate-rulesets.py` 已经把这条变成断言（改坏了 CI 直接红）。
+
+### 2.5.4 根因三：分支名不命中 `conditions.ref_name`
+
+即便规则装对了，**分支不在 `include` 里 = 不生效**（不是报错，就是不生效）。
+
+实测案例：规则管的是 `refs/heads/feature/**`，而实际分支叫 `git-apps/lex` → 不命中。
+
+```bash
+# fnmatch 语义：`*` 不跨 `/`，`**` 才跨层级
+#   feature/**        → feature/a、feature/a/b ✅；不匹配 feature ❌
+#   git-apps/**       → git-apps/lex ✅
+#   *Release          → Lex-Release ✅（单层通配）
+gh api repos/<org>/<repo>/rules/branches/<分支名> | jq -r '.[].type'
+#    ★ 返回 [] → 这个分支没被任何规则命中
+```
+
+### 2.5.5 还有一个"不会报错"的点：**本地 commit 永远不会被拦**
+
+`git commit` 是纯本地动作，GitHub 管不到。
+metadata 规则是在 **push（ref update）** 时才生效：
+→ 本地 `git commit` 成功 → `git push` 才被拒 → 而且失败形态是"**分支没动**"而不是"push 被拒"
+（见 [`15-commit-message-cr-prefix.md`](./15-commit-message-cr-prefix.md) §5.3）。
+
+> ★ **所以"我提交的时候没有任何限制"这句话本身不能证明规则没装** ——
+> 先确认 `git push` 有没有被拒，再看 §2.5.1 的两条只读检查。
 
 ---
 

@@ -620,7 +620,7 @@ Merge 按钮禁用 → 全员合不了
 │  范围: refs/heads/feature/**                                     │
 │  规则: branch_name_pattern + commit_message_pattern              │
 │  目的: 名字/提交信息不合规的分支根本创建不出来                      │
-│  文件: 06-repo-feature-conventions.json                           │
+│  文件: 06-repo-feature-conventions.json（功能分支：PR + CI check）    │
 └───────────────────────────────────────────────────────────────────┘
 ┌─ R2 · dev 集成分支（repo ruleset, target=branch）──────────────────┐
 │  范围: refs/heads/dev                                            │
@@ -655,6 +655,14 @@ Merge 按钮禁用 → 全员合不了
 └───────────────────────────────────────────────────────────────────┘
 ```
 
+> ★ **★ rule type 的可用性因计划而异（实测）**：
+> `commit_message_pattern` / `branch_name_pattern` / `merge_queue` / push ruleset
+> 只在 **Enterprise 组织**可用；个人账号上 API 返回 `422`，**UI 导入还会静默丢弃**
+> → ruleset 显示 active 但 `rules: []` → 什么都不拦。
+> `pull_request` / `deletion` / `non_fast_forward` / `required_linear_history` /
+> `required_status_checks` / `required_deployments` → **所有计划可用**。
+> → 完整诊断见 [`16-ruleset-install-runbook.md`](./16-ruleset-install-runbook.md) §2.5。
+>
 > ★ **为什么是"分层"而不是"一条大 ruleset"**：
 > ① 不同分支的**严格度不同**（dev 1 个 reviewer，prod 2 个 + CR）；
 > ② 不同分支的**规则类型不同**（feature 要管分支名，prod 要管 check）；

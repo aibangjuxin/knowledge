@@ -14,9 +14,10 @@
 | [`03-repo-release-branches.json`](./03-repo-release-branches.json) | `release/**` 发布候选分支 → 2 reviewer + linear history + squash | 同上 |
 | [**`04-repo-prod-branches.json`**](./04-repo-prod-branches.json) | ★ **核心**：`main` + `release/prod` → 2 reviewer + **`cr/prod-validation`（限定来源 App）** + strict | 同上 |
 | [`05-push-secrets.json`](./05-push-secrets.json) | push 规则：禁 `.pem/.key/.p12` 等密钥扩展名、禁改 `releases/**`、禁 >10MB 文件 | 同上（`target: push`） |
-| [`06-repo-feature-conventions.json`](./06-repo-feature-conventions.json) | feature 分支规范：分支名必须 `feature/` 开头 + commit message 必须 Conventional Commits | 同上 |
-| [`07-commit-message-cr-prefix-protected.json`](./07-commit-message-cr-prefix-protected.json) | ★ **commit message 必须以 `CR<6位数字>` 开头**（管 `main` / `release/**`） | **组织级**（metadata 规则需 Enterprise） |
-| [`08-commit-message-cr-prefix-feature.json`](./08-commit-message-cr-prefix-feature.json) | ★ 同上，但管 `feature/**`（push 时就拦） | 同上 |
+| [`06-repo-feature-conventions.json`](./06-repo-feature-conventions.json) | **功能/开发分支保护**（PR 必需 + `cr-prefix` check）：管 `feature/**` `git-apps/**` `fix/**` `codex/**` | 仓库级（所有计划可用） |
+| [`07-commit-message-cr-prefix-protected.json`](./07-commit-message-cr-prefix-protected.json) | **主分支保护**（PR 必需 + `cr-prefix` check + 禁删/禁强推）：管 `main` `*Release` | 仓库级（所有计划可用） |
+| [`workflows/cr-prefix-check.yaml`](./workflows/cr-prefix-check.yaml) | ★ **CI 校验器**：commit message + PR 标题必须 `^CR[0-9]{6}` | 装进 `<repo>/.github/workflows/` |
+| [`install-ci-check.sh`](./install-ci-check.sh) | ★ 一键把 CI 校验器装进仓库（建分支 + 提交 + 开 PR） | 需要 `gh auth refresh -s workflow` |
 | [`simulate-commit-gate.py`](./simulate-commit-gate.py) | ★ **三层判定模拟器**（L1 hook / L2 Ruleset / L3 App），不连 GitHub | —— |
 | [`commit-msg-hook.sh`](./commit-msg-hook.sh) | ★ L1 本地 commit-msg hook（秒级反馈） | 安装到 `.githooks/commit-msg` |
 | [`apply-rulesets.sh`](./apply-rulesets.sh) | 下发脚本：先静态校验 → 再 CREATE / UPDATE | —— |
@@ -134,7 +135,32 @@ git config core.hooksPath .githooks
 
 ---
 
-## 6. 关联文档
+## 6. ★ 个人账号 / 非 Enterprise：规则类型的可用性（实测）
+
+在个人账号（`User`）上实测各 rule type：
+
+| rule type | 结果 |
+|---|---|
+| `pull_request` / `deletion` / `non_fast_forward` / `required_linear_history` / `required_status_checks` / `required_deployments` | ✅ 可用 |
+| `commit_message_pattern` / `branch_name_pattern` / `merge_queue` / push ruleset | ❌ `422 Invalid rule` |
+
+★ **UI 导入时不会报错**，而是**静默丢弃** → ruleset 显示 `active` 但 `rules: []` → 什么都不拦。
+
+**自查（30 秒）**：
+
+```bash
+gh api repos/<owner>/<repo>/rulesets | jq -r '.[] | "\(.id)\t\(.name)\t\(.enforcement)"'
+for id in <id>; do
+  gh api repos/<owner>/<repo>/rulesets/$id | jq -r '"\(.name): rules=\([.rules[]?.type]|join(","))"'
+done
+gh api repos/<owner>/<repo>/rules/branches/main | jq -r '.[].type'   # 目标分支上实际生效的规则
+```
+
+→ 个人账号请走 **CI 路线**（`workflows/cr-prefix-check.yaml` + `required_status_checks`）。
+
+---
+
+## 7. 关联文档
 
 | 主题 | 文档 |
 |---|---|

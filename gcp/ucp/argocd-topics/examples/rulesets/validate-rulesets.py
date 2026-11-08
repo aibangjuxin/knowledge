@@ -194,6 +194,16 @@ RULE_PARAMS = {
         "required_review_thread_resolution",
         "required_reviewers",
     },
+    # ★ API 里 pull_request.parameters 的**必填字段**（少一个 → 422）
+    #   实测：只写 required_approving_review_count 会报
+    #   "Invalid property /rules/N: data matches no possible input"
+    "pull_request.required": {
+        "required_approving_review_count",
+        "dismiss_stale_reviews_on_push",
+        "require_code_owner_review",
+        "require_last_push_approval",
+        "required_review_thread_resolution",
+    },
     "required_status_checks": {
         "required_status_checks",
         "strict_required_status_checks_policy",
@@ -326,17 +336,24 @@ def check_prod_strictness(rulesets):
         # 纯元数据类 ruleset（只管 commit message / 分支名）不受生产严格度约束
         if is_convention_only(rs):
             continue
+        # ★ main 必须走 PR —— 这条对企业版和个人仓库版都成立 → ERROR
+        if not rules_of(rs, "pull_request"):
+            err(f"{f}: 覆盖 main 的 ruleset 没有 pull_request 规则 —— "
+                f"等于允许直接 push 到 main")
+
+        # 下面两条是"企业版推荐值"，个人仓库可以更宽松 → WARN
         pr = rules_of(rs, "pull_request")
         if pr:
             params = pr[0].get("parameters") or {}
             n = params.get("required_approving_review_count", 0)
             if n < 2:
-                err(f"{f}: 覆盖 main 的 ruleset 只有 {n} 个 reviewer —— "
-                    f"生产分支至少要 2 个")
+                warn(f"{f}: 覆盖 main 的 ruleset 只有 {n} 个 reviewer —— "
+                     f"企业/团队仓库建议 ≥ 2（个人仓库 0~1 也可以，"
+                     f"注意 require_last_push_approval 在单人仓库会把自己锁死）")
             methods = params.get("allowed_merge_methods") or []
             if methods != ["squash"]:
-                err(f"{f}: 覆盖 main 的 ruleset 的 allowed_merge_methods = {methods} —— "
-                    f"必须严格是 [\"squash\"]（与发布流程的线性历史一致）")
+                warn(f"{f}: 覆盖 main 的 ruleset 的 allowed_merge_methods = {methods} —— "
+                     f"企业发布流程建议严格是 [\"squash\"]（线性历史）")
 
 
 def check_bypass(rulesets):
@@ -395,6 +412,16 @@ def check_rule_params(rulesets):
             required = {"required_status_checks": "required_status_checks"}
             if rtype in required and required[rtype] not in params:
                 err(f"{f}: rule `{rtype}` 缺少必填字段 `{required[rtype]}`")
+
+            # ★ pull_request.parameters：一旦写了 parameters，就必须**字段齐全**
+            #   （少一个必填字段 → GitHub API 返回 422，报错信息完全看不出是哪缺了）
+            if rtype == "pull_request" and "parameters" in rule:
+                must = RULE_PARAMS["pull_request.required"]
+                missing = must - set(params)
+                if missing:
+                    err(f"{f}: rule `pull_request` 的 parameters 缺少必填字段 "
+                        f"{sorted(missing)} —— GitHub 会返回 422"
+                        f"（★ parameters 可以整个省略，但不能只写一半）")
 
 
 def check_names_unique(rulesets):
