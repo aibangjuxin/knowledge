@@ -99,6 +99,14 @@ name_of() {
   python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("name",""))' "$1"
 }
 
+# 安全地取"同名 ruleset 的数字 id"。
+# ★ gh api 在出错时会把错误 JSON 打到 **stdout**（不是 stderr），
+#   所以必须用 grep 只留纯数字 id，否则会把错误 JSON 当成 id 去 DELETE/PUT。
+ids_of() {  # $1=endpoint  $2=name
+  gh api "$1" --paginate --jq ".[] | select(.name == \"$2\") | .id" 2>/dev/null \
+    | grep -E '^[0-9]+$' || true
+}
+
 # ── --list ──────────────────────────────────────────────────────────────────
 if [[ $LIST -eq 1 ]]; then
   echo "▸ 仓库级 ruleset（repos/$OWNER/$REPO）"
@@ -138,7 +146,7 @@ fi
 # ── --delete ────────────────────────────────────────────────────────────────
 if [[ -n "$DELETE" ]]; then
   if [[ -n "$REPO" ]]; then
-    ids="$(gh api "repos/$OWNER/$REPO/rulesets" --paginate --jq ".[] | select(.name==\"$DELETE\") | .id" 2>/dev/null)"
+    ids="$(ids_of "repos/$OWNER/$REPO/rulesets" "$DELETE")"
     if [[ -n "$ids" ]]; then
       for id in $ids; do
         gh api -X DELETE "repos/$OWNER/$REPO/rulesets/$id" >/dev/null || fail "删除 $DELETE 失败"
@@ -148,7 +156,7 @@ if [[ -n "$DELETE" ]]; then
       echo "  （仓库级没找到 $DELETE）"
     fi
   fi
-  ids="$(gh api "orgs/$OWNER/rulesets" --paginate --jq ".[] | select(.name==\"$DELETE\") | .id" 2>/dev/null)"
+  ids="$(ids_of "orgs/$OWNER/rulesets" "$DELETE")"
   if [[ -n "$ids" ]]; then
     for id in $ids; do
       gh api -X DELETE "orgs/$OWNER/rulesets/$id" >/dev/null || fail "删除 $DELETE 失败"
@@ -232,8 +240,7 @@ d = json.load(sys.stdin); d["enforcement"] = sys.argv[1]; print(json.dumps(d, in
   fi
 
   # ③ 查同名 → UPDATE / CREATE
-  existing_id="$("${list_cmd[@]}" --paginate --jq \
-    ".[] | select(.name == \"$name\") | .id" 2>/dev/null | head -1)"
+  existing_id="$(ids_of "$base" "$name" | head -1)"
 
   if [[ -n "$existing_id" ]]; then
     echo "  → UPDATE ruleset #$existing_id"
