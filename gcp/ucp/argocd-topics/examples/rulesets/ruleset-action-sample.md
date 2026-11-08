@@ -344,7 +344,6 @@ hook 校验的是主题行必须 以小写 type 开头：^[a-z]+(\([a-z0-9/_.-]+
  │ requiring <type>(<scope>): <summary>... A 'must start with CH...' rule would conflict with that hook."
  │ 两边唯一的交集写法：CR 号放在后面，不能放最前面。
 
-
 ```
  - `gh pr create --base feature/cr-prefix-verify --head docs/cr-prefix-lab --title "CH013456 docs: add ruleset x action lab docs" --body "把 ruleset × action 的实验手册与脚本通过 PR 合入受管分支（受管分支不允许直接 push）"`
     - wait for cr-prefix check → should be success
@@ -488,36 +487,6 @@ Already up to date.
 
  │ 关键：只要本地没有"远端没有"的 commit，pull 本来就是 fast-forward，根本不会造 merge commit，hook也就没机
  │ 会触发。 这次之所以出事，是因为你本地多了一个已被 squash 掉的重复 commit。
-
-
-冲突的根因是"两边基于同一个旧 base 各改各的"。重建即可：
-
- ```bash
-   gh pr close 235
-   git checkout docs/cr-prefix-lab
-   git reset --hard origin/feature/cr-prefix-verify     # 以远端受管分支当前内容为起点
-   # 编辑文件（只放真正的文档内容，别放聊天记录）
-   git add -A
-   git commit -m "docs(rulesets): <真实描述> (CH013456)"
-   git push -f origin docs/cr-prefix-lab                 # 这条分支不受管 → 可以强推
-   gh pr create --base feature/cr-prefix-verify --head docs/cr-prefix-lab --title "CH013456 docs: ..."
- ```
-
-冲突的根因是"两边基于同一个旧 base 各改各的"。重建即可：
-
- ```bash
-   gh pr close 235
-   git checkout docs/cr-prefix-lab
-   git reset --hard origin/feature/cr-prefix-verify     # 以远端受管分支当前内容为起点
-   # 编辑文件（只放真正的文档内容，别放聊天记录）
-   git add -A
-   git commit -m "docs(rulesets): <真实描述> (CH013456)"
-   git push -f origin docs/cr-prefix-lab                 # 这条分支不受管 → 可以强推
-   gh pr create --base feature/cr-prefix-verify --head docs/cr-prefix-lab --title "CH013456 docs: ..."
- ```
-
-
-```
 
 
 ## 实验 C · 标题与 commit 的 CR 号不一致
