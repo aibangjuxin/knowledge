@@ -15,6 +15,8 @@
 | [**`04-repo-prod-branches.json`**](./04-repo-prod-branches.json) | ★ **核心**：`main` + `release/prod` → 2 reviewer + **`cr/prod-validation`（限定来源 App）** + strict | 同上 |
 | [`05-push-secrets.json`](./05-push-secrets.json) | push 规则：禁 `.pem/.key/.p12` 等密钥扩展名、禁改 `releases/**`、禁 >10MB 文件 | 同上（`target: push`） |
 | [`06-repo-feature-conventions.json`](./06-repo-feature-conventions.json) | **功能/开发分支保护**（PR 必需 + `cr-prefix` check）：管 `feature/**` `git-apps/**` `fix/**` `codex/**` | 仓库级（所有计划可用） |
+| [**`06-dev-branch-guard-x-cr-prefix-action.md`](./06-dev-branch-guard-x-cr-prefix-action.md)** | ★ **06 ruleset × `cr-prefix` Action 联合工作详解**：两个文件怎么咬合、完整生命周期、线上实测状态、**5 个已确认的缺口** | —— （解读文档） |
+| [**`ruleset-action-sample.md`](./ruleset-action-sample.md)** | ★★ **全套实验手册（A~I 共 10 个实验）**：每条都是真实跑过的输出，含验收清单、清理流程、逃生通道、故障排查表 | —— （实操手册） |
 | [`07-commit-message-cr-prefix-protected.json`](./07-commit-message-cr-prefix-protected.json) | **主分支保护**（PR 必需 + `cr-prefix` check + 禁删/禁强推）：管 `main` `*Release` | 仓库级（所有计划可用） |
 | [`workflows/cr-prefix-check.yaml`](./workflows/cr-prefix-check.yaml) | ★ **CI 校验器**：commit message + PR 标题必须 `^CR[0-9]{6}` | 装进 `<repo>/.github/workflows/` |
 | [`install-ci-check.sh`](./install-ci-check.sh) | ★ 一键把 CI 校验器装进仓库（建分支 + 提交 + 开 PR） | 需要 `gh auth refresh -s workflow` |
