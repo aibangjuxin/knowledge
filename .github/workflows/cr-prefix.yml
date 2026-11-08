@@ -1,0 +1,83 @@
+# cr-prefix — GitHub Actions producer for the required status check "cr-prefix"
+# Repo: aibangjuxin/knowledge
+# Ruleset: dev-branch-guard requires a check/status exactly named "cr-prefix"
+# on refs/heads/feature/**, git-apps/**, fix/**, codex/**
+#
+# How it satisfies the rule:
+#   GitHub Actions creates a check run named after the JOB's `name:` (or job id).
+#   The workflow-level `name:` does NOT become the check name.
+#   So this job is named exactly `cr-prefix` — do not rename it, and do not
+#   also post a commit status with context `cr-prefix` (if both exist, both must pass).
+#
+# Rule checked (adjust the regex if your real rule differs):
+#   - PR title must CONTAIN CH + digits, e.g. "CH013456 release: pfb-gcp-v0.1.0"
+#     or "feat(actions): add cr-prefix check for CH013456"
+#   - Every non-merge commit subject in the PR must CONTAIN CH + digits
+#   Merge commits ("Merge branch ...") are skipped.
+#   It is CONTAINS, not "must start with", on purpose: the repo also has a
+#   local Conventional Commits hook requiring <type>(<scope>): <summary>,
+#   e.g. "feat(actions): add cr-prefix check for CH013456". A "must start
+#   with CH..." rule would conflict with that hook. Change PREFIX_REGEX
+#   below to change the rule in one place.
+
+name: cr-prefix
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  cr-prefix:
+    name: cr-prefix
+    runs-on: ubuntu-latest
+    env:
+      PREFIX_REGEX: "CH[0-9]+"
+    steps:
+      - name: Checkout PR history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check PR title and commit prefixes
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          echo "PR title: $PR_TITLE"
+          echo "Range: $BASE_SHA..$HEAD_SHA"
+
+          fail=0
+
+          if ! echo "$PR_TITLE" | grep -Eq "$PREFIX_REGEX"; then
+            echo "::error::PR title must contain a CR prefix matching $PREFIX_REGEX, e.g. 'feat(actions): add cr-prefix check for CH013456'"
+            fail=1
+          fi
+
+          # List non-merge commit subjects in the PR and check each one.
+          # `git log` exits 0 even when the range is empty; handle that case.
+          mapfile -t subjects < <(git log --format=%s --no-merges "$BASE_SHA..$HEAD_SHA" || true)
+
+          if [ "${#subjects[@]}" -eq 0 ]; then
+            echo "::warning::No non-merge commits found in $BASE_SHA..$HEAD_SHA"
+          fi
+
+          for subject in "${subjects[@]}"; do
+            echo "commit: $subject"
+            if ! echo "$subject" | grep -Eq "$PREFIX_REGEX"; then
+              echo "::error::Commit message must contain a CR prefix matching $PREFIX_REGEX: $subject"
+              fail=1
+            fi
+          done
+
+          if [ "$fail" -ne 0 ]; then
+            echo "cr-prefix: FAILED"
+            exit 1
+          fi
+
+          echo "cr-prefix: OK"

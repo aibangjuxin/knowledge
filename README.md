@@ -12,65 +12,65 @@
 
 ### Infrastructure & Cloud
 
-| Path | Description |
-|------|-------------|
-| `gcp/` | GCP architecture: Load Balancing, VPC, IAP, Cloud Armor, multi-tenant |
-| `gke/` | GKE platform: cluster setup, workload identity, autoscaling, addons |
-| `k8s/` | Kubernetes: networking, storage, RBAC, operators, Helm |
-| `dns/` | DNS design: Cloud DNS, private zones, split-horizon, record management |
-| `network/` | Network topology: VPC design, firewall rules, peering, HA |
-| `ssl/` | TLS/SSL: cert management, mTLS, public CA, private PKI |
-| `terrafrom/` | Terraform IaC: module design, state management, CI/CD |
+| Path         | Description                                                            |
+| ------------ | ---------------------------------------------------------------------- |
+| `gcp/`       | GCP architecture: Load Balancing, VPC, IAP, Cloud Armor, multi-tenant  |
+| `gke/`       | GKE platform: cluster setup, workload identity, autoscaling, addons    |
+| `k8s/`       | Kubernetes: networking, storage, RBAC, operators, Helm                 |
+| `dns/`       | DNS design: Cloud DNS, private zones, split-horizon, record management |
+| `network/`   | Network topology: VPC design, firewall rules, peering, HA              |
+| `ssl/`       | TLS/SSL: cert management, mTLS, public CA, private PKI                 |
+| `terrafrom/` | Terraform IaC: module design, state management, CI/CD                  |
 
 ### AI & Development
 
-| Path | Description |
-|------|-------------|
-| `ai/` | AI tools: prompts, fine-tuning, model serving, local LLM infra |
-| `skills/` | Reusable agent skills: workflow automation, MCP, skill authoring |
-| `prompt/` | Prompt engineering: templates, techniques, evaluation |
-| `api-service/` | API design: REST, gRPC, versioning, auth patterns |
-| `node/` | Node.js ecosystem: runtime, packages, best practices |
-| `java/` | Java / JVM: Spring Boot, performance tuning, concurrency |
+| Path           | Description                                                      |
+| -------------- | ---------------------------------------------------------------- |
+| `ai/`          | AI tools: prompts, fine-tuning, model serving, local LLM infra   |
+| `skills/`      | Reusable agent skills: workflow automation, MCP, skill authoring |
+| `prompt/`      | Prompt engineering: templates, techniques, evaluation            |
+| `api-service/` | API design: REST, gRPC, versioning, auth patterns                |
+| `node/`        | Node.js ecosystem: runtime, packages, best practices             |
+| `java/`        | Java / JVM: Spring Boot, performance tuning, concurrency         |
 
 ### Apple Ecosystem
 
-| Path | Description |
-|------|-------------|
-| `macos/` | macOS automation: scripts, Homebrew, system config |
-| `ios/` | iOS development: Xcode, Swift, SwiftUI, device management |
-| `apple/` | Apple platform: iPad, Shortcuts, Continuity, AirDrop |
+| Path     | Description                                               |
+| -------- | --------------------------------------------------------- |
+| `macos/` | macOS automation: scripts, Homebrew, system config        |
+| `ios/`   | iOS development: Xcode, Swift, SwiftUI, device management |
+| `apple/` | Apple platform: iPad, Shortcuts, Continuity, AirDrop      |
 
 ### Operations & Security
 
-| Path | Description |
-|------|-------------|
-| `safe/` | Security research: CVE, pentest notes, threat modeling |
-| `sre/` | SRE practices: SLOs, error budgets, incident response |
-| `monitor/` | Observability: logging, metrics, tracing, alerting |
-| `logs/` | Log analysis: patterns, grep tricks, log diving |
-| `devops/` | Delivery & automation: CI/CD pipelines, GitOps vs Operator paradigms, `devops/kubeops/` |
+| Path       | Description                                                                             |
+| ---------- | --------------------------------------------------------------------------------------- |
+| `safe/`    | Security research: CVE, pentest notes, threat modeling                                  |
+| `sre/`     | SRE practices: SLOs, error budgets, incident response                                   |
+| `monitor/` | Observability: logging, metrics, tracing, alerting                                      |
+| `logs/`    | Log analysis: patterns, grep tricks, log diving                                         |
+| `devops/`  | Delivery & automation: CI/CD pipelines, GitOps vs Operator paradigms, `devops/kubeops/` |
 
 ### Reference & Productivity
 
-| Path | Description |
-|------|-------------|
-| `nginx/` | Nginx: reverse proxy, rate limiting, config snippets |
-| `kong/` | Kong API Gateway: plugins, declarative config, auth |
-| `docker/` | Docker: Dockerfile best practices, multi-stage builds, registry |
-| `shell-script/` | Shell scripts: reusable utilities, automation |
-| `shortcut/` | Shortcuts: Apple Shortcuts, CLI workflows |
-| `bin/` | Bin utilities: single-file tools, wrappers |
+| Path            | Description                                                     |
+| --------------- | --------------------------------------------------------------- |
+| `nginx/`        | Nginx: reverse proxy, rate limiting, config snippets            |
+| `kong/`         | Kong API Gateway: plugins, declarative config, auth             |
+| `docker/`       | Docker: Dockerfile best practices, multi-stage builds, registry |
+| `shell-script/` | Shell scripts: reusable utilities, automation                   |
+| `shortcut/`     | Shortcuts: Apple Shortcuts, CLI workflows                       |
+| `bin/`          | Bin utilities: single-file tools, wrappers                      |
 
 ### Languages & Learning
 
-| Path | Description |
-|------|-------------|
-| `English/` | English learning: vocabulary, phrases, business writing |
-| `go/` | Go: concurrency patterns, stdlib, best practices |
-| `python/` | Python: scripts, data tools, venv management |
-| `linux/` | Linux: systemd, networking, performance tuning |
-| `git.sh` / `git-detail-status.sh` | Git utilities: analysis, visualization, workflow |
+| Path                              | Description                                             |
+| --------------------------------- | ------------------------------------------------------- |
+| `English/`                        | English learning: vocabulary, phrases, business writing |
+| `go/`                             | Go: concurrency patterns, stdlib, best practices        |
+| `python/`                         | Python: scripts, data tools, venv management            |
+| `linux/`                          | Linux: systemd, networking, performance tuning          |
+| `git.sh` / `git-detail-status.sh` | Git utilities: analysis, visualization, workflow        |
 
 ---
 
