@@ -389,7 +389,7 @@ gh api "repos/aibangjuxin/knowledge/commits/${HEAD_SHA}/check-runs" \
   --jq '[.check_runs[] | select(.name == "cr-prefix")] | last | "\(.status) \(.conclusion)"'
 
  
-
+- only testing
 
 ➜  knowledge git:(docs/cr-prefix-lab) gh pr view 233 --repo aibangjuxin/knowledge --json mergeStateStatus -q .mergeStateStatus
 ➜  knowledge git:(docs/cr-prefix-lab) gh pr view 233 --repo aibangjuxin/knowledg
