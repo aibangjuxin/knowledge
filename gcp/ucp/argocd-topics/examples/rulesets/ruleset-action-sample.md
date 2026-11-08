@@ -243,6 +243,39 @@ git log --oneline origin/feature/cr-prefix-verify -1
 > （受管分支不能强推、不能删 → 清理需要走[逃生通道](#逃生通道（受管分支的唯一正确恢复方式）)。）
 
 ---
+下面部分是我模拟的一个完整的正常过程
+```bash
+➜  knowledge git:(main) git checkout -b feature/cr-prefix-verify
+Switched to a new branch 'feature/cr-prefix-verify'
+➜  knowledge git:(feature/cr-prefix-verify) pwd
+/Users/lex/git/knowledge
+➜  knowledge git:(feature/cr-prefix-verify) ✗ git add .
+➜  knowledge git:(feature/cr-prefix-verify) ✗ git commit -m "feat(lab): commit 里写的是 CH013456"
+[feature/cr-prefix-verify 2ee959d0] feat(lab): commit 里写的是 CH013456
+ 4 files changed, 1732 insertions(+)
+ create mode 100644 gcp/ucp/argocd-topics/examples/rulesets/06-dev-branch-guard-x-cr-prefix-action.md
+ create mode 100644 gcp/ucp/argocd-topics/examples/rulesets/ruleset-action-sample.md
+ create mode 100755 gcp/ucp/argocd-topics/verify-cr-prefix.sh
+➜  knowledge git:(feature/cr-prefix-verify) git push
+Enumerating objects: 18, done.
+Counting objects: 100% (18/18), done.
+Delta compression using up to 10 threads
+Compressing objects: 100% (11/11), done.
+Writing objects: 100% (11/11), 29.94 KiB | 9.98 MiB/s, done.
+Total 11 (delta 7), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (7/7), completed with 7 local objects.
+remote: error: GH013: Repository rule violations found for refs/heads/feature/cr-prefix-verify.
+remote: Review all repository rules at https://github.com/aibangjuxin/knowledge/rules?ref=refs%2Fheads%2Ffeature%2Fcr-prefix-verify
+remote:
+remote: - Changes must be made through a pull request.
+remote:
+remote: - Required status check "cr-prefix" is expected.
+remote:
+To github.com:aibangjuxin/knowledge.git
+ ! [remote rejected]   feature/cr-prefix-verify -> feature/cr-prefix-verify (push declined due to repository rule violations)
+error: failed to push some refs to 'github.com:aibangjuxin/knowledge.git'
+```
+
 
 ## 实验 C · 标题与 commit 的 CR 号不一致
 
@@ -658,6 +691,7 @@ gh api repos/$REPO/rulesets/$RS --jq '"\(.enforcement) rules=\([.rules[].type]|j
 | 本地过了、CI 红了 | 两边正则不一致 | 统一 `PREFIX_REGEX` |
 | `git push` 报奇怪的错、`git log` 里没有自己的 commit | metadata 规则（本仓库没启用）→ 不适用 | — |
 | 强推 / 删分支被拒 | `deletion` / `non_fast_forward` 正常生效 | 要改就走逃生通道 |
+| `git push` 被拒，报 `Changes must be made through a pull request` | ★ **受管分支不允许直接 push**（`pull_request` 规则） | 走 PR：另开一条不受管分支 → push → 开 PR 合入（见[实验 0](#实验-0-·-准备受管分支)） |
 | 删不掉受管分支 | 同上 | 逃生通道（先 disabled） |
 | `gh` 命令要不停按 `q`/ESC | `gh` 自动用了 `less` 分页 | `export GH_PAGER=cat` |
 
