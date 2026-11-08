@@ -286,6 +286,66 @@ error: failed to push some refs to 'github.com:aibangjuxin/knowledge.git'
  Plan:
  - git checkout -b docs/cr-prefix-lab (from current HEAD, carrying the commit) ==> 等于是新建一个 branch
  - git push -u origin docs/cr-prefix-lab ==> 推送成功（docs/cr-prefix-lab 不受管 → 直接推）。
+- docs/cr-prefix-lab 后面我碰到了一个问题，就是在这个 Branch 里面，我在 Commit 的时候遇到一点问题。 
+```
+ Key message:
+ 分支保护/ruleset 跟 commit 没有任何关系。 commit 是纯本地动作，GitHub 根本看不到。拦住你的是你自己机器上的
+ .git/hooks/commit-msg —— 客户端 hook，对所有分支一视同仁，跟保护无关
+
+
+➜  knowledge git:(docs/cr-prefix-lab) ✗ git commit -m "CH013456 docs chore(git): merge origin/feature/cr-prefix-verify"
+
+❌ 提交被拦截：主题行不符合 Conventional Commits。
+
+   当前主题行：CH013456 docs chore(git): merge origin/feature/cr-prefix-verify
+
+   规则：<type>(<scope>): <祈使句摘要>
+   示例：
+     docs(gcp): add GKE metadata exploration doc
+     fix(auth): handle expired token refresh
+     chore(vscode): add todo-plus extension vsix
+
+   如需跳过此检查：git commit --no-verify
+
+➜  knowledge git:(docs/cr-prefix-lab) ✗ git commit -m "docs(git): merge origin/feature/cr-prefix-verify (CH013456)"
+[docs/cr-prefix-lab 24dcf4e] docs(git): merge origin/feature/cr-prefix-verify (CH013456)
+
+hook 校验的是主题行必须 以小写 type 开头：^[a-z]+(\([a-z0-9/_.-]+\))?!?: .+
+ 你的消息开头是大写 CH → 第一个字符就挂了 → 后面写得再规范也没用。
+
+ 解决办法（我实测了 4 种写法）
+
+ ┌──────────────────────────────────────────────────────┬──────────┬─────────────┬────────────────────────┐
+ │ 消息                                                 │ 本地     │ CI          │ 结论                   │
+ │                                                      │ hook     │ cr-prefix   │                        │
+ ├──────────────────────────────────────────────────────┼──────────┼─────────────┼────────────────────────┤
+ │ CH013456 docs chore(git): merge origin/...           │ ❌ 拦截  │ ✅ 通过     │ 两边过不去             │
+ ├──────────────────────────────────────────────────────┼──────────┼─────────────┼────────────────────────┤
+ │ docs(git): merge origin/feature/cr-prefix-verify     │ ✅ 放行  │ ✅ 通过     │ ★ 推荐                 │
+ │ (CH013456)                                           │          │             │                        │
+ ├──────────────────────────────────────────────────────┼──────────┼─────────────┼────────────────────────┤
+ │ chore(git): merge origin/feature/cr-prefix-verify    │ ✅ 放行  │ ✅ 通过     │ ✅ 也可以              │
+ │ CH013456                                             │          │             │                        │
+ ├──────────────────────────────────────────────────────┼──────────┼─────────────┼────────────────────────┤
+ │ docs: update ruleset-action-sample lab doc           │ ✅ 放行  │ ✅ 通过     │ ✅ 描述真实改动时用这  │
+ │ (CH013456)                                           │          │             │ 个                     │
+ └──────────────────────────────────────────────────────┴──────────┴─────────────┴────────────────────────┘
+
+ ### 四个选项
+
+ A. 把 CR 号挪到主题行末尾（推荐）
+
+ ```bash
+   git commit -m "docs(git): merge origin/feature/cr-prefix-verify (CH013456)"
+ ```
+
+ │ ★ 这就是 cr-prefix.yml 头注释里那句话的由来：
+ │ "It is CONTAINS, not 'must start with', on purpose: the repo also has a local Conventional Commits hook
+ │ requiring <type>(<scope>): <summary>... A 'must start with CH...' rule would conflict with that hook."
+ │ 两边唯一的交集写法：CR 号放在后面，不能放最前面。
+
+
+```
  - `gh pr create --base feature/cr-prefix-verify --head docs/cr-prefix-lab --title "CH013456 docs: add ruleset x action lab docs" --body "把 ruleset × action 的实验手册与脚本通过 PR 合入受管分支（受管分支不允许直接 push）"`
     - wait for cr-prefix check → should be success
  - merge (squash or merge)
@@ -428,6 +488,33 @@ Already up to date.
 
  │ 关键：只要本地没有"远端没有"的 commit，pull 本来就是 fast-forward，根本不会造 merge commit，hook也就没机
  │ 会触发。 这次之所以出事，是因为你本地多了一个已被 squash 掉的重复 commit。
+
+
+冲突的根因是"两边基于同一个旧 base 各改各的"。重建即可：
+
+ ```bash
+   gh pr close 235
+   git checkout docs/cr-prefix-lab
+   git reset --hard origin/feature/cr-prefix-verify     # 以远端受管分支当前内容为起点
+   # 编辑文件（只放真正的文档内容，别放聊天记录）
+   git add -A
+   git commit -m "docs(rulesets): <真实描述> (CH013456)"
+   git push -f origin docs/cr-prefix-lab                 # 这条分支不受管 → 可以强推
+   gh pr create --base feature/cr-prefix-verify --head docs/cr-prefix-lab --title "CH013456 docs: ..."
+ ```
+
+冲突的根因是"两边基于同一个旧 base 各改各的"。重建即可：
+
+ ```bash
+   gh pr close 235
+   git checkout docs/cr-prefix-lab
+   git reset --hard origin/feature/cr-prefix-verify     # 以远端受管分支当前内容为起点
+   # 编辑文件（只放真正的文档内容，别放聊天记录）
+   git add -A
+   git commit -m "docs(rulesets): <真实描述> (CH013456)"
+   git push -f origin docs/cr-prefix-lab                 # 这条分支不受管 → 可以强推
+   gh pr create --base feature/cr-prefix-verify --head docs/cr-prefix-lab --title "CH013456 docs: ..."
+ ```
 
 
 ```
