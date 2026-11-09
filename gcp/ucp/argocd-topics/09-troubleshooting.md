@@ -44,15 +44,15 @@
 
 | 现象 | 根因 | 定位 | 处理 |
 |---|---|---|---|
-| 所有人都登录失败 | 禁用了 admin 但组映射没生效 | `kubectl -n argocd get cm argocd-cm -o jsonpath='{.data.admin\.enabled}'`；`argocd rbac list` | 见 [`03-dex-ldap-sso.md`](./03-dex-ldap-sso.md) §7 |
-| 能登录但看不到任何 Application | `groups` 没进 Token，或 `scopes` 没含 groups | 浏览器 F12 看 id_token payload | 开 `insecureEnableGroups: true` + `scopes: [groups]`；见 [`03`](./03-dex-ldap-sso.md) §4 |
+| 所有人都登录失败 | 禁用了 admin 但组映射没生效 | `kubectl -n argocd get cm argocd-cm -o jsonpath='{.data.admin\.enabled}'`；`argocd rbac list` | 见 [`03-dex-ldap-sso.md`](./03-dex-ldap-sso.md) §9 |
+| 能登录但看不到任何 Application | `groups` 没进 Token，或 `scopes` 没含 groups | 浏览器 F12 看 id_token payload | 模式 A：查 IdP 的 groups claim / 开 `enableUserInfoGroups`；模式 B（Dex+OIDC）：connector 里开 `insecureEnableGroups: true` + `scopes: [groups]`；模式 C（Dex+LDAP）：查 `groupSearch`；见 [`03`](./03-dex-ldap-sso.md) §3.5 / §5.1.1 |
 | `g, devops-admin, role:admin` 不生效 | `argocd-rbac-cm` 的 `scopes` 缺 groups | `kubectl -n argocd get cm argocd-rbac-cm -o jsonpath='{.data.scopes}'` | 改 `scopes: '[groups, email]'` |
 | 意外拥有 admin 权限 | `g` 的 subject 与 SSO claim 撞名 | `argocd rbac list` 看所有 `g` 规则 | 换带命名空间的组名，如 `my-org:devops-admin` |
-| LDAP 报 "failed to search groups" | `userMatchers` 的 `userAttr`/`groupAttr` 不匹配 | `ldapsearch` 手工验证 | 见 [`03`](./03-dex-ldap-sso.md) §3.3 |
+| LDAP 报 "failed to search groups" | `userMatchers` 的 `userAttr`/`groupAttr` 不匹配 | `ldapsearch` 手工验证 | 见 [`03`](./03-dex-ldap-sso.md) §5.3 |
 | 组名不生效 | `groupSearch.nameAttr` 与策略里的字符串不一致 | `ldapsearch ... "(objectClass=groupOfNames)" cn` | 大小写敏感，必须完全一致 |
-| 密码明明对但认证失败 | `bindPW` 里的 `$` 被当变量展开 | 检查是否用了 Secret + 环境变量 | 见 [`03`](./03-dex-ldap-sso.md) §3.4 |
+| 密码明明对但认证失败 | `bindPW` 里的 `$` 被当变量展开 | 检查是否用了 Secret + 环境变量 | 见 [`03`](./03-dex-ldap-sso.md) §5.4 |
 | 改了 `argocd-cm` 无效 | ConfigMap 变更不重启 Dex | — | `kubectl -n argocd rollout restart deploy/argocd-dex-server` |
-| 员工离职后仍有权限 | 组只在登录时刷新 | 检查 Token 有效期 | 缩短 Token 生命周期 / 主动吊销；见 [`03`](./03-dex-ldap-sso.md) §6.3 |
+| 员工离职后仍有权限 | 组只在登录时刷新 | 检查 Token 有效期 | 缩短 Token 生命周期 / 主动吊销；见 [`03`](./03-dex-ldap-sso.md) §8.2 |
 | 登录被限流拒绝 | `ARGOCD_MAX_CONCURRENT_LOGIN_REQUESTS_COUNT` 与副本数不匹配 | 检查 `ARGOCD_API_SERVER_REPLICAS` | 见 [`02-ha.md`](./02-ha.md) §2 约束 3 |
 | dex-server 重启后所有人掉线 | dex 用内存存储 | — | 预期行为；改用 Kubernetes CRD 后端 |
 

@@ -1,0 +1,30 @@
+{
+  "name": "org-required-workflows",
+  "target": "branch",
+  "enforcement": "disabled",
+  "conditions": {
+    "repository_name": {
+      "include": ["~ALL"],
+      "exclude": ["sandbox-*"]
+    },
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH"],
+      "exclude": []
+    }
+  },
+  "bypass_actors": [],
+  "rules": [
+    {
+      "type": "required_workflows",
+      "parameters": {
+        "required_workflows": [
+          {
+            "path": ".github/workflows/org-policy-guard.yaml",
+            "ref": "refs/heads/main",
+            "repository_id": 654321
+          }
+        ]
+      }
+    }
+  ]
+}

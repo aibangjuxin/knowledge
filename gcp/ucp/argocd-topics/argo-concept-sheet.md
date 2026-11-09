@@ -102,7 +102,7 @@
 
 | # | 动作 | 配置位置 | 作用 |
 |---|---|---|---|
-| ① | 让 LDAP 组进 Token | `argocd-cm` 的 `dex.config`：`insecureEnableGroups: true` + `scopes` 含 `groups` | Token 里带上 `groups` |
+| ① | 让组进 Token | 模式 A（OIDC 直连）：IdP 侧配置 + `requestedIDTokenClaims` / `enableUserInfoGroups`；模式 B（Dex+OIDC）：connector 里的 `insecureEnableGroups` + `scopes`；模式 C（Dex+LDAP）：`groupSearch` | Token 里带上 `groups` |
 | ② | 组 → 角色 | `argocd-rbac-cm` 的 `policy.csv` | `devops-admin` → `role:admin` |
 | ③ | 禁用内置 admin | `argocd-cm` 的 `admin.enabled: "false"` | 关闭本地 `admin` 账号 |
 

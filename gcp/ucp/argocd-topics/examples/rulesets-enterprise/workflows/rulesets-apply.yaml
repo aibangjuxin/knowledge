@@ -1,0 +1,92 @@
+# =============================================================================
+#  rulesets-apply.yaml —— 合并后自动下发组织级 ruleset（GitOps 落地）
+# -----------------------------------------------------------------------------
+#  ★ 为什么企业版必须走 GitOps
+#    个人版：ruleset 配错了 = 一个仓库卡住 → 改一下就好
+#    企业版：ruleset 配错了 = 整个组织卡住 → 而且组织级 ruleset **只有 org owner
+#            能改**（连平台组自己都改不了）→ 恢复路径长得多
+#    → 所以"改规则"必须是 **PR → 评审 → CI apply**，而不是"谁有空谁去 UI 点一下"。
+#
+#  ★ 与个人版的差别
+#    · 个人版 CI apply 的是仓库级 ruleset
+#    · 企业版 CI apply 的是 **组织级** ruleset → token 必须有 admin:org
+#    · 企业版还要做 **漂移检测**（见 rulesets-drift.yaml）
+#
+#  前置
+#    · 把本目录（rulesets-enterprise/）放进一个**策略仓库**
+#    · 配好 secret：GH_RULESET_TOKEN（PAT，scope: repo + admin:org）
+#      ★ 也可以用 GitHub App + 细粒度权限，但 App 必须被授予组织的
+#        "Administration: write" —— 组织级 ruleset 的写权限只有 owner 有
+#    · 配好 variable：ORG / REPO_PATTERN
+#
+#  ★ 安全纪律
+#    · 生产 ruleset 的 enforcement 由 profile + PR 决定，CI **不自动打开 active**
+#      （--enforcement 由 workflow 里的变量控制，默认 disabled）
+#    · 每次 apply 的结果写进 job summary，便于审计
+# =============================================================================
+
+name: rulesets-apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "examples/rulesets-enterprise/**"
+  workflow_dispatch:
+    inputs:
+      enforcement:
+        description: "本次下发的 enforcement"
+        required: true
+        default: "disabled"
+        type: choice
+        options: [disabled, active, evaluate]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rulesets-apply
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: 静态校验（E1–E15）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 校验规则集
+        run: python3 examples/rulesets-enterprise/validate-rulesets.py --strict
+
+  apply:
+    name: 下发
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 下发（★ 先 disabled）
+        env:
+          GH_TOKEN: ${{ secrets.GH_RULESET_TOKEN }}
+          ORG: ${{ vars.ORG }}
+          ENFORCEMENT: ${{ github.event.inputs.enforcement || 'disabled' }}
+        run: |
+          cd examples/rulesets-enterprise
+          chmod +x apply-rulesets.sh
+          ./apply-rulesets.sh --apply \
+              --owner "$ORG" \
+              --enforcement "$ENFORCEMENT" \
+              | tee apply.log
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat apply.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 回读线上状态（确认真的生效了）
+        env:
+          GH_TOKEN: ${{ secrets.GH_RULESET_TOKEN }}
+          ORG: ${{ vars.ORG }}
+        run: |
+          gh api "orgs/$ORG/rulesets" --paginate \
+            --jq '.[] | "- \(.name)\ttarget=\(.target)\tenforcement=\(.enforcement)"' \
+            | tee -a "$GITHUB_STEP_SUMMARY"

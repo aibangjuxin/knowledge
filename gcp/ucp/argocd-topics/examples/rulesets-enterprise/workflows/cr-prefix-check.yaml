@@ -1,0 +1,89 @@
+# =============================================================================
+#  cr-prefix-check.yaml（企业版·可选）—— CI 兜底的格式校验
+# -----------------------------------------------------------------------------
+#  ★ 企业版已经有 metadata 规则了，为什么还要这个？
+#    因为它们回答的是**不同的问题**：
+#
+#      metadata 规则（服务端）："格式对不对" —— 判定发生在 push 时刻，
+#                               失败形态是「分支指针不更新」，开发者要改历史
+#      CI check（PR 时刻）    ："格式对不对" —— 失败形态是「PR 上一个红叉」，
+#                               开发者当场就能看到，红得明明白白
+#
+#    → CI 是**体验层**（看得见的失败），metadata 是**权威层**（绕不过的失败）。
+#    → 两者一起上：反馈早、反馈清楚，且不会因为有人改了 ruleset 就失效。
+#
+#  ★ 什么时候可以不要它
+#    · 如果你们的开发者已经习惯"push 被拒 → ref 不动 → 改历史"，
+#      并且有本地 hook（commit-msg-hook.sh）兜底，可以不装。
+#    · 企业版的好处是**服务端规则不会因为 App 挂了而失效**（metadata 是 GitHub 原生能力）
+#
+#  安装（★ 见同目录 install-ci-check.sh）
+#      cp cr-prefix-check.yaml <repo>/.github/workflows/cr-prefix-check.yaml
+#
+#  ★ 它产生的 status check 名字 = job 的 name = `cr-prefix`
+#    → 若要在 ruleset 里强制它，required_status_checks 写 {"context": "cr-prefix"}
+#    → 企业版推荐：**不**把它设成 required（metadata 已经强制了），
+#      只当"给人看的信号"。要设成 required 也行，但会多一道卡点。
+# =============================================================================
+
+name: cr-prefix
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cr-prefix:
+    # ★ 这个 name 就是 status check 的 context
+    name: cr-prefix
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. PR 标题 ───────────────────────────────────────────────────────
+      # ★ 用 env 传值，不要把标题直接插进 run 脚本（防命令注入）
+      - name: 校验 PR 标题
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if ! printf '%s' "$PR_TITLE" | grep -Eq '^CR[0-9]{6}(\s|$)'; then
+            echo "::error::PR 标题必须以 CR<6位数字> 开头 —— 当前：$PR_TITLE"
+            echo "::error::示例：CR123456 release: pfb-gcp-v0.1.0: github app"
+            exit 1
+          fi
+          echo "✅ PR 标题格式合规：$PR_TITLE"
+
+      # ── 2. 每个 commit 的 subject ─────────────────────────────────────────
+      - name: 拉取 PR 的 commit 列表
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/commits" \
+            --jq '.[].commit.message | split("\n")[0]' > /tmp/subjects.txt
+          wc -l < /tmp/subjects.txt | xargs echo "共检查 commit 数："
+
+      - name: 校验每个 commit 的 subject
+        run: |
+          if grep -Evq '^CR[0-9]{6}(\s|$)' /tmp/subjects.txt; then
+            echo "::error::以下 commit 的 subject 不合规（必须以 CR<6位数字> 开头）："
+            grep -Ev '^CR[0-9]{6}(\s|$)' /tmp/subjects.txt | while IFS= read -r line; do
+              echo "::error::  $line"
+            done
+            exit 1
+          fi
+          echo "✅ 所有 commit 的 subject 都合规"
+
+      # ── 3. 分支名（企业版服务端已强制，这里只是给人看）──────────────────
+      - name: 校验分支名（提示性）
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if ! printf '%s' "$HEAD_REF" | grep -Eq '^(feature|fix|hotfix|git-apps|codex)/[A-Za-z0-9._-]+$'; then
+            echo "::warning::分支名不符合规范：$HEAD_REF"
+            echo "::warning::服务端 branch_name_pattern 会拦（push 时 ref 不更新）"
+          fi

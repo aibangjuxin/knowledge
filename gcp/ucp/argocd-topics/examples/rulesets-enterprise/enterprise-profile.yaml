@@ -1,0 +1,154 @@
+# =============================================================================
+#  enterprise-profile.yaml —— 企业版（GitHub Enterprise）规则集的"前提声明"
+# -----------------------------------------------------------------------------
+#  **它解决什么问题**
+#  个人版（examples/rulesets/）里，很多能力是"想用但用不了"——
+#  commit_message_pattern / branch_name_pattern / push ruleset / merge_queue
+#  在非 Enterprise 账号上 API 直接 422，UI 导入则**静默丢弃**。
+#
+#  企业版把这些能力全部打开，但代价是：**配置必须自洽，否则全组织一起卡死**。
+#  所以先把这张"前提声明"写清楚，再让 validate-rulesets.py 把它变成断言：
+#
+#    ① 你的 org 到底是什么计划？（决定哪些 rule type 可用）
+#    ② 哪些仓库属于哪个管控等级？（决定哪套 ruleset 打到它）
+#    ③ CR Check App 的 ID / check 名？（决定门禁指向谁）
+#    ④ 命名规范的正则？（必须与 ruleset JSON **逐字符一致**）
+#
+#  ★ 这个文件是**唯一真相源**：
+#    - validate-rulesets.py 读它做断言
+#    - apply-rulesets.sh 读它拿 org 名 / App ID / 仓库清单
+#    - simulate-commit-gate.py 读它拿正则
+#    - commit-msg-hook.sh / branch-name-hook.sh 读它拿本地正则
+#    改这里 = 改全链路的期望值；改 ruleset JSON 但不改这里 → CI 直接红。
+# =============================================================================
+
+org:
+  # ── 组织标识 ────────────────────────────────────────────────────────
+  name: "example-corp"           # ★ 换成你们的 org 名
+  # ★ 计划：enterprise | enterprise-cloud | ghes | team | personal
+  #   enterprise / enterprise-cloud → GitHub Enterprise Cloud
+  #   ghes                        → GitHub Enterprise Server（自建）
+  #   team                        → 只有 Team 能力（★ metadata 规则不可用）
+  #   personal                    → 个人账号（★ 只能参考，不能照抄本目录）
+  plan: "enterprise"
+
+  # GHES 自建时改成你的 host；apiBase 也要跟着改
+  #   GHES:  https://<host>/api/v3
+  #   GHEC:  https://api.github.com
+  ghHost: "github.com"
+  apiBase: "https://api.github.com"
+
+  # ── 仓库分层（决定哪套 ruleset 作用到谁）────────────────────────────
+  repos:
+    # 生产仓库：最严（2 reviewer + code owner + CR Check + 签名 + merge queue）
+    production:
+      - "platform-*"
+      - "core-*"
+    # 普通业务仓库：走 dev/release + PR 门禁
+    standard:
+      - "app-*"
+      - "svc-*"
+    # ★ 沙箱/实验仓库：可以从管控里排除（repo_name exclude）
+    sandbox:
+      - "sandbox-*"
+
+  # ── 分支口径 ────────────────────────────────────────────────────────
+  branches:
+    default: "main"
+    dev: "dev"
+    releaseGlob: "release/**"
+    prod:
+      - "main"
+      - "release/prod"
+
+# ── CR Check（GitHub App）门禁 ─────────────────────────────────────────────
+crCheck:
+  # ★ CR Check 这个 GitHub App 的 App ID。
+  #   它就是 required_status_checks 的 "expected source"（integration_id）。
+  #   留 0 = 校验器会报 ERROR —— 那是故意的：门禁不能没有来源限定。
+  appId: 0
+
+  # ★ 必须与 git-apps/cr-check/config/policy.yaml 的 checkName **逐字符一致**
+  checkName: "cr/prod-validation"
+
+  # ★ CR Check 服务的 base 分支（它负责判定哪些分支需要过 CR）
+  #   这份清单必须被 ruleset 覆盖（个人版的 C3 契约，企业版继续沿用）
+  managedBranches:
+    - "release/prd"
+    - "release/prod"
+
+# ── 命名规范（正则）─────────────────────────────────────────────────────────
+# ★ 这三个正则会同时出现在：
+#    - ruleset JSON（服务端强制）
+#    - 本地 hook（秒级反馈）
+#    - CI 校验器（二次兜底）
+#   三处必须**逐字符一致** → 由 validate-rulesets.py 断言。
+#
+# ★ 注意 YAML 双引号里的 \\s 是为了产出字面的 \s（RE2 的 \s）。
+conventions:
+  # commit subject：CR + 恰好 6 位数字，后面接空白或结束
+  commitMessagePattern: "^CR[0-9]{6}(\\s|$)"
+
+  # 分支名：只允许这几类前缀
+  branchNamePattern: "^(feature|fix|hotfix|git-apps|codex)/[A-Za-z0-9._-]+$"
+
+  # tag 名：v<major>.<minor>.<patch>[-预发布标识]
+  tagNamePattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.]+)?$"
+
+# ── 严格度（各管控等级的最低要求）─────────────────────────────────────────
+strictness:
+  # 普通仓库 / 默认分支的最低 reviewer 数
+  defaultMinReviewers: 1
+  # 生产仓库 + 生产分支的最低 reviewer 数
+  productionMinReviewers: 2
+
+  # 生产分支是否要求签名提交（required_signatures）
+  requireSignedCommits: true
+
+  # 是否启用 merge queue（私有仓库需要 Enterprise）
+  mergeQueue: true
+
+  # 是否启用 required_workflows（组织级强制 CI 定义）
+  # ★ 只有 GitHub Enterprise Cloud 明确支持；GHES 需按版本核对
+  requiredWorkflows: false
+
+  # 是否启用 code scanning ruleset（需要 GitHub Advanced Security）
+  codeScanning: false
+
+# ── 豁免名单（bypass）──────────────────────────────────────────────────────
+# ★ 默认【空】。
+#   企业版的原则：**豁免必须显式写出来**。
+#   例如 Dependabot 提的 commit 不可能带 CR 前缀 →
+#     bypassAllowlist:
+#       - actorId: 1234
+#         actorType: "Integration"    # 或 "RepositoryRole" / "Team" / "User"
+#         reason: "Dependabot 自动提交，无 CR 号"
+#
+#   ★ 校验器只允许 bypassAllowlist 里**显式列出**的 actor 使用
+#     bypass_mode = "always"；其它任何 "always" 都是 ERROR。
+bypassAllowlist: []
+
+# ── 推送门禁（push ruleset，Enterprise 专属）────────────────────────────────
+pushGuard:
+  # 禁止提交的文件扩展名（密钥 / 证书 / 私钥）
+  restrictedExtensions:
+    - ".pem"
+    - ".key"
+    - ".p12"
+    - ".pfx"
+    - ".jks"
+    - ".keystore"
+    - ".ppk"
+    - ".asc"
+    - ".gpg"
+    - ".env"
+  # 禁止修改的路径（发布产物 / terraform state）
+  restrictedPaths:
+    - "releases/**"
+    - "**/*.tfstate"
+    - "**/*.tfstate.backup"
+    - "**/id_rsa*"
+  # 单文件大小上限（★ 单位 MB，不是字节）
+  maxFileSizeMB: 10
+  # 是否开启 block_credential_changes（扫描提交里的凭据）—— Enterprise 新能力
+  blockCredentialChanges: true

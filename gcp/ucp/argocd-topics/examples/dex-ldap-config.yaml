@@ -1,6 +1,11 @@
 # Argo CD · Dex + LDAP 身份配置
 #
 # 用途：让 Argo CD 通过嵌入式 Dex 连接企业 LDAP，并让 LDAP 组出现在 ID Token 中。
+#
+# ⚠️ 先看 ../03-dex-ldap-sso.md §0：**如果公司已有 OIDC IdP（Okta / Entra ID / Keycloak /
+#    Auth0 / Google），用模式 A（OIDC 直连）更简单** → 见 ./oidc-direct-config.yaml。
+#    本文件只在「只有 LDAP / AD」时才需要。
+#
 # 应用：kubectl apply -f dex-ldap-config.yaml
 #
 # ⚠️ 本文件不含任何真实凭据。所有密码、私钥、token 一律为 [REDACTED]，
@@ -93,18 +98,17 @@ data:
           # recursionGroupAttr: memberOf
 
     # ---------------------------------------------------------------------------
-    # ↓↓↓ 关键开关：让 LDAP 组出现在 ID Token 里 ↓↓↓
-    # 不开这两项 → g, devops-admin, role:admin 永远不会生效
+    # 组怎么进 token（Dex + LDAP）：**不需要开关**。
+    #
+    # · Argo CD 向 Dex 请求的 scope 固定包含 groups
+    #   （上游 util/oidc/oidc.go → getScopes() → openid, profile, email, groups）
+    # · Dex 的 LDAP connector 只要配了上面的 groupSearch，就会把组写进 ID Token
+    #
+    # ⚠️ 网上常见的「dex.config 顶层写 insecureEnableGroups: true / scopes: [...]」
+    #    不是 Dex 的配置字段 → 会被 Dex 忽略（只有 Dex 的 **OIDC connector** 里
+    #    这两个才是真字段，见 ../03-dex-ldap-sso.md §4.3）。
+    #    所以这里**故意不写**这两个键 —— 写了也是装饰，别以为它在起作用。
     # ---------------------------------------------------------------------------
-    insecureEnableGroups: true
-
-    scopes:
-    - profile
-    - email
-    - groups
-
-    # 如果组仍然不在 ID Token 里（可能被 Dex 过滤），打开这个从 UserInfo 端点再取一次：
-    # getUserInfo: true
 
     # ---- 可选：静态客户端（仅当需要非 Web 流程时）----
     # staticClients:

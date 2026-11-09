@@ -136,7 +136,7 @@ kubectl get cm argocd-cm -n argocd -o jsonpath='{.data.dex\.config}' | head -40
 
 | # | 风险 | 影响 | 缓解 |
 |---|---|---|---|
-| R1 | 禁用 `admin` 后无人能进 Argo CD | 完全锁死 | **先**验证 `devops-admin` 组映射生效，**再**禁用 admin；保留 break-glass 手段（见 [`03-dex-ldap-sso.md`](./03-dex-ldap-sso.md) §6） |
+| R1 | 禁用 `admin` 后无人能进 Argo CD | 完全锁死 | **先**验证 `devops-admin` 组映射生效，**再**禁用 admin；保留 break-glass 手段（见 [`03-dex-ldap-sso.md`](./03-dex-ldap-sso.md) §7） |
 | R2 | `policy.default` 权限无法被 `deny` 收回 | 默认权限过宽 | 用最小权限 `role:authenticated` 自定义角色，不要用 `role:readonly` 当默认 |
 | R3 | LDAP 组变更只在下次登录生效 | 离职/降权延迟 | 缩短 Token 生命周期 + 定期复核组成员 |
 | R4 | Gatekeeper Webhook 故障导致集群写入全挂 | 业务中断 | 设 `failurePolicy: Fail` 但配 PDB + 多副本；先 `Ignore` 观察期再收紧 |
@@ -153,7 +153,7 @@ kubectl get cm argocd-cm -n argocd -o jsonpath='{.data.dex\.config}' | head -40
 |---|---|
 | [`01-redis-persistence.md`](./01-redis-persistence.md) | Redis 三分类、当前清单事实、持久化方案 |
 | [`02-ha.md`](./02-ha.md) | HA 拓扑、副本约束、备份恢复 |
-| [`03-dex-ldap-sso.md`](./03-dex-ldap-sso.md) | Dex/LDAP、禁用 admin、组映射 |
+| [`03-dex-ldap-sso.md`](./03-dex-ldap-sso.md) | SSO 身份打通（OIDC 直连 / Dex+OIDC / Dex+LDAP）、禁用 admin、组映射 |
 | [`04-appproject-rbac.md`](./04-appproject-rbac.md) | 三层权限边界 |
 | [`05-appset.md`](./05-appset.md) | ApplicationSet 生成器 |
 | [`06-opa-gatekeeper-impact.md`](./06-opa-gatekeeper-impact.md) | OPA 三层区分 |

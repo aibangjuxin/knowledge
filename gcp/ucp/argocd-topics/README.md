@@ -24,7 +24,7 @@ Kubernetes 原生 GitOps 落地指南 —— 从架构选型到生产运维的�
 | 为什么不用 Crossplane？整体架构长什么样？ | [00](./00-architecture-no-crossplane.md) |
 | Redis 到底要不要持久化？业务 Redis 怎么改？ | [01](./01-redis-persistence.md) |
 | 高可用怎么配？副本数、Redis HA、坑在哪？ | [02](./02-ha.md) |
-| Dex 接 LDAP、组怎么进 Token、怎么禁用 admin？ | [03](./03-dex-ldap-sso.md) |
+| OIDC / LDAP 怎么打通 SSO？组怎么进 Token？怎么禁用 admin？ | [03](./03-dex-ldap-sso.md) |
 | AppProject 边界、RBAC 角色、K8s ServiceAccount？ | [04](./04-appproject-rbac.md) |
 | ApplicationSet 批量分发怎么写？各 generator 边界？ | [05](./05-appset.md) |
 | ApplicationSet 和 Application 到底什么关系？ | [对比速查：ApplicationSet vs Application](../argocd-applicationset-vs-application.md) |
@@ -97,17 +97,22 @@ StatefulSet + `volumeClaimTemplates` 改造、Memorystore 方案对比。
 
 ---
 
-### [03 · Dex / LDAP / SSO](./03-dex-ldap-sso.md)
+### [03 · SSO 身份打通（OIDC 直连 / Dex / LDAP）](./03-dex-ldap-sso.md)
 
-三个**相互独立**的动作，缺一不可：
+**先选模式**（有 OIDC 就别装 Dex），再按四个**相互独立**的动作做：
 
 ```
-① 禁用内置 admin 账号
-② LDAP 组进入 OIDC Token
-③ 组映射为 Argo CD 角色
+① 打通登录链路（oidc.config / dex.config）
+② 组进入 OIDC Token
+③ 组映射为 Argo CD 角色（policy.csv）
+④ 禁用内置 admin 账号
 ```
 
-含：`dex.config` 完整配置、`insecureEnableGroups` + `scopes` 双开关、
+含：**OIDC 直连**完整配置（`oidc.config` 字段全表、groups claim 三条路径、
+Okta/Entra/Keycloak/Auth0/Google 差异表、`sub` vs `email` vs `groups` 的主体语义、
+PKCE / `refreshTokenThreshold` / device code 登录）、
+`dex.config`（LDAP + OIDC）完整配置、组开关的真实语义澄清
+（`insecureEnableGroups` / `scopes` 只对 **OIDC connector** 有效）、
 `bindPW` 的 `$` 转义陷阱、组名大小写敏感、离职人员权限回收、
 **锁死后的 break-glass 恢复路径**。
 
@@ -313,7 +318,7 @@ R0–R12 能力映射、三方接线图与 9 个真实坑（CR 号=Workflow 名�
 
 | 文件 | 用途 | 关键注意事项 |
 |---|---|---|
-| [`dex-ldap-config.yaml`](./examples/dex-ldap-config.yaml) | Dex + LDAP 完整配置 | `insecureEnableGroups: true` + `scopes` 必须同时有 |
+| [`dex-ldap-config.yaml`](./examples/dex-ldap-config.yaml) | Dex + LDAP 完整配置（模式 C） | 组进 token 靠 `groupSearch`（**不靠** `insecureEnableGroups`） |
 | [`argocd-rbac-cm.yaml`](./examples/argocd-rbac-cm.yaml) | 组 → 角色映射 | `scopes` 必须含 `groups`；`policy.default` 不能被 deny 收回 |
 | [`appproject-multi-env.yaml`](./examples/appproject-multi-env.yaml) | 多环境项目边界 | 收紧 `default` 是破坏性操作 |
 | [`applicationset-matrix.yaml`](./examples/applicationset-matrix.yaml) | 批量分发（Matrix/List/Merge） | `template.spec.project` 必须显式写 |

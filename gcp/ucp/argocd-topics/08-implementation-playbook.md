@@ -165,13 +165,23 @@ argocd app diff <test-app>
 
 ---
 
-## 阶段 3 · Dex / LDAP + 组映射（**先做组映射**）
+## 阶段 3 · SSO 打通 + 组映射（**先做组映射**）
 
-### 3.1 步骤
+### 3.0 先选模式（别跳过这步）
+
+| 你的情况 | 走哪条 | 参考 |
+|---|---|---|
+| 公司已有 OIDC IdP（Okta / Entra ID / Keycloak / Auth0 / Google） | **模式 A：OIDC 直连**（无 Dex） | [`03-dex-ldap-sso.md`](./03-dex-ldap-sso.md) §3，示例 [`examples/oidc-direct-config.yaml`](./examples/oidc-direct-config.yaml) |
+| 只有 LDAP / AD | 模式 C：Dex + LDAP | 本页 3.1，示例 [`examples/dex-ldap-config.yaml`](./examples/dex-ldap-config.yaml) |
+
+> 两种模式的**验收标准完全一样**（token 里有 `groups`、`g, <组名>, role:admin` 生效、
+> 该账号能管理 Application），只是配置位置不同。
+
+### 3.1 步骤（模式 C：Dex + LDAP）
 
 ```bash
 # ① 先在 LDAP 侧验证 connector 配置正确
-#    （用 ldapsearch 验证，见 03-dex-ldap-sso.md §3.3）
+#    （用 ldapsearch 验证，见 03-dex-ldap-sso.md §5.3）
 
 # ② 放 LDAP 绑定密码到 Secret
 kubectl -n argocd create secret generic argocd-dex-ldap \

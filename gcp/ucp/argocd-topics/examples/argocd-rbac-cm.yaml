@@ -8,6 +8,10 @@
 #   ② scopes 必须包含 groups，否则 g, <组名>, <角色> 规则永不生效
 #   ③ policy.default 的权限**无法**用 deny 规则收回
 #   ④ 组名建议带命名空间前缀（如 my-org:devops-admin），避免与 SSO claim 撞名
+#
+# 本文件对**三种 SSO 模式通用**（OIDC 直连 / Dex+OIDC / Dex+LDAP）：
+#   · scopes 里写的是 **claim 名**（groups / email），不是 OAuth scope
+#   · 组名的值必须和 token 里的值逐字一致（大小写敏感）
 
 apiVersion: v1
 kind: ConfigMap

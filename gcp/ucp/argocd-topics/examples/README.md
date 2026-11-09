@@ -39,6 +39,7 @@
 | `demo.sh` | [`gitops-layout/`](./gitops-layout/demo.sh) | ✅ | 端到端 Demo（建集群→装 Argo CD→同步） |
 | `argocd-health.sh` | [本目录](./argocd-health.sh) | ✅ | **运行时**体检（纯只读） |
 | `validate-rulesets.py` | [`rulesets/`](./rulesets/validate-rulesets.py) | ❌ | Ruleset 与 CR Check 的**三条契约**（C1/C2/C3）是否自洽 |
+| `validate-rulesets.py`（企业版） | [`rulesets-enterprise/`](./rulesets-enterprise/validate-rulesets.py) | ❌ | 企业版的 **15 条契约**（E1–E15：能力 / 一致性 / 治理） |
 
 > **离线 vs 运行时**：左边 10 个工具**不需要**集群和 Argo CD，
 > 纯靠 Git 里的文件就能跑 → 可以直接进 CI 的 PR 检查。
@@ -112,7 +113,11 @@ kubectl 不会帮你兜底**。
 | HA 里 `server.replicas=3` 但 `ARGOCD_API_SERVER_REPLICAS=1` | 登录被限流误拒（上游 #11387） |
 | `dex.replicas > 1` | dex 用内存存储，多副本登录态不一致 |
 | Dex `bindPW` 是明文 | 密码进 Git |
-| Dex 缺 `insecureEnableGroups` / `groupSearch` | LDAP 组进不了 token → RBAC 全废 |
+| Dex 的 LDAP connector 缺 `groupSearch` / `nameAttr` / `userMatchers` | LDAP 组进不了 token → RBAC 全废 |
+| Dex 的 **OIDC connector** 缺 `insecureEnableGroups` / `scopes: [groups]` | 上游 IdP 的组进不了 token |
+| `dex.config` 顶层写了 `insecureEnableGroups` / `scopes` | Dex 会忽略（Dex 没有这两个顶层字段），别以为它在起作用 |
+| OIDC 直连的 `clientSecret` 写成明文 | 凭据进 Git |
+| OIDC 直连没写任何取组途径（`groups` / `requestedIDTokenClaims` / `enableUserInfoGroups`） | token 里没有组 → RBAC 全废 |
 | Repository Secret 缺 `argocd.argoproj.io/secret-type` label | Argo CD **根本不认**这个 Secret |
 | Secret 里有明文 password / token | 凭据泄露 |
 | AppProject 的 `roles[].policies` 主体名不对 | 该项目角色规则不生效 |
@@ -214,8 +219,9 @@ cd examples/gitops-layout
 
 | 文件 | 用途 | 关键点 |
 |---|---|---|
-| [`dex-ldap-config.yaml`](./dex-ldap-config.yaml) | Dex + LDAP 完整配置 | `insecureEnableGroups: true` + `scopes` 必须同时有 |
-| [`argocd-rbac-cm.yaml`](./argocd-rbac-cm.yaml) | 组 → 角色映射 | `scopes` 必须含 `groups`；`policy.default` 不能被 deny 收回 |
+| [`oidc-direct-config.yaml`](./oidc-direct-config.yaml) | **OIDC 直连**完整配置（模式 A，企业主流） | `clientSecret` 必须是 Secret 引用；请求里要有取组途径（`groups` scope / `requestedIDTokenClaims` / `enableUserInfoGroups`） |
+| [`dex-ldap-config.yaml`](./dex-ldap-config.yaml) | Dex + LDAP 完整配置（模式 C） | 组进 token 靠 `groupSearch`（**不靠** `insecureEnableGroups`） |
+| [`argocd-rbac-cm.yaml`](./argocd-rbac-cm.yaml) | 组 → 角色映射（三种模式通用） | `scopes` 必须含 `groups`；`policy.default` 不能被 deny 收回 |
 | [`appproject-multi-env.yaml`](./appproject-multi-env.yaml) | 多环境项目边界 | 收紧 `default` 是破坏性操作 |
 | [`applicationset-matrix.yaml`](./applicationset-matrix.yaml) | 批量分发（Matrix/List/Merge） | `template.spec.project` 必须显式写 |
 | [`argocd-repositories-githubapp.yaml`](./argocd-repositories-githubapp.yaml) | Repository Secret | 目标分支**不在这里** |
@@ -223,6 +229,7 @@ cd examples/gitops-layout
 | [`ha-values-override.yaml`](./ha-values-override.yaml) | HA 升级 values | `ARGOCD_API_SERVER_REPLICAS` 必须与副本数一致 |
 | [`gitops-layout/`](./gitops-layout/) | **完整 GitOps 仓库骨架** | `bootstrap/` 里的非资源清单必须用 `kustomization.yaml` 排除 |
 | [`rulesets/`](./rulesets/) | **GitHub Rulesets 配置 + 契约检查** | `checkName` 必须等于 `policy.yaml`；`integration_id` 不能漏 |
+| [`rulesets-enterprise/`](./rulesets-enterprise/) | ★ **GitHub Enterprise 版**：组织级 ruleset + metadata 规则 + push 门禁 | 计划/版本不支持的 rule type 会被**静默丢弃** → 先跑能力探针；差异对照见 [`personal-vs-enterprise.md`](./rulesets-enterprise/personal-vs-enterprise.md) |
 
 ---
 

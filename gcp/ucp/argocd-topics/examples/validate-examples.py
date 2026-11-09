@@ -228,7 +228,7 @@ def _check_plaintext(name, data):
 
 
 def check_dex_config(doc, name):
-    """Dex + LDAP：组能不能进 token、密码是不是明文、TLS 三选一。"""
+    """Dex：组能不能进 token（OIDC/LDAP connector 各自的开关）、密码是不是明文、TLS 三选一。"""
     data = doc.get("data") or {}
     raw = data.get("dex.config")
     if not raw:
@@ -250,42 +250,137 @@ def check_dex_config(doc, name):
 
     for conn in connectors:
         cid = conn.get("id", "?")
-        if conn.get("type") != "ldap":
-            continue
+        ctype = conn.get("type")
         ccfg = conn.get("config") or {}
 
-        # ① TLS 三选一
-        tls_flags = [f for f in ("insecureNoSSL", "insecureSkipVerify", "startTLS") if f in ccfg]
-        if not tls_flags:
-            warn(f"[{name}] ldap connector {cid} 没写任何 TLS 选项"
-                 f"（host 端口会决定行为，最好显式写 startTLS）")
-        if ccfg.get("insecureNoSSL"):
-            err(f"[{name}] ldap connector {cid} insecureNoSSL=true → 密码明文传输")
-        if ccfg.get("insecureSkipVerify"):
-            err(f"[{name}] ldap connector {cid} insecureSkipVerify=true → 不校验证书")
+        if ctype == "ldap":
+            # ① TLS 三选一
+            tls_flags = [f for f in ("insecureNoSSL", "insecureSkipVerify", "startTLS") if f in ccfg]
+            if not tls_flags:
+                warn(f"[{name}] ldap connector {cid} 没写任何 TLS 选项"
+                     f"（host 端口会决定行为，最好显式写 startTLS）")
+            if ccfg.get("insecureNoSSL"):
+                err(f"[{name}] ldap connector {cid} insecureNoSSL=true → 密码明文传输")
+            if ccfg.get("insecureSkipVerify"):
+                err(f"[{name}] ldap connector {cid} insecureSkipVerify=true → 不校验证书")
 
-        # ② bindPW 必须是环境变量引用，不能是明文
-        bind_pw = str(ccfg.get("bindPW", ""))
-        if bind_pw and not bind_pw.startswith("$"):
-            err(f"[{name}] ldap connector {cid} bindPW 是明文"
-                f" → 必须写成 $dex.ldap.bindPW 并用 Secret 注入")
+            # ② bindPW 必须是环境变量引用，不能是明文
+            bind_pw = str(ccfg.get("bindPW", ""))
+            if bind_pw and not bind_pw.startswith("$"):
+                err(f"[{name}] ldap connector {cid} bindPW 是明文"
+                    f" → 必须写成 $dex.ldap.bindPW 并用 Secret 注入")
 
-        # ③ 组搜索
-        if not ccfg.get("groupSearch"):
-            err(f"[{name}] ldap connector {cid} 没有 groupSearch"
-                f" → token 里不会有组 → RBAC 的 g, 规则全部失效")
-        gs = ccfg.get("groupSearch") or {}
-        if gs and not gs.get("nameAttr"):
-            warn(f"[{name}] ldap connector {cid} groupSearch 没写 nameAttr"
-                 f"（组名取不到）")
+            # ③ 组搜索（LDAP 模式下这是组能不能进 token 的**唯一**决定因素）
+            if not ccfg.get("groupSearch"):
+                err(f"[{name}] ldap connector {cid} 没有 groupSearch"
+                    f" → token 里不会有组 → RBAC 的 g, 规则全部失效")
+            gs = ccfg.get("groupSearch") or {}
+            if gs and not gs.get("nameAttr"):
+                warn(f"[{name}] ldap connector {cid} groupSearch 没写 nameAttr"
+                     f"（组名取不到）")
+            if gs and not gs.get("userMatchers"):
+                warn(f"[{name}] ldap connector {cid} groupSearch 没写 userMatchers"
+                     f"（组成员匹配不上 → 组永远查不到）")
 
-    # ④ 组进 token 的总开关
-    if cfg.get("insecureEnableGroups") is not True:
-        err(f"[{name}] dex.config 缺 insecureEnableGroups: true"
-            f" → LDAP 组不会出现在 ID Token 里 → RBAC 组映射必然失效")
-    scopes = cfg.get("scopes") or []
-    if isinstance(scopes, list) and "groups" not in scopes:
-        err(f"[{name}] dex.config scopes={scopes} 不含 groups")
+        elif ctype == "oidc":
+            # OIDC connector：组来自上游 IdP，必须显式放行并向上游请求
+            if ccfg.get("insecureEnableGroups") is not True:
+                err(f"[{name}] oidc connector {cid} 缺 insecureEnableGroups: true"
+                    f" → 上游 IdP 的组不会进 token → RBAC 组映射失效")
+            scopes = ccfg.get("scopes") or []
+            if isinstance(scopes, str):
+                scopes = [scopes]
+            if "groups" not in scopes:
+                err(f"[{name}] oidc connector {cid} scopes={scopes} 不含 groups"
+                    f" → 没向上游 IdP 请求组")
+            secret = str(ccfg.get("clientSecret", ""))
+            if secret and not secret.startswith("$"):
+                err(f"[{name}] oidc connector {cid} clientSecret 是明文"
+                    f" → 必须写成 $dex.<name>.clientSecret 并用 Secret 注入")
+
+    # ④ 顶层的 insecureEnableGroups / scopes 不是 Dex 的配置字段 → 写了也是装饰
+    for key in ("insecureEnableGroups", "scopes"):
+        if key in cfg:
+            warn(f"[{name}] dex.config 顶层有 {key}"
+                 f" → Dex 会忽略它（这不是 Dex 的顶层字段）"
+                 f"；OIDC connector 的这两个字段要写在 connector 的 config 里面，"
+                 f"LDAP connector 根本不需要它们")
+
+
+def check_oidc_config(doc, name):
+    """OIDC 直连（模式 A）：issuer 对不对、密钥是不是明文、组能不能进 token。"""
+    data = doc.get("data") or {}
+
+    # ① url 必须是 https，否则回调地址不对
+    url = str(data.get("url", ""))
+    if not url:
+        err(f"[{name}] argocd-cm 没有 url → OIDC 回调地址推不出来")
+    elif not url.startswith("https://"):
+        err(f"[{name}] url={url!r} 不是 https → OIDC 回调/登出跳转会有问题")
+
+    raw = data.get("oidc.config")
+    if not raw:
+        err(f"[{name}] argocd-cm 没有 oidc.config")
+        return
+    try:
+        cfg = load(str(raw))
+    except Exception as exc:
+        err(f"[{name}] oidc.config 不是合法 YAML：{exc}")
+        return
+    if not isinstance(cfg, dict):
+        err(f"[{name}] oidc.config 解析结果不是字典")
+        return
+
+    # ② 必填字段
+    issuer = str(cfg.get("issuer", ""))
+    if not issuer:
+        err(f"[{name}] oidc.config 缺 issuer")
+    elif not issuer.startswith("https://"):
+        err(f"[{name}] oidc.config issuer={issuer!r} 不是 https")
+
+    if not cfg.get("clientID"):
+        err(f"[{name}] oidc.config 缺 clientID")
+
+    # ③ clientSecret 必须是 Secret 引用，不能是明文
+    secret = str(cfg.get("clientSecret", ""))
+    if not secret:
+        err(f"[{name}] oidc.config 缺 clientSecret")
+    elif not secret.startswith("$"):
+        err(f"[{name}] oidc.config clientSecret 是明文"
+            f" → 必须写成 $oidc.<name>.clientSecret 或 $<secret>:<key> 并用 Secret 注入")
+
+    # ④ 组能不能进 token（三条路径任选其一）
+    scopes = cfg.get("requestedScopes") or []
+    if isinstance(scopes, str):
+        scopes = [scopes]
+    claims = cfg.get("requestedIDTokenClaims") or {}
+    has_groups = (
+        "groups" in scopes
+        or "groups" in claims
+        or cfg.get("enableUserInfoGroups") is True
+    )
+    if not has_groups:
+        warn(f"[{name}] oidc.config 里找不到任何取组途径"
+             f"（requestedScopes 无 groups / requestedIDTokenClaims 无 groups / "
+             f"enableUserInfoGroups 未开）→ token 里没有组 → RBAC 的 g, 规则失效")
+    else:
+        note(f"[{name}] oidc.config 取组途径 ✓")
+
+    # ⑤ email scope：按邮箱授权个别用户时才需要
+    if "email" not in scopes:
+        warn(f"[{name}] oidc.config requestedScopes 不含 email"
+             f" → 只能用组授权，无法按邮箱授权个别用户")
+
+    # ⑥ refreshTokenThreshold 格式
+    threshold = str(cfg.get("refreshTokenThreshold", ""))
+    if threshold:
+        m = re.match(r"^(\d+)([smh])$", threshold)
+        if not m:
+            err(f"[{name}] oidc.config refreshTokenThreshold={threshold!r} "
+                f"格式不合法（应为 30s / 5m / 1h 这种）")
+        elif int(m.group(1)) * {"s": 1, "m": 60, "h": 3600}[m.group(2)] == 0:
+            warn(f"[{name}] oidc.config refreshTokenThreshold=0s"
+                 f" → Token 过期即需重新登录")
 
 
 def check_ha_values(doc, name):
@@ -508,7 +603,15 @@ def dispatch(doc, name, fname=""):
     if kind == "ConfigMap" and meta_name == "argocd-rbac-cm":
         check_argocd_rbac_cm(doc, full)
     elif kind == "ConfigMap" and meta_name == "argocd-cm":
-        check_dex_config(doc, full)
+        data = doc.get("data") or {}
+        # 三种模式二选一：OIDC 直连（oidc.config）或 Dex（dex.config）
+        if data.get("oidc.config"):
+            check_oidc_config(doc, full)
+        if data.get("dex.config"):
+            check_dex_config(doc, full)
+        if not data.get("oidc.config") and not data.get("dex.config"):
+            err(f"[{full}] argocd-cm 既没有 oidc.config 也没有 dex.config"
+                f" → 没有任何 SSO 入口")
     elif kind == "Secret":
         check_repository_secret(doc, full)
     elif kind == "StatefulSet":
