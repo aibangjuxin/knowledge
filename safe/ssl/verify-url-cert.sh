@@ -157,6 +157,20 @@ print_kv() {
   printf "%-26s %s\n" "$1" "$2"
 }
 
+# Extract the value from a "<label>: <value>" handshake line.
+#
+# An absent line must render as an explicit "not available" rather than as an
+# empty string, which would look like a missing value for a field that is
+# genuinely not reported (e.g. "Temp Key:" does not exist under TLS 1.3).
+kv_from_line() {
+  local line="$1"
+  if [ -z "$line" ]; then
+    printf "not available"
+  else
+    printf "%s" "${line#*: }"
+  fi
+}
+
 print_section() {
   echo
   echo "$HEAVY"
@@ -566,11 +580,11 @@ GROUP_LINE=$(grep -m1 -E '^[[:space:]]*Negotiated TLS1.3 group:' "$RAW_OUTPUT" |
 
 print_kv "Negotiated protocol:" "${PROTO:-not available}"
 print_kv "Negotiated cipher:" "${CIPHER:-not available}"
-print_kv "Peer signature type:" "${PEER_LINE#*: }"
-print_kv "Peer signing digest:" "${DIGEST_LINE#*: }"
-print_kv "Handshake hash:" "${HASH_LINE#*: }"
-print_kv "Key-exchange group:" "${GROUP_LINE#*: }"
-print_kv "Server temp key:" "${TEMP_KEY_LINE#*: }"
+print_kv "Peer signature type:" "$(kv_from_line "$PEER_LINE")"
+print_kv "Peer signing digest:" "$(kv_from_line "$DIGEST_LINE")"
+print_kv "Handshake hash:" "$(kv_from_line "$HASH_LINE")"
+print_kv "Key-exchange group:" "$(kv_from_line "$GROUP_LINE")"
+print_kv "Server temp key:" "$(kv_from_line "$TEMP_KEY_LINE")"
 print_kv "Verify result:" "${VERIFY_LINE:-not available}"
 
 # --- DH / key-exchange parameter strength -----------------------------------
@@ -580,7 +594,6 @@ print_kv "Verify result:" "${VERIFY_LINE:-not available}"
 # Careful: "Server public key is N bit" reports the CERTIFICATE key size, not
 # the DH group size (verified against a 2048-bit cert with 1024-bit DH, which
 # printed 2048). The ephemeral DH size lives in "Server Temp Key: DH, N bits".
-DH_TEMP=$(printf "%s\n" "$RAW_CONTENT" | grep -m1 -E '(Peer|Server) Temp Key:' | sed 's/^[^:]*:[[:space:]]*//')
 DH_BITS="$(dh_group_bits "$RAW_CONTENT")"
 
 if [ -n "$DH_BITS" ]; then
