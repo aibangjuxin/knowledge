@@ -17,6 +17,14 @@ Kubernetes 原生 GitOps 落地指南 —— 从架构选型到生产运维的�
 00 → 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10 → 11
 ```
 
+### 深入（可选）
+
+```
+git-apps/ 8 篇（自研 GitHub App / CR Check 专题）
+  → prow-pulls（Prow 怎么设计合并门）
+    → sigs（sigs 生态里还有哪些范式值得抄）
+```
+
 ### 只想解决一个具体问题
 
 | 你的问题 | 看哪篇 |
@@ -45,6 +53,9 @@ Kubernetes 原生 GitOps 落地指南 —— 从架构选型到生产运维的�
 | **CR Check（Go）的详细设计：包结构 / 接口 / 端点 / 里程碑 / 工作量** | [13](./git-apps/13-cr-check-go-design.md) |
 | **★ GitHub Rulesets 怎么配？怎么和 GitHub App 联合成合并门禁？** | [14](./git-apps/14-rulesets-and-gitapp-gate.md) |
 | **★ CR Check 的 Go 代码在哪？怎么本地跑起来验证？** | [cr-check](./git-apps/cr-check/) |
+| **Probot 是什么？为什么我们不用它？** | [17](./git-apps/17-probot-apps.md) |
+| **Prow 的 PR 门禁怎么设计的？哪些能直接抄到 CR Check？** | [prow-pulls](./prow-pulls.md) |
+| **Kubernetes SIGs 生态地图？哪些设计范式值得抄？** | [sigs](./sigs.md) |
 
 ---
 
@@ -284,7 +295,7 @@ R0–R12 能力映射、三方接线图与 9 个真实坑（CR 号=Workflow 名�
 > CR 在内部 CR 管理平台上处于**可执行（implement/approved）状态**，
 > 且合并必须落在 **Maintenance Window** 内。
 >
-> **本目录 6 篇文档按这个顺序读：**
+> **本目录 8 篇文档按这个顺序读：**
 
 | # | 文档 | 直接回答 |
 |---|---|---|
@@ -295,6 +306,7 @@ R0–R12 能力映射、三方接线图与 9 个真实坑（CR 号=Workflow 名�
 | 5 | [`14-rulesets-and-gitapp-gate.md`](./git-apps/14-rulesets-and-gitapp-gate.md) | “Rulesets 零基础 + 和 CR Check 怎么咬合 + 分支保护怎么分层配？”<br>含：Ruleset 五个组成部分与**分层叠加取最严**、25 条 API 规则清单、**唯一耦合点 `integration_id`**、**4 种静默失效**、分层 ruleset 完整 JSON、与 release 流程 14 步逐条映射、**Ruleset 表达不了的约束**、Merge Queue、18 条坑 |
 | 6 | [`15-commit-message-cr-prefix.md`](./git-apps/15-commit-message-cr-prefix.md) | “commit message 必须以 `CR123456` 开头 —— 最小示例怎么配？”<br>含：两个例子（正/反）、三层判定模型（L1 hook / L2 Ruleset / L3 App）、**两条最小 ruleset JSON**、RE2 正则约束、**★ squash merge 到底校验谁**、★ metadata 规则需 Enterprise、本地模拟器、降级方案 |
 | 7 | [`16-ruleset-install-runbook.md`](./git-apps/16-ruleset-install-runbook.md) | “JSON 怎么装上去才生效？”<br>含：组织级/仓库级端点差异、**安装六步顺序**、UI 导入 / `gh api` / IaC / GitOps 四条路径、**★ PUT 全量替换的坑**、**三层验证**、熔断纪律、权限矩阵、报错对照表 |
+| 8 | [`17-probot-apps.md`](./git-apps/17-probot-apps.md) | “Probot 是什么？我们为什么不用它？”<br>含：Probot = 写 GitHub App 的 Node.js 脚手架、GitHub App vs PAT vs Actions 选型、**App/webhook/`context.octokit` 核心概念**、Hello World 源码、`APP_ID`/`WEBHOOK_SECRET`/`PRIVATE_KEY` 三个环境变量与部署形态、生态现成 app 清单、**Probot vs 我们的 Go 版 CR Check 逐项对照** |
 | ★ | [`cr-check/`](./git-apps/cr-check/) | **★ 可运行的 Go 实现**（本文档集的代码部分）<br>CR Check 服务完整代码 + 策略配置 + K8s 清单 + 测试脚本<br>**30 秒跑起来** → [`cr-check/README.md`](./git-apps/cr-check/README.md) §0 |
 | ★ | [`examples/rulesets/`](./examples/rulesets/) | **★ 可直接下发的 Ruleset 配置 + 契约检查**<br>5 份 ruleset JSON + `apply-rulesets.sh` + `validate-rulesets.py`（C1/C2/C3 断言） |
 
@@ -309,6 +321,60 @@ R0–R12 能力映射、三方接线图与 9 个真实坑（CR 号=Workflow 名�
    required_status_checks 的 context（= policy.yaml 的 checkName）+ integration_id（来源 App）。
    ★ 接错 → 门禁静默失效 → 见 doc 14 §4.5 与 examples/rulesets/validate-rulesets.py。
 ```
+
+---
+
+### [prow-pulls · 从 kubernetes-sigs/prow 的 PR 管理机制，看 GitHub 门禁该怎么设计](./prow-pulls.md)
+
+> **背景**：上面 8 篇讲的是「**我们自己怎么造**」，
+> 这一篇讲的是「**业界最成熟的门禁系统怎么设计**」——Prow 是 K8s 社区自己的 CI/CD 系统，
+> 它的合并门（tide）跑在几千个 PR 上，踩过的坑比我们都多。
+
+**直接回答**：「Prow 是怎么让『这个 PR 现在为什么不能合并』变成一个
+**永远存在、永远准确、人和机器都能读**的东西的？哪些能直接抄？」
+
+**Prow 最有价值的不是"它很强"，而是它的「可解释性」——而这正是我们 CR Check 缺的一层。**
+
+取材方式：直接读 GitHub API 的真实数据（PR 列表、bot 评论、commit status、label 定义、Prow 源码），
+所有关键结论附可复现命令（见附录 B）。
+
+含：★ **值得学习的 13 个设计**（逐条：现象 → 证据 → 为什么 → 怎么抄）——
+聚合 context 且说明「缺什么」（§2.1）、`do-not-merge/*` 命名空间承载所有阻塞原因（§2.2）、
+**结论必须绑定 tree hash**（§2.3）、状态失效时同步撤销标记+重请 review+留痕（§2.4）、
+**审批粒度跟着改动路径走**（OWNERS 模型，§2.5）、trust gate 与 merge gate 分离（§2.6）、
+命令必须带理由且**在原生处理之前拦**（§2.8）、失败信息精确到可执行（§2.9）、
+**自己的错误输出不能被自己当命令解析**（§2.10）、bot 评论嵌机器可读元数据（§2.11）、
+配置即代码 + 热生效（§2.12）；值得警惕的地方（§3）→ 映射到 CR Check 的 P1/P2/P3 行动清单（§4）。
+
+> ⚠️ 诚实说明：Prow 用的是 **commit status**，**不是** check run（§0.2）——
+> 这也是我们为什么自研 App + 走 check run 那条路时，不能照抄 Prow 的关键差异点。
+
+---
+
+### [sigs · Kubernetes SIGs 生态地图，以及我们能借鉴什么](./sigs.md)
+
+> **背景**：`kubernetes-sigs` 是 K8s 社区所有「**没进核心仓库、但已成事实标准**」项目的落地处。
+> **该抄的是它的设计范式，不是它的项目清单。**
+
+**直接回答**：「除了 Prow，这 210 个仓库里还有哪些设计值得抄到 GitOps / CR Check 上？」
+
+**sigs 值得学的不是"用哪个项目"，而是"它怎么把一个生态项目做成事实标准"。**
+
+取材方式：直接读 GitHub API 真实数据（仓库清单、topics、license、star、
+`kubernetes/community` 的 `sigs.yaml`、各仓库 README 原文），**数据快照 2026-11-10**。
+
+含：组织结构三层拆解与 `sigs.yaml` 机制（§1）、**210 个仓库生态地图**（§2）、
+八个能力域（§3）、★ **值得借鉴的 8 个设计**（§4）——
+**声明式 API + 独立 provider**（Cluster API / Gateway API / CSI，§4.1）、
+**先有 conformance 再长生态**（§4.2）、**Kueue AdmissionCheck：外部系统参与准入决策的状态机**（§4.3）、
+**cli-utils inventory：显式记录"这次 apply 了什么"**（§4.4）、
+**structured-merge-diff 的字段所有权模型**（§4.5）、kubectl-validate 与服务端同源（§4.6）、
+**时间线版本化**（§4.7）、Prow 的定位索引（§4.8）；
+值得警惕的地方（§5）→ 行动清单 P1/P2/P3（§6）+ 证据速查与复现命令（§7–§8）。
+
+> 📌 两篇的关系：[`prow-pulls.md`](./prow-pulls.md) 拆 Prow 的 **13 个门禁设计**，
+> [`sigs.md`](./sigs.md) 拆 sigs 里**其它仓库**的设计（§4.1–§4.7）并补上 Prow 的定位（§4.8），
+> **不重复**那 13 条。建议按 `prow-pulls` → `sigs` 的顺序读。
 
 ---
 

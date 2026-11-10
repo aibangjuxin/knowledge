@@ -491,10 +491,13 @@ This pull-request has been approved by: hoxhaeris (Author self-approved), petr-m
 <details >
 Needs approval from an approver in each of these files:
 
-- ~~[OWNERS](...)~~ [petr-muller]     ← 删除线表示已满足
+- ~~[OWNERS](https://github.com/kubernetes-sigs/prow/blob/main/pkg/OWNERS)~~ [petr-muller]     ← 删除线表示已满足
 </details>
 <!-- META={"approvers":[]} -->        ← ★ 空数组 = 已满足
 ```
+
+> 注：真实评论里这个链接指向该 PR 涉及的 OWNERS 文件（此处沿用上文的 `pkg/OWNERS`）。
+> **删除线 + 人名** 是已满足的视觉信号——我们 CR Check 要复用这个表达（见 §2.8）。
 
 **为什么好**
 

@@ -17,6 +17,7 @@
 | 6 | [`14-rulesets-and-gitapp-gate.md`](./14-rulesets-and-gitapp-gate.md) | 「**GitHub Rulesets 怎么配？怎么和 GitHub App 联合成合并门禁？**」<br>零基础 Ruleset 教程（分层/叠加/enforcement/bypass）、25 条 API 规则清单、**Ruleset ↔ App 的唯一耦合点 `integration_id`**、4 种静默失效、分层 ruleset 完整 JSON、与 release 流程 14 步的逐条映射、Merge Queue、18 条坑 |
 | 7 | [`15-commit-message-cr-prefix.md`](./15-commit-message-cr-prefix.md) | 「**commit message 必须以 `CR123456` 开头，Ruleset 怎么配？**」<br>最小可跑示例：两个例子（正/反）、三层判定模型（L1 本地 hook / L2 Ruleset / L3 CR Check App）、两条最小 ruleset JSON、**RE2 正则约束**、**squash merge 时到底校验谁**、本地模拟器、Enterprise 降级方案 |
 | 8 | [`16-ruleset-install-runbook.md`](./16-ruleset-install-runbook.md) | 「**JSON 怎么装上去才会生效？**」<br>组织级 vs 仓库级端点差异、**安装六步顺序**（App 先跑一次 check run）、UI 导入 / `gh api` / IaC / GitOps 四条路径、**PUT 是全量替换的坑**、**三层验证（配置+聚合+联调）**、熔断纪律、权限矩阵、**报错对照表** |
+| 9 | [`17-probot-apps.md`](./17-probot-apps.md) | 「**Probot 是什么？我们为什么不用它？**」<br>Probot = 写 GitHub App 的 Node.js 脚手架、App/Installation/webhook/Octokit 核心概念、Hello World 源码、3 个环境变量与部署形态、生态现成 app 清单、**Probot vs 我们的 Go 版 CR Check 对照** |
 | ★ | [`cr-check/`](./cr-check/) | **★ 可运行的 Go 实现**（本文档集的代码部分）<br>CR Check 服务的完整代码：`cmd/server` + 9 个 `internal` 包、策略配置、K8s 清单、测试脚本。<br>**30 秒跑起来** → 见 [`cr-check/README.md`](./cr-check/README.md) §0 |
 | ★ | [`../examples/rulesets/`](../examples/rulesets/) | **★ 可直接下发的 Ruleset 配置 ＋ 契约静态检查 ＋ commit 前缀模拟器**<br>8 份 ruleset JSON（org 基线 / feature 规范 / dev / release / prod / push / **CR 前缀 ×2**）+ `apply-rulesets.sh` + `validate-rulesets.py` + `simulate-commit-gate.py` |
 
