@@ -3,6 +3,8 @@
 > 在 Pi（终端里的编码 Agent）里点击本地 Markdown 链接，自动在 Rex 终端当前 pane **右侧开一个分屏**，用 terminal-browser 渲染出带样式的预览，Pi 保持焦点不被抢走。
 >
 > 安装日期：2026-11-12 · 环境：macOS 27.2 · Pi 1.5.2 · Rex 0.0.1793981048-g01d6c4 · Node v26.12.1
+>
+> **2026-11-12 追加**：[第十四节](#十四-让-agent-稳定输出可点链接2026-11-12-补充) —— 「Agent 输出的 .md 一个都点不开」的排查与三层自动化改造（system prompt 规则 + 技能 + 自检工具）。
 
 ---
 
@@ -325,6 +327,9 @@ env HOME=~/.local/state/rex-markdown-browser/home \
 | `~/.local/state/rex-markdown-browser/` | terminal-browser 的隔离 HOME / profile / config / cache / daemon |
 | `~/.pi/node_modules/@earendil-works/{pi-coding-agent,pi-tui}` | 软链，给测试与 marked 解析兜底 |
 | `/opt/homebrew/bin/terminal-browser` | Homebrew cask 安装的渲染器 |
+| `~/.pi/agent/APPEND_SYSTEM.md` | **2026-11-12 追加**：把「.md 引用必须写成可点链接」写进 system prompt（见第十四节） |
+| `~/.pi/agent/skills/rex-md-links/SKILL.md` | **2026-11-12 追加**：按需加载的详细规则手册 |
+| `~/.pi/agent/skills/rex-md-links/check.sh` | **2026-11-12 追加**：路径能不能被改写的自检工具 |
 
 ---
 
@@ -346,6 +351,7 @@ env HOME=~/.local/state/rex-markdown-browser/home \
 | 现象 | 排查 |
 | --- | --- |
 | 链接不可点击 | 没跑 `/reload`；或 Pi 不在 Rex 里（无 `REX_SESSION`/`REX_BLOCK`）；或 Pi 提示 "Rex Markdown requires a local Rex terminal"（当前是远程 Rex server） |
+| **Agent 输出的路径点了没反应** | Agent 把路径写成了行内代码 / 纯文本 / 代码块，而不是 `[文字](路径)` 语法 → 扩展根本没得可改写。**详见第十四节** |
 | 提示 handler 未安装 | 跑 `node ~/.pi/tools/rex-markdown/install.mjs` |
 | 预览开了但空白/报错 | 看 `~/Library/Application Support/Rex Markdown/handler.log`，以及 Rex 分屏的启动报错；浏览器日志在 `~/.local/state/rex-markdown-browser/state` |
 | 滚动预览很卡/掉帧 | `render.fps` 必须是 30；`terminal-browser config get render.fps`（用上面的 env）确认 |
@@ -384,6 +390,9 @@ rm -rf ~/.pi/node_modules/@earendil-works
 ### 10.1 结论
 
 **不需要做任何额外处理**。只要链接满足下面的条件，Pi 渲染每一条新消息时都会自动把它改写成 `rex-md://open/<ticket>`，终端里直接可点。你要做的只是让 Agent 在消息里写出 `.md` 链接。
+
+> ⚠️ **反过来说**：Agent 如果把路径写成行内代码、纯文本或塞在代码块里，扩展就一个都扫不到 → 一个都不会可点。
+> 这一条是实际踩过的坑，完整排查与自动化改造见 **[第十四节](#十四-让-agent-稳定输出可点链接2026-11-12-补充)**。
 
 ### 10.2 判定规则（来自 `bridge.mjs` 的 `resolveMarkdownPath()`）
 
@@ -577,4 +586,243 @@ open "rex-md://open/$(printf '0%.0s' {1..64})"; sleep 3
 cat ~/Library/Application\ Support/"Rex Markdown"/handler.log
 
 # 8. 最后：在 Pi 会话里执行 /reload
+```
+
+---
+
+## 🔗 十四、让 Agent 稳定输出可点链接（2026-11-12 补充）
+
+> 这一节记录一次真实踩坑：**“为什么 Agent 列了一堆 Markdown，我一个都点不开”**，
+> 以及为了让 Agent **每次都自动**写成可点链接而做的三层改造。
+
+### 14.1 起因：不是工具坏了，是 Agent 写错了格式
+
+现象：Agent 回答里列了几十个 `.md` 文件，**一个都点不开**，但 hover 链接看到的是原始路径而不是 `rex-md://`。
+
+定位结论：**扩展只改写「真正的 Markdown 链接 token」**。
+`bridge.mjs` 的 `rewriteMarkdown()` 只处理 `token.type === "link"`，其余一律跳过：
+
+```js
+if (token.type === "link") {                    // ← 只有这种会被改写
+  const target = linkFor(token.href);
+  ...
+} else if (!["code", "codespan", "html", "image"].includes(token.type)) {
+  // 递归处理子节点
+}
+```
+
+用真实代码验证（`marked` 的 lexer + `bridge.mjs` 的 rewriteMarkdown）：
+
+| Agent 写的 | 改写结果 | 能预览？ |
+| --- | --- | --- |
+| `` `base/00-index.md` `` | 原样不动（`codespan`） | ❌ |
+| `base/01-struct.md`（纯文本） | 原样不动 | ❌ |
+| ` ```代码块``` 里的路径` | 原样不动（`code`） | ❌ |
+| `![图](a.md)` | 原样不动（`image`） | ❌ |
+| `[base/01-struct.md](base/01-struct.md)` | → `rex-md://open/<ticket>` | ✅ |
+| `[跨项目](file:///Users/lex/git/.../x.md)` | → `rex-md://open/<ticket>` | ✅ |
+
+**结论：链接可点与否，完全取决于 Agent 有没有“写成链接”。**
+扩展本身、ticket 机制、handler 调度全都是好的。
+
+> 这也解释了第十节 10.7 的结论：“Pi 消息”指的是**终端 TUI 里渲染出来的对话气泡**，
+> 改写发生在渲染层，所以模型上下文里存的永远是原文。
+
+### 14.2 定位手法（下次遇到直接照抄）
+
+```bash
+# 1) 确认 Pi 在 Rex 里跑（扩展靠这两个环境变量定位发起点击的 pane）
+env | grep -E '^REX_(SESSION|BLOCK|SERVER)'
+
+# 2) 看 ticket 有没有在签发（有 = 扩展扫到了链接）
+ls -lt ~/Library/Application\ Support/"Rex Markdown"/tickets/ | head
+
+# 3) 看 handler 有没有真的被调用
+tail -20 ~/Library/Application\ Support/"Rex Markdown"/handler.log
+
+# 4) 直接验证某个写法会不会被改写（最直接）
+node --input-type=module -e '
+import { rewriteMarkdown, resolveMarkdownPath } from "/Users/lex/.pi/tools/rex-markdown/bridge.mjs";
+import { createRequire } from "node:module";
+const require = createRequire("/Users/lex/.pi/node_modules/@earendil-works/pi-coding-agent/package.json");
+const { lexer } = require("marked");
+const cwd = process.cwd();
+const linkFor = (h) => { const p = resolveMarkdownPath(h, cwd); return p ? "rex-md://open/<ticket>" : null; };
+const s = "- [a.md](a.md)\n- `b.md`\n";
+console.log(rewriteMarkdown(s, lexer(s), linkFor));
+'
+```
+
+### 14.3 三层改造（让 Agent 每次都自动写成可点链接）
+
+| 层 | 文件 | 作用 | 生效时机 |
+| --- | --- | --- | --- |
+| L1 · 常驻 | `~/.pi/agent/APPEND_SYSTEM.md` | 把规则写进 **system prompt** | **新会话**（见 14.4） |
+| L2 · 按需 | `~/.pi/agent/skills/rex-md-links/SKILL.md` | 详细规则 + 对照表 + 坑位，命中任务时加载 | `/reload` 后可用 |
+| L3 · 工具 | `~/.pi/agent/skills/rex-md-links/check.sh` | 输出前自检路径，避免给死链 | 随时 |
+
+#### L1：`~/.pi/agent/APPEND_SYSTEM.md`（全文）
+
+```markdown
+# 输出规范：Markdown 文件引用必须用可点击链接
+
+当你在回答中引用磁盘上的 .md / .markdown 文件时（列目录、指向刚写的笔记、给出“看这篇/看那个”），
+必须写成真正的 Markdown 链接，而不是行内代码或纯文本。
+
+## 规则
+
+1. 用真正的 Markdown 链接：`[文件名.md](路径)`
+2. 显示文字就是文件名本身，不要再套反引号。
+3. 路径必须能解析到真实存在的文件：
+   - 同项目内 → 相对 Pi 启动 cwd 的相对路径
+   - 跨项目 / 不确定 cwd → `file://` 绝对 URL
+4. 绝对不要用下面这些写法（都不会被改写）：
+   - 行内代码 `docs/a.md`
+   - 纯文本 docs/a.md
+   - 放在 ``` 代码块里的路径
+   - `![a](a.md)` 图片语法
+   - 指向目录的链接 `[d03/](d03/)`
+   - 指向 .go / .sh / .pdf 的链接（只支持 .md / .markdown）
+
+## 为什么要这么写
+
+本机装了 Rex Markdown 扩展：它在 Pi 渲染你的消息时扫描 `[文字](链接)`，
+把指向本地 .md 的链接换成 rex-md://open/<ticket>，
+点击后在 Rex 终端当前 pane 右侧开一个分屏，用 terminal-browser 渲染出带样式的预览。
+
+改写发生在渲染层，所以：
+- 只有真正的链接语法才会被扫描 → 你必须“写成链接”才行
+- 已经滚过去的旧消息不会被回溯改写 → 需要重新输出一遍（或 /reload）
+- 模型上下文里存的仍是原文 → 不影响任何功能
+
+## 自检
+
+bash ~/.pi/agent/skills/rex-md-links/check.sh path/to/file.md
+输出 OK → /绝对路径 才会被改写；输出 SKIP 就别把它写成链接。
+
+验证：Cmd/Ctrl + hover 链接，目标应是 rex-md://open/<64位hex>。
+```
+
+> ⚠️ `APPEND_SYSTEM.md` 的**项目版优先级高于全局版**（不合并）：
+> `.pi/APPEND_SYSTEM.md` > `~/.pi/agent/APPEND_SYSTEM.md`。
+> 源码依据：`dist/core/resource-loader.js:970` `discoverAppendSystemPromptFile()`。
+
+#### L2：`~/.pi/agent/skills/rex-md-links/SKILL.md`
+
+frontmatter 里的 `description` 决定路由命中率，写全了关键词：
+
+```yaml
+---
+name: rex-md-links
+description: Make Markdown file references clickable so the Rex Markdown extension renders them in a
+  side-by-side preview pane. Use when listing, enumerating, summarizing, or pointing at .md /
+  .markdown files (docs, notes, READMEs, design docs) in your reply — e.g. "list the markdown files",
+  "which doc should I read", "here are the notes", or whenever your answer contains file paths the
+  user may want to open. Triggers on mentions of Rex Markdown preview, rex-md:// links, markdown
+  links not clickable, or "怎么让文档能点开".
+---
+```
+
+正文包含：判定规则、写法对照表、什么时候该主动加链接、验证方法、常见问题。
+
+#### L3：`~/.pi/agent/skills/rex-md-links/check.sh`
+
+```bash
+#!/usr/bin/env bash
+# 输出： OK → /绝对路径   会被改写
+#        SKIP             不会被改写，别写成链接
+set -uo pipefail
+BRIDGE="$HOME/.pi/tools/rex-markdown/bridge.mjs"
+[ -f "$BRIDGE" ] || { echo "SKIP   找不到 bridge.mjs：$BRIDGE" >&2; exit 1; }
+[ "$#" -eq 0 ] && { echo "用法: bash $0 <路径...>" >&2; exit 1; }
+node --input-type=module -e '
+const { resolveMarkdownPath } = await import(process.argv[1]);
+for (const p of process.argv.slice(2)) {
+  const r = resolveMarkdownPath(p, process.cwd());
+  console.log(r ? "OK    → " + r : "SKIP");
+}
+' "$BRIDGE" "$@"
+```
+
+实测输出：
+
+```
+daydayup/md/03-if-for.md       OK    → /Users/lex/git/go/daydayup/md/03-if-for.md
+base/00-index.md               OK    → /Users/lex/git/go/base/00-index.md
+nonexistent.md                 SKIP
+https://a.com/b.md            SKIP
+daydayup/d03/main.go           SKIP
+file:///Users/lex/git/knowledge/macos/terminal/Rex/Rex-Markdown-for-pi.md
+                               OK    → /Users/lex/git/knowledge/macos/terminal/Rex/Rex-Markdown-for-pi.md
+```
+
+### 14.4 ⚠️ 激活：`/reload` 不够，**必须开新会话**
+
+读 Pi 源码得到的结论（`@earendil-works/pi-coding-agent` 1.5.2）：
+
+```
+dist/core/agent-session.js:2794   this._rebuildSystemPrompt(this.getActiveToolNames());
+                                     └─ 唯一调用点，在 extendResourcesFromExtensions() 里
+dist/core/agent-session.js:2783   if (!this._extensionRunner.hasHandlers("resources_discover")) return;
+                                     └─ 没有扩展提供 resources_discover → 直接 return
+dist/core/agent-session.js:3132   await this.extendResourcesFromExtensions("reload");   ← reload 时也会走到上面那个 early-return
+```
+
+即：**`/reload` 会重新注册 markdown transformer、重新签发 ticket（渲染层），
+但不会重建 system prompt（L1 的规则、L2 的技能清单）。**
+
+| 操作 | 效果 |
+| --- | --- |
+| `/reload` | ✅ 重新注册 transformer + 重新签发 ticket → **旧消息里的链接复活** |
+| **重启 Pi / 开新会话** | ✅ 加载 `APPEND_SYSTEM.md` + 新技能 → **规则真正生效** |
+
+### 14.5 已知硬限制
+
+| 限制 | 说明 |
+| --- | --- |
+| 只支持 `.md` / `.markdown` | `.go` / `.sh` / `.pdf` / `.txt` 一律不能预览 |
+| 指向目录的链接不生效 | 要预览目录得指它的 `README.md` |
+| 链接必须指向**真实存在**的文件 | 不存在就不改写（避免死链） |
+| 相对路径绑定 Pi 启动 cwd | 跨项目用 `file://` 绝对 URL |
+| 需要新做 `rex-src://` handler | 想预览源码得复制一份 `Handler.swift` + `open.mjs`，把渲染器换成源码高亮 |
+
+### 14.6 验收清单
+
+- [ ] `env | grep REX_SESSION` 有输出
+- [ ] `ls ~/Library/Application\ Support/"Rex Markdown"/tickets/` 有新 ticket
+- [ ] `tail ~/Library/Application\ Support/"Rex Markdown"/handler.log` 有 split 记录
+- [ ] Agent 输出的 `[x.md](x.md)` hover 显示 `rex-md://open/<64位hex>`
+- [ ] 点击 → Rex 右侧开 “Markdown” 分屏 → 渲染正常
+- [ ] `bash ~/.pi/agent/skills/rex-md-links/check.sh <路径>` 返回 `OK`
+- [ ] **重启 Pi 后**，新会话里的 Agent 已经会自动写可点链接
+
+### 14.7 本次追加改造的命令流水
+
+```bash
+# 1. L1：system prompt 规则
+cat > ~/.pi/agent/APPEND_SYSTEM.md <<'EOF'
+...（内容见 14.3）
+EOF
+
+# 2. L2：技能
+mkdir -p ~/.pi/agent/skills/rex-md-links
+cat > ~/.pi/agent/skills/rex-md-links/SKILL.md <<'EOF'
+...（内容见 14.3）
+EOF
+
+# 3. L3：自检工具
+cat > ~/.pi/agent/skills/rex-md-links/check.sh <<'EOF'
+...（内容见 14.3）
+EOF
+chmod +x ~/.pi/agent/skills/rex-md-links/check.sh
+
+# 4. 验证自检工具
+cd /Users/lex/git/go && bash ~/.pi/agent/skills/rex-md-links/check.sh \
+  daydayup/md/03-if-for.md base/00-index.md nonexistent.md https://a.com/b.md
+
+# 5. 验证改写行为（真实调用 bridge.mjs）
+node --input-type=module -e '...（见 14.2 第 4 条）'
+
+# 6. 最后：重启 Pi（或开新会话）让 APPEND_SYSTEM.md 生效
+#    /reload 只够复活旧消息的链接，不够加载新规则
 ```
