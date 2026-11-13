@@ -56,9 +56,9 @@ steps:
     args:
       - '-c'
       - |
-        gcloud storage cp /workspace/tfplan "gs://${_BUCKET}/plans/${_BUILD_ID}.tfplan"
+        gcloud storage cp /workspace/tfplan "gs://${_BUCKET}/plans/$BUILD_ID.tfplan"
         terraform -chdir=. show -no-color /workspace/tfplan > /workspace/plan.txt || true
-        gcloud storage cp /workspace/plan.txt "gs://${_BUCKET}/plans/${_BUILD_ID}.txt"
+        gcloud storage cp /workspace/plan.txt "gs://${_BUCKET}/plans/$BUILD_ID.txt"
     env:
       - 'GOOGLE_OAUTH_ACCESS_TOKEN=$(cat /workspace/token.txt)'
     waitFor: ['plan']
