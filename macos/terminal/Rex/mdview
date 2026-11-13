@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# mdview — 在终端里直接看 Markdown
+#
+#   mdview FILE.md          在 Rex 右侧开一个分屏，用 terminal-browser 渲染（焦点留在当前 pane）
+#   mdview DIR|              浏览目录下的所有 .md（fzf + glow 预览，Enter 打开分屏）
+#   mdview -c FILE.md       在当前 pane 用 glow 直接渲染（不另开分屏）
+#   mdview -l DIR           只列出目录下的 .md（树状）
+#
+# 依赖：rex(本地 Rex server)、terminal-browser、glow(可选)、fzf(可选)
+set -uo pipefail
+
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+MD_ROOT="$HOME/.local/state/rex-markdown-browser"
+SUPPORT_DIR="$HOME/Library/Application Support/Rex Markdown"
+
+# ── 浏览器可执行文件 ───────────────────────────────────────────────
+browser_bin() {
+  if command -v terminal-browser >/dev/null 2>&1; then
+    command -v terminal-browser
+    return 0
+  fi
+  if [ -f "$SUPPORT_DIR/programs.json" ]; then
+    node -e 'try{console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).browser||"")}catch(e){}' \
+      "$SUPPORT_DIR/programs.json"
+    return 0
+  fi
+  return 1
+}
+
+# ── 隔离的浏览器环境（和 Pi 预览用同一套 profile/daemon）────────────
+browser_env_args() {
+  printf '%s\n' \
+    "HOME=$MD_ROOT/home" \
+    "TERMINAL_BROWSER_NO_TELEMETRY=1" \
+    "TERMINAL_BROWSER_PRESENT=animation" \
+    "TERMINAL_BROWSER_APPDATA=$MD_ROOT/profiles" \
+    "TERMINAL_BROWSER_CONFIG_DIR=$MD_ROOT/config" \
+    "XDG_DATA_HOME=$MD_ROOT/data" \
+    "XDG_STATE_HOME=$MD_ROOT/state" \
+    "XDG_CACHE_HOME=$MD_ROOT/cache" \
+    "XDG_RUNTIME_DIR=$MD_ROOT/run"
+}
+
+file_url() {
+  node -e 'const {pathToFileURL}=require("url");console.log("terminal-browser-file://file"+pathToFileURL(process.argv[1]).pathname)' "$1"
+}
+
+# ── 在 Rex 右侧开分屏渲染 ──────────────────────────────────────────
+open_pane() {
+  local file="$1"
+  [ -f "$file" ] || { echo "mdview: 找不到文件：$file" >&2; return 1; }
+  file="$(cd "$(dirname "$file")" && pwd)/$(basename "$file")"
+  local browser; browser="$(browser_bin)"
+  [ -n "$browser" ] || { echo "mdview: 没找到 terminal-browser" >&2; return 1; }
+  local url; url="$(file_url "$file")"
+  local dir; dir="$(dirname "$file")"
+  local base; base="$(basename "$file")"
+
+  # 不在 Rex 里跑 → 退化成当前终端全屏预览
+  if [ -z "${REX_SESSION:-}" ] || ! command -v rex >/dev/null 2>&1; then
+    echo "mdview: 不在 Rex 终端里，直接在当前终端渲染（Ctrl+Q 退出）" >&2
+    local -a fallback_env=()
+    while IFS= read -r kv; do fallback_env+=("$kv"); done < <(browser_env_args)
+    exec /usr/bin/env "${fallback_env[@]}" "$browser" open --no-merge "$url"
+  fi
+
+  local -a env_pairs=()
+  while IFS= read -r kv; do env_pairs+=("$kv"); done < <(browser_env_args)
+
+  local args=(run --session "$REX_SESSION")
+  [ -n "${REX_BLOCK:-}" ] && args+=(--block "$REX_BLOCK")
+  args+=(--split right --ratio 45 --focus=false --shell=none --cwd "$dir" --label "MD" --json --)
+
+  rex "${args[@]}" /usr/bin/env "${env_pairs[@]}" "$browser" open --no-merge "$url"
+}
+
+# ── 当前 pane 用 glow 渲染 ─────────────────────────────────────────
+open_inline() {
+  local file="$1"
+  [ -f "$file" ] || { echo "mdview: 找不到文件：$file" >&2; return 1; }
+  if command -v glow >/dev/null 2>&1; then
+    exec glow --style=dark --pager "$file"
+  fi
+  exec bat --language=md --style=numbers --color=always --paging=always "$file"
+}
+
+# ── 列出目录下的 .md ──────────────────────────────────────────────
+list_md() {
+  local dir="${1:-.}"
+  find "$dir" -type f \( -name '*.md' -o -name '*.markdown' \) \
+    -not -path '*/.git/*' -not -path '*/node_modules/*' | sort
+}
+
+# ── fzf 浏览目录 ──────────────────────────────────────────────────
+browse_dir() {
+  local dir="${1:-.}"
+  local files
+  files="$(find "$dir" -type f \( -name '*.md' -o -name '*.markdown' \) \
+            -not -path '*/.git/*' -not -path '*/node_modules/*' -exec sh -c \
+            'for f; do case "$f" in /*) echo "$f";; *) echo "$PWD/$f";; esac; done' _ {} + | sort)"
+  if [ -z "$files" ]; then echo "mdview: $dir 下没有 .md 文件" >&2; return 1; fi
+  if ! command -v fzf >/dev/null 2>&1; then
+    printf '%s\n' "$files"
+    return 0
+  fi
+  local preview="glow --style=dark --width 120"
+  command -v glow >/dev/null 2>&1 || preview="cat"
+  printf '%s\n' "$files" | fzf \
+    --preview "$preview {}" \
+    --preview-window 'right:62%:wrap' \
+    --border 'rounded' --height '90%' \
+    --bind "enter:execute(bash '$SELF' --pane {1})+abort,ctrl-o:execute(bash '$SELF' --pane {1})+abort" \
+    --header "mdview · Enter 在 Rex 右侧分屏预览 · Esc 退出"
+}
+
+# ── 参数解析 ──────────────────────────────────────────────────────
+MODE="auto"; TARGET=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -c|--cat)   MODE="cat"; shift ;;
+    -l|--list)  MODE="list"; shift ;;
+    --pane)     MODE="pane"; shift ;;
+    -d|--dir)   MODE="browse"; shift ;;
+    -h|--help)  sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *)          TARGET="$1"; shift ;;
+  esac
+done
+
+case "$MODE" in
+  cat)  [[ -n "$TARGET" ]] || { echo "用法: mdview -c FILE.md" >&2; exit 1; }
+        open_inline "$TARGET" ;;
+  list) list_md "${TARGET:-.}" ;;
+  pane) [[ -n "$TARGET" ]] || { echo "用法: mdview --pane FILE.md" >&2; exit 1; }
+        open_pane "$TARGET" ;;
+  browse)
+        [[ -n "$TARGET" ]] || TARGET="."
+        browse_dir "$TARGET" ;;
+  auto)
+        if [[ -z "$TARGET" ]]; then TARGET="."
+        fi
+        if [ -d "$TARGET" ]; then
+          browse_dir "$TARGET"
+        else
+          open_pane "$TARGET"
+        fi ;;
+esac

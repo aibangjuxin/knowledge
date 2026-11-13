@@ -5,6 +5,8 @@
 > 安装日期：2026-11-12 · 环境：macOS 27.2 · Pi 1.5.2 · Rex 0.0.1793981048-g01d6c4 · Node v26.12.1
 >
 > **2026-11-12 追加**：[第十四节](#十四-让-agent-稳定输出可点链接2026-11-12-补充) —— 「Agent 输出的 .md 一个都点不开」的排查与三层自动化改造（system prompt 规则 + 技能 + 自检工具）。
+>
+> **延伸**：不想在 Pi 里看文档、想直接在终端里 Review Markdown（glow / fzf / Rex 分屏预览） → [How-to-view-markdown.md](./How-to-view-markdown.md)。
 
 ---
 
