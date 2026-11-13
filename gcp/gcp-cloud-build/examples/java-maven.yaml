@@ -1,0 +1,42 @@
+# Java/Maven：构建 jar → 推到 Artifact Registry 的 Maven 仓库
+#
+# 需要的 API：
+#   cloudbuild, compute, artifactregistry
+#
+# 前提：已创建 Maven 格式的 Artifact Registry 仓库
+#   gcloud artifacts repositories create my-app-maven \
+#     --repository-format=maven --location=asia-northeast1
+
+steps:
+  # ── Maven 构建（跳过测试，测试可拆到独立 trigger） ──
+  - name: 'gcr.io/cloud-builders/mvn'
+    id: 'mvn'
+    args:
+      - '-B'
+      - '-DskipTests'
+      - 'package'
+      # 把 Maven 仓库指向 Artifact Registry
+      - '-Dmaven.repo.local=/workspace/.m2'
+    env:
+      - 'MAVEN_OPTS=-Dmaven.repo.local=/workspace/.m2'
+
+  # ── 发布到 Artifact Registry Maven 仓库 ──────
+  - name: 'gcr.io/cloud-builders/mvn'
+    id: 'deploy'
+    args:
+      - 'org.apache.maven.plugins:maven-deploy-plugin:3.1.1:deploy'
+      - '-Durl=https://${_REGION}-maven.pkg.dev/$PROJECT_ID/${_REPO}'
+      - '-DrepositoryId=artifact-registry'
+      - '-DaltDeploymentRepository=artifact-registry::default::${_REGION}-maven.pkg.dev/$PROJECT_ID/${_REPO}'
+    waitFor: ['mvn']
+
+substitutions:
+  _REGION: 'asia-northeast1'
+  _REPO: 'my-app-maven'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  diskSizeGb: 100
+  logging: 'CLOUD_LOGGING_ONLY'
+
+timeout: '1800s'

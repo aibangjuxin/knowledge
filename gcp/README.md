@@ -14,7 +14,7 @@
 - `firestore/`: 子目录: docs, scripts
 - `gateway/`: (空目录)
 - `gce/`: 子目录: rolling
-- `gcp-cloud-build/`: 文件: gcp-cloud-build-concepts.md
+- `gcp-cloud-build/`: 子目录: examples (文件: docker-to-cloudrun.yaml, nodejs-test-deploy.yaml, java-maven.yaml, golang-binary.yaml, terraform-plan-only.yaml, pubsub-trigger.yaml); 文件: README.md, cloudbuild-guide.md, gcp-cloud-build-concepts.md
 - `gcp-infor/`: 子目录: assistant, linux-scripts
 - `gke/`: 子目录: docs
 - `glb/`: 文件: glb+psc.md, glb-retry-timeout.md, glb.md, target-https-proxies.md

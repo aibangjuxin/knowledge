@@ -1,0 +1,64 @@
+# Node.js：跑测试 → 打镜像 → 推 Artifact Registry
+#
+# 演示：
+#   - 多 step 共享 /workspace
+#   - id / waitFor 控制步骤顺序
+#   - allowFailure：允许非阻塞失败
+#   - allowExitCodes：允许特定退出码
+
+steps:
+  # ── 依赖安装 ─────────────────────────────────
+  - name: 'node:20'
+    id: 'install'
+    dir: 'app/'
+    script: |
+      npm ci
+      echo "node_modules/" > .dockerignore
+
+  # ── 静态检查（允许失败，不阻塞构建） ──────────
+  - name: 'node:20'
+    id: 'lint'
+    dir: 'app/'
+    script: |
+      npm run lint
+    allowFailure: true
+
+  # ── 单元测试 ─────────────────────────────────
+  - name: 'node:20'
+    id: 'test'
+    dir: 'app/'
+    script: |
+      npm test -- --coverage
+    waitFor: ['install']
+
+  # ── 构建镜像（必须等测试过） ─────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'image'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$COMMIT_SHA'
+      - '.'
+    waitFor: ['test']
+
+  # ── 推送 ─────────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$COMMIT_SHA'
+    waitFor: ['image']
+
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$COMMIT_SHA'
+
+substitutions:
+  _REGION: 'asia-northeast1'
+  _REPO: 'my-app'
+  _SERVICE: 'my-service'
+
+options:
+  machineType: 'E2_STANDARD_2'
+  diskSizeGb: 50
+  logging: 'CLOUD_LOGGING_ONLY'
+
+timeout: '900s'

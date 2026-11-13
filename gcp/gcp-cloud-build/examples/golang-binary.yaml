@@ -1,0 +1,86 @@
+# Go：编译静态二进制 → 打包 → 上传 GCS
+#
+# 演示「任意文件」类产物（artifacts.objects），不是容器镜像。
+#
+# 需要的 API：cloudbuild, compute, storage
+
+steps:
+  # ── 编译（静态链接，便于放进 scratch 镜像或直接分发） ──
+  - name: 'golang:1.22'
+    id: 'build'
+    args:
+      - 'build'
+      - '-trimpath'
+      - '-ldflags=-s -w'
+      - '-o'
+      - '/workspace/bin/app'
+      - './cmd/app'
+    env:
+      - 'GOOS=linux'
+      - 'GOARCH=amd64'
+      - 'CGO_ENABLED=0'
+      - 'GOCACHE=/workspace/.gocache'
+      - 'GOMODCACHE=/workspace/.gomodcache'
+
+  # ── 打包 tar.gz ──────────────────────────────
+  - name: 'gcr.io/cloud-builders/tar'
+    id: 'package'
+    args:
+      - '-czf'
+      - '/workspace/dist/app-${_VERSION}.tar.gz'
+      - '-C'
+      - '/workspace/bin'
+      - 'app'
+    waitFor: ['build']
+
+  # ── 上传到 GCS ───────────────────────────────
+  - name: 'gcr.io/cloud-builders/gsutil'
+    id: 'upload'
+    args:
+      - 'cp'
+      - '/workspace/dist/app-${_VERSION}.tar.gz'
+      - 'gs://${_BUCKET}/releases/app-${_VERSION}.tar.gz'
+    waitFor: ['package']
+
+  # ── 写一份元数据 JSON ────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'metadata'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        cat > /workspace/dist/metadata.json <<EOF
+        {
+          "version": "${_VERSION}",
+          "commit": "${COMMIT_SHA}",
+          "branch": "${BRANCH_NAME}",
+          "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        }
+        EOF
+    waitFor: ['package']
+
+  - name: 'gcr.io/cloud-builders/gsutil'
+    args:
+      - 'cp'
+      - '/workspace/dist/metadata.json'
+      - 'gs://${_BUCKET}/releases/metadata.json'
+    waitFor: ['metadata']
+
+# 声明产物（Cloud Build 会在构建结束后把工作区里的这些文件当作 build artifacts）
+artifacts:
+  objects:
+    location: 'gs://${_BUCKET}/releases'
+    paths:
+      - 'dist/app-${_VERSION}.tar.gz'
+      - 'dist/metadata.json'
+
+substitutions:
+  _VERSION: '0.0.0-dev'
+  _BUCKET: 'my-release-bucket'
+
+options:
+  machineType: 'E2_STANDARD_2'
+  diskSizeGb: 50
+  logging: 'CLOUD_LOGGING_ONLY'
+
+timeout: '600s'

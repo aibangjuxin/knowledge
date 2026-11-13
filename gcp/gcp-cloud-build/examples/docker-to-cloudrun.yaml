@@ -1,0 +1,60 @@
+# Docker 镜像 → Artifact Registry → Cloud Run
+#
+# 最常见的形态：CI 构建镜像，main 分支自动部署。
+#
+# 用法：
+#   gcloud builds submit --config examples/docker-to-cloudrun.yaml \
+#     --substitutions=_REGION=asia-northeast1,_REPO=my-app,_SERVICE=my-service
+#
+# 需要的 API：
+#   cloudbuild, compute, artifactregistry, run, iam, logging
+
+steps:
+  # ── 1. 构建镜像 ──────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$COMMIT_SHA'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:latest'
+      - '.'
+
+  # ── 2. 推送（也可依赖 images: 自动推送） ───────
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$COMMIT_SHA'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:latest'
+
+  # ── 3. 部署到 Cloud Run（仅 main 分支） ───────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE}'
+      - '--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$COMMIT_SHA'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--quiet'
+    condition: '$BRANCH_NAME == "main"'
+
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$COMMIT_SHA'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:latest'
+
+substitutions:
+  _REGION: 'asia-northeast1'
+  _REPO: 'my-app'
+  _SERVICE: 'my-service'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  diskSizeGb: 100
+  logging: 'CLOUD_LOGGING_ONLY'
+  substitutionOption: 'ALLOW_LOOSE'
+
+timeout: '1200s'
+
+serviceAccount: 'projects/$PROJECT_ID/serviceAccounts/gcb-builder@$PROJECT_ID.iam.gserviceaccount.com'

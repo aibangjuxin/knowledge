@@ -1,0 +1,81 @@
+# Terraform：只跑 plan，**不 apply**
+#
+# 安全原则：Cloud Build 里做 IaC 时，默认只 plan。
+# 真正 apply 走 Cloud Deploy 或独立的人工审批流水线。
+#
+# 需要的 API：cloudbuild, compute, iam, iamcredentials, cloudresourcemanager
+#
+# 身份：使用 service account impersonation，让 Terraform 用指定 SA 操作，
+# 而不是把 SA key 塞进环境变量。
+
+steps:
+  # ── 1. 认证：拿指定 SA 的短期 token ──────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'auth'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        gcloud auth print-identity-token \
+          --impersonate-service-account=projects/$PROJECT_ID/serviceAccounts/${_TF_SA} \
+          > /workspace/token.txt
+    env:
+      - 'GOOGLE_APPLICATION_CREDENTIALS=/workspace/token.txt'
+
+  # ── 2. 初始化 ────────────────────────────────
+  - name: 'hashicorp/terraform:1.7'
+    id: 'init'
+    args:
+      - 'init'
+      - '-input=false'
+      - '-no-color'
+    env:
+      - 'TF_IN_AUTOMATION=1'
+      - 'TF_INPUT=0'
+      - 'GOOGLE_OAUTH_ACCESS_TOKEN=$(cat /workspace/token.txt)'
+
+  # ── 3. Plan（只读，不改任何资源） ─────────────
+  - name: 'hashicorp/terraform:1.7'
+    id: 'plan'
+    args:
+      - 'plan'
+      - '-input=false'
+      - '-no-color'
+      - '-out=/workspace/tfplan'
+      - '-var-file=terraform.tfvars'
+    env:
+      - 'TF_IN_AUTOMATION=1'
+      - 'TF_INPUT=0'
+      - 'GOOGLE_OAUTH_ACCESS_TOKEN=$(cat /workspace/token.txt)'
+    waitFor: ['init']
+
+  # ── 4. 把 plan 结果导出成 artifact ───────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'show'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        gcloud storage cp /workspace/tfplan "gs://${_BUCKET}/plans/${_BUILD_ID}.tfplan"
+        terraform -chdir=. show -no-color /workspace/tfplan > /workspace/plan.txt || true
+        gcloud storage cp /workspace/plan.txt "gs://${_BUCKET}/plans/${_BUILD_ID}.txt"
+    env:
+      - 'GOOGLE_OAUTH_ACCESS_TOKEN=$(cat /workspace/token.txt)'
+    waitFor: ['plan']
+
+artifacts:
+  objects:
+    location: 'gs://${_BUCKET}/plans'
+    paths:
+      - 'plan.txt'
+
+substitutions:
+  _TF_SA: 'terraform-runner@$PROJECT_ID.iam.gserviceaccount.com'
+  _BUCKET: 'my-iac-artifacts'
+
+options:
+  machineType: 'E2_STANDARD_2'
+  diskSizeGb: 50
+  logging: 'CLOUD_LOGGING_ONLY'
+
+timeout: '900s'
