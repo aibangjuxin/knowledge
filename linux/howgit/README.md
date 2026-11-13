@@ -3,7 +3,6 @@
 Git 使用与原理知识库。
 
 ## 目录结构
-## 目录结构
 ```
 howgit/
 ├── config/                                # Git 配置
@@ -16,11 +15,13 @@ howgit/
 ├── How-to-understand-git-pull-rebase.md   # 理解 git pull --rebase:跟 merge 的区别、内部机制、何时用何时不能用
 ├── why-to-using-githubapps.md                  # 为什么用 GitHub Apps —— App 是什么、跟 OAuth/PAT/Webhook 区别、GitHub→GitLab 触发场景
 ├── github-repo-role-permissions.md        # GitHub 仓库角色权限详解
+├── gh-user-guide.md                       # GitHub CLI (gh) 实用指南 —— PR/Issue/CI 全流程,终端内完成不打开浏览器
 └── README.md
 ```
 
 ## 顶层文档
 
+- `gh-user-guide.md`: **GitHub CLI (`gh`) 实用指南** —— 认证配置、PR 全生命周期(创建/查看/diff/checks/review/合并)、Issue、Actions CI 监控、`gh api`/`gh search` 兜底、脚本化与别名、常见坑速查。核心原则:**`gh` 默认在终端输出,不开浏览器;想看网页信息用 `--json` + `--jq`**
 - `How-to-get-commitid.md`: PR rebase 后如何拿到最新的 commit ID(gh CLI / REST API / GitLab / Gitee / 本地 git)
 - `How-to-understand-tree-id-and-commit-id.md`: tree id 和 commit id 的本质 —— 它们的字节级结构、决定字段、互相关系,以及 SHA-1 为何被一改就全改(配套上文的"概念扫盲"篇)
 - `How-to-understand-git-pull-rebase.md`: `git pull --rebase` 是什么 —— 跟默认 merge 模式的对比、内部 transplant 步骤、何时该用 / 绝对不能用、出错怎么 recover、跟 `--autostash` / `pull.rebase=true` 等常见组合
@@ -30,7 +31,7 @@ howgit/
 ## 子目录内容
 
 - `config/`: 4 文件
-- `docs/`: 30 文件
+- `docs/`: 31 文件(含 `gh.md` —— 指向 `../gh-user-guide.md` 的入口指针)
 - `gitimg/`: 5 文件
 - `scripts/`: 4 文件
 - `scripts_new/`: 1 文件
@@ -49,5 +50,7 @@ howgit/
 
 ## 关键交叉引用
 
+- `gh-user-guide.md` (gh CLI 命令) ↔ `docs/gh.md` (旧入口,已合并) —— 同源,以后只维护 `gh-user-guide.md`
+- `gh-user-guide.md` §3.1 (创建 PR) ↔ `How-to-get-commitid.md` (rebase 后拿 commit id) —— PR 流程的上下游
 - `why-to-using-githubapps.md` (App 权限,bot) ↔ `github-repo-role-permissions.md` (collaborator 权限,人) — 互补,两个一起看
 - `why-to-using-githubapps.md` §3.4 / §4.1 (webhook) ↔ `docs/webhook.md` (裸 webhook 的 chatgpt 风格教程) — 前者讲 App 自带 webhook 带身份,后者只讲裸 webhook
