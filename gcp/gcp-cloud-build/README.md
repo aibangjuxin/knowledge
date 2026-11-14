@@ -7,6 +7,7 @@ GCP 的托管式 CI/CD（serverless）。提交 `cloudbuild.yaml` → Cloud Buil
 | 文件 | 内容 |
 | :--- | :--- |
 | [`cloudbuild-guide.md`](cloudbuild-guide.md) | **主文档**：是什么 / 能产出什么 / 上手全流程 / API 与 IAM 清单 / Schema 速查 / CLI 速查 / 成本配额 / 安全 / 排错 |
+| [**`how-to-github-trigger-cloud-build.md`**](how-to-github-trigger-cloud-build.md) | **GitHub → Cloud Build 端到端打通**：GitHub App 原理、1st gen / 2nd gen 两条路线选型、源码拉取链路、IAM 身份全景、产物落地（镜像 / JAR）、**GitHub 企业版场景（自建 GHE / 内网打通 / 自签 CA）**、加固清单、排错手册 |
 | [**`how-to-autofix-cve-with-cloud-build.md`**](how-to-autofix-cve-with-cloud-build.md) | **CVE 自动修复闭环**：Cloud Build 在修复流水线里的角色、改 Dockerfile 的修补映射表、三种落地形态、报告怎么拿、差分判定、12 个 CVE 场景特有的坑 |
 | [`gcp-cloud-build-concepts.md`](gcp-cloud-build-concepts.md) | 概念与生态全景（英文）：核心概念、GitHub 集成、Pipeline 集成选项、收益与最佳实践 |
 | [`examples/`](examples/)) | 可直接改用的 `cloudbuild.yaml` 模板 |
