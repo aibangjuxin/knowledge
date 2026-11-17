@@ -1,0 +1,137 @@
+# Argo CD · OIDC 直连配置（模式 A）
+#
+# 用途：Argo CD 直接对接企业 IdP（Okta / Entra ID / Keycloak / Auth0 / Google），
+#       员工用**个人账号 SSO** 登录，权限由 IdP 里的**组**决定。
+# 应用：kubectl apply -f oidc-direct-config.yaml
+#
+# 完整说明见 ../03-dex-ldap-sso.md §3。
+#
+# ⚠️ 本文件不含任何真实凭据。所有密码、私钥、token 一律为 [REDACTED]，
+#    请通过 Secret 注入，切勿把明文提交进 Git。
+#
+# 前置条件：
+#   ① IdP 侧已注册应用，回调地址登记为 https://argocd.example.com/auth/callback
+#      （CLI 另需 http://localhost:8085/auth/callback，或改用 device code 流程）
+#   ② IdP 侧已确认组会出现在 groups claim 里（Entra 需在 Token Configuration 点 Add groups claim）
+#
+# 注意：本文件**不**包含 admin.enabled: "false"。
+#      禁用内置 admin 是独立动作，必须在验证组映射生效之后单独执行。
+
+# ---------------------------------------------------------------------------
+# ① 客户端密钥
+#
+# 两种放法，二选一：
+#   A) 直接放进 argocd-secret（Argo CD 自己管理的 Secret，GitOps 里不要直接改）
+#      kubectl -n argocd patch secret argocd-secret \
+#        --patch='{"stringData": {"oidc.okta.clientSecret": "<真实值>"}}'
+#   B) 独立 Secret + 本文件这种引用（推荐交给 External Secrets / SOPS 管理）
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: Secret
+metadata:
+  name: argocd-oidc-client
+  namespace: argocd
+  labels:
+    # 非 argocd-secret 的 Secret 必须带这个标签，Argo CD 才会把它纳入密钥解析范围
+    app.kubernetes.io/part-of: argocd
+type: Opaque
+stringData:
+  # ⚠️ 替换为真实值，且不要提交进 Git
+  clientSecret: "[REDACTED]"
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: argocd
+    app.kubernetes.io/name: argocd-cm
+data:
+  # Argo CD 自身的外部访问地址（OIDC 回调地址由它推导：<url>/auth/callback）
+  url: https://argocd.example.com
+
+  # ---------------------------------------------------------------------------
+  # OIDC 直连配置（不是 dex.config —— 两者互斥，别混着写）
+  # ---------------------------------------------------------------------------
+  oidc.config: |
+    name: Okta
+    issuer: https://your-org.okta.com/oauth2/default
+    clientID: aaaabbbbccccddddeee
+    # 引用 Secret，不写明文。$oidc.okta.clientSecret → argocd-secret 的同名 key
+    # $argocd-oidc-client:clientSecret → 上面那个独立 Secret 的 key
+    clientSecret: $argocd-oidc-client:clientSecret
+
+    # 请求的 OAuth scope。上游默认就是这四个，写出来是为了让 reviewer 看得见。
+    requestedScopes: ["openid", "profile", "email", "groups"]
+
+    # 请求 ID Token 里的额外 claim。部分 IdP 即使加了 groups scope 也要显式声明。
+    requestedIDTokenClaims:
+      groups:
+        essential: true
+
+    # 自签 / 私有 CA 的 IdP 才需要，公有 CA 保持注释
+    # rootCA: |
+    #   -----BEGIN CERTIFICATE-----
+    #   ...
+    #   -----END CERTIFICATE-----
+
+    # PKCE：IdP 与其客户端都支持时打开（防授权码截获）
+    enablePKCEAuthentication: true
+
+    # 提前刷新 ID Token：会话不中断，且**组会跟着刷新**（这是直连模式相对 Dex 的优势）。
+    # ⚠️ 必须小于 IdP 的 ID Token 有效期，否则每次请求都重新签发（变慢）。
+    #    Keycloak 默认 access token 只有 5 分钟 → 用 1m 这种更小的值。
+    refreshTokenThreshold: 1m
+
+    # 登出时一并结束 IdP 的 SSO 会话
+    # logoutURL: https://your-org.okta.com/oauth2/default/logout?id_token_hint={{token}}
+
+  # ---------------------------------------------------------------------------
+  # 可选：模式 A 下内置 Dex 没有用途，关掉少一个有状态组件 + 一个对外端口。
+  # （Helm: dex.enabled=false；原生安装: kubectl -n argocd scale deploy/argocd-dex-server --replicas=0）
+  # ---------------------------------------------------------------------------
+
+---
+# ---------------------------------------------------------------------------
+# RBAC：组 → 角色
+#
+# ⚠️ 完整版见 ./argocd-rbac-cm.yaml（两种模式通用），这里只给最小骨架。
+#    关键点：
+#      · scopes 里的名字是 **claim 名**，不是 OAuth scope。
+#        写 groups → Argo CD 去 token 的 claims["groups"] 取值；
+#        写 email  → 取 claims["email"]（用于"按邮箱授权个别用户"）。
+#      · 组名要和 token 里的值逐字一致（大小写敏感；Keycloak 是 /platform/admin 这种完整路径）。
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: argocd
+    app.kubernetes.io/name: argocd-rbac-cm
+data:
+  policy.csv: |
+    # 最小权限默认角色：所有已认证用户只能读
+    p, role:authenticated, applications, get, *, allow
+    p, role:authenticated, projects, get, *, allow
+    p, role:authenticated, repositories, get, *, allow
+    p, role:authenticated, clusters, get, *, allow
+
+    # 平台管理员组 → 全局管理员
+    # ⚠️ 这里的值必须和 token 里的 groups claim **逐字一致**（大小写敏感）。
+    #    Keycloak 是完整路径（/platform/admin），Entra ID 可能是组 GUID。
+    #    下面的前缀只是一种命名规范，IdP 里的组名也要按同样的规范建。
+    g, my-org:platform-admins, role:admin
+
+    # 只读组 → 继承最小权限
+    g, my-org:platform-readonly, role:authenticated
+
+  # ⚠️ 默认权限无法用 deny 收回，所以不要用 role:readonly 当默认
+  policy.default: role:authenticated
+
+  # ⚠️ 不含 groups 的话，所有 g, <组名>, <角色> 规则永不生效
+  scopes: '[groups, email]'

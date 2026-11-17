@@ -1,0 +1,15 @@
+# 组件启用清单：dev-01 × gateway
+#
+# ⭐ 集群级组件：Gateway（Solo Mesh / Gloo）声明，每个集群一份
+#    → apps/gateway/overlays/cluster/dev-01/
+#
+# 控制面（controller / CRD）由 Helm 装；这里只管**数据面声明**
+# （Gateway / HTTPRoute）。控制器生成的 Deployment 不要写进 Git
+# ——会和 Argo CD 抢所有权。
+
+component: gateway
+cluster: dev-01
+server: https://dev-01.k8s.example.com
+env: dev
+project: platform-dev
+namespace: platform-dev

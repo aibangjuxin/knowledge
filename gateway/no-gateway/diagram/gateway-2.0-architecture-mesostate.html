@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gateway 2.0 Architecture — Multi-Tenant GKE Gateway (Mesostate)</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 1.5rem;
+      color: white;
+    }
+
+    .container { max-width: 1600px; margin: 0 auto; }
+
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+
+    .pulse-dot {
+      width: 12px; height: 12px;
+      background: #22d3ee; border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.8rem; margin-left: 1.75rem; }
+
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+      overflow-x: auto;
+    }
+
+    svg { display: block; min-width: 1300px; }
+
+    .badge {
+      display: inline-block; padding: 1px 5px;
+      border-radius: 3px; font-size: 6px; font-weight: 600; margin-top: 2px;
+    }
+    .badge-new  { background: rgba(251,191,36,0.3);  color: #fbbf24; }
+    .badge-orig { background: rgba(34,197,94,0.2);   color: #22c55e; }
+    .badge-team { background: rgba(14,165,233,0.3);    color: #38bdf8; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem; margin-top: 1.5rem;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem; border: 1px solid #1e293b;
+      padding: 1.1rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan    { background: #22d3ee; }
+    .card-dot.violet  { background: #a78bfa; }
+    .card-dot.amber   { background: #fbbf24; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.orange  { background: #fb923c; }
+    .card-dot.sky     { background: #0ea5e9; }
+    .card-dot.rose    { background: #fb7185; }
+
+    .card h3 { font-size: 0.8rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.7rem; }
+    .card li { margin-bottom: 0.3rem; }
+
+    .footer {
+      text-align: center; margin-top: 1.25rem;
+      color: #475569; font-size: 0.7rem;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-row">
+      <div class="pulse-dot"></div>
+      <h1>Gateway 2.0 Architecture — Multi-Tenant GKE Gateway (Mesostate)</h1>
+    </div>
+    <p class="subtitle">
+      Left: Entry Flow (PSC → IIP) | Right: Multi-Tenant GKE Gateway — one GKE Gateway per team, all in namespace abjx-int-gkegw
+    </p>
+  </div>
+
+  <!-- DIAGRAM -->
+  <div class="diagram-container">
+    <svg viewBox="0 0 1600 1280">
+
+      <defs>
+        <!-- Arrowheads -->
+        <marker id="arr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <polygon points="0 0, 9 3.5, 0 7" fill="#64748b"/>
+        </marker>
+        <marker id="arr-c" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <polygon points="0 0, 9 3.5, 0 7" fill="#22d3ee"/>
+        </marker>
+        <marker id="arr-a" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <polygon points="0 0, 9 3.5, 0 7" fill="#fbbf24"/>
+        </marker>
+        <marker id="arr-o" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <polygon points="0 0, 9 3.5, 0 7" fill="#fb923c"/>
+        </marker>
+        <marker id="arr-v" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <polygon points="0 0, 9 3.5, 0 7" fill="#a78bfa"/>
+        </marker>
+        <marker id="arr-g" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <polygon points="0 0, 9 3.5, 0 7" fill="#34d399"/>
+        </marker>
+        <marker id="arr-s" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <polygon points="0 0, 9 3.5, 0 7" fill="#0ea5e9"/>
+        </marker>
+        <marker id="arr-r" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <polygon points="0 0, 9 3.5, 0 7" fill="#fb7185"/>
+        </marker>
+        <marker id="arr-t1" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <polygon points="0 0, 9 3.5, 0 7" fill="#38bdf8"/>
+        </marker>
+        <marker id="arr-t2" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <polygon points="0 0, 9 3.5, 0 7" fill="#4ade80"/>
+        </marker>
+        <marker id="arr-t3" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+          <polygon points="0 0, 9 3.5, 0 7" fill="#c084fc"/>
+        </marker>
+
+        <!-- Grid -->
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+        </pattern>
+      </defs>
+
+      <!-- BG Grid -->
+      <rect width="100%" height="100%" fill="url(#grid)"/>
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- REGION: External Layer -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <rect x="10" y="10" width="1580" height="45" rx="10"
+            fill="rgba(34,211,238,0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,4"/>
+      <text x="22" y="28" fill="#22d3ee" font-size="10" font-weight="600">External Layer (Internet-Facing)</text>
+
+      <!-- Client -->
+      <rect x="30" y="28" width="110" height="42" rx="6"
+            fill="rgba(8,51,68,0.6)" stroke="#22d3ee" stroke-width="2"/>
+      <text x="85" y="47" fill="white" font-size="11" font-weight="600" text-anchor="middle">Client</text>
+      <text x="85" y="60" fill="#94a3b8" font-size="8" text-anchor="middle">Browser / API</text>
+
+      <!-- Arrow: Client → PSC -->
+      <line x1="140" y1="49" x2="180" y2="49" stroke="#22d3ee" stroke-width="2" marker-end="url(#arr-c)"/>
+      <text x="160" y="44" fill="#94a3b8" font-size="8">HTTPS :443</text>
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- REGION: GCP Platform -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <rect x="10" y="70" width="1580" height="1175" rx="12"
+            fill="rgba(251,191,36,0.03)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+      <text x="22" y="88" fill="#fbbf24" font-size="10" font-weight="600">Google Cloud Platform</text>
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- REGION: B-Project Producer VPC -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <rect x="10" y="105" width="1580" height="1120" rx="10"
+            fill="transparent" stroke="#475569" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="22" y="122" fill="#64748b" font-size="9" font-weight="600">B Project — Private VPC (Producer)</text>
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- SECTION 1: PSC → IIP (Left strip) -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <rect x="10" y="135" width="400" height="1070" rx="10"
+            fill="rgba(167,139,250,0.04)" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="4,4"/>
+      <text x="22" y="152" fill="#a78bfa" font-size="9" font-weight="600">Entry Flow: Cross-Project PSC</text>
+
+      <!-- PSC Attachment -->
+      <rect x="30" y="190" width="180" height="75" rx="6"
+            fill="rgba(167,139,250,0.3)" stroke="#a78bfa" stroke-width="2"/>
+      <text x="120" y="215" fill="white" font-size="12" font-weight="700" text-anchor="middle">PSC Attachment</text>
+      <text x="120" y="233" fill="#94a3b8" font-size="9" text-anchor="middle">Cross-Project Endpoint</text>
+      <text x="120" y="248" fill="#a78bfa" font-size="8" text-anchor="middle">Producer: B Project</text>
+      <text x="120" y="260" fill="#fbbf24" font-size="6" text-anchor="middle" class="badge badge-new">NEW Entry</text>
+
+      <!-- Arrow: PSC → IIP -->
+      <line x1="210" y1="227" x2="250" y2="227" stroke="#a78bfa" stroke-width="2" marker-end="url(#arr-v)"/>
+      <text x="230" y="220" fill="#94a3b8" font-size="8">Traffic In</text>
+
+      <!-- IIP Node -->
+      <rect x="250" y="190" width="150" height="75" rx="6"
+            fill="rgba(180,83,9,0.5)" stroke="#d97706" stroke-width="2"/>
+      <text x="325" y="215" fill="white" font-size="12" font-weight="700" text-anchor="middle">IIP</text>
+      <text x="325" y="233" fill="#94a3b8" font-size="9" text-anchor="middle">Internal Ingress Proxy</text>
+      <text x="325" y="248" fill="#94a3b8" font-size="8" text-anchor="middle">This Project as Entry</text>
+      <text x="325" y="260" fill="#fbbf24" font-size="6" text-anchor="middle" class="badge badge-new">NEW</text>
+
+      <!-- IIP Security Layer -->
+      <rect x="250" y="285" width="150" height="32" rx="4"
+            fill="rgba(136,19,55,0.25)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="325" y="306" fill="#fb7185" font-size="8" text-anchor="middle">Header / Path Validation</text>
+
+      <!-- Arrow: IIP → GKE Gateway (vertical) -->
+      <line x1="325" y1="317" x2="370" y2="370" stroke="#d97706" stroke-width="2" marker-end="url(#arr-o)"/>
+      <text x="340" y="345" fill="#94a3b8" font-size="8">proxy_pass</text>
+
+      <!-- Arrow: IIP → Direct Routing Branch -->
+      <line x1="370" y1="317" x2="410" y2="400" stroke="#d97706" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-o)"/>
+      <text x="378" y="365" fill="#94a3b8" font-size="7">direct</text>
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- SECTION 2: GKE Gateway Multi-Tenant (Right expanded area) -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+
+      <!-- IIP path label -->
+      <rect x="420" y="170" width="1150" height="50" rx="6"
+            fill="rgba(180,83,9,0.2)" stroke="#d97706" stroke-width="1.5"/>
+      <text x="995" y="192" fill="#d97706" font-size="11" font-weight="700" text-anchor="middle">IIP Routes →</text>
+      <text x="995" y="209" fill="#94a3b8" font-size="9" text-anchor="middle">team1.appdev.aibang → /team1/* &nbsp;|&nbsp; team2.appdev.aibang → /team2/* &nbsp;|&nbsp; team3.appdev.aibang → /team3/*</text>
+
+      <!-- Namespace boundary -->
+      <rect x="420" y="225" width="1160" height="960" rx="10"
+            fill="rgba(14,165,233,0.04)" stroke="#0ea5e9" stroke-width="2" stroke-dasharray="6,4"/>
+      <text x="434" y="242" fill="#0ea5e9" font-size="10" font-weight="700">
+        Namespace: abjx-int-gkegw
+      </text>
+      <text x="434" y="256" fill="#38bdf8" font-size="8">
+        (all teams share this namespace — one GKE Gateway CR per team)
+      </text>
+
+      <!-- Sub-namespace separator lines (dashed) between teams -->
+      <line x1="810" y1="225" x2="810" y2="1185" stroke="#1e3a5f" stroke-width="1" stroke-dasharray="4,4"/>
+      <line x1="1120" y1="225" x2="1120" y2="1185" stroke="#1e3a5f" stroke-width="1" stroke-dasharray="4,4"/>
+
+      <!-- ─────────────────────────────────────────────────────────── -->
+      <!-- TEAM 1: team1.appdev.aibang — Kong Gateway upstream -->
+      <!-- ─────────────────────────────────────────────────────────── -->
+      <rect x="430" y="268" width="370" height="900" rx="8"
+            fill="transparent" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="3,3"/>
+      <text x="445" y="284" fill="#38bdf8" font-size="10" font-weight="700">
+        Team 1 — Kong Gateway Upstream
+      </text>
+      <text x="445" y="297" fill="#94a3b8" font-size="8">
+        Domain: <tspan fill="#38bdf8">team1.appdev.aibang</tspan>
+      </text>
+
+      <!-- GKE Gateway CR for Team 1 -->
+      <rect x="450" y="310" width="150" height="70" rx="6"
+            fill="rgba(14,165,233,0.4)" stroke="#0ea5e9" stroke-width="2"/>
+      <text x="525" y="335" fill="white" font-size="11" font-weight="700" text-anchor="middle">GKE Gateway</text>
+      <text x="525" y="352" fill="#94a3b8" font-size="8" text-anchor="middle">team1-gateway</text>
+      <text x="525" y="365" fill="#94a3b8" font-size="8" text-anchor="middle">ILB 10.100.0.101</text>
+      <text x="525" y="376" fill="#fbbf24" font-size="6" text-anchor="middle" class="badge badge-team">team1</text>
+
+      <!-- Arrow: IIP → team1 Gateway -->
+      <line x1="400" y1="385" x2="448" y2="345" stroke="#38bdf8" stroke-width="2" marker-end="url(#arr-t1)"/>
+      <text x="420" y="365" fill="#94a3b8" font-size="8">Host: team1.appdev.aibang</text>
+
+      <!-- HTTPRoute for Team 1 -->
+      <rect x="450" y="395" width="150" height="50" rx="4"
+            fill="rgba(14,165,233,0.2)" stroke="#38bdf8" stroke-width="1.5"/>
+      <text x="525" y="417" fill="#38bdf8" font-size="9" font-weight="600" text-anchor="middle">HTTPRoute</text>
+      <text x="525" y="432" fill="#94a3b8" font-size="8" text-anchor="middle">team1-http-route</text>
+
+      <!-- Arrow: Gateway → HTTPRoute -->
+      <line x1="525" y1="380" x2="525" y2="393" stroke="#38bdf8" stroke-width="1.5" marker-end="url(#arr-t1)"/>
+
+      <!-- Listener for Team 1 -->
+      <rect x="620" y="310" width="130" height="50" rx="4"
+            fill="rgba(14,165,233,0.15)" stroke="#38bdf8" stroke-width="1"/>
+      <text x="685" y="332" fill="#38bdf8" font-size="9" font-weight="600" text-anchor="middle">Listener 443</text>
+      <text x="685" y="346" fill="#94a3b8" font-size="7" text-anchor="middle">HTTPS + mTLS</text>
+
+      <!-- Arrow: Gateway → Listener -->
+      <line x1="600" y1="335" x2="618" y2="335" stroke="#38bdf8" stroke-width="1" marker-end="url(#arr-t1)"/>
+
+      <!-- TLS for Team 1 -->
+      <rect x="620" y="395" width="130" height="50" rx="4"
+            fill="rgba(251,191,36,0.15)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="685" y="417" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">TLS Policy</text>
+      <text x="685" y="432" fill="#94a3b8" font-size="7" text-anchor="middle">Cert: *.appdev.aibang</text>
+
+      <!-- Arrow: HTTPRoute → TLS -->
+      <line x1="600" y1="420" x2="618" y2="420" stroke="#fbbf24" stroke-width="1" marker-end="url(#arr-a)"/>
+
+      <!-- Arrow: HTTPRoute → upstream Kong -->
+      <line x1="525" y1="445" x2="525" y2="500" stroke="#34d399" stroke-width="2" marker-end="url(#arr-g)"/>
+      <text x="535" y="475" fill="#94a3b8" font-size="8">/team1/*</text>
+
+      <!-- Kong Gateway 2.0 for Team 1 -->
+      <rect x="450" y="505" width="300" height="55" rx="6"
+            fill="rgba(34,197,94,0.35)" stroke="#16a34a" stroke-width="2"/>
+      <text x="600" y="527" fill="white" font-size="11" font-weight="700" text-anchor="middle">Kong Gateway 2.0</text>
+      <text x="600" y="543" fill="#94a3b8" font-size="8" text-anchor="middle">namespace: kong-team1</text>
+      <text x="600" y="555" fill="#4ade80" font-size="6" text-anchor="middle" class="badge badge-new">Upstream: Kong</text>
+
+      <!-- Kong Policy Box -->
+      <rect x="450" y="572" width="300" height="40" rx="4"
+            fill="rgba(34,197,94,0.1)" stroke="#16a34a" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="600" y="592" fill="#4ade80" font-size="8" text-anchor="middle">Auth / Rate Limit / Logging / Key Auth</text>
+
+      <!-- Kong Upstream -->
+      <rect x="450" y="625" width="300" height="35" rx="4"
+            fill="rgba(34,197,94,0.15)" stroke="#16a34a" stroke-width="1"/>
+      <text x="600" y="647" fill="#94a3b8" font-size="9" text-anchor="middle">Upstream → Backend Services</text>
+
+      <!-- Kong Runtime Pods for Team 1 -->
+      <rect x="450" y="672" width="300" height="50" rx="4"
+            fill="rgba(6,78,59,0.5)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="600" y="694" fill="white" font-size="10" font-weight="600" text-anchor="middle">GKE Runtime</text>
+      <text x="600" y="708" fill="#94a3b8" font-size="8" text-anchor="middle">namespace: kong-team1</text>
+      <text x="600" y="720" fill="#94a3b8" font-size="7" text-anchor="middle">app: api-service | auth-service</text>
+
+      <!-- Kong Ingress hint -->
+      <rect x="450" y="735" width="300" height="30" rx="4"
+            fill="rgba(136,19,55,0.2)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="600" y="754" fill="#fb7185" font-size="7" text-anchor="middle">Control: KongAdmin API / Deck sync / Ingress Class</text>
+
+      <!-- Direct Runtime bypass for Team 1 (dashed) -->
+      <rect x="450" y="780" width="300" height="50" rx="4"
+            fill="rgba(14,165,233,0.1)" stroke="#38bdf8" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="600" y="800" fill="#38bdf8" font-size="8" text-anchor="middle">Direct Runtime (bypass Kong)</text>
+      <text x="600" y="814" fill="#94a3b8" font-size="7" text-anchor="middle">if upstream = direct-runtime</text>
+
+      <!-- Arrow: HTTPRoute → Direct Runtime -->
+      <line x1="525" y1="500" x2="600" y2="780" stroke="#38bdf8" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#arr-t1)"/>
+      <text x="555" y="640" fill="#38bdf8" font-size="7">alt path</text>
+
+      <!-- Service + Pods for direct -->
+      <rect x="450" y="842" width="145" height="40" rx="4"
+            fill="rgba(14,165,233,0.15)" stroke="#38bdf8" stroke-width="1"/>
+      <text x="522" y="860" fill="#94a3b8" font-size="8" text-anchor="middle">team1-direct-svc</text>
+      <text x="522" y="873" fill="#94a3b8" font-size="7" text-anchor="middle">ClusterIP</text>
+
+      <rect x="605" y="842" width="145" height="40" rx="4"
+            fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/>
+      <text x="677" y="860" fill="white" font-size="8" text-anchor="middle">team1-runtime-pods</text>
+      <text x="677" y="873" fill="#94a3b8" font-size="7" text-anchor="middle">abjx-int-gkegw</text>
+
+      <line x1="522" y1="882" x2="605" y2="882" stroke="#34d399" stroke-width="1" marker-end="url(#arr-g)"/>
+
+      <!-- Arrow: Kong → Runtime Pods -->
+      <line x1="600" y1="560" x2="600" y2="670" stroke="#34d399" stroke-width="1.5" marker-end="url(#arr-g)"/>
+
+      <!-- ─────────────────────────────────────────────────────────── -->
+      <!-- TEAM 2: team2.appdev.aibang — Direct Runtime upstream -->
+      <!-- ─────────────────────────────────────────────────────────── -->
+      <rect x="820" y="268" width="290" height="900" rx="8"
+            fill="transparent" stroke="#4ade80" stroke-width="1.5" stroke-dasharray="3,3"/>
+      <text x="835" y="284" fill="#4ade80" font-size="10" font-weight="700">
+        Team 2 — Direct Runtime Upstream
+      </text>
+      <text x="835" y="297" fill="#94a3b8" font-size="8">
+        Domain: <tspan fill="#4ade80">team2.appdev.aibang</tspan>
+      </text>
+
+      <!-- GKE Gateway CR for Team 2 -->
+      <rect x="840" y="310" width="150" height="70" rx="6"
+            fill="rgba(14,165,233,0.4)" stroke="#0ea5e9" stroke-width="2"/>
+      <text x="915" y="335" fill="white" font-size="11" font-weight="700" text-anchor="middle">GKE Gateway</text>
+      <text x="915" y="352" fill="#94a3b8" font-size="8" text-anchor="middle">team2-gateway</text>
+      <text x="915" y="365" fill="#94a3b8" font-size="8" text-anchor="middle">ILB 10.100.0.102</text>
+      <text x="915" y="376" fill="#fbbf24" font-size="6" text-anchor="middle" class="badge badge-team">team2</text>
+
+      <!-- Arrow: IIP → team2 Gateway -->
+      <line x1="400" y1="410" x2="838" y2="345" stroke="#4ade80" stroke-width="2" marker-end="url(#arr-t2)"/>
+      <text x="610" y="375" fill="#94a3b8" font-size="8">Host: team2.appdev.aibang</text>
+
+      <!-- HTTPRoute for Team 2 -->
+      <rect x="840" y="395" width="150" height="50" rx="4"
+            fill="rgba(14,165,233,0.2)" stroke="#4ade80" stroke-width="1.5"/>
+      <text x="915" y="417" fill="#4ade80" font-size="9" font-weight="600" text-anchor="middle">HTTPRoute</text>
+      <text x="915" y="432" fill="#94a3b8" font-size="8" text-anchor="middle">team2-http-route</text>
+
+      <!-- Arrow: Gateway → HTTPRoute -->
+      <line x1="915" y1="380" x2="915" y2="393" stroke="#4ade80" stroke-width="1.5" marker-end="url(#arr-t2)"/>
+
+      <!-- Listener for Team 2 -->
+      <rect x="1000" y="310" width="100" height="50" rx="4"
+            fill="rgba(14,165,233,0.15)" stroke="#4ade80" stroke-width="1"/>
+      <text x="1050" y="332" fill="#4ade80" font-size="9" font-weight="600" text-anchor="middle">Listener 443</text>
+      <text x="1050" y="346" fill="#94a3b8" font-size="7" text-anchor="middle">HTTPS</text>
+
+      <!-- Arrow: Gateway → Listener -->
+      <line x1="990" y1="335" x2="998" y2="335" stroke="#4ade80" stroke-width="1" marker-end="url(#arr-t2)"/>
+
+      <!-- TLS for Team 2 -->
+      <rect x="1000" y="395" width="100" height="50" rx="4"
+            fill="rgba(251,191,36,0.15)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="1050" y="417" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">TLS Policy</text>
+      <text x="1050" y="431" fill="#94a3b8" font-size="7" text-anchor="middle">*.appdev.aibang</text>
+
+      <!-- Arrow: HTTPRoute → TLS -->
+      <line x1="990" y1="420" x2="998" y2="420" stroke="#fbbf24" stroke-width="1" marker-end="url(#arr-a)"/>
+
+      <!-- Arrow: HTTPRoute → Direct Runtime -->
+      <line x1="915" y1="445" x2="915" y2="500" stroke="#4ade80" stroke-width="2" marker-end="url(#arr-t2)"/>
+      <text x="925" y="475" fill="#94a3b8" font-size="8">/team2/*</text>
+
+      <!-- Team 2 Direct Runtime -->
+      <rect x="840" y="505" width="260" height="55" rx="6"
+            fill="rgba(14,165,233,0.4)" stroke="#0284c7" stroke-width="2"/>
+      <text x="970" y="527" fill="white" font-size="11" font-weight="700" text-anchor="middle">GKE Runtime Direct</text>
+      <text x="970" y="543" fill="#94a3b8" font-size="8" text-anchor="middle">abjx-int-gkegw</text>
+      <text x="970" y="555" fill="#38bdf8" font-size="6" text-anchor="middle" class="badge badge-team">Upstream: Direct</text>
+
+      <!-- Team 2 Service -->
+      <rect x="840" y="572" width="130" height="40" rx="4"
+            fill="rgba(14,165,233,0.2)" stroke="#0284c7" stroke-width="1"/>
+      <text x="905" y="594" fill="#94a3b8" font-size="8" text-anchor="middle">team2-svc</text>
+      <text x="905" y="606" fill="#94a3b8" font-size="7" text-anchor="middle">ClusterIP</text>
+
+      <!-- Team 2 Pods -->
+      <rect x="980" y="572" width="120" height="40" rx="4"
+            fill="rgba(6,78,59,0.5)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="1040" y="594" fill="white" font-size="9" font-weight="500" text-anchor="middle">Pods</text>
+      <text x="1040" y="606" fill="#94a3b8" font-size="7" text-anchor="middle">team2-ns</text>
+
+      <!-- Arrow: Runtime → Service -->
+      <line x1="970" y1="560" x2="970" y2="570" stroke="#34d399" stroke-width="1" marker-end="url(#arr-g)"/>
+
+      <!-- Kong bypass hint (dashed) -->
+      <rect x="840" y="628" width="260" height="40" rx="4"
+            fill="rgba(34,197,94,0.08)" stroke="#4ade80" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="970" y="648" fill="#4ade80" font-size="8" text-anchor="middle">Can switch to Kong (namespace: kong-team2)</text>
+      <text x="970" y="660" fill="#94a3b8" font-size="7" text-anchor="middle">by updating HTTPRoute upstreamRef</text>
+
+      <!-- ─────────────────────────────────────────────────────────── -->
+      <!-- TEAM 3: team3.appdev.aibang — Kong Gateway upstream -->
+      <!-- ─────────────────────────────────────────────────────────── -->
+      <rect x="1130" y="268" width="440" height="900" rx="8"
+            fill="transparent" stroke="#c084fc" stroke-width="1.5" stroke-dasharray="3,3"/>
+      <text x="1145" y="284" fill="#c084fc" font-size="10" font-weight="700">
+        Team 3 — Kong Gateway Upstream
+      </text>
+      <text x="1145" y="297" fill="#94a3b8" font-size="8">
+        Domain: <tspan fill="#c084fc">team3.appdev.aibang</tspan>
+      </text>
+
+      <!-- GKE Gateway CR for Team 3 -->
+      <rect x="1150" y="310" width="150" height="70" rx="6"
+            fill="rgba(14,165,233,0.4)" stroke="#0ea5e9" stroke-width="2"/>
+      <text x="1225" y="335" fill="white" font-size="11" font-weight="700" text-anchor="middle">GKE Gateway</text>
+      <text x="1225" y="352" fill="#94a3b8" font-size="8" text-anchor="middle">team3-gateway</text>
+      <text x="1225" y="365" fill="#94a3b8" font-size="8" text-anchor="middle">ILB 10.100.0.103</text>
+      <text x="1225" y="376" fill="#fbbf24" font-size="6" text-anchor="middle" class="badge badge-team">team3</text>
+
+      <!-- Arrow: IIP → team3 Gateway -->
+      <line x1="400" y1="435" x2="1148" y2="345" stroke="#c084fc" stroke-width="2" marker-end="url(#arr-t3)"/>
+      <text x="760" y="395" fill="#94a3b8" font-size="8">Host: team3.appdev.aibang</text>
+
+      <!-- HTTPRoute for Team 3 -->
+      <rect x="1150" y="395" width="150" height="50" rx="4"
+            fill="rgba(14,165,233,0.2)" stroke="#c084fc" stroke-width="1.5"/>
+      <text x="1225" y="417" fill="#c084fc" font-size="9" font-weight="600" text-anchor="middle">HTTPRoute</text>
+      <text x="1225" y="432" fill="#94a3b8" font-size="8" text-anchor="middle">team3-http-route</text>
+
+      <!-- Arrow: Gateway → HTTPRoute -->
+      <line x1="1225" y1="380" x2="1225" y2="393" stroke="#c084fc" stroke-width="1.5" marker-end="url(#arr-t3)"/>
+
+      <!-- Listener for Team 3 -->
+      <rect x="1315" y="310" width="130" height="50" rx="4"
+            fill="rgba(14,165,233,0.15)" stroke="#c084fc" stroke-width="1"/>
+      <text x="1380" y="332" fill="#c084fc" font-size="9" font-weight="600" text-anchor="middle">Listener 443</text>
+      <text x="1380" y="346" fill="#94a3b8" font-size="7" text-anchor="middle">HTTPS + mTLS</text>
+
+      <!-- Arrow: Gateway → Listener -->
+      <line x1="1300" y1="335" x2="1313" y2="335" stroke="#c084fc" stroke-width="1" marker-end="url(#arr-t3)"/>
+
+      <!-- TLS for Team 3 -->
+      <rect x="1315" y="395" width="130" height="50" rx="4"
+            fill="rgba(251,191,36,0.15)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="1380" y="417" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">TLS Policy</text>
+      <text x="1380" y="431" fill="#94a3b8" font-size="7" text-anchor="middle">Cert: *.appdev.aibang</text>
+
+      <!-- Arrow: HTTPRoute → TLS -->
+      <line x1="1300" y1="420" x2="1313" y2="420" stroke="#fbbf24" stroke-width="1" marker-end="url(#arr-a)"/>
+
+      <!-- Arrow: HTTPRoute → upstream Kong -->
+      <line x1="1225" y1="445" x2="1225" y2="500" stroke="#34d399" stroke-width="2" marker-end="url(#arr-g)"/>
+      <text x="1235" y="475" fill="#94a3b8" font-size="8">/team3/*</text>
+
+      <!-- Kong Gateway 2.0 for Team 3 -->
+      <rect x="1150" y="505" width="295" height="55" rx="6"
+            fill="rgba(34,197,94,0.35)" stroke="#16a34a" stroke-width="2"/>
+      <text x="1297" y="527" fill="white" font-size="11" font-weight="700" text-anchor="middle">Kong Gateway 2.0</text>
+      <text x="1297" y="543" fill="#94a3b8" font-size="8" text-anchor="middle">namespace: kong-team3</text>
+      <text x="1297" y="555" fill="#4ade80" font-size="6" text-anchor="middle" class="badge badge-new">Upstream: Kong</text>
+
+      <!-- Kong Policy Box -->
+      <rect x="1150" y="572" width="295" height="40" rx="4"
+            fill="rgba(34,197,94,0.1)" stroke="#16a34a" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="1297" y="592" fill="#4ade80" font-size="8" text-anchor="middle">Auth / Rate Limit / Logging / Key Auth</text>
+
+      <!-- Kong Upstream -->
+      <rect x="1150" y="625" width="295" height="35" rx="4"
+            fill="rgba(34,197,94,0.15)" stroke="#16a34a" stroke-width="1"/>
+      <text x="1297" y="647" fill="#94a3b8" font-size="9" text-anchor="middle">Upstream → Backend Services</text>
+
+      <!-- Kong Runtime Pods for Team 3 -->
+      <rect x="1150" y="672" width="295" height="50" rx="4"
+            fill="rgba(6,78,59,0.5)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="1297" y="694" fill="white" font-size="10" font-weight="600" text-anchor="middle">GKE Runtime</text>
+      <text x="1297" y="708" fill="#94a3b8" font-size="8" text-anchor="middle">namespace: kong-team3</text>
+      <text x="1297" y="720" fill="#94a3b8" font-size="7" text-anchor="middle">app: api-service | auth-service</text>
+
+      <!-- Kong Control hint -->
+      <rect x="1150" y="735" width="295" height="30" rx="4"
+            fill="rgba(136,19,55,0.2)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="1297" y="754" fill="#fb7185" font-size="7" text-anchor="middle">Control: KongAdmin API / Deck sync / Ingress Class</text>
+
+      <!-- Direct Runtime bypass for Team 3 (dashed) -->
+      <rect x="1150" y="780" width="295" height="50" rx="4"
+            fill="rgba(14,165,233,0.1)" stroke="#c084fc" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="1297" y="800" fill="#c084fc" font-size="8" text-anchor="middle">Direct Runtime (bypass Kong)</text>
+      <text x="1297" y="814" fill="#94a3b8" font-size="7" text-anchor="middle">if upstream = direct-runtime</text>
+
+      <!-- Arrow: HTTPRoute → Direct Runtime for Team 3 -->
+      <line x1="1225" y1="500" x2="1297" y2="780" stroke="#c084fc" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#arr-t3)"/>
+      <text x="1260" y="640" fill="#c084fc" font-size="7">alt path</text>
+
+      <!-- Service + Pods for direct team 3 -->
+      <rect x="1150" y="842" width="142" height="40" rx="4"
+            fill="rgba(14,165,233,0.15)" stroke="#c084fc" stroke-width="1"/>
+      <text x="1221" y="860" fill="#94a3b8" font-size="8" text-anchor="middle">team3-direct-svc</text>
+      <text x="1221" y="873" fill="#94a3b8" font-size="7" text-anchor="middle">ClusterIP</text>
+
+      <rect x="1303" y="842" width="142" height="40" rx="4"
+            fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/>
+      <text x="1374" y="860" fill="white" font-size="8" text-anchor="middle">team3-runtime-pods</text>
+      <text x="1374" y="873" fill="#94a3b8" font-size="7" text-anchor="middle">abjx-int-gkegw</text>
+
+      <line x1="1221" y1="882" x2="1303" y2="882" stroke="#34d399" stroke-width="1" marker-end="url(#arr-g)"/>
+
+      <!-- Arrow: Kong → Runtime Pods -->
+      <line x1="1297" y1="560" x2="1297" y2="670" stroke="#34d399" stroke-width="1.5" marker-end="url(#arr-g)"/>
+
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <!-- LEGEND -->
+      <!-- ═══════════════════════════════════════════════════════════════ -->
+      <text x="20" y="1190" fill="white" font-size="10" font-weight="700">Legend</text>
+
+      <rect x="20"  y="1205" width="14" height="10" rx="2" fill="rgba(8,51,68,0.6)"   stroke="#22d3ee" stroke-width="1"/>
+      <text x="40"  y="1214" fill="#94a3b8" font-size="8">Client / External</text>
+
+      <rect x="160" y="1205" width="14" height="10" rx="2" fill="rgba(167,139,250,0.3)" stroke="#a78bfa"  stroke-width="1"/>
+      <text x="180" y="1214" fill="#94a3b8" font-size="8">PSC Attachment (Cross-Project)</text>
+
+      <rect x="370" y="1205" width="14" height="10" rx="2" fill="rgba(180,83,9,0.5)"    stroke="#d97706"  stroke-width="1"/>
+      <text x="390" y="1214" fill="#94a3b8" font-size="8">IIP (Internal Ingress Proxy)</text>
+
+      <rect x="570" y="1205" width="14" height="10" rx="2" fill="rgba(14,165,233,0.4)"  stroke="#0ea5e9"  stroke-width="1"/>
+      <text x="590" y="1214" fill="#94a3b8" font-size="8">GKE Gateway CR (per team)</text>
+
+      <rect x="760" y="1205" width="14" height="10" rx="2" fill="rgba(14,165,233,0.2)"  stroke="#38bdf8"  stroke-width="1"/>
+      <text x="780" y="1214" fill="#94a3b8" font-size="8">HTTPRoute + Listener + TLS</text>
+
+      <rect x="960"  y="1205" width="14" height="10" rx="2" fill="rgba(34,197,94,0.35)" stroke="#16a34a"  stroke-width="1"/>
+      <text x="980"  y="1214" fill="#94a3b8" font-size="8">Kong Gateway 2.0</text>
+
+      <rect x="1160" y="1205" width="14" height="10" rx="2" fill="rgba(6,78,59,0.5)"    stroke="#34d399"  stroke-width="1"/>
+      <text x="1180" y="1214" fill="#94a3b8" font-size="8">GKE Runtime Pods</text>
+
+      <rect x="1340" y="1205" width="14" height="10" rx="2" fill="rgba(14,165,233,0.4)" stroke="#0284c7"  stroke-width="1"/>
+      <text x="1360" y="1214" fill="#94a3b8" font-size="8">Direct Runtime (no Kong)</text>
+
+      <!-- Color dots for teams -->
+      <circle cx="25"  cy="1228" r="5" fill="#38bdf8"/>
+      <text x="35"  y="1231" fill="#94a3b8" font-size="8">Team 1 (Kong upstream)</text>
+      <circle cx="160" cy="1228" r="5" fill="#4ade80"/>
+      <text x="170" y="1231" fill="#94a3b8" font-size="8">Team 2 (Direct upstream)</text>
+      <circle cx="320" cy="1228" r="5" fill="#c084fc"/>
+      <text x="330" y="1231" fill="#94a3b8" font-size="8">Team 3 (Kong upstream)</text>
+
+      <!-- Version tag -->
+      <text x="1580" y="1270" fill="#475569" font-size="8" text-anchor="end">
+        Gateway 2.0 Multi-Tenant GKE Gateway Architecture v1.0 — Namespace: abjx-int-gkegw
+      </text>
+
+    </svg>
+  </div>
+
+  <!-- INFO CARDS -->
+  <div class="cards">
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot violet"></div>
+        <h3>Entry Flow: PSC → IIP</h3>
+      </div>
+      <ul>
+        <li>• Client → Cross-Project PSC Attachment (Producer: B Project)</li>
+        <li>• PSC → IIP (Internal Ingress Proxy) — this project as entry</li>
+        <li>• IIP performs Header / Path validation</li>
+        <li>• IIP routes by Host header to team-specific GKE Gateway</li>
+        <li>• teamN.appdev.aibang → /teamN/* path</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot sky"></div>
+        <h3>Multi-Tenant GKE Gateway (abjx-int-gkegw)</h3>
+      </div>
+      <ul>
+        <li>• All teams share namespace: <tspan fill="#38bdf8">abjx-int-gkegw</tspan></li>
+        <li>• One GKE Gateway CR per team (team1/2/3-gateway)</li>
+        <li>• Each team has: HTTPRoute + Listener 443 + TLS Policy</li>
+        <li>• ILB assigned per gateway (10.100.0.101/102/103)</li>
+        <li>• Team domains: *.appdev.aibang</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot emerald"></div>
+        <h3>Per-Team Upstream Choice</h3>
+      </div>
+      <ul>
+        <li>• <tspan fill="#38bdf8">Team 1</tspan>: Kong Gateway 2.0 (namespace: kong-team1)</li>
+        <li>• <tspan fill="#4ade80">Team 2</tspan>: Direct Runtime (abjx-int-gkegw)</li>
+        <li>• <tspan fill="#c084fc">Team 3</tspan>: Kong Gateway 2.0 (namespace: kong-team3)</li>
+        <li>• Switch upstream by updating HTTPRoute upstreamRef</li>
+        <li>• Kong: Auth/Rate/Logging plugins per team namespace</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot orange"></div>
+        <h3>IIP Routing Rules</h3>
+      </div>
+      <ul>
+        <li>• Host-based routing: teamN.appdev.aibang</li>
+        <li>• Path rewrite: /teamN/* → upstream route</li>
+        <li>• Header injection for upstream identification</li>
+        <li>• Rate limiting + WAF at IIP layer</li>
+        <li>• Mutual TLS (mTLS) to GKE Gateway</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot rose"></div>
+        <h3>Control Plane &amp; Security</h3>
+      </div>
+      <ul>
+        <li>• Kong: KongAdmin API / Deck sync per team namespace</li>
+        <li>• GKE Gateway: kubectl / Gateway API CRs</li>
+        <li>• TLS: *.appdev.aibang wildcard cert</li>
+        <li>• mTLS between IIP and upstream gateways</li>
+        <li>• NetworkPolicy per namespace (tenant isolation)</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot amber"></div>
+        <h3>Adding a New Team (N+1)</h3>
+      </div>
+      <ul>
+        <li>1. Create teamN-gateway GKE Gateway CR in abjx-int-gkegw</li>
+        <li>2. Create teamN-http-route HTTPRoute + Listener + TLS</li>
+        <li>3. IIP config: add Host rule teamN.appdev.aibang</li>
+        <li>4. Choose upstream: Kong (kong-teamN) or Direct Runtime</li>
+        <li>5. For Kong: create namespace kong-teamN + deploy</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- FOOTER -->
+  <p class="footer">
+    Gateway 2.0 Multi-Tenant GKE Gateway Architecture · Namespace: abjx-int-gkegw · One GKE Gateway CR per team · PSC Entry → IIP → Per-Team GKE Gateway
+  </p>
+</div>
+</body>
+</html>

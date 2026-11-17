@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNS Security & Isolation Architecture</title>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --paper: #faf7f2;
+            --paper-2: #f2ede4;
+            --ink: #1c1917;
+            --muted: #57534e;
+            --soft: #78716c;
+            --accent: #b5523a;
+            --accent-tint: rgba(181,82,58,0.08);
+            --link: #2563eb;
+        }
+        body {
+            background: var(--paper);
+            color: var(--ink);
+            font-family: 'Geist', sans-serif;
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .eyebrow {
+            font-family: 'Geist Mono', monospace;
+            font-size: 8px;
+            font-weight: 500;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--soft);
+        }
+        h1 {
+            font-family: 'Instrument Serif', serif;
+            font-size: 2rem;
+            font-weight: 400;
+            margin: 0.5rem 0;
+        }
+        .diagram-container {
+            background: var(--paper-2);
+            border: 1px solid rgba(28,25,23,0.12);
+            border-radius: 8px;
+            padding: 2rem;
+            overflow-x: auto;
+            max-width: 100%;
+        }
+        svg {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <p class="eyebrow">Security Architecture</p>
+        <h1>GKE DNS & Namespace Isolation</h1>
+    </div>
+
+    <div class="diagram-container">
+        <svg width="800" height="500" viewBox="0 0 800 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+                    <circle cx="1" cy="1" r="0.9" fill="rgba(28,25,23,0.10)"/>
+                </pattern>
+                <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                    <polygon points="0 0, 8 3, 0 6" fill="#57534e"/>
+                </marker>
+                 <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                    <polygon points="0 0, 8 3, 0 6" fill="#2563eb"/>
+                </marker>
+            </defs>
+            <rect width="100%" height="100%" fill="var(--paper)"/>
+            <rect width="100%" height="100%" fill="url(#dots)" opacity="0.6"/>
+
+            <!-- Boundaries -->
+            <!-- Team A -->
+            <rect x="40" y="80" width="300" height="300" rx="8" fill="rgba(181,82,58,0.02)" stroke="rgba(181,82,58,0.2)" stroke-dasharray="8,4"/>
+            <text x="190" y="105" fill="var(--accent)" font-size="10" font-weight="600" text-anchor="middle">Namespace: TEAM-A</text>
+
+            <!-- Team B -->
+            <rect x="460" y="80" width="300" height="300" rx="8" fill="rgba(28,25,23,0.02)" stroke="rgba(28,25,23,0.2)" stroke-dasharray="8,4"/>
+            <text x="610" y="105" fill="var(--muted)" font-size="10" font-weight="600" text-anchor="middle">Namespace: TEAM-B</text>
+
+            <!-- Shared System Zone -->
+            <rect x="40" y="400" width="720" height="80" rx="8" fill="rgba(28,25,23,0.03)" stroke="rgba(28,25,23,0.1)"/>
+            <text x="400" y="420" fill="var(--soft)" font-size="10" font-weight="600" text-anchor="middle">Namespace: kube-system</text>
+
+            <!-- Arrows before boxes -->
+            <!-- Team A -> DNS -->
+            <path d="M190 240 V430" stroke="#57534e" stroke-width="1" marker-end="url(#arrow)"/>
+            <!-- Team B -> DNS -->
+            <path d="M610 240 V430" stroke="#57534e" stroke-width="1" marker-end="url(#arrow)"/>
+
+            <!-- Illegal Cross-Namespace Flow -->
+            <path d="M300 180 H460" stroke="#b5523a" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+            <rect x="360" y="170" width="80" height="20" rx="4" fill="var(--paper)"/>
+            <text x="400" y="183" fill="#b5523a" font-size="8" font-family="'Geist Mono'" text-anchor="middle">BLOCKED</text>
+            <text x="400" y="195" fill="#b5523a" font-size="7" font-family="'Geist Mono'" text-anchor="middle">NetworkPolicy</text>
+
+            <!-- DNS to Upstream -->
+            <path d="M480 440 H700" stroke="#2563eb" stroke-width="1" marker-end="url(#arrow-link)"/>
+
+            <!-- Components -->
+            <!-- Team A Pod -->
+            <rect x="120" y="140" width="140" height="60" rx="6" fill="#ffffff" stroke="var(--ink)" stroke-width="1"/>
+            <text x="190" y="170" fill="var(--ink)" font-size="12" font-weight="600" text-anchor="middle">App-A Pod</text>
+            <text x="190" y="185" fill="var(--soft)" font-size="9" font-family="'Geist Mono'" text-anchor="middle">Team A Apps</text>
+
+            <!-- Team B Pod -->
+            <rect x="540" y="140" width="140" height="60" rx="6" fill="#ffffff" stroke="var(--ink)" stroke-width="1"/>
+            <text x="610" y="170" fill="var(--ink)" font-size="12" font-weight="600" text-anchor="middle">App-B Pod</text>
+            <text x="610" y="185" fill="var(--soft)" font-size="9" font-family="'Geist Mono'" text-anchor="middle">Team B Apps</text>
+
+            <!-- Network Policy A -->
+            <rect x="120" y="240" width="140" height="40" rx="4" fill="rgba(181,82,58,0.05)" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4,4"/>
+            <text x="190" y="265" fill="var(--accent)" font-size="10" font-weight="600" text-anchor="middle">Egress: Allow DNS</text>
+
+            <!-- kube-dns -->
+            <rect x="330" y="430" width="140" height="40" rx="6" fill="#ffffff" stroke="var(--ink)" stroke-width="1"/>
+            <text x="400" y="455" fill="var(--ink)" font-size="12" font-weight="600" text-anchor="middle">kube-dns Service</text>
+
+            <!-- External DNS -->
+            <rect x="680" y="430" width="80" height="40" rx="6" fill="rgba(28,25,23,0.03)" stroke="rgba(28,25,23,0.30)" stroke-width="1"/>
+            <text x="720" y="455" fill="var(--ink)" font-size="10" font-weight="600" text-anchor="middle">Cloud DNS</text>
+
+            <!-- Legend -->
+            <line x1="40" y1="490" x2="760" y2="490" stroke="rgba(28,25,23,0.10)" stroke-width="0.8"/>
+            <text x="50" y="505" fill="var(--muted)" font-size="8" font-family="'Geist Mono'" letter-spacing="0.14em">ARCHITECTURE LEGEND</text>
+            
+            <text x="210" y="505" fill="var(--soft)" font-size="8" font-family="'Geist Mono'">--- TRUST BOUNDARY</text>
+            <text x="360" y="505" fill="var(--link)" font-size="8" font-family="'Geist Mono'">→ EXTERNAL FLOW</text>
+        </svg>
+    </div>
+</body>
+</html>

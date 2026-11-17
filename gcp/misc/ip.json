@@ -1,0 +1,18 @@
+{
+  "ipCidrRange": "192.168.0.1/22",
+  "secondaryIpRanges": [
+    {
+      "ipCidrRange": "192.168.0.2/22",
+      "rangename": "lex1"
+    },
+    {
+      "ipCidrRange": "192.168.0.3/22",
+      "rangename": "lex2"
+    },
+    {
+      "ipCidrRange": "192.168.0.4/22",
+      "rangename": "lex4"
+    }
+  ]
+}
+

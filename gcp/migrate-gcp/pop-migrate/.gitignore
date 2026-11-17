@@ -1,0 +1,34 @@
+# 导出文件
+exports/
+!exports/.gitkeep
+
+# 备份文件
+backups/
+!backups/.gitkeep
+
+# 日志文件
+logs/
+!logs/.gitkeep
+
+# 临时文件
+*.tmp
+*.temp
+*~
+
+# 配置文件中的敏感信息
+config/config.yaml.local
+config/secrets.yaml
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 测试文件
+test-*.yaml
+debug-*.log

@@ -1,0 +1,93 @@
+# ExternalName Services for K8s Cluster Migration
+# These services provide DNS resolution and port mapping to the new cluster
+
+---
+# Primary API Service - bbdm-api mapping
+apiVersion: v1
+kind: Service
+metadata:
+  name: new-cluster-bbdm-api
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+    component: external-service
+    service-name: bbdm-api
+    target-cluster: kong
+  annotations:
+    migration.k8s.io/old-service: "bbdm-api"
+    migration.k8s.io/new-service: "bbdm-api"
+    migration.k8s.io/new-namespace: "kong-bbdm"
+    migration.k8s.io/target-endpoint: "api-name01.kong.dev.aliyun.intracloud.cn.aibang"
+    migration.k8s.io/description: "ExternalName service for bbdm-api migration to new cluster"
+spec:
+  type: ExternalName
+  externalName: api-name01.kong.dev.aliyun.intracloud.cn.aibang
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 443
+    name: https
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+    name: http
+  - port: 8078
+    protocol: TCP
+    targetPort: 8078
+    name: api
+
+---
+# Generic New Cluster Gateway Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: new-cluster-gateway
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+    component: external-service
+    service-type: gateway
+    target-cluster: kong
+  annotations:
+    migration.k8s.io/target-endpoint: "kong.dev.aliyun.intracloud.cn.aibang"
+    migration.k8s.io/description: "Generic gateway service for new cluster access"
+spec:
+  type: ExternalName
+  externalName: kong.dev.aliyun.intracloud.cn.aibang
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 443
+    name: https
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+    name: http
+
+---
+# Health Check Service for New Cluster
+apiVersion: v1
+kind: Service
+metadata:
+  name: new-cluster-health
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+    component: external-service
+    service-type: health-check
+    target-cluster: kong
+  annotations:
+    migration.k8s.io/target-endpoint: "api-name01.kong.dev.aliyun.intracloud.cn.aibang"
+    migration.k8s.io/description: "Health check service for new cluster connectivity verification"
+spec:
+  type: ExternalName
+  externalName: api-name01.kong.dev.aliyun.intracloud.cn.aibang
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 443
+    name: https
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+    name: http

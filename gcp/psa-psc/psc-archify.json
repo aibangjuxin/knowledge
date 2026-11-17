@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "GCP Private Service Connect",
+    "output": "psc-archify.html",
+    "quality_profile": "showcase",
+    "viewBox": [1240, 540]
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [40, 60],
+    "cols": 6,
+    "gapX": 50,
+    "gapY": 80,
+    "cellW": 160,
+    "cellH": 80
+  },
+  "components": [
+    {
+      "id": "your-app",
+      "type": "backend",
+      "label": "Your Application",
+      "sublabel": "consumer app",
+      "row": 0,
+      "col": 0
+    },
+    {
+      "id": "psc-neg",
+      "type": "cloud",
+      "label": "PSC NEG",
+      "sublabel": "private mailbox",
+      "tag": "10.20.30.5",
+      "row": 0,
+      "col": 1
+    },
+    {
+      "id": "private-ip",
+      "type": "database",
+      "label": "Private IP",
+      "sublabel": "your subnet",
+      "row": 0,
+      "col": 2
+    },
+    {
+      "id": "backbone",
+      "type": "cloud",
+      "label": "Google Backbone",
+      "sublabel": "private transit",
+      "row": 0,
+      "col": 3
+    },
+    {
+      "id": "service-attachment",
+      "type": "security",
+      "label": "Service Attachment",
+      "sublabel": "producer front door",
+      "row": 0,
+      "col": 4
+    },
+    {
+      "id": "producer-vpc",
+      "type": "cloud",
+      "label": "Producer VPC",
+      "sublabel": "managed service",
+      "row": 0,
+      "col": 5
+    },
+    {
+      "id": "iam-gate",
+      "type": "security",
+      "label": "IAM Accept List",
+      "sublabel": "projects / SAs",
+      "row": 1,
+      "col": 4
+    },
+    {
+      "id": "flow-logs",
+      "type": "security",
+      "label": "VPC Flow Logs",
+      "sublabel": "audit every connection",
+      "row": 1,
+      "col": 5
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Your VPC (consumer project)",
+      "wraps": ["your-app", "psc-neg", "private-ip"]
+    },
+    {
+      "kind": "region",
+      "label": "Producer VPC (managed service)",
+      "wraps": ["service-attachment", "producer-vpc"]
+    },
+    {
+      "kind": "security-group",
+      "label": "PSC private channel — no public internet",
+      "wraps": ["psc-neg", "private-ip", "backbone", "service-attachment"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "app-to-neg",
+      "from": "your-app",
+      "to": "psc-neg",
+      "label": "connect :5432"
+    },
+    {
+      "id": "neg-binds-ip",
+      "from": "psc-neg",
+      "to": "private-ip",
+      "label": "binds"
+    },
+    {
+      "id": "ip-across-backbone",
+      "from": "private-ip",
+      "to": "backbone",
+      "label": "private traffic"
+    },
+    {
+      "id": "backbone-to-attachment",
+      "from": "backbone",
+      "to": "service-attachment",
+      "label": "TCP"
+    },
+    {
+      "id": "attachment-to-producer",
+      "from": "service-attachment",
+      "to": "producer-vpc",
+      "label": "forward"
+    },
+    {
+      "id": "iam-approves",
+      "from": "iam-gate",
+      "to": "service-attachment",
+      "label": "approves",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "attachment-logs",
+      "from": "service-attachment",
+      "to": "flow-logs",
+      "label": "emits",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Forward — request path",
+      "items": [
+        "Your app → PSC NEG on a private IP from your subnet",
+        "Traffic crosses Google's backbone to the Service Attachment",
+        "No public internet hop; producer's VPC stays invisible"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Reverse — who controls it",
+      "items": [
+        "Producer curates the IAM accept list (projects or SAs)",
+        "Non-listed consumers are refused at the attachment",
+        "All connections are recorded in VPC Flow Logs for audit"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Outcome",
+      "items": [
+        "Private, approved, audited path between two VPCs",
+        "No VPC peering, no shared CIDR, no public IPs"
+      ]
+    }
+  ]
+}

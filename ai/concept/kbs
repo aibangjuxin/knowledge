@@ -1,0 +1,8 @@
+#!/bin/bash
+# 知识库搜索包装脚本 - 使用 conda python
+
+# 使用 conda 的 python
+PYTHON="/opt/homebrew/Caskroom/miniconda/base/bin/python"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+$PYTHON "$SCRIPT_DIR/kb_search.py" "$@"

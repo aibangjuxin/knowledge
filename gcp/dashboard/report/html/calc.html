@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Platform Cost Calculator</title>
+    <link href="https://cdn.jsdelivr.net/npm/chart.js" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-light: #e8f0fe;
+            --secondary: #34a853;
+            --secondary-light: #e6f4ea;
+            --border: #dadce0;
+            --text: #202124;
+            --text-secondary: #5f6368;
+            --bg-main: #f8f9fa;
+            --bg-panel: #ffffff;
+            --shadow: 0 1px 2px rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
+            --error: #ea4335;
+            --success: #34a853;
+            --warning: #fbbc04;
+            --chart-bg: #ffffff;
+            --gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        [data-theme="dark"] {
+            --primary: #8ab4f8;
+            --primary-light: #1a2634;
+            --secondary: #81c995;
+            --secondary-light: #1e3229;
+            --border: #5f6368;
+            --text: #e8eaed;
+            --text-secondary: #9aa0a6;
+            --bg-main: #202124;
+            --bg-panel: #292a2d;
+            --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 1px 3px 1px rgba(0,0,0,0.15);
+            --chart-bg: #292a2d;
+            --gradient: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Google Sans', 'Segoe UI', Arial, sans-serif;
+        }
+
+        body {
+            color: var(--text);
+            background: var(--gradient);
+            line-height: 1.5;
+            font-size: 14px;
+            overflow-x: hidden;
+            transition: all 0.3s ease;
+            min-height: 100vh;
+        }
+
+        .header {
+            background-color: var(--bg-panel);
+            padding: 20px 24px;
+            box-shadow: var(--shadow);
+            position: relative;
+            z-index: 10;
+            transition: background-color 0.3s ease;
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+        }
+
+        .logo-icon {
+            margin-right: 12px;
+            width: 32px;
+            height: 32px;
+            background: var(--gradient);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .theme-toggle {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 12px;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .theme-toggle:hover {
+            background-color: var(--primary-light);
+            transform: scale(1.05);
+        }
+
+        .calculator-container {
+            display: flex;
+            max-width: 1400px;
+            margin: 0 auto;
+            position: relative;
+            min-height: calc(100vh - 80px);
+            gap: 32px;
+            padding: 32px;
+        }
+
+        .configuration-panel {
+            width: 420px;
+            min-width: 350px;
+            background-color: var(--bg-panel);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            overflow-y: auto;
+            transition: all 0.3s ease;
+            height: fit-content;
+            padding: 32px;
+        }
+
+        .result-panel {
+            flex: 1;
+            background-color: var(--bg-panel);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            overflow-y: auto;
+            height: fit-content;
+            padding: 32px;
+            transition: background-color 0.3s ease;
+        }
+
+        .section {
+            margin-bottom: 32px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            color: var(--text);
+            position: relative;
+            padding-bottom: 8px;
+        }
+
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 40px;
+            height: 3px;
+            background: var(--gradient);
+            border-radius: 2px;
+        }
+
+        .form-group {
+            margin-bottom: 28px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 12px;
+            font-weight: 600;
+            font-size: 15px;
+            color: var(--text);
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-error {
+            border-color: var(--error) !important;
+            box-shadow: 0 0 0 2px rgba(234, 67, 53, 0.2) !important;
+        }
+
+        .error-message {
+            color: var(--error);
+            font-size: 12px;
+            margin-top: 6px;
+            display: none;
+            font-weight: 500;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 15px;
+            transition: all 0.2s;
+            outline: none;
+            background-color: var(--bg-panel);
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        input[type="number"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
+            transform: translateY(-1px);
+        }
+
+        .input-suffix {
+            position: absolute;
+            right: 16px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            pointer-events: none;
+            font-weight: 600;
+        }
+
+        .help-text {
+            margin-top: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .slider-container {
+            margin-top: 16px;
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            background: var(--border);
+            outline: none;
+            border-radius: 3px;
+            transition: background 0.3s ease;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--gradient);
+            cursor: pointer;
+            transition: transform 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .slider::-webkit-slider-thumb:hover {
+            transform: scale(1.3);
+        }
+
+        .range-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .button {
+            background: var(--gradient);
+            color: white;
+            border: none;
+            padding: 16px 24px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+            box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(26, 115, 232, 0.4);
+        }
+
+        .button:active {
+            transform: translateY(0);
+        }
+
+        .cost-summary {
+            background: var(--gradient);
+            border-radius: 16px;
+            padding: 32px;
+            margin-bottom: 32px;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cost-summary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            z-index: -1;
+        }
+
+        .total-cost {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .cost-period {
+            font-size: 16px;
+            margin-bottom: 24px;
+            opacity: 0.9;
+        }
+
+        .cost-breakdown {
+            margin-top: 32px;
+            background-color: var(--bg-panel);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .cost-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 0;
+            border-bottom: 1px solid var(--border);
+            transition: all 0.2s ease;
+        }
+
+        .cost-item:last-child {
+            border-bottom: none;
+        }
+
+        .cost-item:hover {
+            background-color: var(--primary-light);
+            border-radius: 6px;
+            margin: 0 -8px;
+            padding: 16px 8px;
+        }
+
+        .cost-item-label {
+            color: var(--text);
+            font-weight: 500;
+            font-size: 15px;
+        }
+
+        .cost-item-value {
+            font-weight: 700;
+            color: var(--primary);
+            font-size: 16px;
+        }
+
+        .chart-container {
+            margin-top: 32px;
+            padding: 24px;
+            background-color: var(--chart-bg);
+            border-radius: 12px;
+            transition: background-color 0.3s ease;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .info-card {
+            background-color: var(--bg-panel);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            padding: 28px;
+            margin-bottom: 24px;
+            transition: all 0.3s ease;
+            border: 1px solid var(--border);
+        }
+
+        .info-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(60,64,67,0.15);
+        }
+
+        .info-card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--primary);
+        }
+
+        .info-card-content {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .info-card-list {
+            list-style: none;
+            margin-top: 16px;
+        }
+
+        .info-card-list li {
+            margin-bottom: 12px;
+            position: relative;
+            padding-left: 24px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .info-card-list li:before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 8px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--gradient);
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .action-button {
+            background-color: var(--secondary);
+            color: white;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .action-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(52, 168, 83, 0.3);
+        }
+
+        .action-button.secondary {
+            background-color: var(--warning);
+            color: var(--text);
+        }
+
+        .action-button.secondary:hover {
+            box-shadow: 0 4px 12px rgba(251, 188, 4, 0.3);
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .configuration-panel,
+        .result-panel {
+            animation: slideIn 0.6s ease-out;
+        }
+
+        @media (max-width: 768px) {
+            .calculator-container {
+                flex-direction: column;
+                padding: 16px;
+                gap: 24px;
+            }
+
+            .configuration-panel {
+                width: 100%;
+                padding: 24px;
+            }
+
+            .result-panel {
+                padding: 24px;
+            }
+
+            .header-content {
+                padding: 0 16px;
+            }
+
+            .total-cost {
+                font-size: 36px;
+            }
+
+            .action-buttons {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">API</div>
+                API Platform Cost Calculator
+            </div>
+            <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="calculator-container">
+        <div class="configuration-panel" id="configPanel">
+            <div class="section">
+                <div class="section-title">API Resource Configuration</div>
+                <div class="form-group">
+                    <label for="cpu">CPU Count (vCPU)</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="cpu" min="0" step="1" value="2" onchange="validateAndUpdate(this, 0, 96); updateCost();">
+                        <span class="input-suffix">vCPU</span>
+                    </div>
+                    <div class="error-message" id="cpuError">Please enter a value between 0-96</div>
+                    <div class="slider-container">
+                        <input type="range" min="0" max="96" value="2" class="slider" id="cpuSlider" oninput="updateInputFromSlider('cpu', 'cpuSlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>0</span>
+                            <span>96</span>
+                        </div>
+                    </div>
+                    <div class="help-text">CPU cores allocated per API instance</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="memory">Memory Size (GB)</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="memory" min="0" step="0.5" value="4" onchange="validateAndUpdate(this, 0, 128); updateCost();">
+                        <span class="input-suffix">GB</span>
+                    </div>
+                    <div class="error-message" id="memoryError">Please enter a value between 0-128</div>
+                    <div class="slider-container">
+                        <input type="range" min="0" max="128" value="4" step="0.5" class="slider" id="memorySlider" oninput="updateInputFromSlider('memory', 'memorySlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>0</span>
+                            <span>128</span>
+                        </div>
+                    </div>
+                    <div class="help-text">Memory allocated per API instance</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="maxReplicas">Max Replicas</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="maxReplicas" min="1" step="1" value="4" onchange="validateAndUpdate(this, 1, 20); updateCost();">
+                        <span class="input-suffix">pods</span>
+                    </div>
+                    <div class="error-message" id="maxReplicasError">Please enter a value between 1-20</div>
+                    <div class="slider-container">
+                        <input type="range" min="1" max="20" value="4" class="slider" id="replicasSlider" oninput="updateInputFromSlider('maxReplicas', 'replicasSlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>1</span>
+                            <span>20</span>
+                        </div>
+                    </div>
+                    <div class="help-text">Maximum number of API instance replicas</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="apiCount">API Count</label>
+                    <div class="input-wrapper">
+                        <input type="number" id="apiCount" min="1" step="1" value="1" onchange="validateAndUpdate(this, 1, 100); updateCost();">
+                        <span class="input-suffix">APIs</span>
+                    </div>
+                    <div class="error-message" id="apiCountError">Please enter a value between 1-100</div>
+                    <div class="slider-container">
+                        <input type="range" min="1" max="100" value="1" class="slider" id="apiSlider" oninput="updateInputFromSlider('apiCount', 'apiSlider'); updateCost();">
+                        <div class="range-labels">
+                            <span>1</span>
+                            <span>100</span>
+                        </div>
+                    </div>
+                    <div class="help-text">Total number of APIs to deploy</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <button class="button" onclick="updateCost()">Recalculate Cost</button>
+                <div class="action-buttons">
+                    <button class="action-button" onclick="saveConfiguration()">Save Config</button>
+                    <button class="action-button secondary" onclick="loadConfiguration()">Load Config</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="result-panel">
+            <div class="cost-summary">
+                <div class="total-cost" id="totalCostDisplay">$180.00</div>
+                <div class="cost-period">Estimated Monthly Cost</div>
+
+                <div class="cost-breakdown">
+                    <div class="cost-item">
+                        <div class="cost-item-label">Infrastructure Cost</div>
+                        <div class="cost-item-value" id="baseCostDisplay">$180.00</div>
+                    </div>
+
+                    <div class="cost-item">
+                        <div class="cost-item-label">CPU Cost</div>
+                        <div class="cost-item-value" id="cpuCostDisplay">$76.00</div>
+                    </div>
+
+                    <div class="cost-item">
+                        <div class="cost-item-label">Memory Cost</div>
+                        <div class="cost-item-value" id="memoryCostDisplay">$76.00</div>
+                    </div>
+
+                    <div class="cost-item">
+                        <div class="cost-item-label">Replica Cost Factor</div>
+                        <div class="cost-item-value" id="replicaFactorDisplay">x2.00</div>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="costChart"></canvas>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-card-title">Pricing Formula</div>
+                <div class="info-card-content">
+                    This calculator estimates platform usage fees based on the following pricing formula:
+                    <div class="info-card-list">
+                        <li><strong>Base Cost:</strong> $180/month (platform infrastructure fee)</li>
+                        <li><strong>CPU Cost:</strong> $19 × vCPU count × replicas ÷ 2</li>
+                        <li><strong>Memory Cost:</strong> $19 × memory GB × replicas ÷ 2</li>
+                        <li><strong>Total Cost:</strong> (Base + CPU + Memory) × API count</li>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="info-card-title">PM Usage Guide</div>
+                <div class="info-card-content">
+                    <div class="info-card-list">
+                        <li>Adjust CPU and memory based on API resource requirements</li>
+                        <li>Replica count determines high availability and load capacity</li>
+                        <li>Save common configuration templates for faster quoting</li>
+                        <li>Cost results can be used directly for customer quotes and internal cost accounting</li>
+                        <li>Recommend preparing standardized configuration plans for different customer scales</li>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        function toggleTheme() {
+            const body = document.body;
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateChartTheme();
+        }
+
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme) {
+                document.body.setAttribute('data-theme', savedTheme);
+            } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                document.body.setAttribute('data-theme', 'dark');
+            }
+        }
+
+        function validateAndUpdate(input, min, max) {
+            const value = parseFloat(input.value);
+            const errorElement = document.getElementById(input.id + 'Error');
+            
+            if (isNaN(value) || value < min || value > max) {
+                input.classList.add('input-error');
+                errorElement.style.display = 'block';
+                return false;
+            }
+            
+            input.classList.remove('input-error');
+            errorElement.style.display = 'none';
+            updateSliderValue(input.id + 'Slider', input.id);
+            return true;
+        }
+
+        function updateInputFromSlider(inputId, sliderId) {
+            const slider = document.getElementById(sliderId);
+            const input = document.getElementById(inputId);
+            input.value = slider.value;
+            input.classList.remove('input-error');
+            document.getElementById(inputId + 'Error').style.display = 'none';
+        }
+
+        function updateSliderValue(sliderId, inputId) {
+            const slider = document.getElementById(sliderId);
+            const input = document.getElementById(inputId);
+            if (slider) {
+                slider.value = input.value;
+            }
+        }
+
+        function calculateCost() {
+            let cpu = parseFloat(document.getElementById("cpu").value) || 0;
+            let memory = parseFloat(document.getElementById("memory").value) || 0;
+            let maxReplicas = parseInt(document.getElementById("maxReplicas").value) || 4;
+            let apiCount = parseInt(document.getElementById("apiCount").value) || 1;
+            
+            let base_cost = 180;
+            let cpu_cost = 19 * cpu * maxReplicas / 2;
+            let memory_cost = 19 * memory * maxReplicas / 2;
+            let total_cost = (base_cost + cpu_cost + memory_cost) * apiCount;
+            
+            return {
+                total: total_cost,
+                base: base_cost * apiCount,
+                cpu: cpu_cost * apiCount,
+                memory: memory_cost * apiCount,
+                replicaFactor: maxReplicas / 2
+            };
+        }
+
+        let costChart;
+        
+        function updateCost() {
+            const costs = calculateCost();
+            
+            document.getElementById("totalCostDisplay").innerText = "$" + costs.total.toFixed(2);
+            document.getElementById("baseCostDisplay").innerText = "$" + costs.base.toFixed(2);
+            document.getElementById("cpuCostDisplay").innerText = "$" + costs.cpu.toFixed(2);
+            document.getElementById("memoryCostDisplay").innerText = "$" + costs.memory.toFixed(2);
+            document.getElementById("replicaFactorDisplay").innerText = "x" + costs.replicaFactor.toFixed(2);
+
+            updateChart(costs);
+        }
+
+        function updateChart(costs) {
+            const ctx = document.getElementById('costChart').getContext('2d');
+            const isDark = document.body.getAttribute('data-theme') === 'dark';
+            const textColor = isDark ? '#e8eaed' : '#202124';
+
+            if (costChart) {
+                costChart.destroy();
+            }
+
+            costChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Infrastructure', 'CPU', 'Memory'],
+                    datasets: [{
+                        data: [costs.base, costs.cpu, costs.memory],
+                        backgroundColor: [
+                            '#1a73e8',
+                            '#34a853',
+                            '#fbbc04'
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: textColor,
+                                font: {
+                                    family: '"Google Sans", "Segoe UI", Arial, sans-serif',
+                                    size: 13,
+                                    weight: '500'
+                                },
+                                padding: 20
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.raw;
+                                    const percentage = ((value / costs.total) * 100).toFixed(1);
+                                    return `$${value.toFixed(2)} (${percentage}%)`;
+                                }
+                            },
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            titleColor: 'white',
+                            bodyColor: 'white',
+                            borderColor: '#1a73e8',
+                            borderWidth: 1
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateChartTheme() {
+            if (costChart) {
+                const costs = calculateCost();
+                updateChart(costs);
+            }
+        }
+
+        function getCurrentConfiguration() {
+            return {
+                cpu: parseFloat(document.getElementById("cpu").value),
+                memory: parseFloat(document.getElementById("memory").value),
+                maxReplicas: parseInt(document.getElementById("maxReplicas").value),
+                apiCount: parseInt(document.getElementById("apiCount").value)
+            };
+        }
+
+        function saveConfiguration() {
+            const config = getCurrentConfiguration();
+            localStorage.setItem('api-cost-calculator-config', JSON.stringify(config));
+            
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = 'Saved!';
+            button.style.backgroundColor = '#34a853';
+            
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.backgroundColor = '';
+            }, 2000);
+        }
+
+        function loadConfiguration() {
+            const savedConfig = localStorage.getItem('api-cost-calculator-config');
+            if (savedConfig) {
+                const config = JSON.parse(savedConfig);
+                
+                document.getElementById("cpu").value = config.cpu || 2;
+                document.getElementById("memory").value = config.memory || 4;
+                document.getElementById("maxReplicas").value = config.maxReplicas || 4;
+                document.getElementById("apiCount").value = config.apiCount || 1;
+                
+                document.getElementById("cpuSlider").value = config.cpu || 2;
+                document.getElementById("memorySlider").value = config.memory || 4;
+                document.getElementById("replicasSlider").value = config.maxReplicas || 4;
+                document.getElementById("apiSlider").value = config.apiCount || 1;
+                
+                updateCost();
+                
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = 'Loaded!';
+                button.style.backgroundColor = '#34a853';
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.style.backgroundColor = '';
+                }, 2000);
+            } else {
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = 'No Config';
+                button.style.backgroundColor = '#ea4335';
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.style.backgroundColor = '';
+                }, 2000);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            updateCost();
+        });
+
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+            if (!localStorage.getItem('theme')) {
+                document.body.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+                updateChartTheme();
+            }
+        });
+    </script>
+</body>
+</html>

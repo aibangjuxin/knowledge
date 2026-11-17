@@ -1,0 +1,17 @@
+# Warning:
+# This bundle models a relay-style upstream proxy and is not directly applicable
+# to a Squid explicit forward proxy on port 3128.
+# Keep it only as a reference draft unless the upstream proxy semantics are changed.
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - 00-serviceentries.yaml
+  - 01-egress-gateway.yaml
+  - 02-routing.yaml
+  - 03-saas2-client-secret.example.yaml
+  - 04-saas2-mtls-dr.yaml
+  - 05-authorizationpolicy.yaml
+  - 06-networkpolicy-apps.yaml
+  - 07-networkpolicy-egressgateway.yaml

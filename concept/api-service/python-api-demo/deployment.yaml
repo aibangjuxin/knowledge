@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-name-spring-samples-deploy
+  labels:
+    app: api-name-spring-samples
+spec:
+  replicas: 1 # 可根据需求调整副本数
+  selector:
+    matchLabels:
+      app: api-name-spring-samples
+  template:
+    metadata:
+      labels:
+        app: api-name-spring-samples
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: api-name-spring-samples-2025-11-24
+          # 你指定的2025.11.23版本镜像
+          image: europe-west2-docker.pkg.dev/my-gcp-project/containers/api-name-spring-samples:2025.11.23
+          imagePullPolicy: Always
+          env:
+            # 你关注的环境变量部分
+            - name: apiName
+              value: api-name-spring-samples
+            - name: minorVersion
+              value: 2025.11.24 # 模拟用的版本标识
+            - name: BASE_PATH
+              value: /api-name-spring-samples/v2025.11.24 # 对应健康检查路径的版本
+            - name: HTTPS_CERT_PWD
+              valueFrom:
+                secretKeyRef:
+                  key: abj-sprintruntime.p12.pwd
+                  name: env-region-secret-sprintruntime-local
+            # 片段中原有的其他环境变量
+            - name: APPDYNAMICS_AGENT_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: JAVA_TOOL_OPTIONS
+              value: -javaagent:/opt/appdynamics/javaagent.jar -Dappagent.start.timeout=5...
+            - name: PATH
+              value: /api-name-spring-samples/v2025.11.24
+          lifecycle:
+            postStart:
+              exec:
+                command: ["/bin/bash", "-c", "/bin/bash /opt/agent/lockdown.sh"]
+          # 健康检查（使用2025.11.24版本的路径）
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              httpHeaders:
+                - name: Content-Type
+                  value: application/json
+              path: /api-name-spring-samples/v2025.11.24/.well-known/health
+              port: 8443
+              scheme: HTTPS
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              httpHeaders:
+                - name: Content-Type
+                  value: application/json
+              path: /api-name-spring-samples/v2025.11.24/.well-known/health
+              port: 8443
+              scheme: HTTPS
+            initialDelaySeconds: 50
+            periodSeconds: 48
+            successThreshold: 1
+            timeoutSeconds: 30
+          ports:
+            - containerPort: 8443
+              protocol: TCP
+          # 资源限制（与你提供的片段一致）
+          resources:
+            limits:
+              cpu: "1"
+              memory: 768Mi
+            requests:
+              cpu: 100m
+              memory: 768Mi

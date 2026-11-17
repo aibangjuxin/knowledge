@@ -1,0 +1,26 @@
+# cni.yaml — Istio CNI 插件(节点级网络拦截)
+# 对应 chart: oci://gcr.io/istio-release/charts/cni
+# 详见 02-install-ambient-helm.md §4.1
+
+global:
+  hub: europe-west2-docker.pkg.dev/aibang-12345678-ajbx-dev/containers
+  tag: 1.30.3-distroless
+
+ambient:
+  dnsCapture: true          # ambient 关键:抓 DNS 解析走 ztunnel
+
+excludeNamespaces:
+  - istio-system
+  - kube-system
+  - gke-managed-system      # GKE 系统组件,绝不能被 CNI 拦截
+
+cni:
+  cniConfDir: /etc/cni/net.d
+  cniBinDir: /opt/cni/bin
+  resource:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi

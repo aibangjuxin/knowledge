@@ -1,0 +1,18 @@
+{
+  "_comment_": "infra-gcp 专用:跨 project Bucket IAM policy 模板。应用命令:gcloud storage buckets set-iam-policy gs://user-data ./bucket-iam-policy.json",
+  "_comment_2": "⚠ 必查:member 字段必须是 KSA principal(serviceAccount:PROJECT.svc.id.goog[NS/SA_NAME]),不是 GSA email",
+  "_comment_3": "⚠ 必查:condition.expression 限定 prefix,防止 KSA 泄漏后整个 bucket 可写",
+  "bindings": [
+    {
+      "role": "roles/storage.objectCreator",
+      "members": [
+        "serviceAccount:master-project.svc.id.goog[api-ns/api-bucket-writer]"
+      ],
+      "condition": {
+        "title": "api-ns-prefix-only",
+        "description": "只允许写 api-data/ 前缀",
+        "expression": "resource.name.startsWith('projects/_/buckets/user-data/objects/api-data/')"
+      }
+    }
+  ]
+}

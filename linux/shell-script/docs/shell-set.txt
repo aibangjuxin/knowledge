@@ -1,0 +1,16 @@
+set -euo pipefail 是一种 shell 选项，用于改变 shell 脚本的行为。这里是每个选项的含义：
+
+set -e 或 set -o errexit：这个选项告诉 shell 如果脚本中的任何命令返回非零状态码（即错误），则立即退出。这有助于尽早捕获错误并防止它们在后面引起更严重的问题。
+set -u 或 set -o nounset：这个选项告诉 shell 如果遇到未定义的变量（即未设置或赋值的变量），则立即退出。这有助于防止脚本继续执行可能不正确或意外的行为。
+set -o pipefail：这个选项告诉 shell 如果管道（即由管道符 '|' 连接的一系列命令）中的任何命令失败，则将管道视为失败。这很重要，因为默认情况下，管道的退出状态是管道中最后一个命令的退出状态，这可能会掩盖早期命令中的错误。
+这些选项一起有助于确保 shell 脚本更加健壮，不容易出错�
+
+
+
+
+set -euo pipefail is a shell option used to change the behavior of the shell script. Here's what each option means:
+
+set -e or set -o errexit: This option tells the shell to exit immediately if any command in the script exits with a non-zero status (i.e., an error). This helps to catch errors early and prevent them from causing further issues down the line.
+set -u or set -o nounset: This option tells the shell to exit immediately if it encounters an undefined variable (i.e., a variable that has not been set or assigned a value). This helps to prevent the script from continuing with potentially incorrect or unintended behavior.
+set -o pipefail: This option tells the shell to consider a pipeline (i.e., a series of commands connected by the pipe symbol '|') as having failed if any of the commands in the pipeline fail. This is important because by default, the exit status of a pipeline is the exit status of the last command in the pipeline, which can mask errors in earlier commands.
+Together, these options help to ensure that shell scripts are more robust and less prone to errors.�

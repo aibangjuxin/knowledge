@@ -1,0 +1,21 @@
+{
+  "name": "org-code-scanning",
+  "target": "code_scanning",
+  "enforcement": "disabled",
+  "conditions": {
+    "repository_name": {
+      "include": ["platform-*", "core-*"],
+      "exclude": []
+    }
+  },
+  "bypass_actors": [],
+  "rules": [
+    {
+      "type": "code_scanning_tools",
+      "parameters": {
+        "analyze": ["codeql", "semgrep"],
+        "check": []
+      }
+    }
+  ]
+}

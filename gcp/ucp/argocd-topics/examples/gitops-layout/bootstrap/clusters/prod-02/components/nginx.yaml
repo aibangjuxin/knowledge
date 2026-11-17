@@ -1,0 +1,12 @@
+# 组件启用清单：prod-02 × nginx
+#
+# prod-02 在**另一个 GCP project**（acme-platform-prod-b），
+# 但 env 仍是 prod → 走 apps/nginx/overlays/prod/，
+# AppProject 仍是 platform-prod。
+
+component: nginx
+cluster: prod-02
+server: https://prod-02.k8s.example.com
+env: prod
+project: platform-prod
+namespace: platform-prod

@@ -1,0 +1,28 @@
+# 集群元信息：prod-02
+#
+# ⚠️ 不是 Argo CD 资源，不会被 apply。
+#
+# ⭐ 本集群演示「**多个 GCP project**」：
+#    prod-01 在 acme-platform-prod-a，prod-02 在 acme-platform-prod-b，
+#    两个 project 的网络、IAM、计费完全独立。
+#
+#    但它们的 **AppProject 相同**（platform-prod）——因为 AppProject
+#    是按**环境**划分的，不是按 GCP project 划分的。
+#    隔离靠：Cluster Secret（各自凭据）+ Workload Identity SA +
+#            AppProject.destinations 逐个列出 server。
+#
+#    如果确实需要按 project 隔离权限，再拆一个 platform-prod-b 项目；
+#    代价是组件清单里的 project 字段也要跟着分叉。
+
+cluster: prod-02
+server: https://prod-02.k8s.example.com
+env: prod
+project: platform-prod
+namespace: platform-prod
+
+# ---- 以下字段仅供人/工具参考，不参与 ApplicationSet 展开 ----------------
+gcpProject: acme-platform-prod-b
+gcpRegion: asia-northeast1
+vpc: vpc-prod-b
+argocdClusterSecret: prod-02
+workloadIdentityServiceAccount: sa-argocd@acme-platform-prod-b.iam.gserviceaccount.com

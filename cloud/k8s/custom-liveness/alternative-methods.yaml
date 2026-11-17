@@ -1,0 +1,145 @@
+# 方法1: 使用自定义Docker镜像
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squid-with-custom-image
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: squid-custom
+  template:
+    metadata:
+      labels:
+        app: squid-custom
+    spec:
+      containers:
+      - name: squid-with-health-check
+        image: your-registry/squid-with-health-check:latest  # 自定义镜像
+        ports:
+        - containerPort: 3128
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+---
+# 方法2: 使用InitContainer准备脚本
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squid-with-init-container
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: squid-init
+  template:
+    metadata:
+      labels:
+        app: squid-init
+    spec:
+      initContainers:
+      - name: script-downloader
+        image: busybox
+        command: ['sh', '-c']
+        args:
+        - |
+          cat > /shared/health-check.py << 'EOF'
+          #!/usr/bin/env python3
+          import requests
+          import time
+          from flask import Flask, jsonify
+          
+          app = Flask(__name__)
+          
+          @app.route('/health')
+          def health_check():
+              try:
+                  response = requests.get('https://www.baidu.com', timeout=5)
+                  if response.status_code == 200:
+                      return jsonify({"status": "healthy"}), 200
+              except:
+                  pass
+              return jsonify({"status": "unhealthy"}), 503
+          
+          if __name__ == '__main__':
+              app.run(host='0.0.0.0', port=8080)
+          EOF
+          chmod +x /shared/health-check.py
+        volumeMounts:
+        - name: shared-scripts
+          mountPath: /shared
+      containers:
+      - name: squid
+        image: squid:latest
+        ports:
+        - containerPort: 3128
+      - name: health-checker
+        image: python:3.9-slim
+        command: ['sh', '-c']
+        args:
+        - |
+          pip install flask requests &&
+          python /shared/health-check.py
+        volumeMounts:
+        - name: shared-scripts
+          mountPath: /shared
+        ports:
+        - containerPort: 8080
+      volumes:
+      - name: shared-scripts
+        emptyDir: {}
+
+---
+# 方法3: 使用Secret存储脚本（适合敏感脚本）
+apiVersion: v1
+kind: Secret
+metadata:
+  name: health-check-secret
+type: Opaque
+data:
+  health-check.py: |
+    IyEvdXNyL2Jpbi9lbnYgcHl0aG9uMwppbXBvcnQgcmVxdWVzdHMKaW1wb3J0IHRpbWUKZnJvbSBm
+    bGFzayBpbXBvcnQgRmxhc2ssIGpzb25pZnkKCmFwcCA9IEZsYXNrKF9fbmFtZV9fKQoKQGFwcC5y
+    b3V0ZSgnL2hlYWx0aCcpCmRlZiBoZWFsdGhfY2hlY2soKToKICAgIHJldHVybiBqc29uaWZ5KHsi
+    c3RhdHVzIjogImhlYWx0aHkifSksIDIwMAoKaWYgX19uYW1lX18gPT0gJ19fbWFpbl9fJzoKICAg
+    IGFwcC5ydW4oaG9zdD0nMC4wLjAuMCcsIHBvcnQ9ODA4MCk=
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squid-with-secret
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: squid-secret
+  template:
+    metadata:
+      labels:
+        app: squid-secret
+    spec:
+      containers:
+      - name: health-checker
+        image: python:3.9-slim
+        command: ['sh', '-c']
+        args:
+        - |
+          pip install flask requests &&
+          python /secrets/health-check.py
+        volumeMounts:
+        - name: health-check-secret
+          mountPath: /secrets
+        ports:
+        - containerPort: 8080
+      volumes:
+      - name: health-check-secret
+        secret:
+          secretName: health-check-secret
+          defaultMode: 0755

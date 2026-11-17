@@ -1,0 +1,23 @@
+>[Unit]
+Description=Tenant Hello World HTTP+HTTPS server
+Documentation=file:/opt/tenant/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -u /opt/tenant/server.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Hardening (production-ready; safe to drop for POC)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/tenant
+
+[Install]
+WantedBy=multi-user.target

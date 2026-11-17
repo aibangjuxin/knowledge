@@ -1,0 +1,19 @@
+# VirtualGateway - Defines ingress gateway listener configuration
+# This is the Gloo Mesh equivalent of Istio Gateway resource
+apiVersion: networking.gloo.solo.io/v2
+kind: VirtualGateway
+metadata:
+  name: team-a-gateway
+  namespace: team-a-runtime
+spec:
+  workloads:
+  - selector:
+      labels:
+        app: gloo-gateway
+      namespace: gloo-gateway
+  listeners:
+  - http: {}
+    port:
+      number: 8080
+    allowedRouteTables:
+    - host: "*"  # Allow RouteTables with any host (restrict in production)

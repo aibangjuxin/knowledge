@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "mTLS Client Cert Lifecycle + Anti-Drift",
+    "output": "shared-glb-cn-b.html",
+    "viewBox": [1050, 760],
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    { "id": "main", "label": "Cert lifecycle + request flow" },
+    { "id": "terminal", "label": "Terminal exits" }
+  ],
+  "states": [
+    { "id": "issued", "type": "start", "label": "Issued", "sublabel": "Venafi issues", "lane": "main", "col": 0, "step": "01", "tag": "cert" },
+    { "id": "valid", "type": "active", "label": "Valid cert", "sublabel": "in CA chain", "lane": "main", "col": 1, "step": "02", "tag": "cert" },
+    { "id": "glb", "type": "active", "label": "GLB mTLS", "sublabel": "TrustConfig verify", "lane": "main", "col": 2, "step": "03", "tag": "edge" },
+    { "id": "route", "type": "decision", "label": "URI-SAN gate", "sublabel": "path + cert match", "lane": "main", "col": 3, "step": "04", "tag": "check" },
+    { "id": "served", "type": "success", "label": "team-svc", "sublabel": "serves request", "lane": "main", "col": 4, "tag": "ok" },
+    { "id": "expired", "type": "failure", "label": "Expired / Revoked", "sublabel": "CRL / auto-renew", "lane": "terminal", "col": 0, "tag": "term" },
+    { "id": "drift404", "type": "failure", "label": "404 drift", "sublabel": "cert ≠ path team", "lane": "terminal", "col": 1, "yOffset": 12, "tag": "drift" }
+  ],
+  "transitions": [
+    { "id": "issued-valid", "from": "issued", "to": "valid", "variant": "default" },
+    { "id": "valid-glb", "from": "valid", "to": "glb", "variant": "default" },
+    { "id": "glb-route", "from": "glb", "to": "route", "variant": "default" },
+    { "id": "route-ok", "from": "route", "to": "served", "variant": "emphasis" },
+    { "id": "route-drift", "from": "route", "to": "drift404", "variant": "security" },
+    { "id": "glb-expired", "from": "glb", "to": "expired", "variant": "security" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Cert lifecycle",
+      "items": [
+        "Venafi issues cert with URI-SAN spiffe://.../<team>-<api>-client",
+        "Cert valid while in CA chain and within time window",
+        "Auto-renew re-issues before expiry; revocation via CRL/OCSP"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Request flow",
+      "items": [
+        "Client presents cert → GLB TrustConfig verifies chain",
+        "URL Map routes by path to team backend service",
+        "HTTPRoute checks path + x-client-cert-uri-sans"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Anti-drift + exits",
+      "items": [
+        "URI-SAN matches → team-svc serves (no auth code)",
+        "Mismatch (Team 1 cert on /team2apiname) → 404",
+        "Expired / Revoked certs rejected at the edge"
+      ]
+    }
+  ]
+}

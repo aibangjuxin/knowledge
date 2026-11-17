@@ -1,0 +1,10 @@
+# Helm values for Gloo Gateway (Ingress)
+glooGateway:
+  enabled: true
+  gatewayProxies:
+    gatewayProxy:
+      service:
+        type: LoadBalancer # For GKE, this will create a L4 ILB/XLB
+        # Optional: annotations for GKE ILB
+        # annotations:
+        #   cloud.google.com/load-balancer-type: "Internal"

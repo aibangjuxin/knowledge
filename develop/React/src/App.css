@@ -1,0 +1,56 @@
+.App {
+  text-align: center;
+}
+
+.App-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+}
+
+.health-status {
+  margin: 20px 0;
+  font-size: 18px;
+}
+
+.status {
+  margin-left: 10px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-weight: bold;
+}
+
+.status.healthy {
+  background-color: #4caf50;
+  color: white;
+}
+
+.status.checking {
+  background-color: #ff9800;
+  color: white;
+}
+
+.features {
+  margin-top: 30px;
+}
+
+.features h2 {
+  font-size: 24px;
+  margin-bottom: 15px;
+}
+
+.features ul {
+  list-style: none;
+  padding: 0;
+}
+
+.features li {
+  margin: 10px 0;
+  font-size: 16px;
+}

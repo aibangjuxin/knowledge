@@ -1,0 +1,50 @@
+# Load Test Configuration
+# Usage: ./config-based-test.sh load-test-config.yaml
+
+test_name: "Website Performance Test"
+target_url: "https://www.toutiao.com/w/1840396364175372/?log_from=386af56e4fc548_1755142542314"
+
+# Test scenarios
+scenarios:
+  - name: "Light Load"
+    duration: 60
+    connections: 10
+    rps: 50
+    
+  - name: "Medium Load"
+    duration: 120
+    connections: 25
+    rps: 100
+    
+  - name: "Heavy Load"
+    duration: 180
+    connections: 50
+    rps: 200
+
+# Tools to use (wrk, ab, hey, vegeta, k6)
+tools:
+  - wrk
+  - hey
+
+# Monitoring options
+monitoring:
+  enabled: true
+  interval: 5
+  metrics:
+    - cpu
+    - memory
+    - network
+
+# Output options
+output:
+  directory: "./test-results"
+  formats:
+    - txt
+    - json
+    - html
+  
+# Thresholds
+thresholds:
+  max_response_time: 500  # ms
+  max_error_rate: 5       # percentage
+  min_throughput: 100     # requests/second

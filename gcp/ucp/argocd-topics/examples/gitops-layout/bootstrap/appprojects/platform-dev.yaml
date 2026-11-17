@@ -1,0 +1,50 @@
+# Argo CD · dev 环境项目
+#
+# 继承：sourceRepos / sourceNamespaces / clusterResource*List / namespaceResource*List
+#       从父项目 platform 继承（不重复写）
+# 覆盖：destinations / roles 是**本项目自己定义**的，不继承父项目
+
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform-dev
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform
+    app.kubernetes.io/environment: dev
+spec:
+  description: Platform dev 环境
+
+  # ---- 允许的目标 ---------------------------------------------------------
+  # ⚠️ destinations 必须**逐个集群**列出 server。
+  #    少一个 → 该集群的 Application 同步被拒：
+  #    "not match any of the allowed destinations"
+  #    （validate-clusters.py 会检查这一条）
+  #
+  #    AppProject 按**环境**划分，不按 GCP project 划分：
+  #    dev-01 与 dev-02 可以属于不同的 GCP project，但共用 platform-dev。
+  destinations:
+  - server: 'https://dev-01.k8s.example.com'
+    namespace: 'platform-dev'
+  - server: 'https://dev-02.k8s.example.com'
+    namespace: 'platform-dev'
+  # 沙箱集群：任意集群、任意 namespace（仅限本项目）
+  - server: '*'
+    namespace: 'platform-sandbox'
+
+  # ---- 集群级资源：dev 放宽 ----------------------------------------------
+  # 注意：白名单的 '*' **只**对 clusterResource 生效，
+  #       namespaceResourceBlacklist 仍会拦住 Role/RoleBinding。
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'
+
+  # ---- 项目角色 ------------------------------------------------------------
+  roles:
+  - name: admin
+    description: Dev 运维
+    policies:
+    - p, proj:platform-dev:admin, applications, *, platform-dev/*, allow
+    groups:
+    - my-org:devops-dev
+    - my-org:devops-platform

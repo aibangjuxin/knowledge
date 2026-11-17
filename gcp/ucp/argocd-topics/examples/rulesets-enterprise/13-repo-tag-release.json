@@ -1,0 +1,32 @@
+{
+  "name": "repo-release-tag-convention",
+  "target": "tag",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": ["~ALL"],
+      "exclude": []
+    }
+  },
+  "bypass_actors": [],
+  "rules": [
+    {
+      "type": "creation"
+    },
+    {
+      "type": "update"
+    },
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "tag_name_pattern",
+      "parameters": {
+        "name": "tag 必须是 v<major>.<minor>.<patch>[-预发布]",
+        "negate": false,
+        "operator": "regex",
+        "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.]+)?$"
+      }
+    }
+  ]
+}

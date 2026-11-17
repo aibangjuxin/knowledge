@@ -1,0 +1,541 @@
+#!/usr/bin/env zsh
+# dualview — 多显示器拓扑:排列位置 / 缩放 / 刷新率 / 主屏,以及"为什么要卡"
+#
+# 设计目标:
+#   - displaywatch 看的是**单块屏的参数**;真正让人抓狂的是屏与屏之间的事:
+#     外接屏摆到了主屏左边导致菜单栏方向变了、两块屏之间有个大洞鼠标要飞半天、
+#     5K 屏按 1x 显示字糊、4K 屏跑 60Hz 拖不动动画。
+#   - 免 brew / 免第三方:排列几何来自系统自带的 JXA 桥
+#     (osascript -l JavaScript + AppKit.NSScreen / CoreGraphics),
+#     像素与模式信息来自 system_profiler,两边按屏名合并。
+#   - 显示:
+#       ① 每块屏的完整档案:几何、缩放、刷新率、像素/逻辑分辨率、主屏、镜像
+#       ② 排列拓扑图(ASCII),一眼看出谁在谁左边、中间有没有洞
+#       ③ 虚拟桌面(所有屏的外接矩形)尺寸
+#       ④ 每块屏的诊断:HiDPI 是否开启、刷新率档位、缩放是否与主屏一致
+#       ⑤ 结论:最该调的那一项
+#   - 只读:不碰任何显示设置(改排列/改刷新率请去 系统设置→显示器)
+#
+# 用法:
+#   dualview                  # 全量单次
+#   dualview --map            # 只看排列拓扑图
+#   dualview --list           # 只看屏幕清单
+#   dualview --json
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -r _TAB=$'\t'
+typeset ONLY=''
+typeset AS_JSON=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --map)  ONLY='map';  shift ;;
+    --list)  ONLY='list'; shift ;;
+    --json) AS_JSON=true; shift ;;
+    --version) echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--map|--list] [--json]"
+      echo ""
+      echo "  --map   只看排列拓扑图"
+      echo "  --list  只看屏幕清单"
+      echo "  --json  TSV 输出"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 && $AS_JSON == false ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+typeset -g -a J_SCR=()    # id<TAB>name<TAB>fx<TAB>fy<TAB>w<TAB>h<TAB>scale<TAB>fps<TAB>main<TAB>builtin<TAB>online<TAB>asleep<TAB>mirror<TAB>model<TAB>serial
+typeset -g -a J_SP=()     # name<TAB>pixels<TAB>ui_looks<TAB>hz<TAB>main<TAB>rotation
+typeset -g -a J_MAP=()    # r<TAB>c<TAB>tag<TAB>name
+typeset -g -a J_ROWS=()   # name<TAB>px<TAB>w<TAB>h<TAB>scale<TAB>hz<TAB>flags<TAB>fx<TAB>fy<TAB>where<TAB>ui
+typeset -g J_MINX=0 J_MINY=0 J_MAXX=0 J_MAXY=0 J_UNIT=100
+typeset -g J_N=0
+typeset -g J_ERR=''
+# 具名解析器的输出(由 _scr_fields / _sp_fields 填)
+typeset -g S_ID='' S_NAME='' S_FX=0 S_FY=0 S_W=0 S_H=0 S_SCALE=1 S_FPS=0 S_MAIN=0
+typeset -g S_BUILTIN=0 S_ONLINE=1 S_ASLEEP=0 S_MIRROR=0 S_MODEL='' S_SERIAL='' S_VY=0 S_VH=0
+typeset -g SP_NAME='' SP_PX='?' SP_UI='' SP_HZ='' SP_MAIN='' SP_ROT=''
+
+# ---- ① 屏幕几何(系统自带 JXA 桥) -----------------------------------------
+# 为什么不用 displaywatch 那套 ioreg:ioreg 拿不到**逻辑坐标**,
+# 而"这屏在主屏左边还是右边"这个问题只能靠 CGDisplayBounds 的 origin 回答。
+#
+# 坑(坐标):NSScreen.frame 是 **Cocoa 坐标**(原点在左下、y 向上),
+# CGDisplayBounds 是 **Quartz 坐标**(原点在左上、y 向下)。
+# 画拓扑图必须用后者,直接拿 NSScreen 的 y 画,整张图会上下颠倒。
+_collect_geometry() {
+  local js
+  js=$(mktemp)
+  cat > "$js" <<'JSEOF'
+ObjC.import('AppKit');
+ObjC.import('CoreGraphics');
+const screens = $.NSScreen.screens;
+const out = [];
+for (let i = 0; i < screens.count; i++) {
+  const s = screens.objectAtIndex(i);
+  const dd = s.deviceDescription;
+  const num = dd.objectForKey('NSScreenNumber');
+  const id = num ? num.intValue : 0;
+  const f = s.frame;
+  const v = s.visibleFrame;
+  // 可见高度比 frame 矮的那部分被 Dock / 菜单栏占了,排查"底下一条空白"要用它
+  out.push([
+    id,
+    ObjC.unwrap(s.localizedName),
+    f.origin.x, f.origin.y, f.size.width, f.size.height,
+    v.origin.y, v.size.height,
+    s.backingScaleFactor,
+    s.maximumFramesPerSecond,
+    // 两个坑叠在一起:
+    //  ① NSScreen **没有** screenNumber 属性(老 API 才有),直接读是 undefined;
+    //  ② 屏号是 NSNumber 对象,=== 比的是引用,永远 false。
+    // 正确写法:两边都从 deviceDescription 里取 NSScreenNumber 再比 intValue。
+    ($.NSScreen.mainScreen &&
+     $.NSScreen.mainScreen.deviceDescription.objectForKey('NSScreenNumber').intValue === num.intValue) ? 1 : 0,
+    $.CGDisplayIsBuiltin(id),
+    $.CGDisplayIsOnline(id),
+    $.CGDisplayIsAsleep(id),
+    $.CGDisplayIsInMirrorSet(id),
+    $.CGDisplayModelNumber(id),
+    $.CGDisplaySerialNumber(id)
+  ].join('\t'));
+}
+out.join('\n');
+JSEOF
+
+  local out
+  out=$(osascript -l JavaScript "$js" 2>/dev/null) || out=''
+  rm -f "$js"
+
+  if [[ -z $out ]]; then
+    J_ERR='osascript 拿不到屏幕信息(无图形会话?远程登录?或系统限制了 JXA 桥接)'
+    return 1
+  fi
+
+  # 逐行读入,一行一块屏
+  #
+  # 坑(本脚本开发时踩到,直接让脚本永远转圈):
+  # `while read … <<< "$out"; do` 把重定向挂在 **read 命令**上,
+  # zsh 会在每次读完之后把输入位置**还原**,于是永远读到第一行 —— 死循环。
+  # 重定向必须挂在 while 循环上:`while read …; do … done <<< "$out"`。
+  local line id
+  local fx fy w h vy vh scale fps main builtin online asleep mirror model serial
+  while IFS=$_TAB read -r id name fx fy w h vy vh scale fps main builtin online asleep mirror model serial; do
+    [[ -n $id ]] || continue
+    J_SCR+=("${id}${_TAB}${name}${_TAB}${fx}${_TAB}${fy}${_TAB}${w}${_TAB}${h}${_TAB}${scale}${_TAB}${fps}${_TAB}${main}${_TAB}${builtin}${_TAB}${online}${_TAB}${asleep}${_TAB}${mirror}${_TAB}${model}${_TAB}${serial}")
+    J_N=$(( J_N + 1 ))
+  done <<< "$out"
+  return 0
+}
+
+# ---- ② 像素与模式(system_profiler) --------------------------------------
+# system_profiler 给的是"面板真分辨率 + UI 看起来多大 + 当前 Hz",
+# 和 NSScreen 的逻辑尺寸互补:后者没有像素数,前者没有几何。
+# 坑:输出里 GPU 段和 Displays 段是两层缩进,只有 8 空格缩进 + 冒号结尾的才是屏名。
+_collect_sprofiler() {
+  local out
+  # 坑(解析):system_profiler 的屏之间**没有空行**,最后一块屏后面才有一个。
+  # 早先"攒到空行再输出",结果只拿到最后一块屏,而且字段整体错位
+  # (hz 里装的是 Rotation 的值)。正确做法:遇到下一个 8 空格缩进的屏名就 flush。
+  out=$(system_profiler SPDisplaysDataType 2>/dev/null | LC_ALL=C awk '
+    function flush(   h) {
+      if (name == "") return
+      h = "-"
+      # 坑:值是 "2560 x 1440 @ 60.00Hz",@ 后面有一个空格,
+      # 用 /@[0-9.]+Hz/ 匹配不到 → hz 变空 → 后面所有字段整体左移一位,
+      # 症状是"刷新率那一列显示 Supported"(那是 Rotation 的值)。
+      if (match(ui, /@ *[0-9.]+ *Hz/)) h = substr(ui, RSTART + 2, RLENGTH - 4)
+      printf "SP\t%s\t%s\t%s\t%s\t%s\t%s\n", name, px, ui, h, mn, rot
+      px = "-"; ui = "-"; mn = "-"; rot = "-"; name = ""
+    }
+    # 屏名行:8 空格缩进 + 非空格开头 + 行尾冒号(GPU 的 "Displays:" 是 4 空格)
+    /^        [^ ].*:$/ { flush(); name = $0; sub(/^ +/, "", name); sub(/:$/, "", name); next }
+    name != "" && /Resolution:/    { px  = $0; sub(/.*Resolution: */, "", px);  next }
+    name != "" && /UI Looks like:/ { ui  = $0; sub(/.*UI Looks like: */, "", ui); next }
+    name != "" && /Main Display:/  { mn  = $0; sub(/.*Main Display: */, "", mn);  next }
+    name != "" && /Rotation:/      { rot = $0; sub(/.*Rotation: */, "", rot); next }
+    END { flush() }
+  ')
+  [[ -z $out ]] && return 0
+  local kind n px ui hz mn rot
+  # 关键:awk 用 "-" 顶替空值,再在读进来之后换回空串。
+  # 原因见 README 新坑:IFS=$'\t' 时**连续 tab 会被折叠成一个分隔符**,
+  # 空字段直接消失,后面所有值整体左移(症状:hz 里出现 Rotation 的值)。
+  while IFS=$_TAB read -r kind n px ui hz mn rot; do
+    [[ $kind == 'SP' ]] || continue
+    J_SP+=("${n}${_TAB}${px}${_TAB}${ui}${_TAB}${hz}${_TAB}${mn}${_TAB}${rot}")
+  done <<< "$out"
+  return 0
+}
+
+# ---- ③ 拓扑图 ------------------------------------------------------------
+# 把所有屏的 Quartz 矩形映射到一张字符画上。
+# 坐标:Quartz 原点在左上,y 向下,所以直接用 fy / fy+h 当上下边。
+_build_map() {
+  (( J_N == 0 )) && return 0
+
+  # 外接矩形
+  local first=1 line id name fx fy w h scale fps main builtin online asleep mirror model serial
+  local c0 c1 r0 r1 tag r c i
+  for line in $J_SCR; do
+    _scr_fields "$line"
+    if (( first )); then
+      J_MINX=$S_FX; J_MAXX=$(( S_FX + S_W )); J_MINY=$S_FY; J_MAXY=$(( S_FY + S_H )); first=0
+    else
+      (( S_FX < J_MINX )) && J_MINX=$S_FX
+      (( S_FX + S_W > J_MAXX )) && J_MAXX=$(( S_FX + S_W ))
+      (( S_FY < J_MINY )) && J_MINY=$S_FY
+      (( S_FY + S_H > J_MAXY )) && J_MAXY=$(( S_FY + S_H ))
+    fi
+  done
+
+  # 单位:整张图控制在 64 列 × 20 行以内,长宽各自取更大的那个约束
+  local span_x=$(( J_MAXX - J_MINX )) span_y=$(( J_MAXY - J_MINY ))
+  (( span_x <= 0 )) && span_x=1
+  (( span_y <= 0 )) && span_y=1
+  J_UNIT=$(( span_x / 56 ))
+  (( J_UNIT < 1 )) && J_UNIT=1
+  local unit_y=$(( span_y / 17 ))
+  (( unit_y > J_UNIT )) && J_UNIT=$unit_y
+
+  # 先算出每块屏占据的字符格范围,再逐格填充
+  # (tag/r/c 已经在函数开头声明过,这里绝不再写 local —— 循环体内重复 local 会回显)
+  for (( i = 1; i <= J_N; i++ )); do
+    _scr_fields "$J_SCR[$i]"
+    c0=$(( (S_FX - J_MINX) / J_UNIT ))
+    c1=$(( (S_FX + S_W - J_MINX) / J_UNIT ))
+    r0=$(( (S_FY - J_MINY) / J_UNIT ))
+    r1=$(( (S_FY + S_H - J_MINY) / J_UNIT ))
+    (( c1 <= c0 )) && c1=$(( c0 + 1 ))
+    (( r1 <= r0 )) && r1=$(( r0 + 1 ))
+    # 主屏标 M,其他按序号,图上一眼能分清
+    if (( S_MAIN == 1 )); then tag='M'; else tag="$i"; fi
+    for (( r = r0; r <= r1; r++ )); do
+      for (( c = c0; c <= c1; c++ )); do
+        J_MAP+=("${r}${_TAB}${c}${_TAB}${tag}${_TAB}${name}")
+      done
+    done
+  done
+  return 0
+}
+
+# ---- 具名解析器 ----------------------------------------------------------
+# J_SCR 一行的字段顺序(改这个表就要同步改这里):
+#   1 id  2 name  3 fx  4 fy  5 w  6 h  7 scale  8 fps  9 main
+#   10 builtin  11 online  12 asleep  13 mirror  14 model  15 serial
+#   16 visibleY  17 visibleH
+_scr_fields() {
+  local rest
+  IFS=$_TAB read -r S_ID S_NAME S_FX S_FY S_W S_H S_SCALE S_FPS S_MAIN \
+                 S_BUILTIN S_ONLINE S_ASLEEP S_MIRROR S_MODEL S_SERIAL S_VY S_VH <<< "$1"
+  return 0
+}
+# J_SP 一行:1 name 2 pixels 3 ui_looks 4 hz 5 main 6 rotation
+_sp_fields() {
+  IFS=$_TAB read -r SP_NAME SP_PX SP_UI SP_HZ SP_MAIN SP_ROT <<< "$1"
+  # "-" 表示"没有值"(awk 不能吐空字段,见下),换回空串方便后面判断
+  [[ $SP_HZ  == '-' ]] && SP_HZ=''
+  [[ $SP_UI  == '-' ]] && SP_UI=''
+  [[ $SP_PX  == '-' ]] && SP_PX='?'
+  [[ $SP_MAIN == '-' ]] && SP_MAIN=''
+  [[ $SP_ROT == '-' ]] && SP_ROT=''
+  return 0
+}
+# 取某块屏对应的 system_profiler 记录;取不到就填 '?'
+_sp_for() {
+  local want=$1 line
+  for line in $J_SP; do
+    [[ ${line%%$'\t'*} == $want ]] && { _sp_fields "$line"; return 0 }
+  done
+  SP_NAME=$want; SP_PX='?'; SP_UI=''; SP_HZ=''; SP_MAIN=''; SP_ROT=''
+  return 0
+}
+
+# ---- ④ 诊断 --------------------------------------------------------------
+# 全部通过具名变量判断,不再用 $8 / $9 这种位置下标 ——
+# J_SCR 一行 17 个字段,下标写错一个,症状是"主屏判定成没有主屏"这种
+# 看起来毫无关联的错误(实测踩过:把 main 写成 $8,主屏永远是 0)。
+_verdicts() {
+  local bad=0 warn=0
+  local line px hz
+  local line2
+
+  # 屏幕数与主屏数先统计一次
+  local n_scr=0 n_main=0
+  for line in $J_SCR; do
+    (( n_scr = n_scr + 1 ))
+    [[ $(print -r -- "$line" | cut -f9) == '1' ]] && (( n_main = n_main + 1 ))
+  done
+
+  for line in $J_SCR; do
+    _scr_fields "$line"
+    px=$SP_PX
+    hz=$SP_HZ
+
+    if [[ -n $hz ]] && (( hz < 60 )) && (( S_BUILTIN == 0 )); then
+      # 4K/5K 外接屏跑不到 60Hz,九成是线材(HDR 高速线)、接口(转接坞)或
+      # macOS 默认选了"节能刷新率"。这类屏常见支持 75/120Hz。
+      if [[ $px == 5120* || $px == 3840* ]]; then
+        printf "warn\t%s 刷新率偏低\t%s @ %s\t系统设置→显示器里按住 Option 点缩放,旁边能选更高刷新率;换 HDMI2.1 / DP 高速线常能直接翻倍\n" \
+          "$S_NAME" "$px" "$hz"
+        (( warn = warn + 1 ))
+      fi
+    elif [[ -n $hz ]] && (( hz < 30 )); then
+      printf "bad\t%s 刷新率异常低\t%s\t几乎一定选错了模式,拖窗口会明显掉帧\n" "$S_NAME" "$hz"
+      (( bad = bad + 1 ))
+    fi
+
+    # HiDPI:5K/4K 屏按 1x 显示,文字一定发虚
+    if [[ $px != '?' && $px != '' ]] && (( S_SCALE < 2 )) && [[ $px == 5120* || $px == 3840* ]]; then
+      printf "warn\t%s 没开 HiDPI\t%s 按 %sx 显示\t文字会发虚(系统设置→显示器→按住 Option 点缩放,选带缩放的那档)\n" \
+        "$S_NAME" "$px" "$S_W"
+      (( warn = warn + 1 ))
+    fi
+
+    (( S_ASLEEP == 1 )) && printf "info\t%s 处于休眠\t-\t没接信号或被系统关掉,唤醒后才会重排\n" "$S_NAME"
+    if (( S_MIRROR == 1 )); then
+      printf "warn\t%s 在镜像组里\t-\t镜像时两块屏同分辨率,不能各用各的缩放\n" "$S_NAME"
+      (( warn = warn + 1 ))
+    fi
+
+    if (( S_MAIN == 1 )); then
+      if (( S_FX > 0 )); then
+        printf "warn\t主屏不在最左边\tx=%s\t菜单栏/新窗口都出现在这块;多数人习惯主屏放最左或最上\n" "$S_FX"
+        (( warn = warn + 1 ))
+      fi
+    else
+      if (( S_FX < 0 && S_FX + S_W <= 0 )); then
+        printf "info\t%s 在主屏左侧\tx=%s\t鼠标向左出屏就是它,符合习惯就不用改\n" "$S_NAME" "$S_FX"
+      fi
+      # 与主屏的水平空隙:两块屏之间没被覆盖的横向距离
+      local gap
+      gap=$(print -r -- $J_SCR | LC_ALL=C awk -F'\t' -v n="$S_ID" '
+        $9 == 1 { m0 = $3; m1 = $3 + $5 }
+        $1 == n { s0 = $3; s1 = $3 + $5 }
+        END {
+          if (s1 <= m0) print m0 - s1
+          else if (m1 <= s0) print s0 - m1
+          else print 0
+        }')
+      if [[ -n $gap ]] && (( gap > 200 )); then
+        printf "warn\t%s 和主屏之间空 %d 点\t-\t鼠标要飞过这段空白,拖窗口不方便;在系统设置里把它们拖近\n" \
+          "$S_NAME" "$gap"
+        (( warn = warn + 1 ))
+      fi
+    fi
+  done
+
+  if (( n_scr == 1 && n_main == 0 )); then
+    printf "info\t只有一块屏且不是主屏\t-\t无头会话 / 屏幕被关掉时的状态\n"
+  fi
+  if (( n_scr > 0 && n_main == 0 )); then
+    printf "bad\t没有主屏\t-\t异常状态,菜单栏会没地方放;重登一次通常能恢复\n"
+    (( bad = bad + 1 ))
+  fi
+  if (( n_scr == 1 && n_main == 1 && S_BUILTIN == 0 )); then
+    printf "info\t单块外接屏,无内置屏\t-\t合盖或外接键盘使用中,系统设置里没有「内置显示器」那一栏\n"
+  fi
+
+  printf "info\t统计\tbad=%d warn=%d\t先修 bad\n" "$bad" "$warn"
+}
+
+# ---- 渲染 ----------------------------------------------------------------
+_kv() { printf "%s\t%s\t%s\t%s\n" "$1" "$2" "$3" "$4"; }
+
+_render_kv() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return s }
+    NF < 2 { next }
+    {
+      if ($1 == "ok")       { col = g;   mark = "✓" }
+      else if ($1 == "warn") { col = y;   mark = "!" }
+      else if ($1 == "bad")  { col = red; mark = "✗" }
+      else                  { col = d;   mark = "·" }
+      printf "  %s%s%s %s%s%s  %s%s  %s  %s\n", col, mark, r, b, pad($2, 30), r, pad($3, 26), d, $4, r
+    }
+  '
+}
+
+# 把 J_SCR 和 J_SP 合并成展示行:name px ui w h scale fps hz flags fx fy
+_build_rows() {
+  # local 一律在函数开头写一次:写进循环体第二轮会回显 tag=… / where=… 污染输出
+  local line px hz flags where
+  for line in $J_SCR; do
+    _scr_fields "$line"
+    _sp_for "$S_NAME"
+    px=${SP_PX:-'?'}; hz=${SP_HZ:-''}
+    [[ -z $hz ]] && hz="${S_FPS}"
+    hz="${hz}Hz"
+    flags=''
+    (( S_MAIN == 1 ))     && flags="${flags}主屏 "
+    (( S_BUILTIN == 1 )) && flags="${flags}内置 "
+    (( S_MIRROR == 1 ))  && flags="${flags}镜像组 "
+    (( S_ONLINE == 0 ))  && flags="${flags}离线 "
+    (( S_ASLEEP == 1 ))  && flags="${flags}休眠 "
+    # 位置描述:相对主屏(0,0)在哪一侧
+    where=''
+    if (( S_MAIN == 1 )); then
+      where='基准(其他屏都相对它)'
+    elif (( S_FX < 0 && S_FX + S_W <= 0 )); then
+      where='主屏左侧'
+    elif (( S_FX > 0 )); then
+      where='主屏右侧'
+    elif (( S_FY > 0 )); then
+      where='主屏下方'
+    else
+      where='主屏上方'
+    fi
+    J_ROWS+=("${S_NAME}${_TAB}${px}${_TAB}${S_W}${_TAB}${S_H}${_TAB}${S_SCALE}${_TAB}${hz}${_TAB}${flags% }${_TAB}${S_FX}${_TAB}${S_FY}${_TAB}${where}${_TAB}${SP_UI}")
+  done
+  return 0
+}
+
+_render_list() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return s }
+    NF < 10 { next }
+    {
+      # 缩放档位的说法
+      if ($5 + 0 >= 2) sc = "HiDPI"
+      else if ($5 + 0 > 0) sc = "标准"
+      else sc = "?"
+      # px 字段是 "5120 x 2880 (5K/UHD+ …)",带空格会撑乱列,
+      # 只把中间那个 " x " 换成 "×",括号里的说明丢掉
+      px = $2
+      if (px == "?") px = "?"
+      else { sub(/ *\(.*/, "", px); gsub(/ x /, "×", px) }
+      printf "  %s#%d %-18s%s %s%11s%s %sx  %s%5s×%-5s%s %-6s %s%7s%s  %s%s%s\n", \
+        b, NR, $1, r, \
+        g, px, r, \
+        $5, \
+        b, $3, $4, r, \
+        sc, y, $6, r, \
+        d, $10, r
+    }
+    END { }
+  ' <(print -rl -- $J_ROWS)
+}
+
+_render_map() {
+  # 每块屏用它自己的字符填格子(主屏 M,其余按序号),这样图本身就能读,
+  # 不用在每行右边挂名字 —— 挂名字的做法在两屏上下紧贴时会张冠李戴。
+  LC_ALL=C awk -F'\t' -v d=$C_DIM -v r=$C_RESET '
+    NF < 3 { next }
+    {
+      row = $1 + 0; col = $2 + 0
+      if (row > maxr) maxr = row
+      if (col > maxc) maxc = col
+      grid[row, col] = $3
+    }
+    END {
+      for (rr = 0; rr <= maxr; rr++) {
+        line = ""
+        for (cc = 0; cc <= maxc; cc++) line = line (grid[rr, cc] == "" ? " " : grid[rr, cc])
+        printf "  %s|%s|%s\n", d, line, d
+      }
+    }
+  ' <(print -rl -- $J_MAP)
+}
+
+_render_legend() {
+  local line n=0 tag
+  for line in $J_SCR; do
+    _scr_fields "$line"
+    (( n = n + 1 ))
+    (( S_MAIN == 1 )) && tag='M' || tag="$n"
+    printf "  %s%s%s = %s%s%s  %d×%d 点 @ %s,%s  %sx\n" \
+      "$C_BOLD" "$tag" "$C_RESET" "$C_CYAN" "$S_NAME" "$C_RESET" \
+      "$S_W" "$S_H" "$S_FX" "$S_FY" "$S_SCALE"
+  done
+}
+
+_section() {
+  echo "${C_BOLD}$1${C_RESET}"
+  echo "  ${C_DIM}───────────────────────────────────────────────────────${C_RESET}"
+}
+
+_render_human() {
+  [[ -t 1 ]] && printf '\033[?25l\033[2J\033[H'
+  echo "${C_BOLD}${C_CYAN}═══ 多显示器拓扑 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  if [[ -n $J_ERR ]]; then
+    printf "  ${C_RED}✗${C_RESET} %s\n" "$J_ERR"
+    echo "  ${C_DIM}提示: SSH 会话没有图形窗口,拿不到屏幕;要在本机登录会话里跑${C_RESET}"
+    return 0
+  fi
+
+  if [[ -z $ONLY || $ONLY == 'list' ]]; then
+    _section "屏幕清单 (M = 主屏,几何是 Quartz 坐标,原点在左上)"
+    _render_list
+    echo
+  fi
+
+  if [[ -z $ONLY || $ONLY == 'map' ]]; then
+    _section "排列拓扑 (数字 = 第几块屏,M = 主屏)"
+    if (( J_N <= 1 )); then
+      echo "  ${C_DIM}(只有一块屏,没有排列可言)${C_RESET}"
+    else
+      _render_map
+      echo
+      _render_legend
+      echo
+      echo "  ${C_DIM}虚拟桌面(所有屏的外接矩形): $(( J_MAXX - J_MINX )) × $(( J_MAXY - J_MINY )) 点${C_RESET}"
+    fi
+    echo
+  fi
+
+  if [[ -z $ONLY ]]; then
+    _section "诊断"
+    _verdicts | _render_kv
+    echo
+  fi
+
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: osascript -l JavaScript (NSScreen/CoreGraphics), system_profiler SPDisplaysDataType${C_RESET}"
+  echo "${C_DIM}  改设置: 系统设置 → 显示器(排列 / 分辨率 / 刷新率)。想看命令行的实时拓扑,本脚本就是${C_RESET}"
+}
+
+_render_json() {
+  local a b c d
+  print -r -- "meta${_TAB}${SCRIPT_NAME}${_TAB}${VERSION}${_TAB}$(date '+%Y-%m-%d %H:%M:%S')"
+  print -r -- "screens${_TAB}${J_N}"
+  print -r -- "virtual_desktop${_TAB}${J_MINX}${_TAB}${J_MINY}${_TAB}$(( J_MAXX - J_MINX ))${_TAB}$(( J_MAXY - J_MINY ))"
+  local row
+  for row in $J_SCR; do print -r -- "screen${_TAB}${row}"; done
+  for row in $J_SP;  do print -r -- "sprofiler${_TAB}${row}"; done
+  for row in $J_ROWS; do print -r -- "row${_TAB}${row}"; done
+  local vout
+  vout=$(_verdicts)
+  while IFS=$_TAB read -r a b c d; do print -r -- "verdict${_TAB}${a}${_TAB}${b}${_TAB}${c}${_TAB}${d}"; done <<< "$vout"
+}
+
+_cleanup() { [[ -t 1 ]] && printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+if $AS_JSON; then
+  trap - EXIT INT TERM
+  _collect_geometry
+  _collect_sprofiler
+  _build_map
+  _build_rows
+  _render_json
+  exit 0
+fi
+
+_collect_geometry
+_collect_sprofiler
+_build_map
+_build_rows
+_render_human

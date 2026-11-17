@@ -1,0 +1,45 @@
+# infra-gcp 专用:PV 模板(NFS 静态方式,推荐)
+# 创建后:kubectl get pv pv-nfs-app -o yaml | grep csi
+# 架构师 lane:本文档只生成模板,不执行 apply
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-nfs-app                  # ← infra-gcp 命名,集群内唯一
+  labels:
+    tenant: tnt-001                # ← BigQuery 归因
+    storage-type: nfs              # ← 标识存储类型
+    managed-by: infra-gcp          # ← 标识管理方
+spec:
+  capacity:
+    storage: 100Gi                 # ← 标称容量(实际由 NFS server 决定)
+  accessModes:
+  - ReadOnlyMany                   # ← 多 Pod 可读(ro 安全默认)
+  persistentVolumeReclaimPolicy: Retain   # ← 删 PVC 不删 NFS 数据
+  storageClassName: ""              # ← 静态 PV,不用 SC
+  csi:
+    driver: nfs.csi.k8s.io         # ← 关键:NFS CSI driver
+    # volumeHandle 任意唯一字符串
+    volumeHandle: "nfs-app-volume-001"
+    volumeAttributes:
+      # ⚠ infra-gcp 必须先 showmount -e <server> 验证
+      server: "<nfs-server-ip>"    # ← NFS server IP
+      share: "/vol/data/app"      # ← NFS export 路径
+    # NFS 不需要 fsType(linux 内核自动探测)
+    # NFS 不需要 nodePublishSecretRef(无凭据)
+---
+# 配套 PVC(namespace-scoped)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-nfs-app                 # ← 业务方引用
+  namespace: api-ns                 # ← 业务方 namespace
+  labels:
+    tenant: tnt-001                 # ← 与 PV 对齐
+spec:
+  volumeName: pv-nfs-app            # ← 绑到 PV
+  accessModes: [ReadOnlyMany]
+  resources:
+    requests:
+      storage: 10Gi                 # ← ≤ PV capacity
+  storageClassName: ""              # ← 静态 PV,不用 SC

@@ -1,0 +1,27 @@
+# api · prod overlay
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+replicas:
+  - name: api
+    count: 3
+
+labels:
+  - pairs:
+      app.kubernetes.io/instance: api-prod
+      app.kubernetes.io/environment: prod
+    includeSelectors: false
+
+patches:
+  - target:
+      kind: Deployment
+      name: api
+    patch: |-
+      # ⚠️ JSON6902 patch 走**下标**：env 是列表，下标会随 base 变动而失效。
+      #    base 里 env[0] 是 LOG_LEVEL。
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/value
+        value: warn

@@ -1,0 +1,192 @@
+---
+# CR Check 的 K8s 清单（由 Argo CD 管理）
+#
+# ★ 门禁服务自己必须被门禁管住：
+#   清单在 Git 里 → 改动走 PR → CODEOWNERS + 双人复核 + 保护分支。
+#
+# ★ 密钥绝不写在这里 —— 用 External Secrets 从 Secret Manager 同步。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cr-check
+  namespace: cr-check
+  labels:
+    app.kubernetes.io/name: cr-check
+spec:
+  replicas: 2                       # ★ ≥2，避免单点
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0            # ★ 滚动更新期间不减少可用副本
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cr-check
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cr-check
+      annotations:
+        # ★ 每次改镜像都触发滚动更新（Argo CD 用它判断是否需要 sync）
+        checksum/config: "replace-me-with-config-checksum"
+    spec:
+      serviceAccountName: cr-check
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: cr-check
+          # ★ 不可变 tag（commit SHA 或 vX.Y.Z），不用 latest
+          image: ghcr.io/acme/cr-check:v0.1.0
+          args:
+            - -config
+            - /etc/cr-check/policy.yaml
+            - -mode
+            - real
+            - -addr
+            - ":8080"
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cr-check-githubapp
+                  key: app-id
+            - name: GITHUB_APP_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cr-check-githubapp
+                  key: installation-id
+            - name: GITHUB_APP_PRIVATE_KEY_PATH
+              value: /etc/cr-check/githubapp/private-key.pem
+            - name: WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: cr-check-githubapp
+                  key: webhook-secret
+            - name: CR_PLATFORM_URL
+              valueFrom:
+                secretKeyRef:
+                  name: cr-check-crplatform
+                  key: url
+            - name: CR_PLATFORM_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cr-check-crplatform
+                  key: token
+          volumeMounts:
+            - name: githubapp
+              mountPath: /etc/cr-check/githubapp
+              readOnly: true
+            - name: config
+              mountPath: /etc/cr-check
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            # ★ readiness 要包含"能拿到 installation token"，
+            #   否则私钥/网络故障时 Pod 仍 Ready → 请求全失败
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: githubapp
+          secret:
+            secretName: cr-check-githubapp
+            items:
+              - key: private-key.pem
+                path: private-key.pem
+        - name: config
+          configMap:
+            name: cr-check-policy
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cr-check
+  namespace: cr-check
+spec:
+  selector:
+    app.kubernetes.io/name: cr-check
+  ports:
+    - name: http
+      port: 80            # ← Service 端口
+      targetPort: 8080    # ← 容器端口（必须与 Deployment 一致）
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cr-check-policy
+  namespace: cr-check
+data:
+  policy.yaml: |
+    # 这里放 config/policy.yaml 的内容（由 CI 或 kustomize 生成）
+    # ⚠️ 改规则数据走 PR → Argo CD sync，不发版
+    checkName: cr/prod-validation
+    timezone: Asia/Shanghai
+    managedBranches: [release/prd, release/prod]
+    branchEnvMap:
+      release/prd: prd
+      release/prod: prod
+      "": dev
+    cr:
+      allowedExecutableStatuses: [approved, implement]
+      minApprovals: 2
+      forbidSelfApproval: true
+      labelPrefix: "cr/"
+      labelPattern: "^cr/[0-9A-Za-z._-]+$"
+      bodyMarker: "Change-Request:"
+    windows:
+      - env: prd
+        days: [Mon, Tue, Wed, Thu, Fri]
+        start: "02:00"
+        end: "04:00"
+        tz: Asia/Shanghai
+    webhook:
+      events: [pull_request]
+      maxBodyBytes: 2097152
+    server:
+      addr: ":8080"
+      syncEval: false
+      workers: 4
+      recheckIntervalSeconds: 300
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cr-check
+  namespace: cr-check
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cr-check
+  namespace: cr-check
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cr-check

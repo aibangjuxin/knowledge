@@ -1,0 +1,214 @@
+#!/usr/bin/env zsh
+# diskwatch — 磁盘容量 + I/O + APFS 快照观察器
+#
+# 设计目标:
+#   - 公司配 MacBook Pro,无 brew / 无 python,只 zsh + df / iostat / du / diskutil / tmutil
+#   - 显示:
+#       ① 所有挂载点容量 (df -h)
+#       ② 实时 I/O (iostat -d 1)
+#       ③ 大目录占用 (du -sh /Users/lex/{Downloads,Documents,Desktop,...})
+#       ④ Time Machine 本地快照 (tmutil listlocalsnapshots /)
+#       ⑤ APFS 容器状态 (diskutil apfs list)
+#   - 5s 刷新 (I/O 不需要高频)
+#
+# 用法:
+#   diskwatch                 # 持续观察 (5s 刷新)
+#   diskwatch --interval 10   # 10s 刷新
+#   diskwatch --once          # 单次输出
+#   diskwatch --home          # 同时扫描 /Users/$USER 大目录
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i INTERVAL=5
+typeset ONCE=false SHOW_HOME=false
+typeset HOME_DIR=${HOME:-/Users/$(id -un)}
+
+while (( $# > 0 )); do
+  case $1 in
+    --interval|-i) INTERVAL=$2; shift 2 ;;
+    --once)        ONCE=true;    shift ;;
+    --home)        SHOW_HOME=true; shift ;;
+    --version)     echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--interval N] [--once] [--home]"
+      echo "  --home  扫描用户主目录大文件夹"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+# 解析 df -h 输出,保留百分比数字 (去掉 %)
+_df_summarize() {
+  # df -h 输出格式:
+  #   Filesystem      Size   Used  Avail Capacity iused ifree %iused  Mounted on
+  #   /dev/disk5s2s1 1.8Ti  13Gi  1.2Ti     1%  484k  4.3G    0%  /
+  df -h 2>/dev/null | awk 'NR>1 && $NF !~ "^/dev" && $NF !~ "^map" {
+    # 跳过系统内部挂载 (preboot / Recovery / VM 等)
+    if ($NF ~ /^\/(System|private|Volumes)\//) next
+    used=$3; avail=$4; cap=$5; mp=$NF
+    cap_num = cap + 0
+    color = "\033[32m"
+    if (cap_num >= 90) color = "\033[31m"
+    else if (cap_num >= 75) color = "\033[33m"
+    printf "  %s%-40s  %s / %s  (%s)%s\n", color, mp, used, $2, cap, "\033[0m"
+  }'
+}
+
+# 解析 iostat 输出 (简化为只显示主盘 disk0)
+# macOS iostat -d 不带 disk 名 是多列旋转格式,带 disk0 名才是单列
+_iostat_read() {
+  local out
+  out=$(iostat -d disk0 1 2 2>/dev/null) || return
+  # 输出格式 (单盘):
+  #   disk0
+  #     KB/t  tps  MB/s
+  #     7.84   89  1.55   <- 第一次采样 (通常跳过)
+  #     7.84   12  0.10   <- 第二次采样 (真实增量)
+  echo "$out" | awk '
+    /^[[:space:]]*[0-9]/ && NF == 3 {
+      # 数据行: KB/t tps MB/s
+      kb_t = $1; tps = $2; mb_s = $3
+    }
+    /^[[:space:]]*[0-9]/ && NF == 3 && cnt++ > 0 {
+      # 取第二次
+      printf "  %-12s  %6s KB/t  %6s tps  %6s MB/s\n", "disk0", kb_t, tps, mb_s
+      exit
+    }
+  '
+}
+
+# 扫描用户主目录的大文件夹
+_home_dirs() {
+  # 只扫描一级常见目录,避免扫到 Application Support 之类
+  local -a dirs
+  for d in Downloads Documents Desktop Movies Music Pictures Applications Library/Caches; do
+    [[ -d "$HOME_DIR/$d" ]] && dirs+=("$HOME_DIR/$d")
+  done
+  if (( ${#dirs} == 0 )); then return; fi
+
+  echo "${C_BOLD}  用户主目录占用 (Top 10)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  # du -sh * 单次扫描所有,比 du -sh X 一个一个快
+  du -sh -k "${dirs[@]}" 2>/dev/null | sort -hr | head -10 | while read size path; do
+    # 简化: 把 /Users/lex/ 前缀替换成 ~/
+    path=${path#$HOME_DIR/}
+    path="~/$path"
+    # 把 K 转换成 human
+    human=$(awk -v kb="$size" 'BEGIN{
+      if (kb >= 1048576) printf "%.2f GB", kb/1048576
+      else if (kb >= 1024) printf "%.1f MB", kb/1024
+      else printf "%d KB", kb
+    }')
+    printf '  %10s  %s\n' "$human" "$path"
+  done
+}
+
+# Time Machine 本地快照 (APFS 自动快照是 SSD 优化关键)
+_tm_snapshots() {
+  local snaps
+  snaps=$(tmutil listlocalsnapshots / 2>/dev/null | head -10)
+  if [[ -z $snaps ]]; then
+    return
+  fi
+  echo "${C_BOLD}  Time Machine 本地快照${C_RESET} ${C_DIM}(会自动占用空间,定期清理)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  local count=0
+  while IFS= read -r snap; do
+    [[ $snap == com.apple.TimeMachine.* ]] || continue
+    # 提取日期: com.apple.TimeMachine.2026-09-26-103045
+    local ts=${snap#com.apple.TimeMachine.}
+    echo "  ${C_DIM}$ts${C_RESET}"
+    ((count++))
+  done <<<"$snaps"
+  if (( count == 0 )); then
+    echo "  ${C_DIM}(无本地快照)${C_RESET}"
+  else
+    echo "  ${C_DIM}共 ${count} 条  ·  tmutil thinlocalsnapshots / 999999999 1 可清理${C_RESET}"
+  fi
+}
+
+# APFS 容器
+_apfs_containers() {
+  local containers
+  # diskutil apfs list 输出带 ASCII 树形 prefix (| / +--),我们只保留关键行
+  containers=$(diskutil apfs list 2>/dev/null | awk '
+    # 容器入口: "+-- Container diskN ..."
+    /^\+-.*Container disk[0-9]+/ {
+      c++
+      printf "\n  容器 %d: %s\n", c, $0
+      sub(/^[^C]*Container /, "    容器: ", $0)
+      next
+    }
+    # 关键容量行 + Name 行 (strip tree prefix "|   " 等)
+    /Size \(Capacity Ceiling\)|Capacity In Use|Capacity Free|Low Free:/ {
+      sub(/^[[:space:]\|+\\]+/, "", $0)
+      printf "    %s\n", $0
+    }
+    /^[[:space:]\|]+\+-> Volume disk[0-9]+/ {
+      sub(/^[[:space:]\|+\\]+/, "", $0)
+      printf "    %s\n", $0
+    }
+  ')
+  if [[ -n $containers ]]; then
+    echo "${C_BOLD}  APFS 容器${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    echo "$containers"
+  fi
+}
+
+_render() {
+  printf '\033[?25l\033[2J\033[H'
+
+  echo "${C_BOLD}${C_CYAN}═══ 磁盘 / I/O 观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  刷新间隔 ${INTERVAL}s  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  echo "${C_BOLD}  挂载点容量${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  _df_summarize
+
+  echo
+  echo "${C_BOLD}  实时 I/O${C_RESET} ${C_DIM}(iostat 增量,前 1s 样本)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  local io
+  io=$(_iostat_read)
+  if [[ -n $io ]]; then
+    echo "$io"
+  else
+    echo "  ${C_DIM}(iostat 数据不可用)${C_RESET}"
+  fi
+
+  _tm_snapshots
+  echo
+  _apfs_containers
+
+  if $SHOW_HOME; then
+    echo
+    _home_dirs
+  fi
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: df, iostat, du, tmutil, diskutil${C_RESET}"
+}
+
+_cleanup() {
+  printf '\033[?25h\033[0m'; echo
+}
+trap _cleanup EXIT INT TERM
+
+if $ONCE; then
+  _render
+else
+  while true; do _render; sleep $INTERVAL; done
+fi

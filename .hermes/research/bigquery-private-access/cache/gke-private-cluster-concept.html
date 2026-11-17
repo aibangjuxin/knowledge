@@ -1,0 +1,4691 @@
+
+
+
+
+
+
+
+
+
+<!doctype html>
+<html 
+      lang="en"
+      dir="ltr">
+  <head>
+    <meta name="google-signin-client-id" content="721724668570-nbkv1cfusk7kk4eni4pjvepaus73b13t.apps.googleusercontent.com"><meta name="google-signin-scope"
+          content="profile email https://www.googleapis.com/auth/developerprofiles https://www.googleapis.com/auth/developerprofiles.award https://www.googleapis.com/auth/devprofiles.full_control.firstparty"><meta property="og:site_name" content="Google Cloud Documentation">
+    <meta property="og:type" content="website"><meta name="theme-color" content="#1a73e8"><meta charset="utf-8">
+    <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+
+    <link rel="manifest" href="/_pwa/clouddocs/manifest.json"
+          crossorigin="use-credentials">
+    <link rel="preconnect" href="//www.gstatic.com" crossorigin>
+    <link rel="preconnect" href="//fonts.googleapis.com" crossorigin>
+    <link rel="preconnect" href="//www.google-analytics.com" crossorigin><link rel="stylesheet" href="//fonts.googleapis.com/css?family=Google+Sans:400,500|Roboto:400,400italic,500,500italic,700,700italic|Roboto+Mono:400,500,700&display=swap">
+      <link rel="stylesheet"
+            href="//fonts.googleapis.com/css2?family=Material+Icons&family=Material+Symbols+Outlined&display=block"><link rel="stylesheet" href="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/css/app.css">
+      
+        <link rel="stylesheet" href="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/css/dark-theme.css" disabled>
+      <link rel="shortcut icon" href="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/favicons/onecloud/favicon.ico">
+    <link rel="apple-touch-icon" href="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/favicons/onecloud/super_cloud.png"><link rel="canonical" href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation"><link rel="search" type="application/opensearchdescription+xml"
+            title="Google Cloud Documentation" href="https://docs.cloud.google.com/s/opensearch.xml">
+      <link rel="alternate" hreflang="en"
+          href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation" /><link rel="alternate" hreflang="x-default" href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation" /><link rel="alternate" hreflang="zh-Hans"
+          href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation?hl=zh-cn" /><link rel="alternate" hreflang="zh-Hant"
+          href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation?hl=zh-tw" /><link rel="alternate" hreflang="fr"
+          href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation?hl=fr" /><link rel="alternate" hreflang="de"
+          href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation?hl=de" /><link rel="alternate" hreflang="he"
+          href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation?hl=he" /><link rel="alternate" hreflang="id"
+          href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation?hl=id" /><link rel="alternate" hreflang="it"
+          href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation?hl=it" /><link rel="alternate" hreflang="ja"
+          href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation?hl=ja" /><link rel="alternate" hreflang="ko"
+          href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation?hl=ko" /><link rel="alternate" hreflang="pt-BR"
+          href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation?hl=pt-br" /><link rel="alternate" hreflang="pt"
+          href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation?hl=pt" /><link rel="alternate" hreflang="es"
+          href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation?hl=es" /><link rel="alternate" hreflang="es-419"
+          href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation?hl=es-419" /><link rel="alternate" hreflang="en"
+          href="https://berlin.devsitetest.how/kubernetes-engine/docs/concepts/network-isolation" /><link rel="alternate" hreflang="x-default" href="https://berlin.devsitetest.how/kubernetes-engine/docs/concepts/network-isolation" /><link rel="alternate" hreflang="zh-Hans"
+          href="https://berlin.devsitetest.how/kubernetes-engine/docs/concepts/network-isolation?hl=zh-cn" /><link rel="alternate" hreflang="zh-Hant"
+          href="https://berlin.devsitetest.how/kubernetes-engine/docs/concepts/network-isolation?hl=zh-tw" /><link rel="alternate" hreflang="fr"
+          href="https://berlin.devsitetest.how/kubernetes-engine/docs/concepts/network-isolation?hl=fr" /><link rel="alternate" hreflang="de"
+          href="https://berlin.devsitetest.how/kubernetes-engine/docs/concepts/network-isolation?hl=de" /><link rel="alternate" hreflang="he"
+          href="https://berlin.devsitetest.how/kubernetes-engine/docs/concepts/network-isolation?hl=he" /><link rel="alternate" hreflang="id"
+          href="https://berlin.devsitetest.how/kubernetes-engine/docs/concepts/network-isolation?hl=id" /><link rel="alternate" hreflang="it"
+          href="https://berlin.devsitetest.how/kubernetes-engine/docs/concepts/network-isolation?hl=it" /><link rel="alternate" hreflang="ja"
+          href="https://berlin.devsitetest.how/kubernetes-engine/docs/concepts/network-isolation?hl=ja" /><link rel="alternate" hreflang="ko"
+          href="https://berlin.devsitetest.how/kubernetes-engine/docs/concepts/network-isolation?hl=ko" /><link rel="alternate" hreflang="pt-BR"
+          href="https://berlin.devsitetest.how/kubernetes-engine/docs/concepts/network-isolation?hl=pt-br" /><link rel="alternate" hreflang="pt"
+          href="https://berlin.devsitetest.how/kubernetes-engine/docs/concepts/network-isolation?hl=pt" /><link rel="alternate" hreflang="es"
+          href="https://berlin.devsitetest.how/kubernetes-engine/docs/concepts/network-isolation?hl=es" /><link rel="alternate" hreflang="es-419"
+          href="https://berlin.devsitetest.how/kubernetes-engine/docs/concepts/network-isolation?hl=es-419" /><title>About network isolation in GKE &nbsp;|&nbsp; GKE networking &nbsp;|&nbsp; Google Cloud Documentation</title>
+
+<meta property="og:title" content="About network isolation in GKE &nbsp;|&nbsp; GKE networking &nbsp;|&nbsp; Google Cloud Documentation"><meta property="og:url" content="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation"><meta property="og:image" content="https://docs.cloud.google.com/_static/cloud/images/social-icon-google-cloud-1200-630.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630"><meta property="og:locale" content="en"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    
+    "headline": "About network isolation in GKE"
+  }
+</script><script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [{
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Google Kubernetes Engine (GKE)",
+      "item": "https://docs.cloud.google.com/kubernetes-engine/docs"
+    },{
+      "@type": "ListItem",
+      "position": 2,
+      "name": "GKE networking",
+      "item": "https://docs.cloud.google.com/kubernetes-engine/networking/docs"
+    },{
+      "@type": "ListItem",
+      "position": 3,
+      "name": "About network isolation in GKE",
+      "item": "https://docs.cloud.google.com/kubernetes-engine/docs/concepts/network-isolation"
+    }]
+  }
+  </script>
+  
+    
+    
+    
+    
+
+
+
+
+
+
+
+
+ 
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- Lowercase versions of the archetype names -->
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- IT administrators IT administrators doesn't need a lowercase version -->
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+  
+
+    </head>
+  <body class="color-scheme--light"
+        template="page"
+        theme="clouddocs-theme"
+        type="article"
+        
+        appearance
+        
+        layout="docs"
+        
+        
+        free-trial
+        
+        
+        display-toc
+        pending>
+  
+    <devsite-progress type="indeterminate" id="app-progress"></devsite-progress>
+  
+  
+    <a href="#main-content" class="skip-link button">
+      
+      Skip to main content
+    </a>
+    <section class="devsite-wrapper">
+      <devsite-cookie-notification-bar></devsite-cookie-notification-bar>
+        <cloudx-track userCountry="CN"></cloudx-track>
+
+<devsite-header role="banner" keep-tabs-visible>
+  
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="devsite-header--inner" data-nosnippet>
+  <div class="devsite-top-logo-row-wrapper-wrapper">
+    <div class="devsite-top-logo-row-wrapper">
+      <div class="devsite-top-logo-row">
+        <button type="button" id="devsite-hamburger-menu"
+          class="devsite-header-icon-button button-flat material-icons gc-analytics-event"
+          data-category="Site-Wide Custom Events"
+          data-label="Navigation menu button"
+          visually-hidden
+          aria-label="Open menu">
+        </button>
+        
+<div class="devsite-product-name-wrapper">
+
+  <a href="/" class="devsite-site-logo-link gc-analytics-event"
+   data-category="Site-Wide Custom Events" data-label="Site logo" track-type="globalNav"
+   track-name="googleCloudDocumentation" track-metadata-position="nav"
+   track-metadata-eventDetail="nav">
+  
+  <picture>
+    
+    <source srcset="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/lockup_dark_theme.svg"
+            media="(prefers-color-scheme: dark)"
+            class="devsite-dark-theme">
+    
+    <img src="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/lockup_full_color.svg" class="devsite-site-logo" alt="Google Cloud Documentation">
+  </picture>
+  
+</a>
+
+
+
+</div>
+        <div class="devsite-top-logo-row-middle">
+          <div class="devsite-header-upper-tabs">
+            
+              
+              
+  <devsite-tabs class="upper-tabs">
+
+    <nav class="devsite-tabs-wrapper" aria-label="Upper tabs">
+      
+        
+          <tab class="devsite-dropdown
+    
+    devsite-active
+    devsite-clickable
+    ">
+  
+    <a href="https://docs.cloud.google.com/docs"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://docs.cloud.google.com/docs"
+    
+       track-type="nav"
+       track-metadata-position="nav - docs-home"
+       track-metadata-module="primary nav"
+       aria-label="Technology areas, selected" 
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Technology areas"
+         
+           track-name="docs-home"
+         
+           track-link-column-type="single-column"
+         
+       >
+    Technology areas
+  
+    </a>
+    
+      <button
+         aria-haspopup="menu"
+         aria-expanded="false"
+         aria-label="Dropdown menu for Technology areas"
+         track-type="nav"
+         track-metadata-eventdetail="https://docs.cloud.google.com/docs"
+         track-metadata-position="nav - docs-home"
+         track-metadata-module="primary nav"
+         
+          
+            data-category="Site-Wide Custom Events"
+          
+            data-label="Tab: Technology areas"
+          
+            track-name="docs-home"
+          
+            track-link-column-type="single-column"
+          
+        
+         class="devsite-tabs-dropdown-toggle devsite-icon devsite-icon-arrow-drop-down"></button>
+    
+  
+  <div class="devsite-tabs-dropdown" role="menu" aria-label="submenu" hidden>
+    <div class="devsite-tabs-dropdown-content">
+      
+        <button class="devsite-tabs-close-button material-icons button-flat gc-analytics-event"
+                data-category="Site-Wide Custom Events"
+                data-label="Close dropdown menu"
+                aria-label="Close dropdown menu"
+                track-type="nav"
+                track-name="close"
+                track-metadata-eventdetail="#"
+                track-metadata-position="nav - docs-home"
+                track-metadata-module="tertiary nav">close</button>
+      
+      
+        <div class="devsite-tabs-dropdown-column
+                    ">
+          
+            <ul class="devsite-tabs-dropdown-section
+                       ">
+              
+              
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/ai-ml"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/ai-ml"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      AI and ML
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/application-development"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/application-development"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Application development
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/application-hosting"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/application-hosting"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Application hosting
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/compute-area"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/compute-area"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Compute
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/data"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/data"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Data analytics and pipelines
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/databases"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/databases"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Databases
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/dhm-cloud"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/dhm-cloud"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Distributed, hybrid, and multicloud
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/industry"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/industry"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Industry solutions
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/migration"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/migration"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Migration
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/networking"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/networking"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Networking
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/observability"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/observability"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Observability and monitoring
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/security"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/security"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Security
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/storage"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/storage"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Storage
+                    </div>
+                    
+                  </a>
+                </li>
+              
+            </ul>
+          
+        </div>
+      
+    </div>
+  </div>
+</tab>
+        
+      
+        
+          <tab class="devsite-dropdown
+    
+    
+    devsite-clickable
+    ">
+  
+    <a href="https://docs.cloud.google.com/docs/cross-product-overviews"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://docs.cloud.google.com/docs/cross-product-overviews"
+    
+       track-type="nav"
+       track-metadata-position="nav - crossproduct"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Cross-product tools"
+         
+           track-name="crossproduct"
+         
+           track-link-column-type="single-column"
+         
+       >
+    Cross-product tools
+  
+    </a>
+    
+      <button
+         aria-haspopup="menu"
+         aria-expanded="false"
+         aria-label="Dropdown menu for Cross-product tools"
+         track-type="nav"
+         track-metadata-eventdetail="https://docs.cloud.google.com/docs/cross-product-overviews"
+         track-metadata-position="nav - crossproduct"
+         track-metadata-module="primary nav"
+         
+          
+            data-category="Site-Wide Custom Events"
+          
+            data-label="Tab: Cross-product tools"
+          
+            track-name="crossproduct"
+          
+            track-link-column-type="single-column"
+          
+        
+         class="devsite-tabs-dropdown-toggle devsite-icon devsite-icon-arrow-drop-down"></button>
+    
+  
+  <div class="devsite-tabs-dropdown" role="menu" aria-label="submenu" hidden>
+    <div class="devsite-tabs-dropdown-content">
+      
+        <button class="devsite-tabs-close-button material-icons button-flat gc-analytics-event"
+                data-category="Site-Wide Custom Events"
+                data-label="Close dropdown menu"
+                aria-label="Close dropdown menu"
+                track-type="nav"
+                track-name="close"
+                track-metadata-eventdetail="#"
+                track-metadata-position="nav - crossproduct"
+                track-metadata-module="tertiary nav">close</button>
+      
+      
+        <div class="devsite-tabs-dropdown-column
+                    ">
+          
+            <ul class="devsite-tabs-dropdown-section
+                       ">
+              
+              
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/access-resources"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/access-resources"
+                     track-metadata-position="nav - crossproduct"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Access and resources management
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/costs-usage"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/costs-usage"
+                     track-metadata-position="nav - crossproduct"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Costs and usage management
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/iac"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/iac"
+                     track-metadata-position="nav - crossproduct"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Infrastructure as code
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/devtools"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/devtools"
+                     track-metadata-position="nav - crossproduct"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      SDK, languages, frameworks, and tools
+                    </div>
+                    
+                  </a>
+                </li>
+              
+            </ul>
+          
+        </div>
+      
+    </div>
+  </div>
+</tab>
+        
+      
+    </nav>
+
+  </devsite-tabs>
+
+            
+           </div>
+          
+<devsite-search
+    enable-signin
+    enable-search
+    enable-suggestions
+      
+    
+    enable-search-summaries
+    project-name="GKE networking"
+    tenant-name="Google Cloud Documentation"
+    project-scope="/kubernetes-engine/networking/docs"
+    url-scoped="https://docs.cloud.google.com/s/results/kubernetes-engine/networking/docs"
+    
+    
+    
+    >
+  <form class="devsite-search-form" action="https://docs.cloud.google.com/s/results" method="GET">
+    <div class="devsite-search-container">
+      <button type="button"
+              search-open
+              class="devsite-search-button devsite-header-icon-button button-flat material-icons"
+              
+              aria-label="Open search"></button>
+      <div class="devsite-searchbox">
+        <input
+          aria-activedescendant=""
+          aria-autocomplete="list"
+          
+          aria-label="Search"
+          aria-expanded="false"
+          aria-haspopup="listbox"
+          autocomplete="off"
+          class="devsite-search-field devsite-search-query"
+          name="q"
+          
+          placeholder="Search"
+          role="combobox"
+          type="text"
+          value=""
+          >
+          <div class="devsite-search-image material-icons" aria-hidden="true">
+            
+              <svg class="devsite-search-ai-image" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <g clip-path="url(#clip0_6641_386)">
+                    <path d="M19.6 21L13.3 14.7C12.8 15.1 12.225 15.4167 11.575 15.65C10.925 15.8833 10.2333 16 9.5 16C7.68333 16 6.14167 15.375 4.875 14.125C3.625 12.8583 3 11.3167 3 9.5C3 7.68333 3.625 6.15 4.875 4.9C6.14167 3.63333 7.68333 3 9.5 3C10.0167 3 10.5167 3.05833 11 3.175C11.4833 3.275 11.9417 3.43333 12.375 3.65L10.825 5.2C10.6083 5.13333 10.3917 5.08333 10.175 5.05C9.95833 5.01667 9.73333 5 9.5 5C8.25 5 7.18333 5.44167 6.3 6.325C5.43333 7.19167 5 8.25 5 9.5C5 10.75 5.43333 11.8167 6.3 12.7C7.18333 13.5667 8.25 14 9.5 14C10.6667 14 11.6667 13.625 12.5 12.875C13.35 12.1083 13.8417 11.15 13.975 10H15.975C15.925 10.6333 15.7833 11.2333 15.55 11.8C15.3333 12.3667 15.05 12.8667 14.7 13.3L21 19.6L19.6 21ZM17.5 12C17.5 10.4667 16.9667 9.16667 15.9 8.1C14.8333 7.03333 13.5333 6.5 12 6.5C13.5333 6.5 14.8333 5.96667 15.9 4.9C16.9667 3.83333 17.5 2.53333 17.5 0.999999C17.5 2.53333 18.0333 3.83333 19.1 4.9C20.1667 5.96667 21.4667 6.5 23 6.5C21.4667 6.5 20.1667 7.03333 19.1 8.1C18.0333 9.16667 17.5 10.4667 17.5 12Z" fill="#5F6368"/>
+                  </g>
+                <defs>
+                <clipPath id="clip0_6641_386">
+                <rect width="24" height="24" fill="white"/>
+                </clipPath>
+                </defs>
+              </svg>
+            
+          </div>
+          <div class="devsite-search-shortcut-icon-container" aria-hidden="true">
+            <kbd class="devsite-search-shortcut-icon">/</kbd>
+          </div>
+      </div>
+    </div>
+  </form>
+  <button type="button"
+          search-close
+          class="devsite-search-button devsite-header-icon-button button-flat material-icons"
+          
+          aria-label="Close search"></button>
+</devsite-search>
+
+        </div>
+
+        
+
+  
+
+  
+    <a class="devsite-header-link devsite-top-button button gc-analytics-event button-with-icon"
+    href="//console.cloud.google.com/"
+    data-category="Site-Wide Custom Events"
+    data-label="Site header link: Console"
+    
+      
+        referrerpolicy="no-referrer-when-downgrade"
+      
+        track-name="console"
+      
+        track-metadata-position="nav"
+      
+        track-type="globalNav"
+      
+        track-metadata-eventDetail="nav"
+      
+    >
+  Console
+</a>
+  
+
+  
+
+  <devsite-appearance-selector></devsite-appearance-selector>
+
+  
+<devsite-language-selector>
+  <ul role="presentation">
+    
+    
+    <li role="presentation">
+      <a role="menuitem" lang="en"
+        >English</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="de"
+        >Deutsch</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es"
+        >Español</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es_419"
+        >Español – América Latina</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="fr"
+        >Français</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="id"
+        >Indonesia</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="it"
+        >Italiano</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pt"
+        >Português</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pt_br"
+        >Português – Brasil</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="he"
+        >עברית</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_cn"
+        >中文 – 简体</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_tw"
+        >中文 – 繁體</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ja"
+        >日本語</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ko"
+        >한국어</a>
+    </li>
+    
+  </ul>
+</devsite-language-selector>
+
+
+
+
+        
+          <devsite-user 
+                        
+                        
+                          enable-profiles
+                        
+                        
+                          fp-auth
+                        
+                        id="devsite-user">
+            
+              
+              <span class="button devsite-top-button" aria-hidden="true" visually-hidden>Sign in</span>
+            
+          </devsite-user>
+        
+        
+        
+      </div>
+    </div>
+  </div>
+
+
+
+  <div class="devsite-collapsible-section
+    ">
+    <div class="devsite-header-background">
+      
+        
+          <div class="devsite-product-id-row"
+           >
+            <div class="devsite-product-description-row">
+              
+                
+                <div class="devsite-product-id">
+                  
+                    
+  
+  <a href="https://docs.cloud.google.com/kubernetes-engine/networking/docs">
+    
+  <div class="devsite-product-logo-container"
+       
+       
+       
+    size="medium"
+  >
+  
+    <picture>
+      
+      <source class="devsite-dark-theme"
+              media="(prefers-color-scheme: dark)"
+              srcset=" /_static/clouddocs/images/icons/products/kubernetes-engine-white.svg"
+              sizes="64px">
+      
+      <img class="devsite-product-logo"
+           alt=""
+           src="https://docs.cloud.google.com/_static/clouddocs/images/icons/products/kubernetes-engine-color.svg"
+           srcset=" /_static/clouddocs/images/icons/products/kubernetes-engine-color.svg"
+           sizes="64px"
+           loading="lazy"
+           >
+    </picture>
+  
+  </div>
+  
+  </a>
+  
+
+                  
+                  
+                  
+                    <ul class="devsite-breadcrumb-list"
+  
+    aria-label="Lower header breadcrumb">
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+    
+    
+      
+        
+  <a href="https://docs.cloud.google.com/kubernetes-engine/docs"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Lower Header"
+      
+        data-value="1"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="1"
+      
+        track-metadata-eventdetail="Google Kubernetes Engine (GKE)"
+      
+    >
+    
+          Google Kubernetes Engine (GKE)
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://docs.cloud.google.com/kubernetes-engine/networking/docs"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Lower Header"
+      
+        data-value="2"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="2"
+      
+        track-metadata-eventdetail="GKE networking"
+      
+    >
+    
+          GKE networking
+        
+  </a>
+  
+      
+    
+  </li>
+  
+</ul>
+                </div>
+                
+              
+              
+            </div>
+            
+              <div class="devsite-product-button-row">
+  
+
+  
+  <a href="//console.cloud.google.com/freetrial"
+  
+    class="cloud-free-trial-button button button-primary
+      "
+    
+    
+      
+        referrerpolicy="no-referrer-when-downgrade"
+      
+        track-metadata-position="nav"
+      
+        track-name="gcpCta"
+      
+        track-type="freeTrial"
+      
+        track-metadata-eventDetail="nav"
+      
+    
+    >Start free</a>
+
+</div>
+            
+          </div>
+          
+        
+      
+      
+        <div class="devsite-doc-set-nav-row">
+          
+          
+            
+            
+  <devsite-tabs class="lower-tabs">
+
+    <nav class="devsite-tabs-wrapper" aria-label="Lower tabs">
+      
+        
+          <tab  >
+            
+    <a href="https://docs.cloud.google.com/kubernetes-engine/networking/docs"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://docs.cloud.google.com/kubernetes-engine/networking/docs"
+    
+       track-type="nav"
+       track-metadata-position="nav - overview"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Overview"
+         
+           track-name="overview"
+         
+       >
+    Overview
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+        
+          <tab  class="devsite-active">
+            
+    <a href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/explore-gke-networking-docs-use-cases"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/explore-gke-networking-docs-use-cases"
+    
+       track-type="nav"
+       track-metadata-position="nav - guides"
+       track-metadata-module="primary nav"
+       aria-label="Guides, selected" 
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Guides"
+         
+           track-name="guides"
+         
+       >
+    Guides
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+    </nav>
+
+  </devsite-tabs>
+
+          
+          
+        </div>
+      
+    </div>
+  </div>
+
+</div>
+
+
+
+  
+
+  
+</devsite-header>
+        <devsite-book-nav scrollbars >
+          
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="devsite-book-nav-filter"
+     >
+  <span class="filter-list-icon material-icons" aria-hidden="true"></span>
+  <input type="text"
+         placeholder="Filter"
+         
+         aria-label="Type to filter"
+         role="searchbox">
+  
+  <span class="filter-clear-button hidden"
+        data-title="Clear filter"
+        aria-label="Clear filter"
+        role="button"
+        tabindex="0"></span>
+</div>
+
+<nav class="devsite-book-nav devsite-nav nocontent" data-nosnippet
+     aria-label="Side menu">
+  <div class="devsite-mobile-header">
+    <button type="button"
+            id="devsite-close-nav"
+            class="devsite-header-icon-button button-flat material-icons gc-analytics-event"
+            data-category="Site-Wide Custom Events"
+            data-label="Close navigation"
+            aria-label="Close navigation">
+    </button>
+    <div class="devsite-product-name-wrapper">
+
+  <a href="/" class="devsite-site-logo-link gc-analytics-event"
+   data-category="Site-Wide Custom Events" data-label="Site logo" track-type="globalNav"
+   track-name="googleCloudDocumentation" track-metadata-position="nav"
+   track-metadata-eventDetail="nav">
+  
+  <picture>
+    
+    <source srcset="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/lockup_dark_theme.svg"
+            media="(prefers-color-scheme: dark)"
+            class="devsite-dark-theme">
+    
+    <img src="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/lockup_full_color.svg" class="devsite-site-logo" alt="Google Cloud Documentation">
+  </picture>
+  
+</a>
+
+
+</div>
+  </div>
+
+  <div class="devsite-book-nav-wrapper">
+    <div class="devsite-mobile-nav-top">
+      
+        <ul class="devsite-nav-list">
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/docs"
+    
+       class="devsite-nav-title gc-analytics-event
+              devsite-nav-has-children
+              devsite-nav-active"
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Technology areas"
+      
+        track-name="docs-home"
+      
+        track-link-column-type="single-column"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Technology areas"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Technology areas
+   </span>
+    
+    <span class="devsite-nav-icon material-icons" data-icon="forward"
+          >
+    </span>
+    
+  
+  </a>
+  
+
+  
+    <ul class="devsite-nav-responsive-tabs devsite-nav-has-menu
+               ">
+      
+<li class="devsite-nav-item">
+
+  
+  <span
+    
+       class="devsite-nav-title"
+       tooltip
+    
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Technology areas"
+      
+        track-name="docs-home"
+      
+        track-link-column-type="single-column"
+      
+    >
+  
+    <span class="devsite-nav-text" tooltip menu="Technology areas">
+      More
+   </span>
+    
+    <span class="devsite-nav-icon material-icons" data-icon="forward"
+          menu="Technology areas">
+    </span>
+    
+  
+  </span>
+  
+
+</li>
+
+    </ul>
+  
+              
+                <ul class="devsite-nav-responsive-tabs">
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/kubernetes-engine/networking/docs"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Overview"
+      
+        track-name="overview"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Overview"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Overview
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/kubernetes-engine/docs/concepts/explore-gke-networking-docs-use-cases"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              devsite-nav-active"
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Guides"
+      
+        track-name="guides"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Guides"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip menu="_book">
+      Guides
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                </ul>
+              
+            </li>
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/docs/cross-product-overviews"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Cross-product tools"
+      
+        track-name="crossproduct"
+      
+        track-link-column-type="single-column"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Cross-product tools"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Cross-product tools
+   </span>
+    
+  
+  </a>
+  
+
+  
+    <ul class="devsite-nav-responsive-tabs devsite-nav-has-menu
+               ">
+      
+<li class="devsite-nav-item">
+
+  
+  <span
+    
+       class="devsite-nav-title"
+       tooltip
+    
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Cross-product tools"
+      
+        track-name="crossproduct"
+      
+        track-link-column-type="single-column"
+      
+    >
+  
+    <span class="devsite-nav-text" tooltip menu="Cross-product tools">
+      More
+   </span>
+    
+    <span class="devsite-nav-icon material-icons" data-icon="forward"
+          menu="Cross-product tools">
+    </span>
+    
+  
+  </span>
+  
+
+</li>
+
+    </ul>
+  
+              
+            </li>
+          
+          
+    
+    
+<li class="devsite-nav-item">
+
+  
+  <a href="//console.cloud.google.com/"
+    
+       class="devsite-nav-title gc-analytics-event button-with-icon"
+    
+
+    
+      
+        referrerpolicy="no-referrer-when-downgrade"
+      
+        track-name="console"
+      
+        track-metadata-position="nav"
+      
+        track-type="globalNav"
+      
+        track-metadata-eventDetail="nav"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Console"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Console
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+  
+          
+        </ul>
+      
+    </div>
+    
+      <div class="devsite-mobile-nav-bottom">
+        
+          
+          <ul class="devsite-nav-list" menu="_book">
+            <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Discover</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/explore-gke-networking-docs-use-cases"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>GKE networking overview</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Explore GKE documentation</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/kubernetes-engine/networking/docs/gke-documentation"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Overview</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/kubernetes-engine-overview"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Main GKE documentation</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/machine-learning"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>GKE AI/ML documentation</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/explore-gke-networking-docs-use-cases"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>GKE networking documentation</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/security-overview"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>GKE security documentation</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/fleet-management/docs"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>GKE fleet management documentation</span></a></li></ul></div></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Learn GKE networking</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/learn/learn-gke-net-fundamentals"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Learn GKE networking fundamentals</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/learn/learn-gke-net-architecture"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Learn GKE networking architecture</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/reference/gke-networking-terminology"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Learn GKE networking terminology</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/best-practices/networking"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Best practices for GKE networking</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Plan and design your network</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/gke-compare-network-models"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Compare network models in GKE</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/dataplane-v2"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About Dataplane v2</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/dataplane-v2"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Enable Dataplane v2</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/gke-ip-address-mgmt-strategies"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Plan IP addressing when migrating to GKE</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/private-service-connect"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About Private Service Connect</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/cluster-shared-vpc"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure clusters for Shared VPC</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Control network access to your cluster</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/network-isolation"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About network isolation</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/latest/network-isolation"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Customize network isolation</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/networking/docs/restrict-egress-control-plane"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Restrict egress traffic from the API server</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Manage IP addressing in GKE</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/about-ip-addressing"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Understand IP addressing in GKE</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/alias-ips"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About VPC-native clusters</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/alias-ips"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Create VPC-native clusters using alias IP ranges</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/multi-pod-cidr"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Add Pod IP address ranges</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/enable-auto-ipam"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Enable auto IP address management</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/multi-subnet-cluster"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Add subnets to clusters</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/flexible-pod-cidr"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure maximum Pods per node</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/routes-based-cluster"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Create routes-based clusters</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/intranode-visibility"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Monitor Pod to Pod traffic with intranode visibility</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-preview"><a href="/kubernetes-engine/docs/how-to/config-auto-net-for-accelerators"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure automated networking for accelerator VMs</span><span class="devsite-nav-icon material-icons"
+        data-icon="preview"
+        data-title="Preview"
+        aria-hidden="true"></span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Use IP masquerading</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/ip-masquerade-agent"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About IP masquerading</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/ip-masquerade-agent"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure an IP masquerade agent</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/egress-nat-policy-ip-masq-autopilot"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure IP masquerade in Autopilot clusters</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/configuring-privately-used-public-ips-for-gke"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configuring privately used public IP addresses for GKE</span></a></li></ul></div></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Connect and access applications using GKE Services</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/service"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Understand Kubernetes Services</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/service-networking"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About GKE Service networking</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/exposing-apps"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Expose applications as GKE Services</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/deploy-workloads-with-sctp"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Deploy workloads with SCTP</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/tutorials/configure-networking"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure networking for a basic production cluster</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/architecture/exposing-service-mesh-apps-through-gke-ingress"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Expose service mesh applications</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/tutorials/configuring-domain-name-static-ip"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure domain names with static IP addresses</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Make your applications available and discoverable</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/about-service-discovery"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About service discovery</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/kube-dns"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Use kube-dns</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/about-cloud-dns"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About Cloud DNS</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/cloud-dns"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Use Cloud DNS</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/nodelocal-dns-cache"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Use NodeLocal DNSCache</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/custom-kube-dns"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Set up a custom kube-dns deployment</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Expose your applications and load balance traffic</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/about-load-balancing"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About load balancing in GKE</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/migrate-ingress-gateway"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Migrate from Ingress to Gateway API</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Expose HTTP(S) applications</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Use Gateway API (recommended)</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/gateway-api"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About Gateway</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/traffic-management"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About Gateway traffic management</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/gateway-security"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About Gateway security</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/deploying-gateways"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Deploy Gateway resources</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/secure-gateway"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Secure a Gateway</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/configure-gateway-resources"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Control traffic to your Services using Policies</span></a></li><li class="devsite-nav-item
+           devsite-nav-new"><a href="/kubernetes-engine/docs/how-to/configure-gke-service-extensions"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Customize GKE Gateway traffic routing using service extensions</span><span class="devsite-nav-icon material-icons"
+        data-icon="new"
+        data-title="New!"
+        aria-hidden="true"></span></a></li><li class="devsite-nav-item
+           devsite-nav-new"><a href="/kubernetes-engine/docs/how-to/configure-cdn-for-gateway"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure Cloud CDN for Gateway</span><span class="devsite-nav-icon material-icons"
+        data-icon="new"
+        data-title="New!"
+        aria-hidden="true"></span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/gatewayclass-capabilities"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About GatewayClass capabilities</span></a></li><li class="devsite-nav-item
+           devsite-nav-expandable
+           devsite-nav-new"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Utilization-based load balancing for GKE Services</span><span class="devsite-nav-icon material-icons"
+        data-icon="new"
+        data-title="New!"
+        aria-hidden="true"></span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/about-ubb"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About utilization-based load balancing for GKE Services</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/configure-ubb"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure utilization-based load balancing for GKE Services</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/expose-custom-metrics-load-balancer"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Expose custom metrics</span></a></li></ul></div></li></ul></div></li><li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Use Ingress API</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/ingress"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About GKE Ingress for Application Load Balancers</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/ingress-routing-security"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About GKE Ingress routing and security</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/load-balance-ingress"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure Ingress for external Application Load Balancers</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/internal-load-balance-ingress"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure Ingress for internal Application Load Balancers</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/secure-traffic-management"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Secure traffic for GKE Ingress</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/ingress-configuration"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configuring Ingress on Google Cloud</span></a></li></ul></div></li></ul></div></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Expose Generative AI applications</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/about-gke-inference-gateway"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About GKE Inference Gateway</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/deploy-gke-inference-gateway"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Deploy GKE Inference Gateway</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/migrate-gke-inference-gateway"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Migrate GKE Inference Gateway from v1alpha2 to v1</span></a></li><li class="devsite-nav-item
+           devsite-nav-new"><a href="/kubernetes-engine/docs/how-to/use-predicted-latency-based-routing"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Use predicted latency-based routing</span><span class="devsite-nav-icon material-icons"
+        data-icon="new"
+        data-title="New!"
+        aria-hidden="true"></span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/configure-body-based-routing"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure body-based routing</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/customize-gke-inference-gateway-configurations"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Customize the GKE Inference Gateway configuration</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/gke-inference-gateway-rollout-operations"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Perform rollout operations for GKE Inference Gateway</span></a></li></ul></div></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Use LoadBalancer Services</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/service-load-balancer"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About LoadBalancer Services</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/internal-load-balancing"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Create an internal load balancer</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/internal-load-balancing-across-vpc-net"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Create an internal load balancer across VPC networks</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/backend-service-based-external-load-balancer"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Create a backend service-based external load balancer</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/mixed-protocol-lb"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Create a mixed-protocol external load balancer</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/standalone-neg"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Create a Service using standalone zonal NEGs</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/service-load-balancer-parameters"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Learn about LoadBalancer Service parameters</span></a></li></ul></div></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/tutorials/exposing-grpc-services-on-gke-using-envoy-proxy"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Use Envoy Proxy to load-balance gRPC services</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/firewall-rules"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Automatically created firewall rules</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/reserved-hostports"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Reserved hostPorts</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Connect and manage applications across multiple clusters</span>
+      </div></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Multi-cluster Services</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/multi-cluster-services"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About multi-cluster Service</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/multi-cluster-services"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure multi-cluster Services</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/msc-setup-with-shared-vpc-networks"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Set up multi-cluster Services with Shared VPC</span></a></li></ul></div></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Multi-cluster Load Balancing</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/choose-mc-lb-api"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Choose your multi-cluster load balancing API for GKE</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/migrate-gke-multi-cluster"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Migrate to multi-cluster networking</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/multi-cluster-gke-upgrades-multi-cluster-ingress"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Plan upgrades in a multi-cluster environment</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/multi-cluster-gateways"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About multi-cluster Gateways</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/prepare-environment-multi-cluster-gateways"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Prepare environment for multi-cluster Gateways</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/deploy-external-multi-cluster-gateway"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Example 1: Deploy external multi-cluster Gateways</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/deploy-internal-multi-cluster-gateway"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Example 2: Deploy internal multi-cluster Gateways</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/deploy-gateway-traffic-splitting"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Example 3: Deploy multi-cluster Gateways for weighted traffic splitting</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/deploy-capacity-based-load-balancing"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Example 4: Deploy multi-cluster Gateways for capacity-based load balancing</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/multi-cluster-ingress"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About multi-cluster Ingress</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/multi-cluster-ingress-setup"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Set up multi-cluster Ingress</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/multi-cluster-ingress"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Deploy ingress across clusters</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/tutorials/upgrading-multi-cluster-gke-environment-multi-cluster-ingress"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Upgrading a multi-cluster GKE environment with Multi Cluster Ingress</span></a></li></ul></div></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Manage multi-cluster Inference Gateway</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/about-multi-cluster-inference-gateway"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About GKE multi-cluster Inference Gateway</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/setup-multicluster-inference-gateway"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Set up GKE multi-cluster Inference Gateway</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/customize-backend-multicluster-inference-gateway"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Customize backends using GCPBackendPolicy scopes</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/about-elastic-cross-region-high-availability"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About elastic cross-region high availability</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/configure-elastic-cross-region-high-availability"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure elastic cross-region high availability</span></a></li></ul></div></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Secure your network</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/about-security-in-networking"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Understand network security in GKE</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/network-policy"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Control communication between Pods and Services using network policies</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/tutorials/network-policy"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Control application communication using network policies</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/fqdn-network-policies"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Control Pod egress traffic using FQDN network policies</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/configure-cilium-network-policy"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Control cluster-wide communication using network policies</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/network-policy-logging"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Use network policy logging</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/tutorials/secure-services-istio"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Secure Kubernetes Services with Istio</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Optimize your Network Functions</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/about-multinetwork-support-for-pods"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About multi-network support for Pods</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/setup-multinetwork-support-for-pods"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Set up multi-network support for Pods</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/deploy-multinetwork-loadbalancer-services"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Deploy multi-network LoadBalancer Services</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/multus-ipvlan-whereabouts"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure Multus with IPVLAN and Whereabouts</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/allocate-network-resources-dra"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Allocate network resources using Dynamic Resource Allocation</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/about-persistent-ip-addresses-for-gke-pods"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About persistent IP addresses for Pods</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/setup-persistent-ip-addresses-on-gke-pods"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Control communication with persistent IP addresses on Pods</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/health-check-based-load-balancing"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure health-check-based load balancing</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/about-multi-networking-policies"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Use network policies for multi-networks</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/control-traffic-between-pods-services"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure network policies for multi-networks</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/about-gke-service-steering"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About Service Steering</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/setup-service-steering"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Set up Service Steering</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Improve network performance</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/network-tiers"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure external traffic with Network Service Tiers</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/using-gvnic"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Increase network traffic speed for GPU nodes</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/using-tier-1"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Increase network bandwidth for cluster nodes</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Maximize GPU network bandwidth in Standard mode clusters</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/gpu-bandwidth-gpudirect-tcpx-autopilot"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Maximize GPU network bandwidth in Autopilot mode clusters</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Observe your Kubernetes traffic</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/concepts/about-dpv2-observability"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>About GKE Dataplane V2 observability </span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/configure-dpv2-observability"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Set up GKE Dataplane V2 observability</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/observe-your-traffic"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Observe your traffic using GKE Dataplane V2 observability</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-preview"><a href="/kubernetes-engine/docs/how-to/gke-dns-metrics"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Observe GKE DNS traffic</span><span class="devsite-nav-icon material-icons"
+        data-icon="preview"
+        data-title="Preview"
+        aria-hidden="true"></span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Troubleshoot</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/troubleshoot-networking"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Overview</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/troubleshooting/connectivity-issues-in-cluster"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Cluster connectivity</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/troubleshooting/vpc-clusters"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>IP address management in VPC-native clusters</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/troubleshooting/kube-dns"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>kube-dns</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/troubleshooting/cloud-dns"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Cloud DNS</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/troubleshooting/network-isolation"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Network isolation</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Load balancing</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/troubleshooting/load-balancing"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Clusters using Service, Ingress, or Gateway resources</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/troubleshooting/ingress"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>GKE Ingress</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/troubleshooting/ingress-health-checks"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Ingress health checks</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/how-to/troubleshooting-and-ops"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Multi Cluster Ingress</span></a></li><li class="devsite-nav-item"><a href="/kubernetes-engine/docs/troubleshooting/troubleshooting-uneven-traffic-distribution"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Uneven traffic distribution</span></a></li></ul></div></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/docs/troubleshooting/cloud-nat-packet-loss"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Cloud NAT packet loss from a cluster</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/kubernetes-engine/networking/docs/known-issues"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Known issues</span></a></li>
+          </ul>
+        
+        
+          
+    
+      
+      <ul class="devsite-nav-list" menu="Technology areas"
+          aria-label="Side menu" hidden>
+        
+          
+            
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/ai-ml"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: AI and ML"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      AI and ML
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/application-development"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Application development"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Application development
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/application-hosting"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Application hosting"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Application hosting
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/compute-area"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Compute"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Compute
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/data"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Data analytics and pipelines"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Data analytics and pipelines
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/databases"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Databases"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Databases
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/dhm-cloud"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Distributed, hybrid, and multicloud"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Distributed, hybrid, and multicloud
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/industry"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Industry solutions"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Industry solutions
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/migration"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Migration"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Migration
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/networking"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Networking"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Networking
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/observability"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Observability and monitoring"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Observability and monitoring
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/security"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Security"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Security
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/storage"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Storage"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Storage
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+          
+        
+      </ul>
+    
+  
+    
+      
+      <ul class="devsite-nav-list" menu="Cross-product tools"
+          aria-label="Side menu" hidden>
+        
+          
+            
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/access-resources"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Access and resources management"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Access and resources management
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/costs-usage"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Costs and usage management"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Costs and usage management
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/iac"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Infrastructure as code"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Infrastructure as code
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/devtools"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: SDK, languages, frameworks, and tools"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      SDK, languages, frameworks, and tools
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+          
+        
+      </ul>
+    
+  
+        
+        
+          
+    
+  
+    
+  
+        
+      </div>
+    
+  </div>
+</nav>
+          
+        </devsite-book-nav>
+      
+      <section id="gc-wrapper">
+        <main role="main" id="main-content" class="devsite-main-content"
+            
+              has-book-nav
+              has-sidebar
+            >
+          <div class="devsite-sidebar">
+            <div class="devsite-sidebar-content">
+                
+                <devsite-toc class="devsite-nav"
+                            role="navigation"
+                            aria-label="On this page"
+                            depth="2"
+                            scrollbars
+                            data-nosnippet
+                  ></devsite-toc>
+                <devsite-recommendations-sidebar class="nocontent devsite-nav" data-nosnippet>
+                </devsite-recommendations-sidebar>
+            </div>
+          </div>
+          <devsite-content>
+            
+              
+
+
+
+
+
+
+
+
+
+
+<article class="devsite-article"><style>
+      /* Styles inlined from /kubernetes-engine/kubernetes-engine.css */
+/* Checklist in a table */
+table.checklist ul.checklist-items {
+  list-style-type: none;
+  list-style-position:outside;
+}
+
+table.checklist input[type="checkbox"],
+table.checklist input[type="checkbox"]:focus {
+  margin-left: -1.3em;
+  margin-top: 0;
+  margin-bottom: 0;
+  font-size: 20px;
+}
+
+table.gke-release-schedule td + td {
+  white-space: nowrap;
+  font-size: 88%;
+  padding-left: 3px;
+  padding-right: 3px;
+}
+      </style>
+  
+  
+  
+  
+  
+
+  <div class="devsite-article-meta nocontent" role="navigation" data-nosnippet>
+    
+    
+    <ul class="devsite-breadcrumb-list"
+  
+    aria-label="Breadcrumb">
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+    
+    
+      
+        
+  <a href="https://docs.cloud.google.com/"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="1"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="1"
+      
+        track-metadata-eventdetail="Google Cloud Documentation"
+      
+    >
+    
+          Home
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://docs.cloud.google.com/docs"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="2"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="2"
+      
+        track-metadata-eventdetail="Documentation"
+      
+    >
+    
+          Documentation
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://docs.cloud.google.com/docs/application-hosting"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="3"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="3"
+      
+        track-metadata-eventdetail="Application hosting"
+      
+    >
+    
+          Application hosting
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://docs.cloud.google.com/kubernetes-engine/docs"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="4"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="4"
+      
+        track-metadata-eventdetail="Google Kubernetes Engine (GKE)"
+      
+    >
+    
+          Google Kubernetes Engine (GKE)
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://docs.cloud.google.com/kubernetes-engine/networking/docs"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="5"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="5"
+      
+        track-metadata-eventdetail="GKE networking"
+      
+    >
+    
+          GKE networking
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://docs.cloud.google.com/kubernetes-engine/docs/concepts/explore-gke-networking-docs-use-cases"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="6"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="6"
+      
+        track-metadata-eventdetail=""
+      
+    >
+    
+          Guides
+        
+  </a>
+  
+      
+    
+  </li>
+  
+</ul>
+    
+      
+    <devsite-thumb-rating position="header">
+    </devsite-thumb-rating>
+  
+    
+  </div>
+  
+    <devsite-feedback
+  position="header"
+  project-name="GKE networking"
+  product-id="101662"
+  bucket="documentation"
+  context=""
+  version="t-devsite-webserver-20260630-r00-rc00.478639290528629295"
+  data-label="Send Feedback Button"
+  track-type="feedback"
+  track-name="sendFeedbackLink"
+  track-metadata-position="header"
+  class="nocontent"
+  data-nosnippet
+  
+  
+    project-feedback-url="https://issuetracker.google.com/issues/new?component=187077"
+  
+  
+    
+      project-icon="https://docs.cloud.google.com/_static/clouddocs/images/icons/products/kubernetes-engine-color.svg"
+    
+  
+  
+  
+  >
+
+  <button>
+  
+    
+    Send feedback
+  
+  </button>
+</devsite-feedback>
+  
+    <h1 class="devsite-page-title" tabindex="-1">
+      About network isolation in GKE<devsite-actions hidden data-nosnippet><devsite-feature-tooltip
+      ack-key="AckCollectionsBookmarkTooltipDismiss"
+      analytics-category="Site-Wide Custom Events"
+      analytics-action-show="Callout Profile displayed"
+      analytics-action-close="Callout Profile dismissed"
+      analytics-label="Create Collection Callout"
+      class="devsite-page-bookmark-tooltip nocontent"
+      data-nosnippet
+      dismiss-button="true"
+      id="devsite-collections-dropdown"
+      
+      dismiss-button-text="Dismiss"
+
+      
+      close-button-text="Got it">
+
+    
+    
+      <devsite-bookmark></devsite-bookmark>
+    
+
+    <span slot="popout-heading">
+      
+      Stay organized with collections
+    </span>
+    <span slot="popout-contents">
+      
+      Save and categorize content based on your preferences.
+    </span>
+  </devsite-feature-tooltip>
+    <devsite-llm-tools></devsite-llm-tools></devsite-actions>
+  
+      
+    </h1>
+  
+
+  <devsite-toc class="devsite-nav"
+    depth="2"
+    devsite-toc-embedded
+    >
+  </devsite-toc>
+  
+    
+  <div class="devsite-article-body clearfix
+  ">
+
+  
+    
+    
+    
+
+    
+    <div id="tags" class="nocontent">
+    
+      
+      
+        
+        
+        
+
+  <a href="/kubernetes-engine/docs/concepts/autopilot-overview"
+
+    class="devsite-label"
+    data-title="Applies to GKE Autopilot mode." track-type="docChip" track-name="Autopilot"
+    >
+    
+      Autopilot
+    
+
+  </a>
+
+      
+    
+      
+      
+        
+        
+        
+
+  <a href="/kubernetes-engine/docs/concepts/choose-cluster-mode"
+
+    class="devsite-label"
+    data-title="Applies to GKE Standard mode." track-type="docChip" track-name="Standard"
+    >
+    
+      Standard
+    
+
+  </a>
+
+      
+    
+    </div>
+  
+
+    
+
+<p>You can customize network access for the control plane and nodes of your
+Google Kubernetes Engine (GKE) cluster to improve network security for the cluster
+and its workloads. This document explains the various types of isolation that
+you can configure for your cluster, the benefits of isolating your network, and
+any limitations that you must consider before you isolate your cluster.</p>
+
+<p>To configure specific isolation levels for your cluster, see the following
+documents:</p>
+
+<ul>
+<li><a href="/kubernetes-engine/docs/how-to/latest/network-isolation">Customize your network isolation in GKE</a></li>
+<li><a href="/kubernetes-engine/networking/docs/restrict-egress-control-plane">Restrict egress traffic from the API server</a></li>
+</ul>
+
+<section class="key-point">
+<b>Best practice</b>:
+<p>Plan and design your network isolation configuration with
+your organization's Network architects, Network engineers,
+Network administrators, or another team who is responsible for the definition,
+implementation, and maintenance of the network architecture.</p>
+</section>
+
+<h2 id="types_of_network_access" data-text="Types of network access" tabindex="-1">Types of network access</h2>
+
+<p>Components in your cluster&mdash;like the control plane, API server, and nodes&mdash;send
+and receive network traffic for different purposes. You can customize your
+cluster&#39;s isolation by controlling one or more of the following types of network
+access:</p>
+
+<ul>
+<li><strong>Access to the control plane from external sources</strong>: customize who can
+access your control plane to perform tasks like running <code translate="no" dir="ltr">kubectl</code> commands
+in the cluster.</li>
+<li><strong>Access to external webhooks from the API server</strong>: customize whether the
+Kubernetes API server can send traffic directly to
+<a href="https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#contacting-the-webhook">external webhook servers</a>
+through the control plane.</li>
+<li><strong>Access to the nodes from external sources:</strong> customize whether external
+clients on the public internet can access your nodes.</li>
+</ul>
+
+<h2 id="control-plane-access" data-text="Access to the control plane from external sources" tabindex="-1">Access to the control plane from external sources</h2>
+
+<p>In this section, you&#39;ll consider who can access your control plane.</p>
+
+<p>Every GKE cluster has a <a href="/kubernetes-engine/docs/concepts/cluster-architecture#control_plane">control plane</a> that handles Kubernetes API
+requests. The control plane runs on a virtual machine (VM) that is in a
+VPC network in a Google-managed project. A regional cluster has
+multiple replicas of the control plane, each of which runs on its own VM.
+Principals like cluster administrators use a control plane endpoint to access
+the cluster for tasks like running <code translate="no" dir="ltr">kubectl</code> commands or deploying workloads. The
+control plane endpoint is used by external clients to access the cluster,
+and isn&#39;t used for direct communication with the Compute Engine VM instances that
+host the control plane replicas. The control plane has the following kinds of
+endpoints for access to the cluster:</p>
+
+<p>The control plane has two kinds of endpoints for cluster access:</p>
+
+<ul>
+<li>DNS-based endpoint</li>
+<li>IP-based endpoints</li>
+</ul>
+
+<section class="key-point">
+<b>Best practice</b>:
+<p>Use only the DNS-based endpoint to access your control plane for simplified configuration and a flexible and policy-based layer of security.</p>
+</section>
+
+<h3 id="dns-based_endpoint" data-text="DNS-based endpoint" tabindex="-1">DNS-based endpoint</h3>
+
+<p>The DNS-based endpoint gives a unique and immutable DNS or fully qualified
+domain name (FQDN) for each cluster control plane. This DNS name can be used to
+access your control plane for its entire lifecycle. The DNS name resolves to an
+endpoint that is accessible from any network reachable by Google Cloud APIs,
+including on-premises or other cloud networks. Enabling the DNS-based endpoint
+eliminates the need for a
+<a href="/kubernetes-engine/docs/tutorials/private-cluster-bastion">bastion host</a> or
+proxy nodes to access the control plane from other VPC networks
+or external locations.</p>
+
+<p>To access the control plane endpoint, you need to configure IAM
+roles and policies, and authentication tokens. For more details on the exact
+permissions required, see <a href="/kubernetes-engine/docs/how-to/latest/network-isolation">Customize your network
+isolation</a>.</p>
+
+<p>In addition to IAM policies and tokens, you can also configure
+the following access attributes:</p>
+
+<ul>
+<li><p><strong>IP address or network-based controls with
+<a href="/vpc-service-controls/docs/overview">VPC Service Controls</a></strong>: to enhance
+security for your GKE cluster control plane,
+VPC Service Controls adds another layer of access security. It uses
+context-aware access based on attributes like network origin.</p>
+
+<p>VPC Service Controls doesn&#39;t directly support clusters with public IP
+addresses for their control plane. However, GKE clusters,
+including both private and public clusters, gain protection from
+VPC Service Controls when you access them using the DNS-based endpoint.</p>
+
+<p>You configure VPC Service Controls to protect your GKE
+cluster&#39;s DNS-based endpoint by including <code translate="no" dir="ltr">container.googleapis.com</code> and
+<code translate="no" dir="ltr">kubernetesmetadata.googleapis.com</code> in your service perimeter&#39;s restricted
+services list. Adding these APIs to your service perimeter will enable
+VPC-SC for <em>all</em> GKE API operations. This configuration helps ensure that your
+defined security perimeters govern access to the control plane.</p>
+
+<p>By using both IAM policies and VPC Service Controls to secure
+access to the DNS-based endpoint, you create a multi-layer security model
+for your cluster control plane. VPC Service Controls integrates with
+supported Google Cloud services. It aligns your cluster&#39;s security
+configuration with the data you host in other Google Cloud services.</p></li>
+<li><p><strong>Private Service Connect or Cloud NAT</strong>: to access the
+DNS-based endpoint from clients that don&#39;t have public internet access. By
+default, the DNS-based endpoint is accessible through Google Cloud
+APIs that are available on the public internet. To learn more, see
+<a href="/kubernetes-engine/docs/how-to/latest/network-isolation#dns-based-endpoint">DNS-based
+endpoint</a>
+in the Customize your network isolation page.</p></li>
+<li><p><strong>Kubernetes authentication credentials</strong>: to authenticate to the DNS-based
+endpoint by using
+<a href="https://kubernetes.io/docs/reference/access-authn-authz/authentication/#service-account-tokens">Kubernetes ServiceAccount bearer tokens</a>
+or
+<a href="https://kubernetes.io/docs/reference/access-authn-authz/authentication/#x509-client-certificates">X.509 client certificates</a>.
+These authentication methods are disabled by default in GKE
+clusters. You can enable these methods when you configure the DNS-based
+endpoint for a cluster.</p>
+
+<aside class="key-point"><b>Best practice</b>:
+<p>ServiceAccount tokens and client certificates can add complexity and
+management overhead to your security configuration. Unless your use case
+requires one of these authentication methods,
+<a href="/kubernetes-engine/docs/how-to/api-server-authentication">use IAM credentials to authenticate to your control plane</a>.</p></aside></li>
+</ul>
+
+<h3 id="ip-based_endpoints" data-text="IP-based endpoints" tabindex="-1">IP-based endpoints</h3>
+
+<p>Optionally, you can also configure access to the control plane using IP-based
+endpoints.</p>
+
+<h4 id="terminology" data-text="Terminology related to clusters and IP addresses" tabindex="-1">Terminology related to clusters and IP addresses</h4>
+
+<ul>
+<li><p><strong>Google Cloud external IP addresses</strong>:</p>
+
+<ul>
+<li><p>External IP addresses assigned to any VM used by any customer hosted on
+Google Cloud. Google Cloud owns these IP addresses. To learn more,
+see <a href="/compute/docs/faq#find_ip_range">Where can I find Compute Engine IP ranges?</a></p></li>
+<li><p>External IP addresses used by Google Cloud products such as
+Cloud Run or Cloud Run functions. Any client hosted
+on Google Cloud can instantiate these IP addresses. Google Cloud owns these
+IP addresses.</p></li>
+</ul></li>
+<li><p><strong>Google-reserved IP addresses</strong>: External IP addresses for
+GKE cluster management purposes. These IP addresses include
+GKE managed processes and other production Google services.
+Google owns these IP addresses.</p></li>
+<li><p><strong>GKE cluster IP address ranges</strong>: Internal IP addresses
+assigned to the cluster that GKE uses for the cluster&#39;s
+nodes, Pods, and Services.</p></li>
+<li><p><strong>Internal IP addresses</strong>: IP addresses from your cluster&#39;s
+VPC network. These IP addresses can include your cluster IP
+address, on-premises networks, the <a href="https://datatracker.ietf.org/doc/html/rfc1918">RFC 1918
+ranges</a>, or the privately
+used public IP (PUPI) addresses that include non-RFC 1918 ranges.</p></li>
+<li><p><strong>External IP-based cluster endpoint</strong>: The IP address of the external
+endpoint, which GKE assigns to the control plane.</p></li>
+<li><p><strong>External control plane VM IP address</strong>: The external IP address that&#39;s
+assigned to every VM instance that runs the control plane and is used only
+for egress traffic from the API server.</p></li>
+<li><p><strong>Internal endpoint</strong>: The internal IP address that GKE assigns to the
+control plane.</p></li>
+<li><p><strong>VPC network</strong>: A virtual network in which you create
+subnets with IP address ranges specifically for the cluster&#39;s nodes and
+Pods.</p></li>
+</ul>
+
+<p>When using IP-based endpoints, you have two options:</p>
+
+<ul>
+<li><p><strong>Expose the control plane on both the external and internal endpoints</strong>.
+This means that the control plane&#39;s external endpoint is accessible from an
+external IP address, and the internal endpoint is accessible from your
+cluster&#39;s VPC network. Nodes will communicate with the control
+plane on the internal endpoint only.</p></li>
+<li><p><strong>Expose the control plane on the internal endpoint only.</strong> This means that
+clients on the internet cannot connect to the cluster and the control plane is
+accessible from any IP address from your cluster&#39;s VPC network.
+Nodes will communicate with the control plane on the internal endpoint only.</p>
+
+<p>This is the most secure option when using IP-based endpoints as it prevents all internet access
+to the control plane. This is a good choice if you
+have workloads that—for example—require controlled access due to data privacy
+and security regulations.</p></li>
+</ul>
+
+<p>In both of the preceding options, you can restrict which IP addresses reach the
+endpoints by configuring <em>authorized networks</em>. If you use IP-based endpoints,
+then we strongly recommend that you add at least one authorized network.
+Authorized networks grant control plane access to a specific set of trusted IPv4
+addresses, and provide protection and additional security benefits for your
+GKE cluster.</p>
+
+<section class="key-point">
+<b>Best practice</b>:
+<p>Enable authorized networks when using IP-based endpoints to secure your GKE cluster.</p>
+</section>
+
+<h4 id="how_authorized_networks_work" data-text="How authorized networks work" tabindex="-1">How authorized networks work</h4>
+
+<p>Authorized networks provide an IP-based firewall that controls access to the
+GKE control plane. Access to the control plane depends on the
+source IP addresses. When you enable authorized networks, you configure the IP
+addresses for which you want to allow access to the GKE cluster control
+plane endpoint as a CIDR block list.</p>
+
+<p>The following table shows:</p>
+
+<ul>
+<li>The preset IP addresses that can always access the GKE control
+plane regardless of whether you enable authorized networks.</li>
+<li>The configurable IP addresses that can access the control plane when you allowlist them by enabling authorized networks.</li>
+</ul>
+
+<table>
+  <thead>
+    <tr>
+      <th>Control plane endpoints</th>
+      <th>Preset IP addresses that can <i>always</i> access the endpoints</th>
+      <th>Configurable IP address that can access the endpoints after enabling authorized networks</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>External and internal endpoints enabled</td>
+      <td>
+        <ul>
+          <li>Google-reserved IP addresses</li>
+          <li>GKE cluster IP address ranges</li>
+        </ul>
+      </td>
+      <td>
+      <ul>
+        <li>Allowlisted external IP addresses</li>
+        <li>Allowlisted internal IP addresses</li>
+        <li>Google Cloud external IP addresses</li>
+      </ul>
+      </td>
+    </tr>
+    <tr>
+      <td>Only internal endpoint enabled</td>
+      <td>
+        <ul>
+          <li>Google-reserved IP addresses</li>
+          <li>GKE cluster IP address ranges</li>
+        </ul>
+      </td>
+      <td>
+        <ul>
+          <li>Allowlisted internal IP addresses.</li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+<aside class="note"><strong>Note:</strong><span> If you only want internal IP addresses to access the control plane, ensure
+  that you enable authorized networks <em>after</em> disabling the control plane&#39;s
+  external endpoint. If you enable authorized networks with allowlisted external
+  IP addresses before disabling the control plane external endpoint, the
+  allowlisted addresses can still access the control plane internal endpoint.</span></aside>
+<p>With an authorized network, you can also configure the region from which an
+internal IP address can reach your control plane&#39;s internal endpoint. You can
+choose to allow access only from the cluster&#39;s VPC network, or
+from any Google Cloud region in a VPC or on-premises environment.</p>
+
+<h3 id="limitations-ip-endpoints" data-text="Limitations of using IP-based endpoints" tabindex="-1">Limitations of using IP-based endpoints</h3>
+
+<ul>
+<li>If you <a href="/vpc/docs/create-modify-vpc-networks#expand-subnet">expand a subnet</a>
+that is used by a cluster with authorized networks, you must update the
+authorized network configuration to include the expanded IP address range.</li>
+<li>If you have clients connecting from networks with dynamic IP addresses, such
+as employees on home networks, you must update the list of authorized networks
+frequently to maintain access to the cluster.</li>
+<li>Disabling access to the control plane&#39;s external endpoint prevents you from
+interacting with your cluster remotely. If you need to remotely access the
+cluster, you must use a <a href="/kubernetes-engine/docs/tutorials/private-cluster-bastion">bastion host</a> which
+forwards client traffic to the cluster. In contrast, using a DNS-based
+endpoint only requires setting up IAM permissions.</li>
+<li>IP-based endpoints don&#39;t directly integrate with VPC Service Controls.
+VPC Service Controls operate at the service perimeter level to control data
+access and movement within Google Cloud. We recommend using both a DNS-based
+endpoint with VPC Service Controls for robust security defense.</li>
+<li>You can specify up to 100 authorized IP address ranges (external and internal
+IP addresses inclusive).</li>
+</ul>
+
+<h3 id="tls-control-plane" data-text="Transport security for control plane connections" tabindex="-1">Transport security for control plane connections</h3>
+
+<p>When you send requests to the Kubernetes API server in a cluster by using
+methods like client libraries or the <code translate="no" dir="ltr">kubectl</code> CLI, the connection between the
+client and the server is
+<a href="https://kubernetes.io/docs/concepts/security/controlling-access/#transport-security">protected by TLS</a>.</p>
+
+<p>To establish a TLS connection, the server presents a certificate to the client.
+The specific server that presents the certificate and the certificate authority
+(CA) that signs the certificate depend on the endpoint that you use to access
+the control plane, as follows:</p>
+
+<ul>
+<li><strong>DNS-based endpoint</strong>: the Google Front End (GFE) service that hosts the
+DNS-based endpoint presents the certificate. The certificate is signed by a
+public, generally recognized Google CA. The client can use the public CA
+information to validate the certificate.</li>
+<li><strong>IP-based endpoints</strong>: the Kubernetes API server presents the certificate.
+The certificate is signed by the cluster root CA. To validate the API server
+certificate, the client must use the public certificate of the cluster root
+CA. When you set up a client in an environment that doesn&#39;t have access to
+the gcloud CLI, you must add the root CA certificate for the
+cluster to your <code translate="no" dir="ltr">~/.kube/config</code> file. For more information, see
+<a href="/kubernetes-engine/docs/how-to/api-server-authentication#environments-without-gcloud">Authenticate to the Kubernetes API server</a>.</li>
+</ul>
+
+<h2 id="access-external-sources-api-server" data-text="Access to external sources from the API server" tabindex="-1">Access to external sources from the API server</h2>
+
+<p>The GKE cluster control plane runs Kubernetes
+<a href="https://kubernetes.io/docs/concepts/architecture/#control-plane-components">control plane components</a>
+like the API server, scheduler, and controllers. The control plane runs on a
+Compute Engine VM instance that&#39;s owned by GKE in a
+managed project. Regional clusters and Autopilot clusters have multiple
+replicas of the control plane, each of which runs on its own VM instance.</p>
+
+<p>By default, each of these Compute Engine VM instances has an external
+IP address that&#39;s assigned directly to the VM. This IP address is
+used only to send admission requests from the Kubernetes API server on an
+instance to
+<a href="https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#contacting-the-webhook">admission webhook servers</a>
+that run outside of the cluster, for example in a different cloud service or
+on-premises. This IP address is used only if the admission webhooks directly
+contact the webhook server by using the server URL or the server IP address.</p>
+
+<p>To improve the security posture of your control plane, you can disable the
+external IP address on your control plane VM instances. In the event of a
+compromise, potential attackers can&#39;t use these external IP addresses to
+communicate. You can customize egress traffic from the API server in the
+following ways:</p>
+
+<ul>
+<li><strong>No egress traffic (<code translate="no" dir="ltr">NONE</code>)</strong>: disable the external IP address of each
+control plane instance and route API server egress traffic to a <a href="https://en.wikipedia.org/wiki/Black_hole_(networking)#Black_hole_filtering">black
+hole</a>.
+All non-critical egress traffic from the API server to external
+destinations is blocked, including traffic to Google Cloud services
+outside of the cluster. This option doesn&#39;t affect critical system traffic
+or traffic from your nodes.</li>
+<li><strong>All egress traffic (<code translate="no" dir="ltr">VIA_CONTROL_PLANE</code>)</strong>: retain the external IP address
+of each control plane instance and let the API server use the IP address for
+egress traffic. This option is the default in GKE.</li>
+</ul>
+
+<p>To learn how to customize your cluster for one of these options, see
+<a href="/kubernetes-engine/networking/docs/restrict-egress-control-plane">Restrict egress traffic from the API server</a>.</p>
+
+<h3 id="external-webhook-configuration" data-text="External webhook configuration" tabindex="-1">External webhook configuration</h3>
+
+<p>When you set control plane egress restrictions to <code translate="no" dir="ltr">NONE</code>, the API server can&#39;t
+make any direct calls to external IP addresses or fully qualified domain names
+(FQDNs). The <code translate="no" dir="ltr">NONE</code> setting has the following effects on external webhooks:</p>
+
+<ul>
+<li>In version 1.35.1-gke.1396000 and later, GKE prevents
+the creation of, or updates to, ValidatingWebhookConfigurations or
+MutatingWebhookConfigurations that use the <code translate="no" dir="ltr">clientConfig.url</code> field.</li>
+<li>Existing webhook configurations that use the <code translate="no" dir="ltr">clientConfig.url</code> field to
+contact an external server stop working.</li>
+</ul>
+
+<p>To create and use external webhook servers, you must do the following:</p>
+
+<ol>
+<li>Update your ValidatingWebhookConfigurations or MutatingWebhookConfigurations
+to use the <code translate="no" dir="ltr">clientConfig.service</code> field. This field lets the API server send
+requests to a Service endpoint, such as <code translate="no" dir="ltr">my-webhook.default.svc</code>, in your
+cluster. These requests aren&#39;t blocked, because the traffic is inside the
+cluster. For more information, see
+<a href="https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#service-reference">Service reference</a>.</li>
+<li><p>Configure the Service to route traffic to your external webhook server. You
+can use one of the following traffic routing designs, depending on your
+security and operational requirements:</p>
+
+<ul>
+<li><strong>Proxy Pods</strong>: use a Deployment or StatefulSet as the backend for your
+Service. Configure the Pods to function as proxies that redirect
+incoming admission requests to your external webhook server. This design
+lets you perform extra tasks, like inspecting and modifying the admission
+requests.</li>
+<li><strong>EndpointSlices</strong>: create the Service without a selector, and then
+manually add an
+<a href="https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/">EndpointSlice</a>
+that maps the Service to the IP address of the external webhook server.
+This design routes traffic without modifying the requests.</li>
+</ul></li>
+</ol>
+
+<p>When you design your webhook configuration, consider the following factors:</p>
+
+<ul>
+<li><strong>Authentication and credentials</strong>: consider how to authenticate with the
+external webhook server. Your traffic routing workflow must also manage how
+credentials (such as API keys, mTLS certificates, and OAuth tokens) are
+applied to connections.</li>
+<li><strong>Security and network control</strong>: consider the attack surface of your
+routing design and your options for security and auditing. The design that
+you implement affects what constraints you can apply to the traffic. For
+example, you can use
+<a href="/kubernetes-engine/docs/how-to/network-policy">NetworkPolicies</a> with proxy
+Pods.</li>
+<li><strong>Observability and reliability</strong>: consider how to monitor connections.
+For example, you can configure proxy Pods to emit metrics, or you can
+implement network observability for EndpointSlices.</li>
+</ul>
+
+<h2 id="cluster-access" data-text="Access to the nodes from external sources" tabindex="-1">Access to the nodes from external sources</h2>
+
+<p>This section discusses isolating <em>nodes</em> within a Kubernetes cluster.</p>
+
+<h3 id="enable-private-nodes" data-text="Enable private nodes" tabindex="-1">Enable private nodes</h3>
+
+<p>Prevent external clients from accessing nodes by provisioning those nodes only
+with internal IP addresses, making the nodes private. Workloads running on nodes
+without an external IP address cannot reach the internet unless NAT is enabled
+on the cluster&#39;s network. You can change these settings at any time.</p>
+
+<p>You can enable private nodes at an individual cluster level or at the node pool
+(for Standard) or workload (for Autopilot) level. Enabling
+private nodes at the node pool or workload level overrides any node
+configuration at the cluster level.</p>
+
+<p>If you update a public node pool to private mode, workloads that require access
+outside the cluster network might fail in the following scenarios:</p>
+
+<ul>
+<li><p>Clusters in a Shared VPC network where Private Google Access is not
+enabled. Manually <a href="/vpc/docs/configure-private-google-access#enabling-pga">enable Private Google Access</a> to ensure GKE
+downloads the assigned node image. For clusters that aren&#39;t in a
+Shared VPC network, GKE automatically enables
+Private Google Access.</p></li>
+<li><p>Workloads that require access to the internet where Cloud NAT is not
+enabled or a custom NAT solution is not defined. To allow egress traffic to
+the internet, <a href="/nat/docs/gke-example">enable Cloud NAT</a> or a custom NAT
+solution.</p></li>
+</ul>
+
+<p>Whether or not you enable private nodes, the control plane still communicates
+with all nodes through internal IP addresses only.</p>
+
+<h2 id="benefits" data-text="Benefits of network isolation" tabindex="-1">Benefits of network isolation</h2>
+
+<p>The following are the benefits of network isolation:</p>
+
+<ul>
+<li><p><strong>Flexibility</strong>:</p>
+
+<ul>
+<li>Clusters have unified and flexible configuration. Clusters with or without
+external endpoints all share the same architecture and support the same
+functionality. You can secure access based on controls
+and best practices that meet your needs. All communication between the nodes
+in your cluster and the control plane use an internal IP address.</li>
+<li>You can change the control plane access and cluster node configuration
+settings at any time without having to re-create the cluster.</li>
+<li>You can choose to enable the external endpoint of the control plane if you
+need to manage your cluster from any location with internet access, or from
+networks or devices that aren&#39;t directly connected with your
+VPC. Or you can disable the external endpoint for enhanced
+security if you need to maintain network isolation for sensitive workloads.
+In either case, you can use authorized networks to limit access to trusted
+IP ranges.</li>
+</ul></li>
+<li><p><strong>Security</strong>:</p>
+
+<ul>
+<li>DNS-based endpoints with VPC Service Controls provide a multi-layer security
+model that protects your cluster against unauthorized networks as well as
+unauthorized identities accessing the control plane. VPC Service Controls
+integrate with Cloud Audit Logs to monitor access to the control plane.</li>
+<li>Private nodes, and the workloads running on these nodes, are not directly
+accessible from the public internet, significantly reducing the potential for
+external attacks on your cluster.</li>
+<li>You can block control plane access from <a href="#terminology">Google Cloud external IP addresses</a> or from external IP addresses to fully isolate the
+cluster control plane and reduce exposure to potential security threats.</li>
+<li>You can disable the external IP addresses of your control plane VM instances
+to prevent attackers from using the IP addresses.</li>
+</ul></li>
+<li><p><strong>Compliance</strong>: If you work in an industry with strict regulations for data
+access and storage, private nodes help with compliance by ensuring that
+sensitive data remains within your private network.</p></li>
+<li><p><strong>Control</strong>: Private nodes give you granular control over how traffic flows in
+and out of your cluster. You can configure firewall rules and network policies
+to allow only authorized communication. If you operate across multi-cloud
+environments, private nodes can help you establish secure and controlled
+communication between different environments.</p></li>
+<li><p><strong>Cost</strong>: By enabling private nodes, you can reduce costs for nodes that don&#39;t
+require an external IP address to access public services on the internet.</p></li>
+</ul>
+
+<h2 id="whats_next" data-text="What's next" tabindex="-1">What's next</h2>
+
+<ul>
+<li>Follow the instructions in <a href="/kubernetes-engine/docs/how-to/latest/network-isolation">Configuring network isolation</a> to experiment with network isolation.</li>
+<li>Learn how to <a href="/kubernetes-engine/networking/docs/restrict-egress-control-plane">restrict egress traffic from the API server</a>.</li>
+<li>Learn more about <a href="/kubernetes-engine/docs/concepts/private-service-connect">Private Service Connect</a>.</li>
+<li>Read an overview of <a href="/kubernetes-engine/docs/concepts/cluster-architecture">cluster architecture</a>.</li>
+<li>Learn about <a href="/kubernetes-engine/docs/best-practices/networking">networking best practices</a>.</li>
+</ul>
+
+
+  
+  
+
+  
+    <devsite-hats-survey class="nocontent" data-nosnippet
+      hats-id="h58tfPFsD0qCaziWjaf0Ngq5PVwJ"
+      listnr-id="5263128"></devsite-hats-survey>
+  
+
+  
+</div>
+
+  
+    
+    
+      
+    <devsite-thumb-rating position="footer">
+    </devsite-thumb-rating>
+  
+       
+         <devsite-feedback
+  position="footer"
+  project-name="GKE networking"
+  product-id="101662"
+  bucket="documentation"
+  context=""
+  version="t-devsite-webserver-20260630-r00-rc00.478639290528629295"
+  data-label="Send Feedback Button"
+  track-type="feedback"
+  track-name="sendFeedbackLink"
+  track-metadata-position="footer"
+  class="nocontent"
+  data-nosnippet
+  
+  
+    project-feedback-url="https://issuetracker.google.com/issues/new?component=187077"
+  
+  
+    
+      project-icon="https://docs.cloud.google.com/_static/clouddocs/images/icons/products/kubernetes-engine-color.svg"
+    
+  
+  
+  
+  >
+
+  <button>
+  
+    
+    Send feedback
+  
+  </button>
+</devsite-feedback>
+       
+    
+    
+  
+
+  <div class="devsite-floating-action-buttons"></div></article>
+
+
+<devsite-content-footer class="nocontent" data-nosnippet>
+  <p>Except as otherwise noted, the content of this page is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 License</a>, and code samples are licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache 2.0 License</a>. For details, see the <a href="https://developers.google.com/site-policies">Google Developers Site Policies</a>. Java is a registered trademark of Oracle and/or its affiliates.</p>
+  <p>Last updated 2026-07-07 UTC.</p>
+</devsite-content-footer>
+
+
+<devsite-notification
+>
+</devsite-notification>
+
+
+  
+<div class="devsite-content-data">
+  
+    
+    
+    <template class="devsite-thumb-rating-feedback">
+      <devsite-feedback
+  position="thumb-rating"
+  project-name="GKE networking"
+  product-id="101662"
+  bucket="documentation"
+  context=""
+  version="t-devsite-webserver-20260630-r00-rc00.478639290528629295"
+  data-label="Send Feedback Button"
+  track-type="feedback"
+  track-name="sendFeedbackLink"
+  track-metadata-position="thumb-rating"
+  class="nocontent"
+  data-nosnippet
+  
+  
+    project-feedback-url="https://issuetracker.google.com/issues/new?component=187077"
+  
+  
+    
+      project-icon="https://docs.cloud.google.com/_static/clouddocs/images/icons/products/kubernetes-engine-color.svg"
+    
+  
+  
+  
+  >
+
+  <button>
+  
+    Need to tell us more?
+  
+  </button>
+</devsite-feedback>
+    </template>
+  
+  
+    <template class="devsite-content-data-template">
+      [[["Easy to understand","easyToUnderstand","thumb-up"],["Solved my problem","solvedMyProblem","thumb-up"],["Other","otherUp","thumb-up"]],[["Hard to understand","hardToUnderstand","thumb-down"],["Incorrect information or sample code","incorrectInformationOrSampleCode","thumb-down"],["Missing the information/samples I need","missingTheInformationSamplesINeed","thumb-down"],["Other","otherDown","thumb-down"]],["Last updated 2026-07-07 UTC."],[],[]]
+    </template>
+  
+</div>
+            
+          </devsite-content>
+        </main>
+        <devsite-footer-promos class="devsite-footer">
+          
+            
+          
+        </devsite-footer-promos>
+        <devsite-footer-linkboxes class="devsite-footer">
+          
+            
+<nav class="devsite-footer-linkboxes nocontent"
+     aria-label="Footer links"
+     data-nosnippet>
+  
+  <ul class="devsite-footer-linkboxes-list">
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Products and pricing</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/products/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 1)"
+            track-metadata-child_headline="products and pricing"track-type="footer link"track-metadata-eventDetail="cloud.google.com/products/"track-metadata-module="footer"track-name="see all products"track-metadata-position="footer">
+            
+          
+            See all products
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/pricing/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 2)"
+            track-metadata-module="footer"track-metadata-child_headline="products and pricing"track-type="footer link"track-metadata-eventDetail="cloud.google.com/pricing/"track-name="google cloud pricing"track-metadata-position="footer">
+            
+          
+            Google Cloud pricing
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/marketplace/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 3)"
+            track-name="google cloud marketplace"track-metadata-position="footer"track-metadata-module="footer"track-metadata-child_headline="resources"track-type="footer link"track-metadata-eventDetail="cloud.google.com/marketplace/">
+            
+          
+            Google Cloud Marketplace
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/contact/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 4)"
+            track-name="contact sales"track-metadata-position="footer"track-metadata-child_headline="engage"track-type="footer link"track-metadata-eventDetail="cloud.google.com/contact/"track-metadata-module="footer">
+            
+              
+              
+            
+          
+            Contact sales
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Support</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//discuss.google.dev/c/google-cloud/14/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 1)"
+            track-metadata-module="footer"target="_blank"track-metadata-child_headline="engage"track-metadata-eventDetail="www.googlecloudcommunity.com"track-type="footer link"track-name="google cloud community"track-metadata-position="footer"rel="noopener">
+            
+          
+            Community forums
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/support-hub/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 2)"
+            track-metadata-module="footer"track-metadata-child_headline="resources"track-type="footer link"track-metadata-eventDetail="cloud.google.com/support-hub/"track-name="support"track-metadata-position="footer">
+            
+          
+            Support
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//docs.cloud.google.com/release-notes"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 3)"
+            track-name="release notes"track-metadata-position="footer"track-metadata-module="footer"track-metadata-child_headline="resources"track-type="footer link"track-metadata-eventDetail="cloud.google.com/release-notes/">
+            
+          
+            Release Notes
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//status.cloud.google.com"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 4)"
+            track-metadata-position="footer"track-name="system status"track-metadata-eventDetail="status.cloud.google.com"track-type="footer link"track-metadata-child_headline="resources"target="_blank"track-metadata-module="footer">
+            
+              
+              
+            
+          
+            System status
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Resources</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//github.com/googlecloudPlatform/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 1)"
+            track-metadata-module="footer"track-type="footer link"track-metadata-eventDetail="github.com/googlecloudPlatform/"track-metadata-child_headline="resources"track-metadata-position="footer"track-name="github">
+            
+          
+            GitHub
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/docs/get-started/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 2)"
+            track-type="footer link"track-metadata-eventDetail="cloud.google.com/docs/get-started/"track-metadata-child_headline="resources"track-metadata-module="footer"track-metadata-position="footer"track-name="google cloud quickstarts">
+            
+          
+            Getting Started with Google Cloud
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/docs/samples"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 3)"
+            track-metadata-child_headline="resources"track-metadata-eventDetail="cloud.google.com/docs/samples"track-type="footer link"track-metadata-module="footer"track-name="code samples"track-metadata-position="footer">
+            
+          
+            Code samples
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/architecture/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 4)"
+            track-name="cloud architecture center"track-metadata-position="footer"track-metadata-module="footer"track-metadata-child_headline="resources"track-type="footer link"track-metadata-eventDetail="cloud.google.com/architecture/">
+            
+          
+            Cloud Architecture Center
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/learn/training/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 5)"
+            track-metadata-child_headline="resources"track-type="footer link"track-metadata-eventDetail="cloud.google.com/learn/training/"track-metadata-module="footer"track-name="training"track-metadata-position="footer">
+            
+              
+              
+            
+          
+            Training and Certification
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Engage</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/blog/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 1)"
+            track-metadata-child_headline="engage"track-type="footer link"track-metadata-eventDetail="cloud.google.com/blog/"track-metadata-module="footer"track-name="blog"track-metadata-position="footer">
+            
+          
+            Blog
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/events/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 2)"
+            track-metadata-eventDetail="cloud.google.com/events/"track-type="footer link"track-metadata-child_headline="engage"track-metadata-module="footer"track-metadata-position="footer"track-name="events">
+            
+          
+            Events
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//x.com/googlecloud"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 3)"
+            track-metadata-module="footer"target="_blank"track-metadata-eventDetail="x.com/googlecloud"track-type="footer link"track-metadata-child_headline="engage"track-metadata-position="footer"track-name="follow on x"rel="noopener">
+            
+          
+            X (Twitter)
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//www.youtube.com/googlecloud"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 4)"
+            rel="noopener"track-metadata-position="footer"track-name="google cloud on youtube"track-metadata-eventDetail="www.youtube.com/googlecloud"track-type="footer link"track-metadata-child_headline="engage"track-metadata-module="footer"target="_blank">
+            
+          
+            Google Cloud on YouTube
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//www.youtube.com/googlecloudplatform"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 5)"
+            track-metadata-position="footer"track-name="google cloud tech on youtube"rel="noopener"track-metadata-module="footer"target="_blank"track-metadata-eventDetail="www.youtube.com/googlecloudplatform"track-type="footer link"track-metadata-child_headline="engage">
+            
+              
+              
+            
+          
+            Google Cloud Tech on YouTube
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+  </ul>
+  
+</nav>
+          
+        </devsite-footer-linkboxes>
+        <devsite-footer-utility class="devsite-footer">
+          
+            
+
+<div class="devsite-footer-utility nocontent" data-nosnippet>
+  
+
+  
+  <nav class="devsite-footer-utility-links" aria-label="Utility links">
+    
+    <ul class="devsite-footer-utility-list">
+      
+      <li class="devsite-footer-utility-item
+                 ">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="//about.google/"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer About Google link"
+         
+           target="_blank"
+         
+           track-metadata-module="utility footer"
+         
+           track-type="footer link"
+         
+           track-metadata-eventDetail="//about.google/"
+         
+           track-name="about google"
+         
+           track-metadata-position="footer"
+         >
+          About Google
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 devsite-footer-privacy-link">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="//policies.google.com/privacy"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Privacy link"
+         
+           track-type="footer link"
+         
+           track-metadata-eventDetail="//policies.google.com/privacy"
+         
+           target="_blank"
+         
+           track-metadata-module="utility footer"
+         
+           track-name="privacy"
+         
+           track-metadata-position="footer"
+         >
+          Privacy
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 ">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="//policies.google.com/terms?hl=en"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Site terms link"
+         
+           track-name="site terms"
+         
+           track-metadata-position="footer"
+         
+           target="_blank"
+         
+           track-metadata-module="utility footer"
+         
+           track-type="footer link"
+         
+           track-metadata-eventDetail="//www.google.com/intl/en/policies/terms/regional.html"
+         >
+          Site terms
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 ">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="//cloud.google.com/product-terms"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Google Cloud terms link"
+         
+           track-name="google cloud terms"
+         
+           track-metadata-position="footer"
+         
+           track-type="footer link"
+         
+           track-metadata-eventDetail="//cloud.google.com/product-terms"
+         
+           track-metadata-module="utility footer"
+         >
+          Google Cloud terms
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 glue-cookie-notification-bar-control">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="#"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Manage cookies link"
+         
+           track-metadata-module="utility footer"
+         
+           track-type="footer link"
+         
+           track-metadata-eventDetail="#"
+         
+           aria-hidden="true"
+         
+           track-name="Manage cookies"
+         
+           track-metadata-position="footer"
+         >
+          Manage cookies
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 devsite-footer-carbon-button">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="//cloud.google.com/sustainability"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Our third decade of climate action: join us link"
+         
+           track-metadata-eventDetail="/sustainability/"
+         
+           track-type="footer link"
+         
+           track-metadata-module="utility footer"
+         
+           track-metadata-position="footer"
+         
+           track-name="Our third decade of climate action: join us"
+         >
+          Our third decade of climate action: join us
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 devsite-footer-utility-button">
+        
+        <span class="devsite-footer-utility-description">Sign up for the Google Cloud newsletter</span>
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="//cloud.google.com/newsletter/"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Subscribe link"
+         
+           track-metadata-position="footer"
+         
+           track-name="subscribe"
+         
+           track-metadata-module="utility footer"
+         
+           track-type="footer link"
+         
+           track-metadata-eventDetail="/newsletter/"
+         >
+          Subscribe
+        </a>
+        
+      </li>
+      
+    </ul>
+    
+    
+<devsite-language-selector>
+  <ul role="presentation">
+    
+    
+    <li role="presentation">
+      <a role="menuitem" lang="en"
+        >English</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="de"
+        >Deutsch</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es"
+        >Español</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es_419"
+        >Español – América Latina</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="fr"
+        >Français</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="id"
+        >Indonesia</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="it"
+        >Italiano</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pt"
+        >Português</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pt_br"
+        >Português – Brasil</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="he"
+        >עברית</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_cn"
+        >中文 – 简体</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_tw"
+        >中文 – 繁體</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ja"
+        >日本語</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ko"
+        >한국어</a>
+    </li>
+    
+  </ul>
+</devsite-language-selector>
+
+  </nav>
+</div>
+          
+        </devsite-footer-utility>
+        <devsite-panel>
+          
+        </devsite-panel>
+        
+      </section>
+      </section>
+    <devsite-sitemask></devsite-sitemask>
+    <devsite-snackbar></devsite-snackbar>
+    <devsite-tooltip ></devsite-tooltip>
+    <devsite-heading-link></devsite-heading-link>
+    <devsite-analytics>
+      
+        <script type="application/json" analytics>[]</script>
+<script type="application/json" tag-management>{&#34;at&#34;: &#34;True&#34;, &#34;ga4&#34;: [], &#34;ga4p&#34;: [], &#34;gtm&#34;: [{&#34;id&#34;: &#34;GTM-5CVQBG&#34;, &#34;purpose&#34;: 1}], &#34;parameters&#34;: {&#34;internalUser&#34;: &#34;False&#34;, &#34;language&#34;: {&#34;machineTranslated&#34;: &#34;False&#34;, &#34;requested&#34;: &#34;en&#34;, &#34;served&#34;: &#34;en&#34;}, &#34;pageType&#34;: &#34;article&#34;, &#34;projectName&#34;: &#34;GKE networking&#34;, &#34;signedIn&#34;: &#34;False&#34;, &#34;tenant&#34;: &#34;clouddocs&#34;, &#34;recommendations&#34;: {&#34;sourcePage&#34;: &#34;&#34;, &#34;sourceType&#34;: 0, &#34;sourceRank&#34;: 0, &#34;sourceIdenticalDescriptions&#34;: 0, &#34;sourceTitleWords&#34;: 0, &#34;sourceDescriptionWords&#34;: 0, &#34;experiment&#34;: &#34;&#34;}, &#34;experiment&#34;: {&#34;ids&#34;: &#34;&#34;}}}</script>
+      
+    </devsite-analytics>
+    
+      <devsite-badger></devsite-badger>
+    
+    
+    <cloudx-user></cloudx-user>
+
+
+
+  <cloudx-free-trial-eligible-store freeTrialEligible="true"></cloudx-free-trial-eligible-store>
+
+    
+<script nonce="+xlCiBPQXNFLbRNnHPWjNvf+lh1Mt4">
+  
+  (function(d,e,v,s,i,t,E){d['GoogleDevelopersObject']=i;
+    t=e.createElement(v);t.async=1;t.src=s;E=e.getElementsByTagName(v)[0];
+    E.parentNode.insertBefore(t,E);})(window, document, 'script',
+    'https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/js/app_loader.js', '[39,"en",null,"/js/devsite_app_module.js","https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd","https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs","https://clouddocs-dot-devsite-v2-prod.appspot.com",null,null,["/_pwa/clouddocs/manifest.json","https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/images/video-placeholder.svg","https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/favicons/onecloud/favicon.ico","https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/lockup_full_color.svg","https://fonts.googleapis.com/css?family=Google+Sans:400,500|Roboto:400,400italic,500,500italic,700,700italic|Roboto+Mono:400,500,700&display=swap"],1,null,[1,6,8,12,14,17,21,25,50,52,63,70,75,76,80,87,91,92,93,97,98,100,101,102,103,104,105,107,108,109,110,112,113,117,118,120,122,124,125,126,127,129,130,131,132,133,134,135,136,138,140,141,147,148,149,151,152,156,157,158,159,161,163,164,168,169,170,179,180,182,183,186,191,193,196],"AIzaSyAP-jjEJBzmIyKR4F-3XITp8yM9T1gEEI8","AIzaSyB6xiKGDR5O3Ak2okS4rLkauxGUG7XP0hg","docs.cloud.google.com","AIzaSyAQk0fBONSGUqCNznf6Krs82Ap1-NV6J4o","AIzaSyCCxcqdrZ_7QMeLCRY20bh_SXdAYqy70KY",null,null,null,["Profiles__enable_targeted_hero","Profiles__enable_profile_collections","Concierge__enable_devsite_llm_tools","Profiles__enable_completequiz_endpoint","DevPro__enable_g1_ineligible_redirect","Cloud__enable_legacy_calculator_redirect","CloudShell__cloud_code_overflow_menu","Cloud__enable_cloud_shell_fte_user_flow","Concierge__enable_remove_info_panel_tags","CloudShell__cloud_shell_button","DevPro__enable_vertex_credit_card","DevPro__enable_code_assist","MiscFeatureFlags__enable_view_transitions","Concierge__enable_pushui","DevPro__enable_cloud_innovators_plus","Profiles__enable_stripe_subscription_management","MiscFeatureFlags__enable_variable_operator_index_yaml","Profiles__require_profile_eligibility_for_signin","Cloud__enable_llm_concierge_chat","DevPro__enable_embed_profile_creation","DevPro__enable_devsite_captcha","MiscFeatureFlags__developers_footer_image","Cloud__cache_serialized_dynamic_content","Profiles__enable_auto_apply_credits","Cloud__enable_cloud_shell","Search__enable_ai_search_summaries_for_all","Profiles__enable_page_saving","DevPro__enable_credits_banner","Profiles__enable_developer_profiles_callout","Profiles__enable_playlist_community_acl","Profiles__enable_join_program_group_endpoint","Concierge__enable_actions_menu","TpcFeatures__enable_unmirrored_page_left_nav","DevPro__enable_nvidia_credits_card","Profiles__enable_developer_profile_benefits_ui_redesign","Search__enable_suggestions_from_borg","DevPro__enable_developer_subscriptions","DevPro__enable_firebase_workspaces_card","BookNav__enable_tenant_cache_key","Profiles__enable_callout_notifications","MiscFeatureFlags__enable_variable_operator","Search__enable_dynamic_content_confidential_banner","Cloud__enable_cloud_dlp_service","MiscFeatureFlags__enable_dark_theme","MiscFeatureFlags__gdp_dashboard_reskin_enabled","OnSwitch__enable","Profiles__enable_user_type","DevPro__enable_devpro_offers","MiscFeatureFlags__developers_footer_dark_image","MiscFeatureFlags__remove_cross_domain_tracking_params","Search__enable_page_map","Analytics__enable_devpro_interaction_logging","TpcFeatures__proxy_prod_host","Profiles__enable_developer_profile_pages_as_content","MiscFeatureFlags__enable_explicit_template_dependencies","EngEduTelemetry__enable_engedu_telemetry","AIStudioInteractionsToggle__interactions_are_default","MiscFeatureFlags__enable_framebox_badge_methods","Cloud__enable_free_trial_server_call","Profiles__enable_completecodelab_endpoint","Search__enable_ai_eligibility_checks","Profiles__enable_purchase_prompts","Profiles__enable_recognition_badges","Profiles__enable_dashboard_curated_recommendations","MiscFeatureFlags__enable_appearance_cookies","MiscFeatureFlags__fix_lower_breadcrumbs","DevPro__enable_free_benefits","Profiles__enable_public_developer_profiles","DevPro__enable_google_payments_buyflow","Profiles__enable_awarding_url","DevPro__remove_eu_tax_intake_form","SignIn__enable_l1_signup_flow","DevPro__enable_google_one_card","DevPro__enable_g1_integration","MiscFeatureFlags__enable_project_variables","MiscFeatureFlags__enable_firebase_utm","Analytics__enable_clearcut_logging","Profiles__enable_complete_playlist_endpoint","Cloud__enable_cloudx_experiment_ids","Experiments__reqs_query_experiments","Cloud__fast_free_trial","DevPro__enable_enterprise"],null,null,"AIzaSyBLEMok-5suZ67qRPzx0qUtbnLmyT_kCVE","https://developerscontentserving-pa.clients6.google.com","AIzaSyCM4QpTRSqP5qI4Dvjt4OAScIN8sOUlO-k","https://developerscontentsearch-pa.clients6.google.com",1,4,1,"https://developerprofiles-pa.clients6.google.com",[39,"clouddocs","Google Cloud Documentation","docs.cloud.google.com",null,"clouddocs-dot-devsite-v2-prod.appspot.com",null,null,[1,1,null,null,null,null,null,null,null,null,null,[1],null,null,null,null,null,1,[1],[null,null,null,[1,20],"/terms/recommendations"],[1],null,[1],[1,null,1],null,[1]],null,[54,null,null,null,null,null,"/images/lockup_full_color.svg","/images/favicons/onecloud/apple-icon.png",null,null,null,1,1,1,1,null,[],null,null,[[],[],[],[],[],[],[],[]],null,1,null,null,null,"/images/lockup_dark_theme.svg",[]],[],null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,[6,1,14,15,22,23,29,37],null,[[null,null,null,null,null,null,[1,[["docType","Choose a content type",[["ApiReference",null,null,null,null,null,null,null,null,"API reference"],["Sample",null,null,null,null,null,null,null,null,"Code sample"],["ReferenceArchitecture",null,null,null,null,null,null,null,null,"Reference architecture"],["Tutorial",null,null,null,null,null,null,null,null,"Tutorial"]]],["category","Choose a topic",[["AiAndMachineLearning",null,null,null,null,null,null,null,null,"Artificial intelligence and machine learning (AI/ML)"],["ApplicationDevelopment",null,null,null,null,null,null,null,null,"Application development"],["BigDataAndAnalytics",null,null,null,null,null,null,null,null,"Big data and analytics"],["Compute",null,null,null,null,null,null,null,null,"Compute"],["Containers",null,null,null,null,null,null,null,null,"Containers"],["Databases",null,null,null,null,null,null,null,null,"Databases"],["HybridCloud",null,null,null,null,null,null,null,null,"Hybrid and multicloud"],["LoggingAndMonitoring",null,null,null,null,null,null,null,null,"Logging and monitoring"],["Migrations",null,null,null,null,null,null,null,null,"Migrations"],["Networking",null,null,null,null,null,null,null,null,"Networking"],["SecurityAndCompliance",null,null,null,null,null,null,null,null,"Security and compliance"],["Serverless",null,null,null,null,null,null,null,null,"Serverless"],["Storage",null,null,null,null,null,null,null,null,"Storage"]]]]]],[1],null,1],[[null,null,null,null,null,["GTM-5CVQBG"],null,null,null,null,null,[["GTM-5CVQBG",2]],1],null,null,null,null,null,1],"mwETRvWii0eU5NUYprb0Y9z5GVbc",4],null,"pk_live_5170syrHvgGVmSx9sBrnWtA5luvk9BwnVcvIi7HizpwauFG96WedXsuXh790rtij9AmGllqPtMLfhe2RSwD6Pn38V00uBCydV4m",1,null,"https://developerscontentinsights-pa.clients6.google.com","AIzaSyCg-ZUslalsEbXMfIo9ZP8qufZgo3LSBDU","AIzaSyDxT0vkxnY_KeINtA4LSePJO-4MAZPMRsE","https://developers.clients6.google.com",null,null,"AIzaSyBQom12tzI-rybN7Sf-KfeL4nwm-Rf7PmI\n",null,null,"https://developers.googleapis.com"]')
+  
+</script>
+
+    <devsite-a11y-announce></devsite-a11y-announce>
+  </body>
+</html>

@@ -1,0 +1,52 @@
+# Multi-stage Dockerfile for Java Applications
+# Target: Distroless (Secure, Minimal)
+
+# ==========================================
+# Stage 1: Builder
+# Purpose: Compile Java code and build the JAR
+# ==========================================
+FROM maven:3.9-eclipse-temurin-17 AS builder
+
+# Set working directory for the build
+WORKDIR /build
+
+# Copy project definition first to cache dependencies
+# This layer will only be rebuilt if pom.xml changes
+COPY pom.xml .
+
+# Download dependencies (offline mode)
+RUN mvn dependency:go-offline
+
+# Copy the rest of the source code
+COPY src ./src
+
+# Build the application
+# -DskipTests is used here assuming tests are run in a previous CI stage
+RUN mvn package -DskipTests
+
+# ==========================================
+# Stage 2: Runtime
+# Purpose: Run the application in a minimal environment
+# ==========================================
+# Use Google's Distroless Java 17 image
+# It contains only the JRE and its dependencies. No shell, no package manager.
+FROM gcr.io/distroless/java17-debian11 AS runtime
+
+# Define environment variables if needed
+# Note: In distroless, we can't use shell expansion like ${API_NAME} in CMD easily
+ENV APP_ROOT=/app
+
+# Copy the JAR file from the builder stage
+# We rename it to 'app.jar' to simplify the entrypoint
+COPY --from=builder /build/target/*.jar /app/app.jar
+
+# Set the working directory
+WORKDIR /app
+
+# Security: Run as non-root user
+# Distroless images have a built-in 'nonroot' user (uid 65532)
+USER 65532:65532
+
+# Entrypoint
+# We use the direct exec form (JSON array) because there is no shell
+ENTRYPOINT ["java", "-jar", "app.jar"]

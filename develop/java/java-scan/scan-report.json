@@ -1,0 +1,11 @@
+{
+  "status" : "FAILED",
+  "issues" : [ {
+    "className" : "com.example.InsecureController",
+    "methodName" : "insecureEndpoint",
+    "message" : "Endpoint is not secured with @PreAuthorize or similar annotations.",
+    "severity" : "HIGH"
+  } ],
+  "scannedClasses" : 5,
+  "scannedControllers" : 2
+}

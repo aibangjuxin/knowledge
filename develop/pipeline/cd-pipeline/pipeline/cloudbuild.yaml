@@ -1,0 +1,45 @@
+steps:
+  # 1. Sync image
+  - name: "gcr.io/cloud-builders/docker"
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        ./scripts/sync-image.sh
+    env:
+      - "NEXUS_IMAGE=$_NEXUS_IMAGE"
+      - "GAR_REPO=$_GAR_REPO"
+      - "VERSION=$_VERSION"
+
+  # 2. Render and Deploy (using envsubst and kubectl)
+  - name: "gcr.io/cloud-builders/kubectl"
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        ./scripts/render-and-apply.sh
+    env:
+      - "USER=$_USER"
+      - "API=$_API"
+      - "IMAGE_NAME=$_GAR_REPO:$_VERSION"
+      - "REPLICAS=$_REPLICAS"
+      - "CPU_REQUEST=$_CPU_REQUEST"
+      - "MEMORY_REQUEST=$_MEMORY_REQUEST"
+      - "CPU_LIMIT=$_CPU_LIMIT"
+      - "MEMORY_LIMIT=$_MEMORY_LIMIT"
+      - "CLOUDSDK_COMPUTE_ZONE=$_ZONE"
+      - "CLOUDSDK_CONTAINER_CLUSTER=$_CLUSTER"
+
+substitutions:
+  _USER: "userA"
+  _API: "api1"
+  _NEXUS_IMAGE: "nexus.local/user/api1:v1.2.3"
+  _GAR_REPO: "asia-east1-docker.pkg.dev/myproj/userA/api1"
+  _VERSION: "v1.2.3"
+  _REPLICAS: "1"
+  _CPU_REQUEST: "100m"
+  _MEMORY_REQUEST: "128Mi"
+  _CPU_LIMIT: "200m"
+  _MEMORY_LIMIT: "256Mi"
+  _ZONE: "asia-east1-a"
+  _CLUSTER: "my-cluster"

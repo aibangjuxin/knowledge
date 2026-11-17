@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxGraphModel adaptiveColors="auto">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+
+    <!-- Title -->
+    <mxCell id="title" value="Part 2: Istio mTLS Internal Flow" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#1A202C;" vertex="1" parent="1">
+      <mxGeometry x="450" y="20" width="600" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="subtitle" value="GKE Pod 内部 mTLS 双向验证 / SPIFFE 身份 / AuthorizationPolicy 完整流程" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=13;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="450" y="58" width="650" height="25" as="geometry"/>
+    </mxCell>
+
+    <!-- istio-ingressgateway namespace -->
+    <mxCell id="ing_ns" value="namespace: istio-ingressgateway" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#EBF8FF;strokeColor=#534AB7;startSize=26;horizontalPadding=10;verticalPadding=10;fontSize=12;fontStyle=1;fontColor=#1A202C;resizeParent=1;resizeParentMax=0;fillOpacity=100;swimlaneFillColor=#EBF8FF;" vertex="1" parent="1">
+      <mxGeometry x="30" y="100" width="480" height="280" as="geometry"/>
+    </mxCell>
+
+    <!-- External LB entry arrow -->
+    <mxCell id="lb_entry" value="Global HTTPS LB (TLS SIMPLE 终止)" style="text;html=1;stroke=none;fill=#EBF8FF;align=center;verticalAlign=middle;fontSize=11;fontColor=#3182CE;rounded=1;whiteSpace=wrap;width=200;height=30;" vertex="1" parent="1">
+      <mxGeometry x="520" y="115" width="200" height="30" as="geometry"/>
+    </mxCell>
+
+    <!-- Istio Gateway Pod -->
+    <mxCell id="gw_pod" value="Istio Gateway Pod" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#534AB7;strokeColor=#3C3489;fontColor=#FFFFFF;fontSize=13;fontStyle=1;arcSize=20;width=200;height=55;" vertex="1" parent="1">
+      <mxGeometry x="60" y="150" width="200" height="55" as="geometry"/>
+    </mxCell>
+    <mxCell id="gw_pod_n" value="TLS SIMPLE 终止&#xa;持有业务域名证书" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#534AB7;" vertex="1" parent="1">
+      <mxGeometry x="60" y="210" width="200" height="28" as="geometry"/>
+    </mxCell>
+
+    <!-- Gateway Envoy Sidecar -->
+    <mxCell id="gw_sc" value="Envoy Sidecar" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#008F8F;strokeColor=#006666;fontColor=#FFFFFF;fontSize=12;fontStyle=1;arcSize=20;width=160;height=50;" vertex="1" parent="1">
+      <mxGeometry x="310" y="150" width="160" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="gw_sc_n" value="SPIFFE 身份&#xa;istiod SDS 签发证书" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#006666;" vertex="1" parent="1">
+      <mxGeometry x="310" y="205" width="160" height="28" as="geometry"/>
+    </mxCell>
+
+    <!-- Gateway → Sidecar (plaintext) -->
+    <mxCell id="gw_to_sc" value="明文 (localhost)" style="text;html=1;stroke=none;fill=#FED7D7;align=center;verticalAlign=middle;fontSize=9;fontColor=#9B2C2C;rounded=1;whiteSpace=wrap;width=80;height=22;" vertex="1" parent="1">
+      <mxGeometry x="260" y="168" width="80" height="22" as="geometry"/>
+    </mxCell>
+
+    <!-- istiod CA -->
+    <mxCell id="istiod" value="istiod CA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#5B4B8A;strokeColor=#44337A;fontColor=#FFFFFF;fontSize=12;fontStyle=1;arcSize=20;width=130;height=50;" vertex="1" parent="1">
+      <mxGeometry x="60" y="320" width="130" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="istiod_n" value="SDS 自动签发 SPIFFE 证书&#xa;每 24h 轮转，存于内存" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#44337A;" vertex="1" parent="1">
+      <mxGeometry x="50" y="375" width="150" height="28" as="geometry"/>
+    </mxCell>
+
+    <!-- team-a-runtime namespace -->
+    <mxCell id="rt_ns" value="namespace: team-a-runtime" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#E9FFFE;strokeColor=#00B5AD;startSize=26;horizontalPadding=10;verticalPadding=10;fontSize=12;fontStyle=1;fontColor=#1A202C;resizeParent=1;resizeParentMax=0;fillOpacity=100;swimlaneFillColor=#E9FFFE;" vertex="1" parent="1">
+      <mxGeometry x="30" y="420" width="940" height="620" as="geometry"/>
+    </mxCell>
+
+    <!-- Business Pod outer container -->
+    <mxCell id="pod_outer" value="Business Pod" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FED7D7;strokeColor=#FC8181;fontColor=#1A202C;fontSize=11;arcSize=15;width=100;height=30;" vertex="1" parent="1">
+      <mxGeometry x="720" y="460" width="100" height="30" as="geometry"/>
+    </mxCell>
+
+    <!-- Runtime Envoy Sidecar -->
+    <mxCell id="rt_sc" value="Envoy Sidecar" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#008F8F;strokeColor=#006666;fontColor=#FFFFFF;fontSize=13;fontStyle=1;arcSize=20;width=200;height=55;" vertex="1" parent="1">
+      <mxGeometry x="450" y="455" width="200" height="55" as="geometry"/>
+    </mxCell>
+    <mxCell id="rt_sc_n1" value="接收 mTLS 流量 / 验证 SPIFFE 证书" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=10;fontColor=#006666;" vertex="1" parent="1">
+      <mxGeometry x="450" y="515" width="200" height="22" as="geometry"/>
+    </mxCell>
+    <mxCell id="rt_sc_n2" value="L4 双向证书验证 + L7 AuthorizationPolicy" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#006666;" vertex="1" parent="1">
+      <mxGeometry x="440" y="535" width="220" height="22" as="geometry"/>
+    </mxCell>
+
+    <!-- App Container -->
+    <mxCell id="app" value="App Container" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F6AD55;strokeColor=#DD6B20;fontColor=#1A202C;fontSize=13;fontStyle=1;arcSize=20;width=150;height="50;" vertex="1" parent="1">
+      <mxGeometry x="130" y="455" width="150" height="55" as="geometry"/>
+    </mxCell>
+    <mxCell id="app_n1" value="HTTP :8443 (明文)" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=10;fontColor=#DD6B20;" vertex="1" parent="1">
+      <mxGeometry x="130" y="515" width="150" height="22" as="geometry"/>
+    </mxCell>
+    <mxCell id="app_n2" value="完全感知不到 mTLS" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#DD6B20;" vertex="1" parent="1">
+      <mxGeometry x="120" y="535" width="170" height="22" as="geometry"/>
+    </mxCell>
+
+    <!-- Sidecar → App (localhost) -->
+    <mxCell id="sc_to_app" value="明文 localhost" style="text;html=1;stroke=none;fill=#FED7D7;align=center;verticalAlign=middle;fontSize=10;fontColor=#9B2C2C;rounded=1;whiteSpace=wrap;width=90;height=25;" vertex="1" parent="1">
+      <mxGeometry x="300" y="475" width="90" height="25" as="geometry"/>
+    </mxCell>
+
+    <!-- PeerAuthentication -->
+    <mxCell id="pa" value="PeerAuthentication" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#008F8F;strokeColor=#006666;fontColor=#FFFFFF;fontSize=11;fontStyle=1;arcSize=20;width=160;height=50;" vertex="1" parent="1">
+      <mxGeometry x="60" y="580" width="160" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="pa_n" value="STRICT — 强制 mTLS&#xa;无证书即拒绝" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#006666;" vertex="1" parent="1">
+      <mxGeometry x="60" y="635" width="160" height="28" as="geometry"/>
+    </mxCell>
+
+    <!-- AuthorizationPolicy -->
+    <mxCell id="azp" value="AuthorizationPolicy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C53030;strokeColor=#9B2C2C;fontColor=#FFFFFF;fontSize=11;fontStyle=1;arcSize=20;width=160;height=50;" vertex="1" parent="1">
+      <mxGeometry x="260" y="580" width="160" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="azp_n" value="default-deny-all&#xa;+ allow gateway SA (SPIFFE)" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#9B2C2C;" vertex="1" parent="1">
+      <mxGeometry x="255" y="635" width="170" height="28" as="geometry"/>
+    </mxCell>
+
+    <!-- NetworkPolicy -->
+    <mxCell id="netpol" value="NetworkPolicy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BEE3F8;strokeColor=#3182CE;fontColor=#1A202C;fontSize=11;fontStyle=1;arcSize=20;width=160;height="50;" vertex="1" parent="1">
+      <mxGeometry x="460" y="580" width="160" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="netpol_n" value="L3/L4 放行规则&#xa;:443 (HTTPS) / :3307 (Auth Proxy)" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#2B6CB0;" vertex="1" parent="1">
+      <mxGeometry x="455" y="635" width="170" height="28" as="geometry"/>
+    </mxCell>
+
+    <!-- GKE Node -->
+    <mxCell id="node" value="GKE Node (VM)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B2F5EA;strokeColor=#00B5AD;fontColor=#1A202C;fontSize=11;arcSize=20;width=120;height=40;" vertex="1" parent="1">
+      <mxGeometry x="680" y="580" width="120" height="40" as="geometry"/>
+    </mxCell>
+
+    <!-- iptables note -->
+    <mxCell id="iptables" value="iptables 规则由 istio-init 注入，自动拦截所有出入站流量至 Sidecar (App 无感知)" style="text;html=1;stroke=none;fill=#E9FFFE;align=center;verticalAlign=middle;fontSize=9;fontColor=#00B5AD;rounded=1;whiteSpace=wrap;width=520;height=25;" vertex="1" parent="1">
+      <mxGeometry x="220" y="680" width="520" height="25" as="geometry"/>
+    </mxCell>
+
+    <!-- mTLS segment -->
+    <mxCell id="mtls_seg" value="mTLS 自动加密 (SPIFFE 双向证书验证)" style="text;html=1;stroke=none;fill=#C6F6D5;align=center;verticalAlign=middle;fontSize=12;fontColor=#276749;fontStyle=1;rounded=1;whiteSpace=wrap;width=260;height=30;" vertex="1" parent="1">
+      <mxGeometry x="350" y="410" width="260" height="30" as="geometry"/>
+    </mxCell>
+
+    <!-- External TLS segment -->
+    <mxCell id="tls_seg" value="① HTTPS / TLS (外部证书·业务域名)" style="text;html=1;stroke=none;fill=#FEFCBF;align=center;verticalAlign=middle;fontSize=11;fontColor=#744210;rounded=1;whiteSpace=wrap;width=220;height=28;" vertex="1" parent="1">
+      <mxGeometry x="530" y="155" width="220" height="28" as="geometry"/>
+    </mxCell>
+
+    <!-- Pod plaintext segment -->
+    <mxCell id="plain_seg" value="③ 明文 localhost (Pod内)" style="text;html=1;stroke=none;fill=#FED7D7;align=center;verticalAlign=middle;fontSize=11;fontColor=#9B2C2C;rounded=1;whiteSpace=wrap;width=150;height=28;" vertex="1" parent="1">
+      <mxGeometry x="280" y="565" width="150" height="28" as="geometry"/>
+    </mxCell>
+
+    <!-- SDS arrows (dashed) -->
+    <mxCell id="sds1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5B4B8A;strokeWidth=1.5;dashed=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="istiod" target="gw_sc">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="sds2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5B4B8A;strokeWidth=1.5;dashed=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="istiod" target="rt_sc">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- istiod label -->
+    <mxCell id="sds_label" value="SDS (Secret Discovery Service)" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#5B4B8A;fontStyle=2;" vertex="1" parent="1">
+      <mxGeometry x="150" y="395" width="160" height="20" as="geometry"/>
+    </mxCell>
+
+    <!-- Ingress namespace arrows -->
+    <mxCell id="ing_arrow" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#534AB7;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="gw_sc" target="rt_sc">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- GKE arrow -->
+    <mxCell id="rt_arrow" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#00B5AD;strokeWidth=1;dashed=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="node" target="rt_sc">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- App side arrow -->
+    <mxCell id="app_arrow" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#F6AD55;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="rt_sc" target="app">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Legend -->
+    <mxCell id="legend" value="安全层说明" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#F7FAFC;strokeColor=#CBD5E0;startSize=24;horizontalPadding=10;verticalPadding=8;fontSize=11;fontStyle=1;fontColor=#1A202C;resizeParent=1;resizeParentMax=0;fillOpacity=100;" vertex="1" parent="1">
+      <mxGeometry x="820" y="100" width="200" height="280" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg1" value="① HTTPS / TLS (外部)" style="text;html=1;stroke=none;fill=#FEFCBF;align=left;verticalAlign=middle;fontSize=10;fontColor=#744210;rounded=1;whiteSpace=wrap;width=170;height=25;" vertex="1" parent="legend">
+      <mxGeometry y="30" width="180" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg1b" value="Client → GLB 终止，业务域名证书" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="legend">
+      <mxGeometry y="58" width="180" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg2" value="② mTLS 自动加密 (SPIFFE)" style="text;html=1;stroke=none;fill=#C6F6D5;align=left;verticalAlign=middle;fontSize=10;fontColor=#276749;rounded=1;whiteSpace=wrap;width=170;height=25;" vertex="1" parent="legend">
+      <mxGeometry y="85" width="180" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg2b" value="Sidecar ↔ Sidecar，istiod SDS 签发&#xa;SPIFFE 证书，PeerAuthentication STRICT" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="legend">
+      <mxGeometry y="113" width="180" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg3" value="③ 明文 localhost (Pod内)" style="text;html=1;stroke=none;fill=#FED7D7;align=left;verticalAlign=middle;fontSize=10;fontColor=#9B2C2C;rounded=1;whiteSpace=wrap;width=170;height=25;" vertex="1" parent="legend">
+      <mxGeometry y="150" width="180" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg3b" value="Sidecar → App，localhost 不经网络" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="legend">
+      <mxGeometry y="178" width="180" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg4" value="双层防护" style="text;html=1;stroke=none;fill=#BEE3F8;align=left;verticalAlign=middle;fontSize=10;fontColor=#2C5282;rounded=1;whiteSpace=wrap;width=170;height=25;" vertex="1" parent="legend">
+      <mxGeometry y="210" width="180" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg4b" value="NetworkPolicy (L3/L4) +&#xa;AuthorizationPolicy (L7 SPIFFE 身份验证)" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="legend">
+      <mxGeometry y="238" width="180" height="30" as="geometry"/>
+    </mxCell>
+
+  </root>
+</mxGraphModel>

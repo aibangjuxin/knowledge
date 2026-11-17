@@ -1,0 +1,142 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: golang-app-with-cert-converter
+  namespace: ${namespace}
+  labels:
+    app: golang-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: golang-app
+  template:
+    metadata:
+      labels:
+        app: golang-app
+    spec:
+      # InitContainer 用于证书格式转换
+      initContainers:
+      - name: cert-converter
+        image: alpine:latest
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          apk add --no-cache openssl
+          echo "Converting PKCS12 to PEM format..."
+          
+          # 提取证书
+          openssl pkcs12 -in /opt/keystore-p12/mycoat-sbrt.p12 \
+            -passin env:KEY_STORE_PWD \
+            -out /opt/keystore-pem/tls.crt \
+            -clcerts -nokeys
+          
+          # 提取私钥
+          openssl pkcs12 -in /opt/keystore-p12/mycoat-sbrt.p12 \
+            -passin env:KEY_STORE_PWD \
+            -out /opt/keystore-pem/tls.key \
+            -nocerts -nodes
+          
+          # 设置权限
+          chmod 644 /opt/keystore-pem/tls.crt
+          chmod 600 /opt/keystore-pem/tls.key
+          
+          echo "Certificate conversion completed!"
+          ls -la /opt/keystore-pem/
+        env:
+        - name: KEY_STORE_PWD
+          valueFrom:
+            secretKeyRef:
+              name: keystore-secret
+              key: password
+        volumeMounts:
+        # 挂载 PKCS12 证书（只读）
+        - name: keystore-p12
+          mountPath: /opt/keystore-p12
+          readOnly: true
+        # 挂载 PEM 证书输出目录（读写）
+        - name: keystore-pem
+          mountPath: /opt/keystore-pem
+      
+      containers:
+      - name: app
+        image: your-registry/golang-app:latest
+        imagePullPolicy: Always
+        env:
+        - name: KEY_STORE_PWD
+          valueFrom:
+            secretKeyRef:
+              name: keystore-secret
+              key: password
+        - name: apiName
+          value: "user-service"
+        - name: minorVersion
+          value: "1"
+        # 指定 PEM 证书路径
+        - name: TLS_CERT_PATH
+          value: "/opt/keystore/tls.crt"
+        - name: TLS_KEY_PATH
+          value: "/opt/keystore/tls.key"
+        volumeMounts:
+        # 挂载配置文件
+        - name: config
+          mountPath: /opt/config
+          readOnly: true
+        # 挂载转换后的 PEM 证书
+        - name: keystore-pem
+          mountPath: /opt/keystore
+          readOnly: true
+        ports:
+        - containerPort: 8443
+          protocol: TCP
+          name: https
+        livenessProbe:
+          httpGet:
+            path: /${apiName}/v${minorVersion}/health
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /${apiName}/v${minorVersion}/ready
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      
+      volumes:
+      # ConfigMap（与 Java 应用相同）
+      - name: config
+        configMap:
+          name: mycoat-common-sprint-conf
+      # PKCS12 证书（Secret）
+      - name: keystore-p12
+        secret:
+          secretName: mycoat-keystore
+      # PEM 证书（EmptyDir，由 InitContainer 生成）
+      - name: keystore-pem
+        emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: golang-app
+  namespace: ${namespace}
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8443
+    targetPort: 8443
+    protocol: TCP
+    name: https
+  selector:
+    app: golang-app

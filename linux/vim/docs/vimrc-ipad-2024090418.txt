@@ -1,0 +1,13 @@
+set history=500
+set number
+set tabstop=2
+set shiftwidth=2
+set expandtab
+set autoindent
+set smartindent
+autocmd FileType yaml setlocal tabstop=2 shiftwidth=2 expandtab
+" :set pastetoggle=<F2>
+set pastetoggle=<C-p>
+set clipboard=unnamed
+" 显示粘贴模式状态
+set showmode

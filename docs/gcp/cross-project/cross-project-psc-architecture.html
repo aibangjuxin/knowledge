@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cross-Project PSC Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1100px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px; background: #22d3ee; border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 960px; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 2rem; }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card-dot.orange { background: #fb923c; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>跨项目 PSC 架构全景图</h1>
+      </div>
+      <p class="subtitle">A Project Shared VPC (Consumer) → PSC Tunnel → B Project Private VPC (Producer)</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 960 700">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrow-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb923c" />
+          </marker>
+          <marker id="arrow-dashed" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- ==================== A PROJECT - Shared VPC (Consumer) ==================== -->
+        <rect x="20" y="20" width="420" height="660" rx="12" fill="rgba(8, 51, 68, 0.15)" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="6,3"/>
+        <text x="32" y="42" fill="#22d3ee" font-size="11" font-weight="700">A Project — Shared VPC (Consumer)</text>
+        <text x="32" y="58" fill="#64748b" font-size="9">Global Load Balancer + PSC NEG</text>
+
+        <!-- Client (外部) -->
+        <rect x="55" y="80" width="120" height="55" rx="6" fill="rgba(30, 41, 59, 0.6)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="115" y="100" fill="white" font-size="11" font-weight="600" text-anchor="middle">External Client</text>
+        <text x="115" y="116" fill="#94a3b8" font-size="8" text-anchor="middle">HTTPS :443</text>
+
+        <!-- GLB -->
+        <rect x="55" y="170" width="160" height="65" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="135" y="192" fill="white" font-size="11" font-weight="600" text-anchor="middle">GLB</text>
+        <text x="135" y="208" fill="#94a3b8" font-size="8" text-anchor="middle">Global HTTPS LB</text>
+        <text x="135" y="223" fill="#fbbf24" font-size="7" text-anchor="middle">Target HTTPS Proxy</text>
+
+        <!-- Cloud Armor -->
+        <rect x="55" y="265" width="160" height="65" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="135" y="287" fill="white" font-size="11" font-weight="600" text-anchor="middle">Cloud Armor</text>
+        <text x="135" y="303" fill="#94a3b8" font-size="8" text-anchor="middle">Security Policy</text>
+        <text x="135" y="318" fill="#fb7185" font-size="7" text-anchor="middle">WAF / DDoS Protection</text>
+
+        <!-- Backend Service A -->
+        <rect x="55" y="360" width="160" height="65" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="135" y="382" fill="white" font-size="11" font-weight="600" text-anchor="middle">Backend Service</text>
+        <text x="135" y="398" fill="#94a3b8" font-size="8" text-anchor="middle">Global / Regional</text>
+        <text x="135" y="413" fill="#34d399" font-size="7" text-anchor="middle">HTTPS</text>
+
+        <!-- PSC NEG -->
+        <rect x="55" y="455" width="160" height="65" rx="6" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="135" y="477" fill="white" font-size="11" font-weight="600" text-anchor="middle">PSC NEG</text>
+        <text x="135" y="493" fill="#94a3b8" font-size="8" text-anchor="middle">PRIVATE_SERVICE_CONNECT</text>
+        <text x="135" y="508" fill="#fb923c" font-size="7" text-anchor="middle">type: network_endpoint</text>
+
+        <!-- Consumer Subnet info -->
+        <rect x="55" y="550" width="350" height="50" rx="6" fill="rgba(30, 41, 59, 0.4)" stroke="#64748b" stroke-width="1"/>
+        <text x="70" y="568" fill="#94a3b8" font-size="9">Subnet: shared-vpc-subnet (Consumer 侧普通 subnet)</text>
+        <text x="70" y="585" fill="#64748b" font-size="8">PSC 接入 IP 从该 subnet 分配，用于 GCP 内部隧道</text>
+
+        <!-- A Project arrows (vertical flow) -->
+        <line x1="115" y1="135" x2="115" y2="168" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="128" y="154" fill="#64748b" font-size="8">HTTPS</text>
+
+        <line x1="135" y1="235" x2="135" y2="263" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="148" y="252" fill="#64748b" font-size="8">Policy</text>
+
+        <line x1="135" y1="330" x2="135" y2="358" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="148" y="347" fill="#64748b" font-size="8">NEG</text>
+
+        <line x1="135" y1="425" x2="135" y2="453" stroke="#fb923c" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="148" y="442" fill="#64748b" font-size="8">PSC</text>
+
+        <!-- Client to GLB arrow -->
+        <line x1="115" y1="135" x2="115" y2="168" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="175" y1="108" x2="310" y2="108" stroke="#94a3b8" stroke-width="1.5"/>
+        <line x1="310" y1="108" x2="310" y2="170" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="242" y="100" fill="#64748b" font-size="8">HTTPS</text>
+
+        <!-- ==================== PSC TUNNEL (跨VPC连接) ==================== -->
+        <rect x="240" y="490" width="480" height="70" rx="8" fill="rgba(251, 146, 60, 0.08)" stroke="#fb923c" stroke-width="1" stroke-dasharray="5,3"/>
+        <text x="480" y="510" fill="#fb923c" font-size="10" font-weight="600" text-anchor="middle">PSC Private Service Connect Tunnel</text>
+        <text x="480" y="527" fill="#94a3b8" font-size="8" text-anchor="middle">GCP 内部网络 · 无需 VPC Peering · IP 空间可重叠</text>
+        <text x="480" y="544" fill="#64748b" font-size="7" text-anchor="middle">自动建立跨 Project VPC 隔离通道</text>
+
+        <!-- PSC NEG to Tunnel arrow -->
+        <line x1="215" y1="487" x2="250" y2="515" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="4,2"/>
+        <!-- Tunnel to Service Attachment -->
+        <line x1="720" y1="515" x2="756" y2="487" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="4,2"/>
+
+        <!-- ==================== B PROJECT - Private VPC (Producer) ==================== -->
+        <rect x="520" y="20" width="420" height="660" rx="12" fill="rgba(76, 29, 149, 0.12)" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="6,3"/>
+        <text x="532" y="42" fill="#a78bfa" font-size="11" font-weight="700">B Project — Private VPC (Producer)</text>
+        <text x="532" y="58" fill="#64748b" font-size="9">Service Attachment + ILB + Backend</text>
+
+        <!-- PSC NAT Subnet (Producer 侧专用) -->
+        <rect x="555" y="80" width="350" height="55" rx="6" fill="rgba(136, 19, 55, 0.25)" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="4,3"/>
+        <text x="570" y="100" fill="#fb7185" font-size="10" font-weight="600">PSC NAT Subnet</text>
+        <text x="570" y="116" fill="#94a3b8" font-size="8">purpose: PRIVATE_SERVICE_CONNECT · 专用于 SNAT 地址转换</text>
+
+        <!-- Service Attachment -->
+        <rect x="555" y="165" width="350" height="70" rx="6" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="730" y="187" fill="white" font-size="11" font-weight="600" text-anchor="middle">Service Attachment</text>
+        <text x="730" y="203" fill="#94a3b8" font-size="8" text-anchor="middle">connection-preference: ACCEPT_MANUAL</text>
+        <text x="730" y="218" fill="#94a3b8" font-size="8" text-anchor="middle">consumer-accept-list: a-project-id=100</text>
+        <text x="730" y="233" fill="#fb923c" font-size="7" text-anchor="middle">绑定 PSC NAT Subnet</text>
+
+        <!-- ILB -->
+        <rect x="555" y="265" width="350" height="65" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="730" y="287" fill="white" font-size="11" font-weight="600" text-anchor="middle">Internal Load Balancer</text>
+        <text x="730" y="303" fill="#94a3b8" font-size="8" text-anchor="middle">Internal L4/L7 · Forwarding Rule</text>
+        <text x="730" y="318" fill="#34d399" font-size="7" text-anchor="middle">Producer 侧入口</text>
+
+        <!-- Backend (GKE/VM/MIG) -->
+        <rect x="555" y="360" width="350" height="70" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="730" y="382" fill="white" font-size="11" font-weight="600" text-anchor="middle">Backend Service</text>
+        <text x="730" y="398" fill="#94a3b8" font-size="8" text-anchor="middle">GKE / VM / MIG</text>
+        <text x="730" y="413" fill="#fbbf24" font-size="7" text-anchor="middle">真实 Backend · IP 不暴露</text>
+
+        <!-- B Project arrows -->
+        <line x1="730" y1="135" x2="730" y2="163" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="744" y="152" fill="#64748b" font-size="8">SNAT</text>
+
+        <line x1="730" y1="235" x2="730" y2="263" stroke="#fb923c" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="744" y="252" fill="#64748b" font-size="8">Route</text>
+
+        <line x1="730" y1="330" x2="730" y2="358" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="744" y="347" fill="#64748b" font-size="8">Forward</text>
+
+        <!-- NAT 说明 -->
+        <rect x="555" y="460" width="350" height="80" rx="6" fill="rgba(15, 23, 42, 0.6)" stroke="#475569" stroke-width="1"/>
+        <text x="570" y="478" fill="#94a3b8" font-size="9">PSC NAT 机制：</text>
+        <text x="570" y="494" fill="#64748b" font-size="8">• Consumer 流量进入 Producer VPC 时</text>
+        <text x="570" y="508" fill="#64748b" font-size="8">• 源 IP 被替换为 PSC NAT Subnet IP</text>
+        <text x="570" y="522" fill="#64748b" font-size="8">• 实现双向 IP 隔离，Backend IP 完全隐藏</text>
+
+        <!-- ==================== LEGEND ==================== -->
+        <rect x="240" y="620" width="480" height="50" rx="8" fill="rgba(15, 23, 42, 0.6)" stroke="#1e293b" stroke-width="1"/>
+        <text x="260" y="638" fill="white" font-size="9" font-weight="600">Legend</text>
+
+        <rect x="260" y="648" width="14" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="278" y="656" fill="#94a3b8" font-size="8">Frontend/入口</text>
+
+        <rect x="360" y="648" width="14" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="378" y="656" fill="#94a3b8" font-size="8">GCP/AWS</text>
+
+        <rect x="450" y="648" width="14" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="468" y="656" fill="#94a3b8" font-size="8">Backend</text>
+
+        <rect x="530" y="648" width="14" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="548" y="656" fill="#94a3b8" font-size="8">Database/存储</text>
+
+        <rect x="630" y="648" width="14" height="10" rx="2" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1"/>
+        <text x="648" y="656" fill="#94a3b8" font-size="8">PSC/Message</text>
+
+        <rect x="730" y="648" width="14" height="10" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="748" y="656" fill="#94a3b8" font-size="8">Security</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot orange"></div>
+          <h3>PSC NEG (Consumer)</h3>
+        </div>
+        <ul>
+          <li>• type: PRIVATE_SERVICE_CONNECT</li>
+          <li>• 指定 subnet 分配 PSC 接入 IP</li>
+          <li>• 无需暴露 Backend 真实 IP</li>
+          <li>• 属于 A Project Shared VPC</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>Service Attachment (Producer)</h3>
+        </div>
+        <ul>
+          <li>• 绑定 PSC NAT Subnet（必须）</li>
+          <li>• connection-preference: ACCEPT_MANUAL</li>
+          <li>• consumer-accept-list 控制访问权限</li>
+          <li>• 属于 B Project Private VPC</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>PSC 跨 VPC 隧道</h3>
+        </div>
+        <ul>
+          <li>• GCP 内部网络自动建立</li>
+          <li>• 无需 VPC Peering</li>
+          <li>• IP 地址空间可重叠</li>
+          <li>• SNAT 实现双向 IP 隔离</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      Cross-Project PSC Architecture · A Project (Shared VPC) → B Project (Private VPC) · GCP Private Service Connect
+    </p>
+  </div>
+</body>
+</html>

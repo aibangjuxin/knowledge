@@ -1,0 +1,73 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Measuring Pod Startup Time: nginx-deployment-854b5bc678-m428j (Namespace: lex)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 Step 1: Get Pod Basic Information
+   Pod Creation Time: 2025-10-29T10:58:34Z
+   Container Start Time: 2025-11-30T05:07:28Z
+
+📋 Step 2: Analyze Readiness Probe Configuration
+   Readiness Probe Configuration:
+{
+  "failureThreshold": 3,
+  "httpGet": {
+    "path": "/",
+    "port": 80,
+    "scheme": "HTTP"
+  },
+  "periodSeconds": 20,
+  "successThreshold": 1,
+  "timeoutSeconds": 3
+}
+
+   Extracted Probe Parameters:
+   - Scheme: HTTP
+   - Port: 80
+   - Path: /
+   - Initial Delay: 0s
+   - Period: 20s
+   - Failure Threshold: 3
+
+⏱️  Step 3: Check Pod Ready Status
+   Pod is already in Ready status
+   Ready Time: 2025-11-30T05:07:38Z
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Final Result
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Application startup duration: 10 seconds
+   (Based on Kubernetes Ready status)
+
+📋 Current Probe Configuration Analysis:
+   - Maximum startup time allowed by current config: 60 seconds
+   - Actual startup time: 10 seconds
+   ✓ Current configuration is sufficient
+
+💡 Recommended optimized configuration:
+   readinessProbe:
+     httpGet:
+       path: /
+       port: 80
+       scheme: HTTP
+     initialDelaySeconds: 0
+     periodSeconds: 20
+     failureThreshold: 1
+
+📋 Or use startupProbe (recommended):
+   startupProbe:
+     httpGet:
+       path: /
+       port: 80
+       scheme: HTTP
+     initialDelaySeconds: 0
+     periodSeconds: 10
+     failureThreshold: 1
+   readinessProbe:
+     httpGet:
+       path: /
+       port: 80
+       scheme: HTTP
+     initialDelaySeconds: 0
+     periodSeconds: 5
+     failureThreshold: 3
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -1,0 +1,43 @@
+# Define the Gateway Listener (Entry point)
+apiVersion: networking.gloo.solo.io/v2
+kind: VirtualGateway
+metadata:
+  name: main-gateway
+  namespace: gloo-gateway
+spec:
+  workloads:
+  - selector:
+      labels:
+        app: gloo-gateway-proxy
+      namespace: gloo-gateway
+  listeners:
+  - http: {}
+    port:
+      number: 80
+    allowedRouteTables:
+    - host: "*"
+---
+# Define the Routing logic (Path mapping)
+apiVersion: networking.gloo.solo.io/v2
+kind: RouteTable
+metadata:
+  name: httpbin-route
+  namespace: sample-app
+spec:
+  hosts:
+  - "*"
+  virtualGateways:
+  - name: main-gateway
+    namespace: gloo-gateway
+  http:
+  - name: httpbin-path
+    matchers:
+    - uri:
+        prefix: /get
+    forwardTo:
+      destinations:
+      - ref:
+          name: httpbin
+          namespace: sample-app
+        port:
+          number: 80

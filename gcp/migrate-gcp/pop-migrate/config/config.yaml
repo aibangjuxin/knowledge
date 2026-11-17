@@ -1,0 +1,183 @@
+# GKE 跨项目迁移配置文件
+
+# 源项目配置
+source:
+  project: "source-project-id"          # 源 GCP 项目 ID
+  cluster: "source-cluster-name"        # 源 GKE 集群名称
+  zone: "asia-east1-a"                  # 源集群区域
+  region: "asia-east1"                  # 源集群地区 (如果是区域集群)
+
+# 目标项目配置
+target:
+  project: "target-project-id"          # 目标 GCP 项目 ID
+  cluster: "target-cluster-name"        # 目标 GKE 集群名称
+  zone: "asia-east1-a"                  # 目标集群区域
+  region: "asia-east1"                  # 目标集群地区 (如果是区域集群)
+
+# 迁移配置
+migration:
+  # 备份设置
+  backup_enabled: true                  # 是否启用备份
+  backup_retention_days: 30             # 备份保留天数
+  
+  # 执行设置
+  dry_run: false                        # 默认是否为干运行模式
+  skip_existing: true                   # 跳过已存在的资源
+  force_overwrite: false                # 强制覆盖已存在的资源
+  
+  # 超时设置
+  timeout: 300                          # 默认超时时间 (秒)
+  kubectl_timeout: 60                   # kubectl 命令超时时间 (秒)
+  
+  # 并发设置
+  parallel_jobs: 3                      # 并行处理的 namespace 数量
+  
+  # 重试设置
+  max_retries: 3                        # 最大重试次数
+  retry_delay: 5                        # 重试间隔 (秒)
+
+# 资源过滤配置
+resources:
+  # 默认包含的资源类型
+  include:
+    - deployments
+    - services
+    - configmaps
+    - secrets
+    - ingresses
+    - persistentvolumeclaims
+    - serviceaccounts
+    - roles
+    - rolebindings
+    - networkpolicies
+    - horizontalpodautoscalers
+    - poddisruptionbudgets
+    - cronjobs
+    - jobs
+    - daemonsets
+    - statefulsets
+    - replicasets
+    - endpoints
+    - limitranges
+    - resourcequotas
+  
+  # 默认排除的资源类型
+  exclude:
+    - events
+    - pods
+    - replicationcontrollers
+    - componentstatuses
+    - nodes
+    - persistentvolumes
+    - storageclasses
+    - volumeattachments
+  
+  # 敏感资源 (需要特殊处理)
+  sensitive:
+    - secrets
+    - serviceaccounts
+    - roles
+    - rolebindings
+    - clusterroles
+    - clusterrolebindings
+
+# 命名空间配置
+namespaces:
+  # 系统命名空间 (不允许迁移)
+  system_namespaces:
+    - kube-system
+    - kube-public
+    - kube-node-lease
+    - default
+    - gke-system
+    - istio-system
+    - knative-serving
+    - gmp-system
+  
+  # 自动创建命名空间
+  auto_create: true
+  
+  # 命名空间标签和注解处理
+  preserve_labels: true
+  preserve_annotations: true
+  
+  # 添加迁移标签
+  add_migration_labels: true
+  migration_labels:
+    "migration.tool": "pop-migrate"
+    "migration.timestamp": "auto"
+    "migration.source.project": "auto"
+    "migration.target.project": "auto"
+
+# 日志配置
+logging:
+  level: "INFO"                         # 日志级别: DEBUG, INFO, WARN, ERROR
+  file_enabled: true                    # 是否写入日志文件
+  console_enabled: true                 # 是否输出到控制台
+  max_file_size: "100MB"               # 最大日志文件大小
+  max_files: 10                        # 最大日志文件数量
+
+# 验证配置
+validation:
+  enabled: true                         # 是否启用迁移后验证
+  timeout: 120                          # 验证超时时间 (秒)
+  
+  # 验证检查项
+  checks:
+    - resource_count                    # 检查资源数量
+    - pod_status                        # 检查 Pod 状态
+    - service_endpoints                 # 检查 Service 端点
+    - ingress_status                    # 检查 Ingress 状态
+    - pvc_status                        # 检查 PVC 状态
+  
+  # 健康检查
+  health_check:
+    enabled: true
+    max_wait_time: 300                  # 最大等待时间 (秒)
+    check_interval: 10                  # 检查间隔 (秒)
+
+# 清理配置
+cleanup:
+  auto_cleanup_exports: false           # 自动清理导出文件
+  auto_cleanup_backups: false           # 自动清理备份文件
+  cleanup_after_days: 7                # 清理文件的天数
+
+# 通知配置 (可选)
+notifications:
+  enabled: false                        # 是否启用通知
+  
+  # Slack 通知
+  slack:
+    enabled: false
+    webhook_url: ""
+    channel: "#migrations"
+  
+  # 邮件通知
+  email:
+    enabled: false
+    smtp_server: ""
+    smtp_port: 587
+    username: ""
+    password: ""
+    from: ""
+    to: []
+
+# 高级配置
+advanced:
+  # 资源转换规则
+  transformations:
+    enabled: false
+    rules_file: "transformations.yaml"
+  
+  # 自定义钩子
+  hooks:
+    pre_migration: ""                   # 迁移前执行的脚本
+    post_migration: ""                  # 迁移后执行的脚本
+    pre_namespace: ""                   # 每个 namespace 迁移前执行
+    post_namespace: ""                  # 每个 namespace 迁移后执行
+  
+  # 性能调优
+  performance:
+    kubectl_batch_size: 50              # kubectl 批处理大小
+    api_rate_limit: 100                 # API 调用频率限制 (每秒)
+    memory_limit: "1Gi"                 # 内存使用限制

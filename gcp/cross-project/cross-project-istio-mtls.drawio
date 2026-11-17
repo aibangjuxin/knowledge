@@ -1,0 +1,312 @@
+<mxGraphModel adaptiveColors="auto">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+
+    <!-- Title -->
+    <mxCell id="title" value="Cross-Project PSC NEG + Istio mTLS Full Flow" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1;fontColor=#1A1A1A;" vertex="1" parent="1">
+      <mxGeometry x="400" y="20" width="800" height="40" as="geometry"/>
+    </mxCell>
+
+    <!-- External Client -->
+    <mxCell id="c1" value="External Client" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#4A5568;strokeColor=#2D3748;fontColor=#FFFFFF;fontSize=12;fontStyle=1;arcSize=20;width=120;height=50;" vertex="1" parent="1">
+      <mxGeometry x="780" y="80" width="120" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="c1b" value="HTTPS请求 *.team-a.appdev.aibang" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=10;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="755" y="135" width="170" height="20" as="geometry"/>
+    </mxCell>
+
+    <!-- DNS -->
+    <mxCell id="dns" value="Public DNS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#48BB78;strokeColor=#276749;fontColor=#FFFFFF;fontSize=11;arcSize=20;width=100;height=40;" vertex="1" parent="1">
+      <mxGeometry x="795" y="165" width="100" height="40" as="geometry"/>
+    </mxCell>
+
+    <!-- A Project Container -->
+    <mxCell id="projA" value="A Project (Consumer / Shared VPC)" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#EBF8FF;strokeColor=#3182CE;startSize=24;horizontalPadding=10;verticalPadding=10;fontSize=12;fontStyle=1;fontColor=#1A202C;resizeParent=1;resizeParentMax=0;fillOpacity=100;" vertex="1" parent="1">
+      <mxGeometry x="40" y="80" width="900" height="700" as="geometry"/>
+    </mxCell>
+
+    <!-- GLB -->
+    <mxCell id="glb" value="Global HTTPS Load Balancer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3182CE;strokeColor=#2C5AA0;fontColor=#FFFFFF;fontSize=11;fontStyle=1;arcSize=20;width=160;height=50;" vertex="1" parent="1">
+      <mxGeometry x="680" y="120" width="160" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="glb_note" value="TLS Termination&#xa;持有业务域名证书" style="text;html=1;stroke=none;fill=none;align=left;verticalAlign=middle;fontSize=9;fontColor=#4A5568;" vertex="1" parent="1">
+      <mxGeometry x="700" y="175" width="120" height="30" as="geometry"/>
+    </mxCell>
+
+    <!-- Cloud Armor -->
+    <mxCell id="armor" value="Cloud Armor" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E53E3E;strokeColor=#C53030;fontColor=#FFFFFF;fontSize=11;fontStyle=1;arcSize=20;width=120;height=45;" vertex="1" parent="1">
+      <mxGeometry x="700" y="220" width="120" height="45" as="geometry"/>
+    </mxCell>
+    <mxCell id="armor_note" value="WAF / TLS Policy / IP Allowlist" style="text;html=1;stroke=none;fill=none;align=left;verticalAlign=middle;fontSize=9;fontColor=#718096;" vertex="1" parent="1">
+      <mxGeometry x="700" y="270" width="130" height="20" as="geometry"/>
+    </mxCell>
+
+    <!-- Backend Service -->
+    <mxCell id="bs" value="Backend Service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#805AD5;strokeColor=#6B46C1;fontColor=#FFFFFF;fontSize=11;fontStyle=1;arcSize=20;width=130;height=45;" vertex="1" parent="1">
+      <mxGeometry x="695" y="300" width="130" height="45" as="geometry"/>
+    </mxCell>
+
+    <!-- Consumer Subnet -->
+    <mxCell id="subnetA" value="Consumer Subnet&#xa;(Shared VPC Subnet)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BEE3F8;strokeColor=#63B3ED;fontColor=#1A202C;fontSize=10;arcSize=15;align=center;width=130;height=40;" vertex="1" parent="1">
+      <mxGeometry x="720" y="360" width="130" height="40" as="geometry"/>
+    </mxCell>
+
+    <!-- PSC NEG -->
+    <mxCell id="pscneg" value="PSC NEG" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3182CE;strokeColor=#2B6CB0;fontColor=#FFFFFF;fontSize=11;fontStyle=1;arcSize=20;width=110;height=45;" vertex="1" parent="1">
+      <mxGeometry x="730" y="420" width="110" height="45" as="geometry"/>
+    </mxCell>
+    <mxCell id="pscneg_note" value="type: PRIVATE_SERVICE_CONNECT&#xa;指向 Service Attachment" style="text;html=1;stroke=none;fill=none;align=left;verticalAlign=middle;fontSize=9;fontColor=#4A5568;" vertex="1" parent="1">
+      <mxGeometry x="720" y="470" width="130" height="30" as="geometry"/>
+    </mxCell>
+
+    <!-- Google Backbone Container -->
+    <mxCell id="backbone" value="Google Internal Backbone" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#FFFAF0;strokeColor=#ED8936;startSize=24;horizontalPadding=10;verticalPadding=10;fontSize=12;fontStyle=1;fontColor=#1A202C;resizeParent=1;resizeParentMax=0;fillOpacity=100;" vertex="1" parent="1">
+      <mxGeometry x="40" y="500" width="900" height="140" as="geometry"/>
+    </mxCell>
+
+    <!-- PSC Tunnel -->
+    <mxCell id="psc_tunnel" value="Private Service Connect&#xa;(Service-Level Private Channel)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ED8936;strokeColor=#C05621;fontColor=#FFFFFF;fontSize=11;fontStyle=1;arcSize=20;width=180;height=50;" vertex="1" parent="1">
+      <mxGeometry x="640" y="530" width="180" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="psc_label" value="No VPC Peering Required&#xa;IP Space Can Overlap" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#C05621;" vertex="1" parent="1">
+      <mxGeometry x="640" y="585" width="180" height="30" as="geometry"/>
+    </mxCell>
+
+    <!-- B Project Container -->
+    <mxCell id="projB" value="B Project (Producer / Private VPC)" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#F0FFF4;strokeColor=#38A169;startSize=24;horizontalPadding=10;verticalPadding=10;fontSize=12;fontStyle=1;fontColor=#1A202C;resizeParent=1;resizeParentMax=0;fillOpacity=100;" vertex="1" parent="1">
+      <mxGeometry x="40" y="650" width="900" height="450" as="geometry"/>
+    </mxCell>
+
+    <!-- Service Attachment -->
+    <mxCell id="sa" value="Service Attachment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#38A169;strokeColor=#276749;fontColor=#FFFFFF;fontSize=11;fontStyle=1;arcSize=20;width=150;height=50;" vertex="1" parent="1">
+      <mxGeometry x="640" y="670" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="sa_note" value="Consumer Access Control&#xa;ACCEPT_MANUAL / ACCEPT_AUTO" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#276749;" vertex="1" parent="1">
+      <mxGeometry x="640" y="725" width="150" height="30" as="geometry"/>
+    </mxCell>
+
+    <!-- PSC NAT Subnet -->
+    <mxCell id="nat_subnet" value="PSC NAT Subnet&#xa;(purpose=PRIVATE_SERVICE_CONNECT)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#9AE6B4;strokeColor=#48BB78;fontColor=#1A202C;fontSize=10;arcSize=15;width=170;height=40;" vertex="1" parent="1">
+      <mxGeometry x="650" y="770" width="170" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="nat_note" value="SNAT: 源IP转换为NAT池地址" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#276749;" vertex="1" parent="1">
+      <mxGeometry x="650" y="815" width="170" height="20" as="geometry"/>
+    </mxCell>
+
+    <!-- ILB -->
+    <mxCell id="ilb" value="Internal Load Balancer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#38A169;strokeColor=#276749;fontColor=#FFFFFF;fontSize=11;fontStyle=1;arcSize=20;width=150;height=50;" vertex="1" parent="1">
+      <mxGeometry x="660" y="850" width="150" height="50" as="geometry"/>
+    </mxCell>
+
+    <!-- GKE Cluster Container -->
+    <mxCell id="gke_cluster" value="GKE Cluster (ASM/Istio Enabled)" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#E9FFFE;strokeColor=#00B5AD;startSize=24;horizontalPadding=10;verticalPadding=10;fontSize=12;fontStyle=1;fontColor=#1A202C;resizeParent=1;resizeParentMax=0;fillOpacity=100;" vertex="1" parent="1">
+      <mxGeometry x="60" y="920" width="870" height="600" as="geometry"/>
+    </mxCell>
+
+    <!-- GKE Node -->
+    <mxCell id="gke_node" value="GKE Node (VM)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B2F5EA;strokeColor=#00B5AD;fontColor=#1A202C;fontSize=10;arcSize=15;width=110;height=35;" vertex="1" parent="1">
+      <mxGeometry x="680" y="950" width="110" height="35" as="geometry"/>
+    </mxCell>
+
+    <!-- Business Pod -->
+    <mxCell id="pod" value="Business Pod" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FED7D7;strokeColor=#FC8181;fontColor=#1A202C;fontSize=10;arcSize=15;width=100;height=30;" vertex="1" parent="1">
+      <mxGeometry x="695" y="1000" width="100" height="30" as="geometry"/>
+    </mxCell>
+
+    <!-- Envoy Sidecar -->
+    <mxCell id="sidecar" value="Envoy Sidecar" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#008F8F;strokeColor=#006666;fontColor=#FFFFFF;fontSize=10;fontStyle=1;arcSize=20;width=140;height=55;" vertex="1" parent="1">
+      <mxGeometry x="280" y="970" width="140" height="55" as="geometry"/>
+    </mxCell>
+    <mxCell id="sidecar_note" value="SPIFFE身份 / istiod SDS证书&#xa;mTLS 自动加密 / 证书验证" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#006666;" vertex="1" parent="1">
+      <mxGeometry x="260" y="1030" width="180" height="30" as="geometry"/>
+    </mxCell>
+
+    <!-- App Container -->
+    <mxCell id="app" value="App Container" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F6AD55;strokeColor=#DD6B20;fontColor=#1A202C;fontSize=10;fontStyle=1;arcSize=20;width=120;height=50;" vertex="1" parent="1">
+      <mxGeometry x="110" y="975" width="120" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="app_note" value="HTTP :8443 (明文)&#xa;完全感知不到 mTLS" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#DD6B20;" vertex="1" parent="1">
+      <mxGeometry x="95" y="1030" width="150" height="30" as="geometry"/>
+    </mxCell>
+
+    <!-- PeerAuthentication -->
+    <mxCell id="pa" value="PeerAuthentication&#xa;STRICT — 强制mTLS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#008F8F;strokeColor=#006666;fontColor=#FFFFFF;fontSize=9;fontStyle=1;arcSize=15;width=130;height=35;" vertex="1" parent="1">
+      <mxGeometry x="60" y="1090" width="130" height="35" as="geometry"/>
+    </mxCell>
+
+    <!-- AuthorizationPolicy -->
+    <mxCell id="ap" value="AuthorizationPolicy&#xa;default-deny-all + allow" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C53030;strokeColor=#9B2C2C;fontColor=#FFFFFF;fontSize=9;fontStyle=1;arcSize=15;width=130;height=35;" vertex="1" parent="1">
+      <mxGeometry x="200" y="1090" width="130" height="35" as="geometry"/>
+    </mxCell>
+
+    <!-- istiod -->
+    <mxCell id="istiod" value="istiod CA&#xa;(SDS 自动签发)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#5B4B8A;strokeColor=#44337A;fontColor=#FFFFFF;fontSize=9;fontStyle=1;arcSize=15;width=110;height=35;" vertex="1" parent="1">
+      <mxGeometry x="60" y="1140" width="110" height="35" as="geometry"/>
+    </mxCell>
+    <mxCell id="istiod_note" value="SPIFFE证书每24h轮转&#xa;存于Sidecar内存" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=8;fontColor=#44337A;" vertex="1" parent="1">
+      <mxGeometry x="50" y="1180" width="130" height="25" as="geometry"/>
+    </mxCell>
+
+    <!-- NetworkPolicy -->
+    <mxCell id="netpol" value="NetworkPolicy&#xa;L3/L4 放行 :443/:3307" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BEE3F8;strokeColor=#3182CE;fontColor=#1A202C;fontSize=9;fontStyle=1;arcSize=15;width=130;height=35;" vertex="1" parent="1">
+      <mxGeometry x="340" y="970" width="130" height="35" as="geometry"/>
+    </mxCell>
+
+    <!-- Flow Labels (annotation boxes) -->
+    <mxCell id="flow1" value="① HTTPS / TLS&#xa;(外部证书·业务域名)" style="text;html=1;stroke=none;fill=#FEFCBF;align=center;verticalAlign=middle;fontSize=10;fontColor=#744210;rounded=1;whiteSpace=wrap;width=130;height=35;" vertex="1" parent="1">
+      <mxGeometry x="700" y="60" width="130" height="35" as="geometry"/>
+    </mxCell>
+    <mxCell id="flow2" value="② mTLS 自动加密&#xa;(SPIFFE 双向证书)" style="text;html=1;stroke=none;fill=#C6F6D5;align=center;verticalAlign=middle;fontSize=10;fontColor=#276749;rounded=1;whiteSpace=wrap;width=130;height=35;" vertex="1" parent="1">
+      <mxGeometry x="430" y="1000" width="130" height="35" as="geometry"/>
+    </mxCell>
+    <mxCell id="flow3" value="③ 明文 localhost&#xa;(Sidecar → App)" style="text;html=1;stroke=none;fill=#FED7D7;align=center;verticalAlign=middle;fontSize=10;fontColor=#9B2C2C;rounded=1;whiteSpace=wrap;width=120;height=35;" vertex="1" parent="1">
+      <mxGeometry x="95" y="1070" width="120" height="35" as="geometry"/>
+    </mxCell>
+
+    <!-- istio-ingressgateway namespace -->
+    <mxCell id="istio_ns" value="namespace: istio-ingressgateway" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#EBF8FF;strokeColor=#534AB7;startSize=20;horizontalPadding=8;verticalPadding=6;fontSize=10;fontStyle=1;fontColor=#1A202C;resizeParent=1;resizeParentMax=0;fillOpacity=100;" vertex="1" parent="1">
+      <mxGeometry x="440" y="120" width="450" height="280" as="geometry"/>
+    </mxCell>
+
+    <!-- Istio Gateway -->
+    <mxCell id="gateway" value="Istio Gateway Pod" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#534AB7;strokeColor=#3C3489;fontColor=#FFFFFF;fontSize=11;fontStyle=1;arcSize=20;width=150;height=50;" vertex="1" parent="1">
+      <mxGeometry x="460" y="155" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="gateway_note" value="TLS SIMPLE 终止&#xa;持有业务域名证书" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#534AB7;" vertex="1" parent="1">
+      <mxGeometry x="455" y="210" width="160" height="25" as="geometry"/>
+    </mxCell>
+
+    <!-- Gateway Sidecar -->
+    <mxCell id="gw_sidecar" value="Envoy Sidecar" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#008F8F;strokeColor=#006666;fontColor=#FFFFFF;fontSize=10;fontStyle=1;arcSize=20;width=140;height=50;" vertex="1" parent="1">
+      <mxGeometry x="680" y="155" width="140" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="gw_sidecar_note" value="SPIFFE 身份&#xa;持有 istiod 颁发证书" style="text;html=1;stroke=none;fill=none;align=center;verticalAlign=middle;fontSize=9;fontColor=#006666;" vertex="1" parent="1">
+      <mxGeometry x="680" y="210" width="140" height="25" as="geometry"/>
+    </mxCell>
+
+    <!-- NetworkPolicy shield for ingress -->
+    <mxCell id="netpol_ingress" value="NetworkPolicy&#xa;L3/L4 放行 :8443" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BEE3F8;strokeColor=#3182CE;fontColor=#1A202C;fontSize=9;arcSize=15;width=120;height=30;" vertex="1" parent="1">
+      <mxGeometry x="460" y="290" width="120" height="30" as="geometry"/>
+    </mxCell>
+
+    <!-- team-a-runtime namespace -->
+    <mxCell id="runtime_ns" value="namespace: team-a-runtime" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#E9FFFE;strokeColor=#00B5AD;startSize=20;horizontalPadding=8;verticalPadding=6;fontSize=10;fontStyle=1;fontColor=#1A202C;resizeParent=1;resizeParentMax=0;fillOpacity=100;" vertex="1" parent="1">
+      <mxGeometry x="60" y="950" width="420" height="290" as="geometry"/>
+    </mxCell>
+
+    <!-- Edge: Client → DNS → GLB -->
+    <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=2;endArrow=none;endFill=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="c1" target="dns">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#4A5568;strokeWidth=2;endArrow=none;endFill=0;" edge="1" parent="1" source="dns" target="glb">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- GLB → Cloud Armor -->
+    <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#E53E3E;strokeWidth=2;endArrow=none;endFill=0;" edge="1" parent="1" source="glb" target="armor">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- Cloud Armor → Backend Service -->
+    <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#805AD5;strokeWidth=2;endArrow=none;endFill=0;" edge="1" parent="1" source="armor" target="bs">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- Backend Service → Consumer Subnet -->
+    <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#63B3ED;strokeWidth=1.5;dashed=1;endArrow=none;endFill=0;strokeDashPattern=5 3;" edge="1" parent="1" source="bs" target="subnetA">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- Consumer Subnet → PSC NEG -->
+    <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#3182CE;strokeWidth=2;endArrow=none;endFill=0;" edge="1" parent="1" source="subnetA" target="pscneg">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- PSC NEG → PSC Tunnel -->
+    <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#ED8936;strokeWidth=2.5;dashed=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="pscneg" target="psc_tunnel">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- PSC Tunnel → Service Attachment -->
+    <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#38A169;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="psc_tunnel" target="sa">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- Service Attachment → NAT Subnet (dependency) -->
+    <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#48BB78;strokeWidth=1.5;dashed=1;endArrow=none;endFill=0;" edge="1" parent="1" source="sa" target="nat_subnet">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- Service Attachment → ILB -->
+    <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#38A169;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="sa" target="ilb">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- ILB → GKE Node -->
+    <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#00B5AD;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="ilb" target="gke_node">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- GKE Node → Pod -->
+    <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#FC8181;strokeWidth=1.5;endArrow=none;endFill=0;" edge="1" parent="1" source="gke_node" target="pod">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- Pod → Sidecar -->
+    <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#008F8F;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="pod" target="sidecar">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- Sidecar → App -->
+    <mxCell id="e14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#F6AD55;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="sidecar" target="app">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- GLB → Gateway -->
+    <mxCell id="e15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#534AB7;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="glb" target="gateway">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- Gateway → Gateway Sidecar -->
+    <mxCell id="e16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#718096;strokeWidth=1;endArrow=none;endFill=0;dashed=1;" edge="1" parent="1" source="gateway" target="gw_sidecar">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- Gateway Sidecar → Runtime Sidecar (mTLS) -->
+    <mxCell id="e17" value="mTLS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0F6E56;strokeWidth=2.5;dashed=1;endArrow=classic;endFill=1;fontColor=#0F6E56;fontSize=10;fontStyle=1;" edge="1" parent="1" source="gw_sidecar" target="sidecar">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- istiod → Sidecar (SDS) -->
+    <mxCell id="e18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5B4B8A;strokeWidth=1;dashed=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="istiod" target="sidecar">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <!-- istiod → gw_sidecar (SDS) -->
+    <mxCell id="e19" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#5B4B8A;strokeWidth=1;dashed=1;endArrow=classic;endFill=1;" edge="1" parent="1" source="istiod" target="gw_sidecar">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Legend -->
+    <mxCell id="legend" value="安全层说明" style="swimlane;horizontal=0;whiteSpace=wrap;html=1;fillColor=#F7FAFC;strokeColor=#CBD5E0;startSize=24;horizontalPadding=10;verticalPadding=8;fontSize=11;fontStyle=1;fontColor=#1A202C;resizeParent=1;resizeParentMax=0;fillOpacity=100;" vertex="1" parent="1">
+      <mxGeometry x="880" y="80" width="220" height="400" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg1" value="① HTTPS / TLS (外部)" style="text;html=1;stroke=none;fill=#FEFCBF;align=left;verticalAlign=middle;fontSize=10;fontColor=#744210;rounded=1;whiteSpace=wrap;width=180;height=25;spacing=6;" vertex="1" parent="legend">
+      <mxGeometry y="30" width="200" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg1b" value="Client → GLB 终止，业务域名证书" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="legend">
+      <mxGeometry y="58" width="200" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg2" value="② mTLS 自动加密 (SPIFFE)" style="text;html=1;stroke=none;fill=#C6F6D5;align=left;verticalAlign=middle;fontSize=10;fontColor=#276749;rounded=1;whiteSpace=wrap;width=180;height=25;" vertex="1" parent="legend">
+      <mxGeometry y="85" width="200" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg2b" value="Sidecar ↔ Sidecar，istiod SDS 签发&#xa;SPIFFE 证书，PeerAuthentication STRICT" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="legend">
+      <mxGeometry y="113" width="200" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg3" value="③ 明文 localhost (Pod内)" style="text;html=1;stroke=none;fill=#FED7D7;align=left;verticalAlign=middle;fontSize=10;fontColor=#9B2C2C;rounded=1;whiteSpace=wrap;width=180;height=25;" vertex="1" parent="legend">
+      <mxGeometry y="150" width="200" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg3b" value="Sidecar → App，localhost 不经网络" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="legend">
+      <mxGeometry y="178" width="200" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg4" value="双层防护" style="text;html=1;stroke=none;fill=#BEE3F8;align=left;verticalAlign=middle;fontSize=10;fontColor=#2C5282;rounded=1;whiteSpace=wrap;width=180;height=25;" vertex="1" parent="legend">
+      <mxGeometry y="210" width="200" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg4b" value="NetworkPolicy (L3/L4) +&#xa;AuthorizationPolicy (L7 SPIFFE)" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="legend">
+      <mxGeometry y="238" width="200" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg5" value="PSC 私有通道" style="text;html=1;stroke=none;fill=#FFFAF0;align=left;verticalAlign=middle;fontSize=10;fontColor=#C05621;rounded=1;whiteSpace=wrap;width=180;height=25;" vertex="1" parent="legend">
+      <mxGeometry y="280" width="200" height="25" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg5b" value="Google Backbone 内部转发&#xa;跨 Project 服务级私有连接" style="text;html=1;stroke=none;fill=none;align=left;fontSize=9;fontColor=#718096;" vertex="1" parent="legend">
+      <mxGeometry y="308" width="200" height="30" as="geometry"/>
+    </mxCell>
+
+  </root>
+</mxGraphModel>

@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudsql-psc-connector-app
+  namespace: default # 确保和 Secret 在同一个命名空间
+  labels:
+    app: cloudsql-psc-connector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudsql-psc-connector
+  template:
+    metadata:
+      labels:
+        app: cloudsql-psc-connector
+    spec:
+      containers:
+      - name: app-container
+        # 注意：你需要先构建 Dockerfile 并将镜像推送到一个镜像仓库 (如 GCR/Artifact Registry)
+        # 然后在这里替换成你的镜像地址
+        image: gcr.io/google-samples/hello-app:1.0 # <-- ！！！将这里替换为你的应用镜像
+        env:
+          # --- 数据库连接配置 ---
+
+          # ！！！重要！！！
+          # 将下面的 IP 地址替换为你的 Consumer VPC 中创建的 PSC 端点 IP
+          - name: DB_HOST
+            value: "YOUR_PSC_ENDPOINT_IP"
+
+          # 从 Secret 'cloudsql-credentials' 中引用数据库用户名
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: cloudsql-credentials
+                key: username
+
+          # 从 Secret 'cloudsql-credentials' 中引用数据库密码
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: cloudsql-credentials
+                key: password

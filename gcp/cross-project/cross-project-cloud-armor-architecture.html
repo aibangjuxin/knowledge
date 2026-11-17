@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cross-Project Cloud Armor Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1100px; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px; background: #fb7185; border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.75rem; margin-left: 1.75rem; }
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1100px; height: auto; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card-dot.sky { background: #38bdf8; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; line-height: 1.6; }
+    .card li { margin-bottom: 0.375rem; padding-left: 1rem; position: relative; }
+    .card li::before { content: "›"; position: absolute; left: 0; color: #475569; }
+    code { background: #0f172a; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.7rem; color: #fbbf24; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="header-row">
+      <div class="pulse-dot"></div>
+      <h1>Cross-Project Cloud Armor — 3 valid paths + 1 rejected</h1>
+    </div>
+    <div class="subtitle">Google Cloud Armor Policy 必须与 Backend Service 同 project · 跨 project 引用被 gcloud 拒绝</div>
+  </div>
+
+  <div class="diagram-container">
+<svg viewBox="0 0 1440 980" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrow-emerald" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#fbbf24"/>
+    </marker>
+    <marker id="arrow-sky" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#38bdf8"/>
+    </marker>
+    <marker id="arrow-rose" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#fb7185"/>
+    </marker>
+    <marker id="arrow-slate" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- ═══════════ ZONE A: PSC (most common) ═══════════ -->
+  <rect x="30" y="80" width="700" height="200" rx="8" fill="none" stroke="#1e293b" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="45" y="105" fill="#34d399" font-size="11" font-weight="700">A. PSC (最常见 · 推荐)</text>
+  <text x="45" y="120" fill="#64748b" font-size="8">Tenant 持有 Cloud Armor + Backend Service + PSC NEG · Master 持有 ILB + MIG</text>
+
+  <!-- Tenant Project box -->
+  <rect x="55" y="145" width="290" height="115" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+  <text x="200" y="166" fill="#34d399" font-size="11" font-weight="600" text-anchor="middle">TENANT PROJECT</text>
+  <rect x="75" y="180" width="250" height="28" rx="3" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+  <text x="200" y="198" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">Cloud Armor Policy</text>
+  <rect x="75" y="215" width="250" height="28" rx="3" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+  <text x="200" y="233" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">Backend Service (same project)</text>
+
+  <!-- arrow Cloud Armor -> Backend Service (same project, solid emerald) -->
+  <path d="M 200 208 L 200 215" stroke="#34d399" stroke-width="2" fill="none" marker-end="url(#arrow-emerald)"/>
+  <rect x="215" y="204" width="80" height="12" rx="2" fill="#020617" opacity="0.95"/>
+  <text x="255" y="213" fill="#34d399" font-size="7" font-weight="600" text-anchor="middle">attach (OK)</text>
+
+  <!-- PSC NEG -->
+  <rect x="75" y="252" width="115" height="0" rx="3" fill="none"/>
+  <!-- actually let me draw NEG below BS, narrow box -->
+  <rect x="75" y="248" width="115" height="0" rx="3" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+
+  <!-- Master Project box -->
+  <rect x="395" y="145" width="290" height="115" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="540" y="166" fill="#fbbf24" font-size="11" font-weight="600" text-anchor="middle">MASTER PROJECT</text>
+  <rect x="415" y="180" width="250" height="28" rx="3" fill="#0f172a" stroke="#fbbf24" stroke-width="1"/>
+  <text x="540" y="198" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">Service Attachment</text>
+  <rect x="415" y="215" width="250" height="28" rx="3" fill="#0f172a" stroke="#fbbf24" stroke-width="1"/>
+  <text x="540" y="233" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">ILB + MIG</text>
+
+  <!-- PSC tunnel (cross-project, dashed emerald = happy path) -->
+  <path d="M 325 230 L 415 230" stroke="#34d399" stroke-width="2.5" fill="none" stroke-dasharray="6,3" marker-end="url(#arrow-emerald)"/>
+  <rect x="325" y="207" width="90" height="14" rx="2" fill="#020617" opacity="0.95"/>
+  <text x="370" y="218" fill="#34d399" font-size="8" font-weight="600" text-anchor="middle">PSC tunnel ✓</text>
+
+  <!-- ═══════════ ZONE B: IaC multi-tenant ═══════════ -->
+  <rect x="30" y="300" width="700" height="190" rx="8" fill="none" stroke="#1e293b" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="45" y="325" fill="#fbbf24" font-size="11" font-weight="700">B. 多 Tenant 共享 WAF · IaC 分发</text>
+  <text x="45" y="340" fill="#64748b" font-size="8">Git repo (policy 模板) → CI/CD → 每个 Tenant Project 重建一份 policy</text>
+
+  <!-- Git repo box -->
+  <rect x="55" y="360" width="160" height="110" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="135" y="381" fill="#fbbf24" font-size="10" font-weight="600" text-anchor="middle">Git repo</text>
+  <text x="135" y="399" fill="#94a3b8" font-size="8" text-anchor="middle">policy.yaml</text>
+  <text x="135" y="414" fill="#94a3b8" font-size="8" text-anchor="middle">Terraform module</text>
+  <text x="135" y="429" fill="#94a3b8" font-size="8" text-anchor="middle">SQli / XSS rules</text>
+  <text x="135" y="450" fill="#64748b" font-size="7" text-anchor="middle">single source of truth</text>
+
+  <!-- CI/CD arrow -->
+  <path d="M 215 415 L 290 415" stroke="#fbbf24" stroke-width="2" fill="none" marker-end="url(#arrow-amber)"/>
+  <rect x="220" y="402" width="65" height="13" rx="2" fill="#020617" opacity="0.95"/>
+  <text x="252" y="412" fill="#fbbf24" font-size="7" font-weight="600" text-anchor="middle">CI apply</text>
+
+  <!-- Tenant 1 -->
+  <rect x="295" y="350" width="200" height="50" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+  <text x="395" y="370" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">Tenant Project 1</text>
+  <text x="395" y="386" fill="#94a3b8" font-size="8" text-anchor="middle">policy.copy #1 + BS</text>
+
+  <!-- Tenant 2 -->
+  <rect x="295" y="408" width="200" height="50" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+  <text x="395" y="428" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">Tenant Project 2</text>
+  <text x="395" y="444" fill="#94a3b8" font-size="8" text-anchor="middle">policy.copy #2 + BS</text>
+
+  <!-- Tenant N -->
+  <rect x="295" y="466" width="200" height="20" rx="3" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+  <text x="395" y="479" fill="#94a3b8" font-size="8" text-anchor="middle">...  Tenant N  (50+ projects)</text>
+
+  <!-- Connecting arrows from CI/CD to each tenant -->
+  <path d="M 290 415 L 295 375" stroke="#fbbf24" stroke-width="1" fill="none" marker-end="url(#arrow-amber)"/>
+  <path d="M 290 415 L 295 432" stroke="#fbbf24" stroke-width="1" fill="none" marker-end="url(#arrow-amber)"/>
+  <path d="M 290 415 L 295 475" stroke="#fbbf24" stroke-width="1" fill="none" marker-end="url(#arrow-amber)"/>
+
+  <!-- CI runner box (separate) -->
+  <rect x="515" y="380" width="195" height="90" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1"/>
+  <text x="612" y="400" fill="#fbbf24" font-size="10" font-weight="600" text-anchor="middle">CI runner 关键约束</text>
+  <text x="525" y="418" fill="#94a3b8" font-size="7">• 每个 tenant 必须 IAM 授权 runner SA</text>
+  <text x="525" y="432" fill="#94a3b8" font-size="7">• terraform apply 用 -var tenant_project=N</text>
+  <text x="525" y="446" fill="#94a3b8" font-size="7">• policy 必须重建,不能跨 project import</text>
+  <text x="525" y="460" fill="#fb7185" font-size="7">• (Google 官方禁止 policy 跨 project 迁移)</text>
+
+  <!-- arrow from tenants to CI runner info -->
+  <path d="M 495 415 L 515 415" stroke="#94a3b8" stroke-width="1" fill="none" stroke-dasharray="2,2" marker-end="url(#arrow-slate)"/>
+
+  <!-- ═══════════ ZONE C: Hierarchical Firewall (org-level) ═══════════ -->
+  <rect x="30" y="510" width="700" height="130" rx="8" fill="none" stroke="#1e293b" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="45" y="535" fill="#38bdf8" font-size="11" font-weight="700">C. 跨 Project IP 黑名单 · Hierarchical Firewall</text>
+  <text x="45" y="550" fill="#64748b" font-size="8">不是 Cloud Armor,是 VPC firewall · 在 Org/Folder 级挂,向下穿透所有 project</text>
+
+  <!-- Org box -->
+  <rect x="55" y="570" width="160" height="55" rx="6" fill="#0f172a" stroke="#38bdf8" stroke-width="1.5"/>
+  <text x="135" y="590" fill="#38bdf8" font-size="10" font-weight="600" text-anchor="middle">Org / Folder</text>
+  <text x="135" y="607" fill="#94a3b8" font-size="8" text-anchor="middle">firewall-policy</text>
+  <text x="135" y="619" fill="#94a3b8" font-size="8" text-anchor="middle">(IP / port rules)</text>
+
+  <!-- Down arrow -->
+  <path d="M 215 597 L 290 597" stroke="#38bdf8" stroke-width="2" fill="none" marker-end="url(#arrow-sky)"/>
+  <rect x="225" y="585" width="60" height="13" rx="2" fill="#020617" opacity="0.95"/>
+  <text x="255" y="595" fill="#38bdf8" font-size="7" font-weight="600" text-anchor="middle">inherit ↓</text>
+
+  <!-- All projects inherit -->
+  <rect x="295" y="570" width="200" height="55" rx="6" fill="#0f172a" stroke="#38bdf8" stroke-width="1"/>
+  <text x="395" y="589" fill="#38bdf8" font-size="10" font-weight="600" text-anchor="middle">所有 Project 自动继承</text>
+  <text x="395" y="605" fill="#94a3b8" font-size="8" text-anchor="middle">Tenant / Master / 其他</text>
+  <text x="395" y="617" fill="#fb7185" font-size="7" text-anchor="middle">⚠ 仅 IP/port,不能做 WAF</text>
+
+  <!-- Limits box -->
+  <rect x="515" y="570" width="195" height="55" rx="6" fill="#0f172a" stroke="#38bdf8" stroke-width="1"/>
+  <text x="612" y="589" fill="#38bdf8" font-size="10" font-weight="600" text-anchor="middle">能力边界</text>
+  <text x="525" y="603" fill="#34d399" font-size="7">✓ deny IP / port / region</text>
+  <text x="525" y="616" fill="#fb7185" font-size="7">✗ SQli / XSS / rate-limit</text>
+
+  <!-- ═══════════ ZONE D: REJECTED (gcloud error) ═══════════ -->
+  <rect x="30" y="660" width="700" height="220" rx="8" fill="none" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="45" y="685" fill="#fb7185" font-size="11" font-weight="700">D. ❌ 跨 Project 直接引用 — 被 gcloud 拒绝</text>
+  <text x="45" y="700" fill="#64748b" font-size="8">Google 控制面硬性阻止 · Lex 2026-06 亲手实验</text>
+
+  <!-- Source box (Master with Cloud Armor) -->
+  <rect x="55" y="720" width="280" height="80" rx="6" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="195" y="740" fill="#fb7185" font-size="10" font-weight="600" text-anchor="middle">MASTER PROJECT</text>
+  <text x="195" y="757" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">Cloud Armor Policy ✗</text>
+  <text x="195" y="775" fill="#94a3b8" font-size="7" text-anchor="middle">(被 gcloud 当作非法源)</text>
+  <text x="195" y="790" fill="#64748b" font-size="7" text-anchor="middle">projects/master/securityPolicies/x</text>
+
+  <!-- big X arrow -->
+  <path d="M 335 760 L 525 760" stroke="#fb7185" stroke-width="2.5" fill="none" stroke-dasharray="4,4" marker-end="url(#arrow-rose)"/>
+  <rect x="395" y="747" width="80" height="26" rx="3" fill="#020617" opacity="0.95"/>
+  <text x="435" y="757" fill="#fb7185" font-size="8" font-weight="700" text-anchor="middle">✗ REJECTED</text>
+  <text x="435" y="770" fill="#fb7185" font-size="6" text-anchor="middle">cross-project</text>
+
+  <!-- Target box (Tenant with Backend Service) -->
+  <rect x="530" y="720" width="180" height="80" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+  <text x="620" y="740" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">TENANT PROJECT</text>
+  <text x="620" y="757" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">Backend Service</text>
+  <text x="620" y="775" fill="#94a3b8" font-size="7" text-anchor="middle">(无法 attach 跨 project policy)</text>
+  <text x="620" y="790" fill="#64748b" font-size="7" text-anchor="middle">projects/tenant/.../bs</text>
+
+  <!-- gcloud error verbatim — inside zone D, with backplate -->
+  <rect x="55" y="815" width="655" height="50" rx="4" fill="#020617" opacity="0.95"/>
+  <text x="65" y="832" fill="#fb7185" font-size="8" font-weight="700" font-family="monospace">gcloud 错误原话:</text>
+  <text x="65" y="847" fill="#fb7185" font-size="7" font-family="monospace">"Invalid value for field 'securityPolicy.securityPolicy': Cross project</text>
+  <text x="65" y="860" fill="#fb7185" font-size="7" font-family="monospace">referencing is not allowed for this resource."</text>
+
+  <!-- ═══════════ RIGHT COLUMN — Reference Links / Anchor Points ═══════════ -->
+  <rect x="750" y="80" width="660" height="750" rx="8" fill="none" stroke="#1e293b" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="765" y="105" fill="#94a3b8" font-size="11" font-weight="700">权威证据 / 引用锚点</text>
+  <text x="765" y="120" fill="#475569" font-size="8">3 条独立证据链,任一即可定论</text>
+
+  <!-- Evidence 1: Google official -->
+  <rect x="770" y="140" width="620" height="100" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+  <text x="785" y="162" fill="#34d399" font-size="10" font-weight="700">① Google 官方原话 #1</text>
+  <text x="785" y="178" fill="#94a3b8" font-size="8">cloud.google.com/armor/docs/security-policy-overview (2026-07-27 fetch)</text>
+  <rect x="785" y="186" width="590" height="48" rx="3" fill="#020617"/>
+  <text x="795" y="202" fill="#34d399" font-size="8" font-style="italic">"Hierarchical security policies are attached at the organization, folder,</text>
+  <text x="795" y="214" fill="#34d399" font-size="8" font-style="italic">or project level, while service-level security policies are associated with</text>
+  <text x="795" y="226" fill="#34d399" font-size="8" font-style="italic">one or more backend services."</text>
+
+  <!-- Evidence 2: Google official 2 -->
+  <rect x="770" y="255" width="620" height="100" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+  <text x="785" y="277" fill="#34d399" font-size="10" font-weight="700">② Google 官方原话 #2</text>
+  <text x="785" y="293" fill="#94a3b8" font-size="8">cloud.google.com/armor/docs/configure-security-policies (2026-07-27 fetch)</text>
+  <rect x="785" y="301" width="590" height="48" rx="3" fill="#020617"/>
+  <text x="795" y="317" fill="#34d399" font-size="8" font-style="italic">"Exporting and importing security policies is useful for version control and</text>
+  <text x="795" y="329" fill="#34d399" font-size="8" font-style="italic">local modification but not for migrating a policy from one project to</text>
+  <text x="795" y="341" fill="#34d399" font-size="8" font-style="italic">another."</text>
+
+  <!-- Evidence 3: Lex 实验 -->
+  <rect x="770" y="370" width="620" height="120" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+  <text x="785" y="392" fill="#34d399" font-size="10" font-weight="700">③ Lex 亲手实验(2026-06)</text>
+  <text x="785" y="408" fill="#94a3b8" font-size="8">gcp/cross-project/cross-mig.md § cross project cloud armor</text>
+  <rect x="785" y="416" width="590" height="68" rx="3" fill="#020617"/>
+  <text x="795" y="430" fill="#94a3b8" font-size="7">$ gcloud compute backend-services update lex-backend \</text>
+  <text x="795" y="442" fill="#94a3b8" font-size="7">    --security-policy=projects/projectID2/.../securityPolicies/...</text>
+  <text x="795" y="458" fill="#fb7185" font-size="7">ERROR: Cross project referencing is not allowed</text>
+  <text x="795" y="470" fill="#fb7185" font-size="7">       for this resource.</text>
+  <text x="795" y="482" fill="#fb7185" font-size="7">→ gcloud 在 API 层校验失败,跟 IAM 权限无关</text>
+
+  <!-- Decision Matrix -->
+  <rect x="770" y="505" width="620" height="160" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1"/>
+  <text x="785" y="527" fill="#fbbf24" font-size="10" font-weight="700">决策矩阵 — 3 种场景选哪条路</text>
+  <text x="785" y="545" fill="#64748b" font-size="8" text-anchor="start">架构                              谁持 BS     Cloud Armor 放哪       策略分发</text>
+
+  <text x="785" y="563" fill="#34d399" font-size="8">A. PSC (Tenant 持 BS)        Tenant         Tenant Project      IaC per tenant</text>
+  <text x="785" y="581" fill="#34d399" font-size="8">B. Shared VPC + cross-NEG    Tenant         Tenant Project      IaC per tenant</text>
+  <text x="785" y="599" fill="#fbbf24" font-size="8">C. Cross-proj ILB (Shared)    Master         Master Project      IaC per tenant</text>
+  <text x="785" y="617" fill="#38bdf8" font-size="8">D. IP 黑名单(独立需求)       —              Hierarchical FW   Org/Folder 级</text>
+  <text x="785" y="635" fill="#fb7185" font-size="8">E. 跨 project direct ref      —              ❌ 不存在            gcloud 拒绝</text>
+  <text x="785" y="652" fill="#64748b" font-size="7">→ A 是 Lex aibang 当前实际用法(Step 7 in env ref)</text>
+
+  <!-- 3 root causes -->
+  <rect x="770" y="680" width="620" height="140" rx="6" fill="#0f172a" stroke="#fb7185" stroke-width="1"/>
+  <text x="785" y="702" fill="#fb7185" font-size="10" font-weight="700">3 个根因(为什么 GCP 不允许)</text>
+  <text x="785" y="720" fill="#94a3b8" font-size="8">① IAM 权限管理信任闭环</text>
+  <text x="795" y="734" fill="#64748b" font-size="7">   project 是权限 + 计费边界,跨 project 强引 → IAM 链路模糊</text>
+  <text x="785" y="750" fill="#94a3b8" font-size="8">② 防范级联故障</text>
+  <text x="795" y="764" fill="#64748b" font-size="7">   B 删 policy → A 业务瞬间 0;无任何告警 → 故障半径失控</text>
+  <text x="785" y="780" fill="#94a3b8" font-size="8">③ 计费与结算分离</text>
+  <text x="795" y="794" fill="#64748b" font-size="7">   Cloud Armor 计费(规则数 + 请求量)必须归属到 policy 所在 project</text>
+  <text x="785" y="812" fill="#64748b" font-size="7">→ 拒绝跨 project = GCP 设计的"故障半径 = project 边界"</text>
+
+  <!-- ═══════════ BOTTOM LEGEND ═══════════ -->
+  <rect x="30" y="900" width="1380" height="60" rx="8" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+  <text x="45" y="923" fill="#94a3b8" font-size="10" font-weight="600">图例 · 颜色语义</text>
+  <circle cx="45" cy="942" r="4" fill="#34d399"/>
+  <text x="55" y="946" fill="#94a3b8" font-size="8">正确路径(同 project 绑定)</text>
+  <circle cx="230" cy="942" r="4" fill="#fbbf24"/>
+  <text x="240" y="946" fill="#94a3b8" font-size="8">IaC 跨 project 复制分发</text>
+  <circle cx="450" cy="942" r="4" fill="#38bdf8"/>
+  <text x="460" y="946" fill="#94a3b8" font-size="8">Hierarchical 向下继承</text>
+  <circle cx="660" cy="942" r="4" fill="#fb7185"/>
+  <text x="670" y="946" fill="#94a3b8" font-size="8">被 GCP 拒绝的路径</text>
+  <circle cx="870" cy="942" r="4" fill="#64748b"/>
+  <text x="880" y="946" fill="#94a3b8" font-size="8">依赖 / 引用</text>
+  <text x="1050" y="946" fill="#64748b" font-size="8">solid=control · dashed=data · dashed-rose=REJECTED</text>
+</svg>
+  </div>
+
+  <!-- ═══════════ BOTTOM INFO CARDS ═══════════ -->
+  <div class="cards">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot emerald"></div>
+        <h3>Lex aibang 实际做法(验证可工作)</h3>
+      </div>
+      <ul>
+        <li>Tenant Project 创建 <code>security-policy</code> + 绑定到自己的 BS</li>
+        <li>Master Project 不创建任何 Cloud Armor</li>
+        <li>完整命令见 <code>skills/architectrue/references/cross-project-psc-environment-aibang.md</code> Step 7</li>
+        <li>europe-west2 / dev-lon-cluster 已生产验证</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot amber"></div>
+        <h3>多 Tenant IaC 分发 — 关键约束</h3>
+      </div>
+      <ul>
+        <li>每个 tenant 的 runner SA 必须在 tenant project 有 <code>securityAdmin</code> + <code>networkAdmin</code></li>
+        <li>policy 必须重建,不能 <code>terraform import</code> 跨 project</li>
+        <li>WAF 规则更新 = 改 Git → CI 自动推到 N 个 tenant</li>
+        <li>50+ tenants 时考虑 Terraform Cloud / Atlantis 集中化</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot sky"></div>
+        <h3>Hierarchical Firewall vs Cloud Armor</h3>
+      </div>
+      <ul>
+        <li>Hierarchical FW 是 VPC firewall,不是 Cloud Armor</li>
+        <li>能力:<code>deny IP/port</code> ✓ · <code>SQli/XSS</code> ✗ · <code>rate-limit</code> ✗</li>
+        <li>适用场景:全 Org 范围的 IP 黑名单(僵尸网络 / 已知攻击者)</li>
+        <li>不要混用:不能把"做 WAF"的活让 Hierarchical FW 替代 Cloud Armor</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot rose"></div>
+        <h3>常见误区 + 验证脚本</h3>
+      </div>
+      <ul>
+        <li>❌ "把 Cloud Armor 放 master 统一管" — gcloud 拒绝</li>
+        <li>❌ "用完整 URI <code>projects/X/securityPolicies/Y</code> 跨 project 引用" — 同上</li>
+        <li>✅ 验证脚本:<code>verify-armor-scope.sh</code>(§7.1 列出 BS 并检查 policy project)</li>
+        <li>✅ 动态验证:<code>test-armor-rule.sh</code>(§7.2 curl + Cloud Logging)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,273 @@
+#!/usr/bin/env zsh
+# memwatch — 内存 / swap / memory pressure 观察器
+#
+# 设计目标:
+#   - 公司配 MacBook Pro,无 brew / 无 python,只 zsh + vm_stat / sysctl / ps / top
+#   - macOS 没有 free 命令,内存理解要解析 vm_stat 的 page-based 输出
+#   - 显示:
+#       ① 物理内存总览 (used/wired/compressed/swap)
+#       ② vm_stat 关键 page counters
+#       ③ Memory Pressure indicator (sysctl vm.memory_pressure)
+#       ④ Top 10 内存占用进程
+#       ⑤ swap 用量 (macOS swap 经常是 0,但 SSD swap 用了就危险)
+#   - 2s 刷新 (默认)
+#
+# 用法:
+#   memwatch                # 持续观察
+#   memwatch --interval 1   # 1s 刷新
+#   memwatch --once         # 单次输出
+#
+# macOS 内存换算公式:
+#   - vm_stat 的所有数字单位都是 "pages"
+#   - page size = 16384 bytes (Apple Silicon + Intel 都一样,自 macOS Catalina 起)
+#   - 16384 bytes = 16 KB/page = 16 * 1024 / (1024^2) MB = 0.015625 MB/page
+#   - 或者 16384 / 1024 / 1024 / 1024 = 0.0000152587890625 GB/page
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i INTERVAL=2 TOP_N=10
+typeset ONCE=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --interval|-i) INTERVAL=$2; shift 2 ;;
+    --top|-n)      TOP_N=$2;     shift 2 ;;
+    --once)        ONCE=true;    shift ;;
+    --version)     echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--interval N] [--top N] [--once]"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+# ---- 内存换算 --------------------------------------------------------------
+# pages -> bytes -> human
+typeset -ri PAGE_SIZE=$(sysctl -n hw.pagesize)
+typeset -r PAGE_SIZE_MB=$((PAGE_SIZE / 1024 / 1024))  # 通常 0.015625 (16 KB)
+typeset -r PAGE_SIZE_KB=$((PAGE_SIZE / 1024))          # 16
+
+# 把 pages 数字 + 单位转成 human readable
+# 用 awk 避免 zsh 浮点精度问题
+_pages_to_human() {
+  local pages=$1
+  # 防御: 空参数 / 非数字 → 0
+  [[ -z $pages || $pages == *[^0-9]* ]] && pages=0
+  awk -v p="$pages" -v sz="$PAGE_SIZE" 'BEGIN{
+    bytes = p * sz
+    if (bytes >= 1073741824) printf "%.2f GB", bytes/1073741824
+    else if (bytes >= 1048576) printf "%.1f MB", bytes/1048576
+    else if (bytes >= 1024) printf "%.1f KB", bytes/1024
+    else printf "%d B", bytes
+  }'
+}
+
+# ---- 数据采集 --------------------------------------------------------------
+# 解析 vm_stat,提取关键 page counters
+# 输出格式:
+#   Pages free:                                    11676.
+#   Pages active:                                 230215.
+#   ...
+_parse_vm_stat() {
+  local line
+  # 用 typeset -g 让变量对父函数可见,同时确保是 string 类型 (H flag)
+  typeset -gH VM_FREE=0 VM_ACTIVE=0 VM_INACTIVE=0 VM_WIRED=0 VM_COMPRESSED=0
+  typeset -gH VM_SPECULATIVE=0 VM_PURGEABLE=0 VM_THROTTLED=0
+  typeset -gH VM_SWAPINS=0 VM_SWAPOUTS=0 VM_PAGEOUTS=0
+  typeset -gH VM_PAGEINS=0 VM_COMPRESSIONS=0 VM_DECOMPRESSIONS=0
+  typeset -gH VM_REACTIVATED=0 VM_PURGED=0 VM_COW=0 VM_ZERO_FILL=0
+
+  while IFS= read -r line; do
+    # 去掉前导空格 + 取 : 后内容 + 去末尾 . + 去末尾空格
+    local key="${${line## }%%:*}"
+    local raw="${${line#*: }%.}"
+    # raw 形如 "  11676" 或 "  11676 " — 去所有空格
+    local val="${raw// /}"
+    [[ -z $val ]] && val=0
+    case $key in
+      'Pages free')                  VM_FREE=$val ;;
+      'Pages active')                VM_ACTIVE=$val ;;
+      'Pages inactive')              VM_INACTIVE=$val ;;
+      'Pages speculative')           VM_SPECULATIVE=$val ;;
+      'Pages throttled')             VM_THROTTLED=$val ;;
+      'Pages wired down')            VM_WIRED=$val ;;
+      'Pages purgeable')             VM_PURGEABLE=$val ;;
+      'Pages stored in compressor')  VM_COMPRESSED=$val ;;
+      'Swapins')                     VM_SWAPINS=$val ;;
+      'Swapouts')                    VM_SWAPOUTS=$val ;;
+      'Pageins')                     VM_PAGEINS=$val ;;
+      'Pageouts')                    VM_PAGEOUTS=$val ;;
+      'Compressions')                VM_COMPRESSIONS=$val ;;
+      'Decompressions')              VM_DECOMPRESSIONS=$val ;;
+      'Pages reactivated')           VM_REACTIVATED=$val ;;
+      'Pages purged')                VM_PURGED=$val ;;
+      'Pages copy-on-write')         VM_COW=$val ;;
+      'Pages zero filled')           VM_ZERO_FILL=$val ;;
+    esac
+  done < <(vm_stat 2>/dev/null)
+}
+
+# 物理内存: sysctl hw.memsize (bytes) + 计算已用 = active + wired + compressed
+_phys_mem() {
+  typeset -gi PHYS_TOTAL_BYTES=$(sysctl -n hw.memsize)
+  typeset -gi PHYS_TOTAL_PAGES=$((PHYS_TOTAL_BYTES / PAGE_SIZE))
+
+  # Mac 活动内存 = active + wired + compressed (近似)
+  typeset -gi USED_PAGES=$((VM_ACTIVE + VM_WIRED + VM_COMPRESSED))
+  typeset -gi FREE_PAGES=$((PHYS_TOTAL_PAGES - USED_PAGES))
+  # 防止负数 (compressed 大时)
+  if (( FREE_PAGES < 0 )); then FREE_PAGES=0; fi
+
+  USED_BYTES=$((USED_PAGES * PAGE_SIZE))
+  FREE_BYTES=$((FREE_PAGES * PAGE_SIZE))
+}
+
+# Memory Pressure: macOS 没有 Linux 的 /proc/pressure,但 sysctl vm.memory_pressure 有信号
+# 我们用一个近似算法: 如果 swapouts > 0 且 swapins >> swapouts,说明在压
+_mem_pressure() {
+  typeset -g MP_LABEL='LOW'
+  typeset -g MP_COLOR=$C_GREEN
+  # 简单启发式: swapouts 越多越差
+  if (( VM_SWAPOUTS > 100000 )); then
+    MP_LABEL='HIGH'; MP_COLOR=$C_RED
+  elif (( VM_SWAPOUTS > 10000 )); then
+    MP_LABEL='MEDIUM'; MP_COLOR=$C_YELLOW
+  else
+    MP_LABEL='LOW'; MP_COLOR=$C_GREEN
+  fi
+}
+
+# Top 内存进程 (按 RSS 排序,聚合)
+_top_mem_procs() {
+  # TSV 输出: mem_mb <TAB> rss_kb <TAB> n_procs <TAB> app
+  ps -Ao rss,pid,comm 2>/dev/null | awk '
+    NR > 1 && $1 ~ /^[0-9]+$/ && $1+0 > 0 {
+      rss=$1; pid=$2; comm=$3
+      n = split(comm, parts, "/")
+      app = parts[n]
+      if (app ~ /\.app/) sub(/\.app.*/, ".app", app)
+      mem_total[app] += rss
+      cnt[app]++
+    }
+    END {
+      for (app in mem_total) {
+        if (mem_total[app] > 1024)  # > 1 MB
+          printf "%d\t%d\t%d\t%s\n", mem_total[app]/1024, mem_total[app], cnt[app], app
+      }
+    }
+  ' | sort -nr | head -n $TOP_N
+}
+
+# 进度条 (传入 bytes 数字 + total bytes)
+_bar_bytes() {
+  local used=$1 total=$2 width=${3:-30}
+  awk -v u="$used" -v t="$total" -v w="$width" 'BEGIN{
+    if (t == 0) t = 1
+    pct = u / t * 100
+    filled = int(pct/100 * w)
+    if (filled > w) filled = w
+    empty = w - filled
+    for (i=0; i<filled; i++) printf "%s", "█"
+    for (i=0; i<empty; i++) printf "%s", "░"
+    printf " %5.1f%%\n", pct
+  }'
+}
+
+_color_pct() {
+  awk -v p="$1" 'BEGIN{
+    if (p >= 85) printf "\033[31m"
+    else if (p >= 70) printf "\033[33m"
+    else printf "\033[32m"
+  }'
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_render() {
+  printf '\033[?25l\033[2J\033[H'
+
+  _parse_vm_stat
+  _phys_mem
+  _mem_pressure
+
+  echo "${C_BOLD}${C_CYAN}═══ 内存实时观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  刷新间隔 ${INTERVAL}s  ·  Page size = ${PAGE_SIZE_KB} KB  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  # 物理内存总览
+  local pct=$((USED_BYTES * 100 / PHYS_TOTAL_BYTES))
+  local color
+  color=$(_color_pct $pct)
+
+  printf "  物理内存总览 (共 %s)\n" "$(_pages_to_human $PHYS_TOTAL_PAGES)"
+  printf "  使用:%s %s%s%s  空闲: %s%s%s\n" \
+    "${C_RESET}" "$color" "$(_bar_bytes $USED_BYTES $PHYS_TOTAL_BYTES)" "${C_RESET}" \
+    "${C_BOLD}" "$(_pages_to_human $((FREE_BYTES / PAGE_SIZE)))" "${C_RESET}"
+
+  echo
+  printf "  %s细分:%s wired=%s  active=%s  compressed=%s  inactive=%s\n" \
+    "${C_DIM}" "${C_RESET}" \
+    "$(_pages_to_human $VM_WIRED)" \
+    "$(_pages_to_human $VM_ACTIVE)" \
+    "$(_pages_to_human $VM_COMPRESSED)" \
+    "$(_pages_to_human $VM_INACTIVE)"
+
+  echo
+  printf "  Memory Pressure: %s%s%-6s%s  swapins=%s  swapouts=%s  pageouts=%s\n" \
+    "$MP_COLOR" "${C_BOLD}" "$MP_LABEL" "${C_RESET}" \
+    "$(_pages_to_human $VM_SWAPINS)" \
+    "$(_pages_to_human $VM_SWAPOUTS)" \
+    "$(_pages_to_human $VM_PAGEOUTS)"
+
+  # swap 详情
+  local swap_used=$(sysctl vm.swapusage 2>/dev/null | awk -F': *' '/used/ {print $2}')
+  if [[ -n $swap_used ]]; then
+    echo
+    echo "  ${C_DIM}Swap:${C_RESET} $swap_used"
+  fi
+
+  echo
+  echo "${C_BOLD}  Top ${TOP_N} 内存进程${C_RESET} ${C_DIM}(按 RSS 聚合)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  printf "  %s%10s  %8s  %6s  %s%s\n" "${C_DIM}" 'MEM_MB' 'RSS_KB' 'PROCS' '应用' "${C_RESET}"
+
+  local procs
+  procs=$(_top_mem_procs)
+  if [[ -z $procs ]]; then
+    echo "  ${C_DIM}(无显著内存占用进程)${C_RESET}"
+  else
+    while IFS= read -r line; do
+      # zsh 5.9 函数体内多变量 read bug, 改用 ${=line} 拆分
+      local -a fields
+      fields=(${=line})
+      local mem_mb=${fields[1]} rss_kb=${fields[2]} n_procs=${fields[3]} app=${fields[4]}
+      printf "  %10.1f  %8.0f  %6d  %s\n" \
+        "$mem_mb" "$rss_kb" "$n_procs" "$app"
+    done <<<"$procs"
+  fi
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: vm_stat, sysctl hw.memsize, ps -Ao, top -l 1${C_RESET}"
+}
+
+_cleanup() {
+  printf '\033[?25h\033[0m'
+  echo
+}
+trap _cleanup EXIT INT TERM
+
+if $ONCE; then
+  _render
+else
+  while true; do _render; sleep $INTERVAL; done
+fi

@@ -1,0 +1,458 @@
+# =============================================================================
+# 02-network-policies.yaml
+# =============================================================================
+# ba000000-lex-int namespace 的 NetworkPolicy 全集
+# 策略: 默认 deny all + 白名单开放
+#
+# 设计依据:
+#   - 同仓库 08-ambient-networkpolicy.md (最权威)
+#   - 同仓库 21-solo-ambient-egress.md §"NetworkPolicy for ambient egress"
+#
+# ★ ambient 必读规则 ★
+# ----------------------------------------
+# 1. 15008 (HBONE 隧道) 必须显式 allow,否则 mesh 流量被 CNI 拦截
+#    — istio-cni 在 pod 内 iptables 重定向 TCP 到 ztunnel 15008/15006/15001
+#    — K8s NetPol 在主机网络命名空间(iptables 层)生效,早于 pod 内重定向
+#    — 若 NetPol 没 allow 15008, ztunnel 收不到流量,mesh 整体不通
+# 2. 15006 / 15001 也必须 allow (waypoint 拦截用 + outbound 转发)
+#    — 这里把它们包含在 "hbone" 类规则里
+# 3. kubelet 探针走 link-local 169.254.7.127/32
+#    — istio-cni SNAT 探针包源 IP 为该 link-local
+#    — NetPol 必须 allow 这个 IP,否则探针失败 pod 一直 NotReady
+# 4. 80/443/8080 等业务端口由业务端口规则覆盖; HBONE 端口单独覆盖
+# ----------------------------------------
+#
+# 每条 NetPol 都基于 podSelector,
+# 默认选:
+#   所有 pod (空白 matchLabels 等于 "all pods in this namespace")
+# 若要缩小到特定 pod,改为 matchLabels: {app: api-x} 等
+# =============================================================================
+
+---
+# -----------------------------------------------------------------------------
+# NP-1: default-deny-all
+# 基线: 默认拒绝所有进出,所有放行都靠后续白名单 NetPol 显式打开
+# 这是 ambient + 多租户隔离的标准做法
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: ba000000-lex-int
+  labels:
+    gateway-access: ba000000-lex-int
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  # 无 ingress / egress 规则 = deny all
+
+---
+# -----------------------------------------------------------------------------
+# NP-2: default-allow-egress-dns
+# 业务 pod → kube-dns (CoreDNS)
+# kube-dns 默认在 kube-system ns, 端口 53/UDP+TCP
+# 不开放 DNS, 所有解析直接挂, 整 ns 立刻不可用
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-egress-dns
+  namespace: ba000000-lex-int
+  labels:
+    gateway-access: ba000000-lex-int
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # UDP DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# -----------------------------------------------------------------------------
+# NP-3: default-allow-egress-public-cidr-block
+# (原 prompt 命名: default-allow-egress-drn)
+#
+# 业务 pod → 公网 + 私网 (RFC5735 保留段 128.0.0.0/2 + RFC1918 10.0.0.0/8)
+#
+# 严格 CIDR 解读:
+#   - 128.0.0.0/2  = 128.0.0.0 – 191.255.255.255
+#     实际 = 整个公网 IPv4 上半段 (RFC5735: 128/2 是 IANA 分配段)
+#   - 10.0.0.0/8    = RFC1918 私网段
+#
+# 注意:
+#   - 这个 CIDR 包含了大量未分配地址/保留地址,生产环境不推荐"全放"
+#   - 推荐收敛为:
+#       允许公网 → 走 egress gateway (waypoint/egress GW 控制)
+#       允许私网 → 按需 10.x.x.x/x 缩小
+#   - 本配置按 prompt 原文落,标注风险
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-egress-public-cidr-block
+  namespace: ba000000-lex-int
+  labels:
+    gateway-access: ba000000-lex-int
+    # 标记: 这是宽松的 fallback 规则, 后续建议收敛
+    note: "prompts-orignal-loose-rule-consider-tighten"
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # 允许到 128.0.0.0/2 (公网上半段)
+    - to:
+        - ipBlock:
+            cidr: 128.0.0.0/2
+            except:
+              # 排除 RFC1918 私网 (走 NP-3.b 单独放)
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              # 排除 link-local (kubelet 探针不走这条路)
+              - 169.254.0.0/16
+              # 排除 loopback
+              - 127.0.0.0/8
+              # 排除多播
+              - 224.0.0.0/4
+              # 排除 0.0.0.0/8 (RFC1122 "this network")
+              - 0.0.0.0/8
+              # 排除 100.64.0.0/10 (CGN)
+              - 100.64.0.0/10
+    # 允许到 10.0.0.0/8 (RFC1918 私网)
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/8
+            except:
+              # 排除 RFC1918 其余段
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              # 排除 link-local
+              - 169.254.0.0/16
+
+---
+# -----------------------------------------------------------------------------
+# NP-4: default-allow-egress-istiod
+# 业务 pod → istiod (控制面)
+# 严格定义:
+#   "Pods in the ambient mesh need to reach istiod on port 15012
+#    (xDS) and 15017 (webhook) for configuration delivery."
+#   — Istio Ambient Install docs
+#
+# 也包含 waypoint pod → istiod (waypoint 自己也需要 xDS)
+# 因为 waypoint pod label 是 gateway.networking.k8s.io/gateway-name=waypoint-int
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-egress-istiod
+  namespace: ba000000-lex-int
+  labels:
+    gateway-access: ba000000-lex-int
+spec:
+  # 选: waypoint pod (因为原 prompt 显式指定这个 selector)
+  # 想覆盖全 ns 业务 pod,把 podSelector 改为 {}
+  podSelector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: waypoint-int
+  policyTypes:
+    - Egress
+  egress:
+    # 业务 pod / waypoint pod → istiod
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+      ports:
+        # xDS (Pilot discovery)
+        - protocol: TCP
+          port: 15012
+        # Citadel / SDS (证书下发)
+        - protocol: TCP
+          port: 15017
+        # Webhook 错! 这是 envoy health check, 不是 istiod 端口
+        #- protocol: TCP
+        #  port: 15021
+
+---
+# -----------------------------------------------------------------------------
+# NP-5: default-allow-ingress-hbone-waypoint
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-ingress-hbone-waypoint
+  namespace: ba000000-lex-int
+  labels:
+    gateway-access: ba000000-lex-int
+spec:
+  # 选: waypoint pod 自己
+  podSelector:
+    matchLabels:
+      #gateway.networking.k8s.io/gateway-name: waypoint-int
+      ingress: int
+  policyTypes:
+    - Ingress
+  ingress:
+    # 接受来自本 ns 业务 pod 的 HBONE 入向
+    - from:
+        #- podSelector: {}    # 同 ns 所有 pod
+        - podSelector:
+            matchLabels:
+              gateway.networking.k8s.io/gateway-name: waypoint-int
+      ports:
+        - protocol: TCP
+          port: 15008
+---
+# -----------------------------------------------------------------------------
+# NP-6: default-allow-egress-hbone-waypoint
+# 出口: waypoint pod → 后端业务 pod (HBONE 解密后转发的目标)
+# waypoint 在 ns 内, 与 ns 内业务 pod 互相访问
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-egress-hbone-waypoint
+  namespace: ba000000-lex-int
+  labels:
+    gateway-access: ba000000-lex-int
+spec:
+  podSelector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: waypoint-int
+  policyTypes:
+    - Egress
+  egress:
+    # waypoint → 本 ns 业务 pod (HBONE 后端)
+    - to:
+        #- podSelector: {}    # 同 ns 所有 pod
+        - podSelector:
+            matchLabels:
+              ingress: int
+      ports:
+        # 业务端口范围 — 严格收敛应该按业务实际端口开
+        # 这里用常用 web/gRPC 端口示例, 实际需调整
+        #- protocol: TCP
+        #  port: 80
+        #- protocol: TCP
+        #  port: 8080
+        #- protocol: TCP
+        #  port: 8443
+        #- protocol: TCP
+        #  port: 9090
+        # 业务端口 + HBONE 端口 (waypoint 与 ztunnel 通信)
+        - protocol: TCP
+          port: 15008
+        #- protocol: TCP
+        #  port: 15001
+
+---
+# -----------------------------------------------------------------------------
+# NP-7: default-allow-ingress-hbone-gateway
+# =============================================================================
+# 作用: 允许来自 ingress Gateway 的 HBONE 流量进入本 ns 的 waypoint pod
+#
+# 设计意图 (来自 yaml-assessment.md §Q1 + assessment-ingress.md §1):
+#   "ingress 流量只走 waypoint 这条路"
+#   实现路径:
+#     ingress GW (lex-gw-int ns, sidecar envoy)
+#       → ztunnel (src node) --HBONE 15008--> ztunnel (dst node)
+#       → ztunnel 识别 "目标 ns has waypoint-int"
+#       → 路由到 waypoint pod (本 ns 内)
+#       → waypoint 做 L7 拦截 (AuthZ/header/路由)
+#       → ztunnel 解密后转发到业务 pod 业务端口
+#
+# 隐含前提 (集群级 flag, 默认 false):
+#   istiod env 必须包含 ENABLE_INGRESS_WAYPOINT_ROUTING=true
+#   否则 NS label `istio.io/ingress-use-waypoint=waypoint` 不生效,
+#   入口流量走 P1 默认行为 (绕过 waypoint)
+#   验证: kubectl get deploy istiod -n istio-system \
+#         -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="ENABLE_INGRESS_WAYPOINT_ROUTING")]}{"\n"}'
+#
+# 严格定义 (Istio Waypoint docs):
+#   "When istio.io/ingress-use-waypoint is set on the Service or Namespace,
+#    ingress-originated traffic is routed through the destination namespace's
+#    waypoint over port 15008."
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-ingress-hbone-gateway
+  namespace: ba000000-lex-int
+  labels:
+    gateway-access: ba000000-lex-int
+spec:
+  # ---------------------------------------------------------------------------
+  # podSelector: 本规则 apply 到哪些 pod
+  # ---------------------------------------------------------------------------
+  # 选: gateway.networking.k8s.io/gateway-name=waypoint-int
+  #
+  # 这是有意设计 (yaml-assessment.md §Q1) — 只对 waypoint pod 生效,
+  # 不 cover 业务 pod 本身。
+  #
+  # 为什么这样设计?
+  #   - ingress 流量到本 ns 的路径是: ingress GW → ztunnel → waypoint
+  #   - 业务 pod 的入口由 NP-8 (same-namespace) + AuthZ 兜底
+  #   - 这条只负责 "ingress 来源 → waypoint 15008" 的 L4 firewall
+  #
+  # 严格定义 (K8s NetworkPolicy spec):
+  #   "The podSelector field selects the pods to which this NetworkPolicy
+  #    applies. An empty podSelector selects all pods in the namespace."
+  #
+  # label 来源 (Istio controller 自动加):
+  #   Istio waypoint controller 在生成 Deployment/Pod 时,
+  #   会自动给 pod 打 label `gateway.networking.k8s.io/gateway-name=<gateway-name>`
+  #   所以 waypoint-int 这个 Gateway 会让对应的 pod 带上这个 label
+  podSelector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: waypoint-int
+  # ---------------------------------------------------------------------------
+  # policyTypes: 这条规则只控制 ingress, 不控制 egress
+  # ---------------------------------------------------------------------------
+  # 严格定义 (K8s NetPol spec):
+  #   "policyTypes indicates which types of policies this NetworkPolicy
+  #    relates to. If empty, the policy applies to all policy types."
+  #
+  # 这里只声明 Ingress = waypoint pod 只受 ingress 限制,
+  # egress 方向由其他 NP 控制 (NP-6 waypoint egress + NP-8 same-namespace)
+  policyTypes:
+    - Ingress
+  # ---------------------------------------------------------------------------
+  # ingress: 允许的入向流量规则
+  # ---------------------------------------------------------------------------
+  ingress:
+    # 单条规则, 允许以下来源:
+    - from:
+        # 来源 = namespaceSelector + podSelector 联合匹配 (AND 语义)
+        # 严格定义:
+        #   "When both namespaceSelector and podSelector are specified,
+        #    the podSelector is ANDed with the namespaceSelector —
+        #    pods must be in matching namespace AND match podSelector."
+        - namespaceSelector:
+            matchLabels:
+              # 匹配 ns 的 label `kubernetes.io/metadata.name: lex-gw-int`
+              # 这是 K8s 自动给 ns 加的 label (ns 创建后由 K8s controller 注入)
+              # 严格定义:
+              #   "kubernetes.io/metadata.name is automatically set by
+              #    Kubernetes to the namespace's name. It cannot be modified."
+              #
+              # 实际效果: 来源只能是 `lex-gw-int` 这个 ns (你的 ingress Gateway ns)
+              kubernetes.io/metadata.name: lex-gw-int
+          podSelector:
+            matchLabels:
+              # 进一步限定来源 ns 内的 pod
+              # 这里用自定义 label `gateway.networking.k8s.io/gateway-name=lex-gw-int`
+              # (Q3 答复: 你自定义的 label,不是 Istio 默认 `app=istio-ingress`)
+              #
+              # 这意味着你的 ingress GW pod 必须打这个 label 才被允许,
+              # 通过 yaml-assessment.md §Q3 确认你确实是这样配的
+              gateway.networking.k8s.io/gateway-name: lex-gw-int
+      # -------------------------------------------------------------------------
+      # ports: 允许的目标端口
+      # -------------------------------------------------------------------------
+      # 严格定义 (K8s NetPol spec):
+      #   "Each defined port/protocol combination must be allowed.
+      #    If ports is empty, all ports are allowed from matching sources."
+      #
+      # 这里只 allow 15008 (HBONE 端口)
+      ports:
+        # 业务端口 80/8080/8443 被注释掉, 因为:
+        #   - waypoint pod 不监听业务端口 (业务 pod 监听)
+        #   - ingress 流量到 waypoint 只走 15008 (HBONE 隧道)
+        #
+        #- protocol: TCP
+        #  port: 80
+        #- protocol: TCP
+        #  port: 8080
+        #- protocol: TCP
+        #  port: 8443
+        # HBONE 端口 — 必须 allow, 否则 ingress 流量被 mesh 拦截
+        # 严格定义:
+        #   "HBONE (HTTP-Based Overlay Network Environment) is the HTTP/2
+        #    CONNECT-based tunneling protocol used by ztunnel. Waypoint
+        #    listens on port 15008 for HBONE connections from ztunnel."
+        - protocol: TCP
+          port: 15008
+
+---
+# -----------------------------------------------------------------------------
+# NP-8: default-allow-same-namespace
+# 同 ns 内 pod 互相访问 (东西向基础)
+# 包含业务端口 + HBONE 端口(因为同 ns 也走 ztunnel + waypoint)
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-allow-same-namespace
+  namespace: ba000000-lex-int
+  labels:
+    gateway-access: ba000000-lex-int
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # 同 ns 所有 pod
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            businessId: ba000000
+  egress:
+    # 同 ns 所有 pod
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            businessId: ba000000
+---
+# -----------------------------------------------------------------------------
+# NP-9: allow-kubelet-probes-http
+# 探针放行: kubelet 通过 link-local 169.254.7.127/32 打业务端口
+#
+# 严格来源 (08-ambient-networkpolicy.md §1.2):
+#   "ambient uses the link-local addresses 169.254.7.127 (IPv4) and
+#    fd16:9254:7127:1337:ffff:ffff:ffff:ffff (IPv6) to identify and
+#    correctly allow kubelet health probe packets."
+#   — Istio Ambient NetworkPolicy docs
+#
+# 业务端口示例 8080 (按业务实际调整)
+# -----------------------------------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kubelet-probes-http
+  namespace: ba000000-lex-int
+  labels:
+    gateway-access: ba000000-lex-int
+spec:
+  podSelector: {}    # 所有业务 pod
+  policyTypes:
+    - Ingress
+  ingress:
+    # IPv4 link-local
+    - from:
+        - ipBlock:
+            cidr: 169.254.7.127/32
+      ports:
+        - protocol: TCP
+          port: 8080    # 业务端口 — 按实际改
+    # IPv6 link-local (若集群启用 IPv6)
+    #- from:
+    #    - ipBlock:
+    #        cidr: fd16:9254:7127:1337:ffff:ffff:ffff:ffff/128
+    #  ports:
+    #    - protocol: TCP
+    #      port: 8080

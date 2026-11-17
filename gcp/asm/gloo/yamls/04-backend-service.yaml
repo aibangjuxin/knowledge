@@ -1,0 +1,18 @@
+# Kubernetes Service - Exposes the backend deployment within the cluster
+# Gloo Gateway will route traffic to this service
+apiVersion: v1
+kind: Service
+metadata:
+  name: api1-backend
+  namespace: team-a-runtime
+  labels:
+    app: api1-backend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: api1-backend

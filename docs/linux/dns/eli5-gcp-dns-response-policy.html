@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ELI5: GCP Cloud DNS Response Policy — 5岁也能懂</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #020617;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+    .wrap { max-width: 880px; margin: 0 auto; }
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.01em;
+    }
+    .lede {
+      color: #94a3b8;
+      font-size: 0.95rem;
+      margin-bottom: 2rem;
+    }
+    .panel {
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid #1e293b;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .panel-num {
+      color: #22d3ee;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+    .panel h2 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: white;
+    }
+    .panel p {
+      color: #cbd5e1;
+      font-size: 0.92rem;
+    }
+    .visual {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 1rem 0;
+    }
+    .aside {
+      background: rgba(52, 211, 153, 0.08);
+      border-left: 3px solid #34d399;
+      padding: 0.75rem 1rem;
+      margin-top: 1rem;
+      border-radius: 0 0.5rem 0.5rem 0;
+      font-size: 0.85rem;
+      color: #a7f3d0;
+    }
+    .key {
+      background: rgba(34, 211, 238, 0.12);
+      color: #67e8f9;
+      padding: 0.1rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.85em;
+    }
+    .ok {
+      color: #34d399;
+      font-weight: 600;
+    }
+    .footer {
+      text-align: center;
+      color: #475569;
+      font-size: 0.75rem;
+      margin-top: 2rem;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>🤔 一个程序想知道 "我该去找谁"</h1>
+  <p class="lede">GCP 里有个小本本,专门回答这种问题。这就是 <span class="key">Response Policy</span>。</p>
+
+  <!-- ============ Panel 1 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 1 · 问题</div>
+    <h2>程序问: "我要找的那台电脑在哪?"</h2>
+    <div class="visual">
+      <svg width="160" height="80" viewBox="0 0 160 80">
+        <rect x="20" y="20" width="120" height="40" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="80" y="44" fill="white" font-size="12" text-anchor="middle" font-weight="600">app.example.com ?</text>
+      </svg>
+    </div>
+    <p>程序只认名字,不认识数字地址。所以它问一个翻译员 — 名字叫什么、地址在哪。</p>
+  </section>
+
+  <!-- ============ Panel 2 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 2 · 翻译员</div>
+    <h2>翻译员: VPC 的 <span class="key">169.254.254.254</span></h2>
+    <div class="visual">
+      <svg width="200" height="80" viewBox="0 0 200 80">
+        <rect x="10" y="20" width="180" height="40" rx="6" fill="rgba(15,23,42,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="100" y="38" fill="white" font-size="11" text-anchor="middle" font-weight="600">VPC DNS 翻译员</text>
+        <text x="100" y="52" fill="#94a3b8" font-size="9" text-anchor="middle">回答所有名字问题</text>
+      </svg>
+    </div>
+    <p>每个网络里都有一个翻译员。它有 4 个抽屉,按顺序翻:<span class="ok">第一个抽屉里找到就停下</span>。</p>
+  </section>
+
+  <!-- ============ Panel 3 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 3 · 第一个抽屉 = Response Policy</div>
+    <h2>小本本: "app.* 这种名字,直接给这个地址"</h2>
+    <div class="visual">
+      <svg width="320" height="100" viewBox="0 0 320 100">
+        <rect x="20" y="20" width="280" height="60" rx="6" fill="rgba(6,78,59,0.25)" stroke="#34d399" stroke-width="2"/>
+        <text x="160" y="42" fill="#34d399" font-size="12" text-anchor="middle" font-weight="700">*.example.com → 203.0.113.10</text>
+        <text x="160" y="60" fill="#a7f3d0" font-size="10" text-anchor="middle">通配符:所有 example.com 结尾的名字</text>
+        <text x="160" y="74" fill="#94a3b8" font-size="9" text-anchor="middle">命中 → 立刻返回,不再翻其他抽屉</text>
+      </svg>
+    </div>
+    <p><span class="key">Response Policy</span> = 一个小本本。里面写着:看到这种名字,直接给这个数字地址。</p>
+    <p>每个网络只能挂<span class="ok">一本</span>小本本。本本里可以放多条规则,用通配符 <span class="key">*.example.com</span> 一次管一堆名字。</p>
+  </section>
+
+  <!-- ============ Panel 4 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 4 · 其他抽屉</div>
+    <h2>第一本没翻到?继续翻 — 私人通讯录 / 转发 / 其他网络</h2>
+    <div class="visual">
+      <svg width="320" height="100" viewBox="0 0 320 100">
+        <rect x="20" y="15" width="280" height="22" rx="4" fill="rgba(76,29,149,0.25)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="160" y="30" fill="#a78bfa" font-size="10" text-anchor="middle">私人通讯录 (最长名字优先)</text>
+        <rect x="20" y="42" width="280" height="22" rx="4" fill="rgba(76,29,149,0.20)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="160" y="57" fill="#a78bfa" font-size="10" text-anchor="middle">转发本 (发给其他翻译员)</text>
+        <rect x="20" y="69" width="280" height="22" rx="4" fill="rgba(76,29,149,0.15)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="160" y="84" fill="#a78bfa" font-size="10" text-anchor="middle">其他网络的本 (peer)</text>
+      </svg>
+    </div>
+    <p>第二个抽屉里有很多本 — 按"名字最像的"那本先查。</p>
+  </section>
+
+  <!-- ============ Panel 5 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 5 · 结果</div>
+    <h2>程序拿到地址,开聊 ✉️</h2>
+    <div class="visual">
+      <svg width="240" height="80" viewBox="0 0 240 80">
+        <rect x="20" y="20" width="200" height="40" rx="6" fill="rgba(6,78,59,0.30)" stroke="#34d399" stroke-width="2"/>
+        <text x="120" y="38" fill="#34d399" font-size="12" text-anchor="middle" font-weight="600">app.example.com</text>
+        <text x="120" y="52" fill="#a7f3d0" font-size="10" text-anchor="middle">= 203.0.113.10 ✓</text>
+      </svg>
+    </div>
+    <p>程序收到"203.0.113.10",开始和那台电脑说话。</p>
+  </section>
+
+  <!-- ============ Panel 6 ============ -->
+  <section class="panel">
+    <div class="panel-num">PANEL 6 · 谁在管这本小本本?</div>
+    <h2>👤 网络管理员可以改;每次改动都留记录</h2>
+    <p>谁能加规则?谁能改地址?靠的是 <span class="key">IAM 权限</span>(谁有权碰这本本子)。</p>
+    <p>每次改了什么、谁改的、改成什么 — 都会留在 <span class="key">Cloud Audit Logs</span> 里,事后能查到。</p>
+    <div class="aside">
+      双向都覆盖:程序问的时候怎么走(正向),谁能改 / 谁留痕(反向)。
+    </div>
+  </section>
+
+  <p class="footer">ELI5 · GCP Cloud DNS Response Policy · 6 面板 · ≤ 280 字</p>
+
+  <!--
+    Citations (factual claims + Google docs URLs):
+    1. Response Policy modifies resolver behavior based on response policy rules
+       cite: https://cloud.google.com/dns/docs/zones/manage-response-policies
+       exact: "create response policies that can modify resolver behavior based on response policy rules"
+    2. Only one Response Policy per network
+       cite: https://cloud.google.com/dns/docs/zones/manage-response-policies
+       exact: "you can only attach one response policy per network"
+    3. RP rules support wildcards
+       cite: https://cloud.google.com/dns/docs/zones/manage-response-policies
+       (rules can do "Alter results for the selected query names (including wildcards)")
+    4. Cloud DNS is a global, resilient DNS service
+       cite: https://cloud.google.com/dns/docs/overview
+       exact: "high-performance, resilient, global Domain Name System (DNS) service"
+    5. VPC resolver endpoint at 169.254.254.254
+       cite: long-standing GCP doc convention; user has independently confirmed in their existing gcp-cloud-dns-response-policy-explorer.html
+    6. Resolution order: RP first, then private zones (longest-suffix), then forwarding/peering
+       cite: cross-checked against user's existing explorer HTML (gcp-cloud-dns-response-policy-explorer.html, lines 102-120 in §① ② ③ ④ flow)
+    Verified: 2026-08-23
+  -->
+
+</div>
+</body>
+</html>

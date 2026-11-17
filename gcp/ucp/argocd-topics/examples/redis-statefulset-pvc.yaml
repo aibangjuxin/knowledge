@@ -1,0 +1,250 @@
+# 业务 Redis · StatefulSet + PVC（对照示例）
+#
+# ⚠️⚠️ 重要区分 ⚠️⚠️
+# 这个文件**不是**给 Argo CD 内部 Redis 用的。
+#
+#   Argo CD 内部 Redis（argocd-redis）：
+#     → 不需要持久化。官方设计如此，加 PVC 反而有害。
+#     → 详见 ../01-redis-persistence.md §4
+#
+#   业务 Redis（你通过 YAML 部署在 GKE 上的那个）：
+#     → 需要持久化。本文件就是它的改造方案。
+#     → 详见 ../01-redis-persistence.md §6
+#
+# 前提：业务 Redis 存的是不能丢的数据（会话/队列/状态）。
+#       如果它明确是纯缓存，请读 ../01-redis-persistence.md §6.1 先做判定。
+#
+# 应用前必查：
+#   kubectl get storageclass
+#   ↓ 确认你集群里实际存在的 StorageClass 名字
+#   ↓ 下面的 standard-rwo 是 GKE 官方文档中确认存在的名字，
+#   ↓   但你的集群不一定默认启用。以实查结果为准。
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: application
+  labels:
+    app: redis
+spec:
+  clusterIP: None          # headless，StatefulSet 的稳定网络标识
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-client
+  namespace: application
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-auth
+  namespace: application
+type: Opaque
+stringData:
+  # ⚠️ 替换为真实值。不要提交进 Git（用 Sealed Secrets / SOPS / External Secrets）
+  password: "[REDACTED]"
+
+---
+# ---------------------------------------------------------------------------
+# 迁移步骤（见 ../08-implementation-playbook.md）：
+#   ① kubectl get deploy redis -o yaml > /tmp/redis-deploy-backup.yaml
+#   ② kubectl apply -f 本文件（先保持 replicas: 1）
+#   ③ kubectl -n application rollout status statefulset/redis
+#   ④ 验证 PVC 绑定 + 数据可读
+#   ⑤ kubectl -n application delete deploy redis
+#   ⑥ kubectl -n application scale statefulset/redis --replicas=3
+# ---------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: application
+  labels:
+    app: redis
+spec:
+  serviceName: redis          # ⭐ 必须与上面 headless Service 的名字一致
+  replicas: 1                 # 先 1 验证，确认无误后再扩容
+  podManagementPolicy: OrderedReady
+  selector:
+    matchLabels:
+      app: redis
+  # -------------------------------------------------------------------------
+  # ⭐ 每副本独立 PVC —— 用 volumeClaimTemplates，而不是手写 3 个 PVC
+  #
+  # 为什么必须这样：
+  #   GKE 的 standard-rwo 是 ReadWriteOnce —— 同一时刻只能被一个节点上的一个 Pod 挂载。
+  #   Deployment 的 Pod 无序、随机名、可以多副本同时存在 → 必然 Multi-Attach 冲突。
+  #   StatefulSet 提供稳定身份 + 每 Pod 独立 PVC，这是 RWO 存储的正确用法。
+  #
+  # 生成的 PVC 名：data-redis-0 / data-redis-1 / data-redis-2
+  #   → 对应 volumeMounts 里的 name: data
+  #
+  # ⚠️ 不要手写这些 PVC。StatefulSet controller 会自己创建并持有它们，
+  #    手写会导致 owner 冲突（apply 报 "already exists" 且不属于它）。
+  #
+  # ⚠️ storageClassName 必须改成你集群里实际存在的名字（kubectl get storageclass）
+  # ⚠️ GKE 的 standard-* 系列默认是 WaitForFirstConsumer 模式：
+  #    PVC 在有 Pod 调度到节点时才会绑定。这需要在集群里有对应区域的节点池。
+  # -------------------------------------------------------------------------
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        app: redis
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: standard-rwo     # ← 实查后修改
+      resources:
+        requests:
+          storage: 20Gi
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      containers:
+      - name: redis
+        image: public.ecr.aws/docker/library/redis:8.2.3-alpine
+        imagePullPolicy: IfNotPresent
+        command:
+        - redis-server
+        - /data/redis.conf
+        ports:
+        - name: redis
+          containerPort: 6379
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-auth
+              key: password
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        # 挂载点必须与 volumeClaimTemplates 生成的卷名一致（默认 <templateName>-<stsName>-<ordinal>）
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: '1'
+            memory: 1Gi
+        # ⭐ 就绪探针必须指向真实 ping，否则 Service 会把流量打到未就绪的 Pod
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - 'redis-cli -a "$REDIS_PASSWORD" ping | grep -q PONG'
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - 'redis-cli -a "$REDIS_PASSWORD" ping | grep -q PONG'
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 3
+          failureThreshold: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+      volumes:
+      - name: config
+        configMap:
+          name: redis-config
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: application
+data:
+  redis.conf: |
+    # ---- 持久化：AOF ----
+    # appendfsync everysec = 最多丢 1 秒数据（推荐）
+    # appendfsync always   = 不丢数据，但写入性能显著下降
+    # appendfsync no       = 由 OS 决定，最多丢 30 秒
+    appendonly yes
+    appendfsync everysec
+
+    # ---- RDB 快照 ----
+    # ⚠️ AOF 和 RDB 可以同时开，但 AOF 开启后 RDB 主要用于备份/压缩。
+    #    如果不需要快照，保持关闭以省 IO。
+    save 3600 1
+    save 300 100
+    save 60 10000
+
+    # ---- 内存 ----
+    maxmemory 768mb
+    # 内存满了的策略：
+    #   noeviction  = 写入报错（适合不能丢数据的场景，推荐）
+    #   allkeys-lru = 淘汰任意 key（适合纯缓存场景）
+    maxmemory-policy noeviction
+
+    # ---- 连接 ----
+    # 密码由命令行 --requirepass 传入，不要写在 ConfigMap 里
+    tcp-keepalive 300
+    timeout 0
+
+    dir /data
+
+---
+# ---------------------------------------------------------------------------
+# ⭐ 每副本独立的 PVC
+#
+# 为什么必须用 StatefulSet + volumeClaimTemplates：
+#   GKE 的 standard-rwo 是 ReadWriteOnce —— 同一时刻只能被一个节点上的一个 Pod 挂载。
+#   Deployment 的 Pod 无序、随机名、可以多副本同时存在 → 必然 Multi-Attach 冲突。
+#   StatefulSet 提供稳定身份 + 每 Pod 独立 PVC，这是 RWO 存储的正确用法。
+#
+# ⚠️ storageClassName 必须改成你集群里实际存在的名字（kubectl get storageclass）
+# ⚠️ GKE 的 standard-* 系列默认是 WaitForFirstConsumer 模式：
+#    PVC 在有 Pod 调度到节点时才会绑定。这需要在集群里有对应区域的节点池。
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# ⭐ 高可用方案对比（详见 ../01-redis-persistence.md §6.4）
+#
+#   StatefulSet + volumeClaimTemplates（本文件）：
+#     优点：完全自控、可自定义配置、成本低
+#     缺点：failover / 升级 / 备份都要自己做
+#
+#   Memorystore for Redis Cluster：
+#     优点：Google 托管、自动 failover、多可用区、分片扩容
+#     缺点：按节点/容量计费；AOF 或 RDB 二选一（不能同时开）
+#     网络：Private Service Connect / Service Connect
+#     文档：https://cloud.google.com/memorystore/docs/cluster/
+#
+#   注意：Memorystore for Redis（单机版）用的是 VPC peering，
+#        与 Cluster 版的 PSC / Service Connect 不同，别混淆。
+# ---------------------------------------------------------------------------

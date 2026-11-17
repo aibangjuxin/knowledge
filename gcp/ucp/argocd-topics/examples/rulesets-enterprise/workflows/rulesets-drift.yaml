@@ -1,0 +1,97 @@
+# =============================================================================
+#  rulesets-drift.yaml —— ★ 漂移检测（别人在 UI 上改了 ruleset）
+# -----------------------------------------------------------------------------
+#  **为什么企业版必须有它**
+#  GitHub 的 ruleset 有两个入口：API 和 UI。
+#  企业版里组织级 ruleset 的价值全在于"**一次性管住所有仓库**"——
+#  只要有人绕过流程在 UI 上点一下，这个价值就消失了，而且没人会发现。
+#
+#  个人版的漂移只是"某个仓库的门禁松了一点"；
+#  企业版的漂移是"整个组织的门禁松了一点" —— 必须当天发现。
+#
+#  检测方式
+#    仓库里的 JSON（真相源）  vs  线上 ruleset（现状）
+#    逐条比对 name / enforcement / rules / conditions / bypass_actors
+#    ★ 只比对**本目录管理的** ruleset，不比对线上其它 ruleset
+#
+#  触发
+#    · 每天定时（企业版建议每天；个人版一周一次就够）
+#    · 手动
+#
+#  失败时
+#    · 退出码非 0 → CI 红 → 通知到值班群
+#    · ★ 不要自动"修复"（那会把别人的紧急改动抹掉）
+#      → 正确动作：**人工判断**是"UI 改了要同步回 JSON"还是"UI 改错了要改回去"
+# =============================================================================
+
+name: rulesets-drift
+
+on:
+  schedule:
+    - cron: "23 2 * * *"        # 每天 02:23
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: 线上 vs 仓库里的 JSON
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 比对
+        env:
+          GH_TOKEN: ${{ secrets.GH_RULESET_TOKEN }}
+          ORG: ${{ vars.ORG }}
+        run: |
+          cd examples/rulesets-enterprise
+          python3 - <<'PY'
+          import json, os, subprocess, sys
+
+          org = os.environ["ORG"]
+          files = sorted(f for f in os.listdir(".") if f[:2].isdigit() and f.endswith(".json"))
+          drift = []
+
+          def fetch(endpoint, name):
+              out = subprocess.run(
+                  ["gh", "api", endpoint, "--paginate", "--jq",
+                   f'[.[] | select(.name == "{name}")] | .[0].id // ""'],
+                  capture_output=True, text=True)
+              rid = out.stdout.strip()
+              if not rid:
+                  return None
+              detail = subprocess.run(["gh", "api", f"{endpoint}/{rid}"],
+                                      capture_output=True, text=True)
+              return json.loads(detail.stdout)
+
+          for f in files:
+              with open(f, encoding="utf-8") as fh:
+                  local = json.load(fh)
+              name = local.get("name")
+              endpoint = ("orgs/%s/rulesets" % org) if "repository_name" in (local.get("conditions") or {}) \
+                         else ("repos/%s/%s/rulesets" % (org, os.environ.get("REPO", "")))
+              live = fetch(endpoint, name)
+              if live is None:
+                  drift.append(f"{f}: 线上找不到 `{name}` —— 被删了？还是 scope 用错了？")
+                  continue
+              for key in ("enforcement", "rules", "conditions", "bypass_actors"):
+                  if json.dumps(local.get(key), sort_keys=True) != json.dumps(live.get(key), sort_keys=True):
+                      drift.append(f"{f}: `{name}` 的 {key} 与线上不一致 —— 有人在 UI 上改过，或该用 PR 改")
+
+          if drift:
+              print("❌ 检出漂移：")
+              for d in drift:
+                  print("  ·", d)
+              print()
+              print("处理方式（★ 不要自动修复）：")
+              print("  1) 判断是「UI 的改动是应急变更」还是「UI 误操作」")
+              print("  2) 应急变更 → 把线上版本同步回本目录的 JSON，提 PR")
+              print("  3) 误操作   → 在 UI 上改回去，或提 PR 用本目录的 JSON 覆盖")
+              sys.exit(1)
+          print("✅ 无漂移")
+          PY

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Files to Requirements"
+  short_description: "Turn local files into clarified requirements"
+  default_prompt: "Use $files-to-requirements to collect local files, consolidate the content, and produce clarified requirements plus follow-up questions."

@@ -1,0 +1,48 @@
+# =====================================================================
+# File: 01-namespace-ambient-label.yaml
+# 作用: 把租户命名空间"升级"为 Ambient mesh 的一等公民
+#
+# 关键概念:
+#   Ambient 的开启有 3 个粒度,我们选 **Namespace 级** — 这是灰度推荐的姿势
+#     - Namespace label `istio.io/dataplane-mode=ambient` → 该 ns 内所有 pod
+#       自动被 ztunnel 接管,容器无需注入 envoy sidecar,证书无需 mount
+#     - Node label 是节点级,作用于"凡是跑在该 node 上的所有 pod",比较暴力
+#     - Pod annotation 极少用,只做"特例"
+#
+#   * 必须显式 opt-in(ztunnel 不会偷偷接管流量)
+#   * 打了 ambient 标签的 ns,**不需要重启正在跑的 pod**,ztunnel 一旦准备好
+#     会立即捕捉新建的 pod;已经运行中的 pod 需要重启一次才被接管
+#   * 不打标签 / 打 = none / 打 = sidecar 都行,zturnel 不动它们
+# =====================================================================
+---
+# L3 租户业务命名空间 — 进入 ambient 模式
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-runtime
+  labels:
+    # ⭐ 核心开关:让这个 namespace 内的 Pod 被 ztunnel 接管 mTLS
+    istio.io/dataplane-mode: ambient
+    # 可选:标记 ambient 信任域(SPIFFE 格式 spiffe://<trust-domain>/ns/<ns>/sa/<sa>)
+    istio.io/namespace: tenant-runtime
+---
+# L2 集中监听 namespace — **保持不进 ambient**(显式打 =none 防止误连)
+#
+# 为什么:ListenerSet 内部其实可以打 ambient,但下面 Gateway NS 我们会让它
+# 留在 sidecar 模式以稳定 TLS termination 行为;这里打 =none 是显式兜底,
+# 防止将来 ambient 默认推广后这里被悄悄接管
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: abjx-listenerset-int
+  labels:
+    # ⭐ 不进 ambient,显式声明
+    istio.io/dataplane-mode: none
+---
+# L1 Gateway NS — 同理保持 sidecar 模式以稳定 e2e TLS termination 行为
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: abjx-gw-int
+  labels:
+    istio.io/dataplane-mode: none

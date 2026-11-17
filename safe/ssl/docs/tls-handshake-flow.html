@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TLS Handshake Flow — TLS 1.2 vs 1.3</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1320px; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px; background: #22d3ee;
+      border-radius: 50%; animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg {
+      width: 100%;
+      min-width: 1100px;
+      height: auto;
+      display: block;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.45rem; line-height: 1.4; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>TLS Handshake — Message Flow</h1>
+      </div>
+      <p class="subtitle">TLS 1.2 (2-RTT) vs TLS 1.3 (1-RTT) — what crosses the wire, in order</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1320 860">
+        <defs>
+          <marker id="arrowhead-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+          </marker>
+          <marker id="arrowhead-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" />
+          </marker>
+          <marker id="arrowhead-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <!-- Background grid -->
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- ============================== ZONE FRAMES ============================== -->
+        <!-- TLS 1.2 zone -->
+        <rect x="20" y="60" width="640" height="700" rx="12"
+              fill="rgba(251, 191, 36, 0.04)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="36" y="80" fill="#fbbf24" font-size="11" font-weight="600">TLS 1.2 — 2 round trips before app data</text>
+
+        <!-- TLS 1.3 zone -->
+        <rect x="680" y="60" width="620" height="700" rx="12"
+              fill="rgba(34, 211, 238, 0.04)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="696" y="80" fill="#22d3ee" font-size="11" font-weight="600">TLS 1.3 — 1 round trip before app data (RFC 8446)</text>
+
+        <!-- ============================== TLS 1.2 ACTORS ============================== -->
+        <!-- Client actor (left vertical bar) -->
+        <rect x="100" y="110" width="160" height="40" rx="6"
+              fill="rgba(8, 51, 68, 0.6)" stroke="#22d3ee" stroke-width="1.5"/>
+        <rect x="100" y="110" width="160" height="40" rx="6" fill="#0f172a" opacity="0.0"/>
+        <text x="180" y="128" fill="white" font-size="12" font-weight="600" text-anchor="middle">Client</text>
+        <text x="180" y="142" fill="#94a3b8" font-size="9" text-anchor="middle">Browser / curl / SDK</text>
+        <!-- Client lifeline (vertical dashed) -->
+        <line x1="180" y1="155" x2="180" y2="730" stroke="#22d3ee" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>
+
+        <!-- Server actor (right vertical bar) -->
+        <rect x="420" y="110" width="160" height="40" rx="6"
+              fill="rgba(6, 78, 59, 0.6)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="500" y="128" fill="white" font-size="12" font-weight="600" text-anchor="middle">Server</text>
+        <text x="500" y="142" fill="#94a3b8" font-size="9" text-anchor="middle">HTTPS endpoint</text>
+        <!-- Server lifeline -->
+        <line x1="500" y1="155" x2="500" y2="730" stroke="#34d399" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>
+
+        <!-- Encryption boundary: TLS 1.2 — CCS messages mark the switch -->
+        <line x1="40" y1="475" x2="580" y2="475" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,4" opacity="0.6"/>
+        <rect x="330" y="463" width="240" height="13" fill="#0f172a" opacity="0.95"/>
+        <text x="450" y="473" fill="#a78bfa" font-size="8" text-anchor="middle">↑ encryption starts here (after CCS)</text>
+
+        <!-- TLS 1.2 messages (top → bottom = time) -->
+
+        <!-- 1. ClientHello (C → S) -->
+        <text x="180" y="185" fill="#94a3b8" font-size="8" text-anchor="middle">client</text>
+        <line x1="185" y1="195" x2="495" y2="195" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <!-- Label on the arrow with opaque backplate -->
+        <rect x="280" y="184" width="135" height="14" fill="#0f172a" opacity="0.95"/>
+        <text x="340" y="194" fill="#22d3ee" font-size="9" font-weight="600" text-anchor="middle">ClientHello</text>
+        <text x="340" y="218" fill="#64748b" font-size="7" text-anchor="middle">random + cipher suites + SNI</text>
+
+        <!-- 2. ServerHello + Certificate + ServerHelloDone (S → C, bundled) -->
+        <line x1="495" y1="240" x2="185" y2="240" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)"/>
+        <rect x="240" y="229" width="220" height="14" fill="#0f172a" opacity="0.95"/>
+        <text x="340" y="239" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">ServerHello + Certificate</text>
+        <text x="340" y="263" fill="#64748b" font-size="7" text-anchor="middle">chosen suite + X.509 chain (cleartext)</text>
+
+        <!-- 3. ClientKeyExchange + ChangeCipherSpec + Finished (C → S, encrypted) -->
+        <line x1="185" y1="490" x2="495" y2="490" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <rect x="220" y="479" width="240" height="14" fill="#0f172a" opacity="0.95"/>
+        <text x="340" y="489" fill="#22d3ee" font-size="9" font-weight="600" text-anchor="middle">ClientKeyExchange + Finished</text>
+        <text x="340" y="513" fill="#64748b" font-size="7" text-anchor="middle">PreMasterSecret (or DH) + MAC [encrypted]</text>
+
+        <!-- 4. ChangeCipherSpec + Finished (S → C, encrypted) -->
+        <line x1="495" y1="540" x2="185" y2="540" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)"/>
+        <rect x="240" y="529" width="220" height="14" fill="#0f172a" opacity="0.95"/>
+        <text x="340" y="539" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">ChangeCipherSpec + Finished</text>
+        <text x="340" y="563" fill="#64748b" font-size="7" text-anchor="middle">key-confirmation MAC [encrypted]</text>
+
+        <!-- 5. Application data (encrypted, both directions) -->
+        <line x1="185" y1="600" x2="495" y2="600" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <line x1="495" y1="630" x2="185" y2="630" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)"/>
+        <rect x="280" y="585" width="120" height="14" fill="#0f172a" opacity="0.95"/>
+        <text x="340" y="595" fill="#cbd5e1" font-size="9" font-weight="600" text-anchor="middle">Application Data</text>
+        <text x="340" y="655" fill="#64748b" font-size="7" text-anchor="middle">GET /index.html, response 200 OK</text>
+
+        <!-- TLS 1.2 timing annotation -->
+        <text x="60" y="195" fill="#fbbf24" font-size="9" font-weight="600">t = 0</text>
+        <text x="60" y="490" fill="#fbbf24" font-size="9" font-weight="600">t = 1 RTT</text>
+        <text x="60" y="600" fill="#fbbf24" font-size="9" font-weight="600">t = 2 RTT</text>
+
+        <!-- ============================== TLS 1.3 ACTORS ============================== -->
+        <rect x="760" y="110" width="160" height="40" rx="6"
+              fill="rgba(8, 51, 68, 0.6)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="840" y="128" fill="white" font-size="12" font-weight="600" text-anchor="middle">Client</text>
+        <text x="840" y="142" fill="#94a3b8" font-size="9" text-anchor="middle">sends key_share upfront</text>
+        <line x1="840" y1="155" x2="840" y2="730" stroke="#22d3ee" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>
+
+        <rect x="1080" y="110" width="160" height="40" rx="6"
+              fill="rgba(6, 78, 59, 0.6)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="1160" y="128" fill="white" font-size="12" font-weight="600" text-anchor="middle">Server</text>
+        <text x="1160" y="142" fill="#94a3b8" font-size="9" text-anchor="middle">HTTPS endpoint</text>
+        <line x1="1160" y1="155" x2="1160" y2="730" stroke="#34d399" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>
+
+        <!-- Encryption boundary: TLS 1.3 — encryption starts at ServerHello -->
+        <line x1="700" y1="350" x2="1290" y2="350" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,4" opacity="0.6"/>
+        <rect x="845" y="338" width="395" height="13" fill="#0f172a" opacity="0.95"/>
+        <text x="1042" y="348" fill="#a78bfa" font-size="8" text-anchor="middle">↑ encryption starts here (everything after ServerHello)</text>
+
+        <!-- TLS 1.3 messages -->
+
+        <!-- 1. ClientHello + key_share (C → S) -->
+        <text x="840" y="185" fill="#94a3b8" font-size="8" text-anchor="middle">client</text>
+        <line x1="845" y1="195" x2="1155" y2="195" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <rect x="920" y="184" width="160" height="14" fill="#0f172a" opacity="0.95"/>
+        <text x="1000" y="194" fill="#22d3ee" font-size="9" font-weight="600" text-anchor="middle">ClientHello + key_share</text>
+        <text x="1000" y="218" fill="#64748b" font-size="7" text-anchor="middle">random + suites + ECDHE pubkey (one-shot)</text>
+
+        <!-- 2. ServerHello + EncryptedExtensions + Certificate + CertVerify + Finished (S → C, encrypted) -->
+        <line x1="1155" y1="380" x2="845" y2="380" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)"/>
+        <rect x="845" y="369" width="310" height="14" fill="#0f172a" opacity="0.95"/>
+        <text x="1000" y="379" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">ServerHello + {EE + Cert + Verify + Finished}</text>
+        <text x="1000" y="403" fill="#64748b" font-size="7" text-anchor="middle">key agreement + auth + key-confirmation [all encrypted]</text>
+
+        <!-- 3. Client Finished (C → S, encrypted) -->
+        <line x1="845" y1="440" x2="1155" y2="440" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <rect x="900" y="429" width="200" height="14" fill="#0f172a" opacity="0.95"/>
+        <text x="1000" y="439" fill="#22d3ee" font-size="9" font-weight="600" text-anchor="middle">{Finished} + early HTTP data</text>
+        <text x="1000" y="463" fill="#64748b" font-size="7" text-anchor="middle">key confirmation [encrypted] + can carry 0.5 RTT of data</text>
+
+        <!-- 4. Application data (encrypted, both directions) -->
+        <line x1="845" y1="500" x2="1155" y2="500" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <line x1="1155" y1="540" x2="845" y2="540" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)"/>
+        <rect x="940" y="485" width="120" height="14" fill="#0f172a" opacity="0.95"/>
+        <text x="1000" y="495" fill="#cbd5e1" font-size="9" font-weight="600" text-anchor="middle">Application Data</text>
+        <text x="1000" y="565" fill="#64748b" font-size="7" text-anchor="middle">HTTP/1.1 or HTTP/2 frames</text>
+
+        <!-- TLS 1.3 timing annotation -->
+        <text x="700" y="195" fill="#22d3ee" font-size="9" font-weight="600">t = 0</text>
+        <text x="700" y="440" fill="#22d3ee" font-size="9" font-weight="600">t = 1 RTT</text>
+
+        <!-- ============================== COMPARISON HIGHLIGHTS ============================== -->
+        <!-- Comparison callouts at the bottom -->
+        <rect x="100" y="680" width="480" height="60" rx="6"
+              fill="rgba(251, 191, 36, 0.08)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="110" y="697" fill="#fbbf24" font-size="9" font-weight="600">TLS 1.2 — cleartext until CCS</text>
+        <text x="110" y="713" fill="#94a3b8" font-size="8">Certificate visible to passive observers. Cipher-suite blob mixes KEX + auth + AEAD.</text>
+        <text x="110" y="727" fill="#94a3b8" font-size="8">No forward secrecy in RSA suites. Server picks DH params (was vulnerable if weak).</text>
+
+        <rect x="760" y="680" width="480" height="60" rx="6"
+              fill="rgba(34, 211, 238, 0.08)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="770" y="697" fill="#22d3ee" font-size="9" font-weight="600">TLS 1.3 — encrypted after ServerHello</text>
+        <text x="770" y="713" fill="#94a3b8" font-size="8">Certificate, CertVerify, Finished all encrypted. ECDHE only — forward secrecy is mandatory.</text>
+        <text x="770" y="727" fill="#94a3b8" font-size="8">All AEAD. Cipher suite = just AEAD + hash. Client key_share enables 1-RTT.</text>
+
+        <!-- ============================== LEGEND (placed outside all zone boundaries) ============================== -->
+        <text x="100" y="790" fill="white" font-size="11" font-weight="600">Legend</text>
+        <rect x="100" y="800" width="14" height="10" rx="2" fill="#0f172a"/>
+        <line x1="107" y1="805" x2="113" y2="805" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="120" y="809" fill="#94a3b8" font-size="9">Client → Server</text>
+
+        <rect x="240" y="800" width="14" height="10" rx="2" fill="#0f172a"/>
+        <line x1="247" y1="805" x2="253" y2="805" stroke="#34d399" stroke-width="1.5"/>
+        <text x="260" y="809" fill="#94a3b8" font-size="9">Server → Client</text>
+
+        <line x1="390" y1="805" x2="406" y2="805" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="412" y="809" fill="#94a3b8" font-size="9">Encryption boundary</text>
+
+        <rect x="560" y="800" width="80" height="14" rx="2" fill="rgba(15, 23, 42, 0.95)"/>
+        <text x="600" y="809" fill="#64748b" font-size="8" text-anchor="middle">[label backplate]</text>
+        <text x="650" y="809" fill="#94a3b8" font-size="9">Label sits on opaque rect to mask the arrow underneath</text>
+
+        <rect x="990" y="800" width="14" height="10" rx="2" fill="rgba(251, 191, 36, 0.15)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="1010" y="809" fill="#94a3b8" font-size="9">TLS 1.2 zone</text>
+
+        <rect x="1130" y="800" width="14" height="10" rx="2" fill="rgba(34, 211, 238, 0.15)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="1150" y="809" fill="#94a3b8" font-size="9">TLS 1.3 zone</text>
+
+      </svg>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>TLS 1.2 — what you used until ~2018</h3>
+        </div>
+        <ul>
+          <li>• 2 round trips before any application byte — the server doesn't even know the secret until ClientKeyExchange arrives</li>
+          <li>• Certificate, ServerKeyExchange, ServerHelloDone all cleartext — passive observers see server identity + cert chain</li>
+          <li>• Cipher suites are giant blobs: <code>TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256</code> — KEX + auth + AEAD + hash all named together</li>
+          <li>• Optional RSA key transport (no forward secrecy) — most modern stacks force (EC)DHE but the protocol still permits it</li>
+          <li>• <code>ChangeCipherSpec</code> is a record-layer wart, not a real handshake message</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>TLS 1.3 — RFC 8446 (2018)</h3>
+        </div>
+        <ul>
+          <li>• 1 round trip — client guesses the ECDHE group and sends its <code>key_share</code> in the very first ClientHello</li>
+          <li>• Everything after ServerHello is encrypted: certificate, CertVerify, Finished, plus a new <code>EncryptedExtensions</code></li>
+          <li>• Static RSA removed — every public-key KEX now provides forward secrecy. Server picks its own DH params from the client's offered shares</li>
+          <li>• Cipher suite = only the AEAD + hash (e.g. <code>TLS_AES_128_GCM_SHA256</code>). Auth + KEX negotiated independently</li>
+          <li>• Optional 0-RTT: client can ship application data on the first flight using a PSK from a previous handshake (with replay caveat)</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>Common pitfalls + verify commands</h3>
+        </div>
+        <ul>
+          <li>• <code>openssl s_client -connect host:443</code> — see negotiated version + cipher; <code>Protocol: TLSv1.3</code> + <code>Cipher: TLS_AES_128_GCM_SHA256</code> is the modern line</li>
+          <li>• <code>verify error:num=20</code> — client trust store is missing the server's root CA; fix with <code>-CAfile</code> or update the OS bundle</li>
+          <li>• <code>verify error:num=21</code> — server didn't ship the intermediate chain (common in self-hosted setups); fix server config, not the client</li>
+          <li>• 0-RTT + non-idempotent POST = replay risk; only enable 0-RTT for GETs, or use <code>single-use</code> tickets with freshness checks</li>
+          <li>• TLS 1.0/1.1 deprecated by all major browsers since 2020; modern servers should fail handshake if client insists</li>
+          <li>• Verify with <code>openssl s_client -tls1_2</code> / <code>-tls1_3</code> to test each version individually during a server cutover</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      TLS handshake flow • Source: RFC 8446 §2 (Figure 1) • MDN Transport Layer Security • Wikipedia Transport Layer Security
+    </p>
+  </div>
+</body>
+</html>

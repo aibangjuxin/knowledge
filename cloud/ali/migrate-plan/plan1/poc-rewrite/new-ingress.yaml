@@ -1,0 +1,53 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bbdm
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app.kubernetes.io/instance: api-name01
+  annotations:
+    # 迁移状态标记
+    migration/status: "migrated"
+    migration/target: "api-name01.kong.dev.aliyun.intracloud.cn.aibang"
+    migration/timestamp: "2025-02-09T00:00:00Z"
+    
+    # 核心代理配置
+    nginx.ingress.kubernetes.io/upstream-vhost: "api-name01.kong.dev.aliyun.intracloud.cn.aibang"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    
+    # 设置正确的请求头
+    nginx.ingress.kubernetes.io/proxy-set-headers: |
+      Host api-name01.kong.dev.aliyun.intracloud.cn.aibang
+      X-Real-IP $remote_addr
+      X-Forwarded-For $proxy_add_x_forwarded_for
+      X-Forwarded-Proto $scheme
+      X-Original-Host $host
+      X-Forwarded-Host $host
+    
+    # 可选：超时配置
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: api-name01.teamname.dev.aliyun.intracloud.cn.aibang
+      http:
+        paths:
+          - backend:
+              service:
+                name: new-cluster-proxy
+                port:
+                  number: 80
+            path: /
+            pathType: ImplementationSpecific
+    - host: api-name01.01.teamname.dev.aliyun.intracloud.cn.aibang
+      http:
+        paths:
+          - backend:
+              service:
+                name: new-cluster-proxy
+                port:
+                  number: 80
+            path: /
+            pathType: ImplementationSpecific

@@ -1,0 +1,34 @@
+# 例 2 · 生产稳态（开 selfHeal，prune 按应用灰度开启）
+# 前提：已确认 Git 是唯一事实源，且应用内不混放别人管的资源。
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: team-a-project-a-prod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: team-a
+  source:
+    repoURL: git@github.com:YOUR_ORG/ucp-platform.git
+    targetRevision: main
+    path: teams/team-a/project-a
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: project-a
+  syncPolicy:
+    automated:
+      enabled: true
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - PruneLast=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

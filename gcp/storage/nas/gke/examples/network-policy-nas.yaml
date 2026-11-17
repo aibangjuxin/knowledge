@@ -1,0 +1,40 @@
+# infra-gcp 专用:NetworkPolicy(锁定单 Pod 出栈 SMB)
+# 关键:podSelector 必须用 role: nas-consumer label 精确锁定
+# 验证:同 namespace 启动另一个不带此 label 的 Pod,kubectl exec nc -zv nas.address.aibang 445 应失败
+# 架构师 lane:本文档只生成模板,不执行 apply
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-only-nas-pod-egress
+  namespace: api-ns
+spec:
+  # 关键:只匹配带 nas-consumer label 的 Pod
+  podSelector:
+    matchLabels:
+      role: nas-consumer
+  policyTypes:
+  - Egress
+  egress:
+  # 允许到公司 NAS CIDR 的 SMB 流量(走场景 A 路由 或 场景 B Cloud VPN)
+  - to:
+    - ipBlock:
+        cidr: 10.20.0.0/16          # ← infra-gcp 确认实际 NAS CIDR
+        except:
+        - 10.20.0.0/24             # ← 排除 NAS management IP
+    ports:
+    - protocol: TCP
+      port: 445
+  # 允许到 kube-dns 解析 nas.address.aibang
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      ports:
+    - protocol: UDP
+      port: 53
+  # 允许到 GCP API(metadata server 等)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443

@@ -1,0 +1,358 @@
+# Kubernetes 资源类型定义和迁移配置
+
+# 资源类型分类
+resource_categories:
+  # 核心工作负载
+  workloads:
+    - deployments
+    - statefulsets
+    - daemonsets
+    - replicasets
+    - jobs
+    - cronjobs
+    - pods
+  
+  # 网络资源
+  networking:
+    - services
+    - ingresses
+    - networkpolicies
+    - endpoints
+  
+  # 配置和存储
+  config_storage:
+    - configmaps
+    - secrets
+    - persistentvolumeclaims
+    - persistentvolumes
+  
+  # 访问控制
+  rbac:
+    - serviceaccounts
+    - roles
+    - rolebindings
+    - clusterroles
+    - clusterrolebindings
+  
+  # 策略和限制
+  policies:
+    - poddisruptionbudgets
+    - horizontalpodautoscalers
+    - verticalpodautoscalers
+    - limitranges
+    - resourcequotas
+    - networkpolicies
+  
+  # 系统资源
+  system:
+    - nodes
+    - namespaces
+    - persistentvolumes
+    - storageclasses
+    - priorityclasses
+
+# 资源迁移优先级 (数字越小优先级越高)
+migration_priority:
+  # 第一批: 基础资源
+  1:
+    - namespaces
+    - serviceaccounts
+    - secrets
+    - configmaps
+    - persistentvolumeclaims
+  
+  # 第二批: RBAC 资源
+  2:
+    - roles
+    - rolebindings
+    - clusterroles
+    - clusterrolebindings
+  
+  # 第三批: 网络资源
+  3:
+    - services
+    - endpoints
+    - networkpolicies
+  
+  # 第四批: 工作负载
+  4:
+    - deployments
+    - statefulsets
+    - daemonsets
+    - replicasets
+  
+  # 第五批: 任务和策略
+  5:
+    - jobs
+    - cronjobs
+    - horizontalpodautoscalers
+    - verticalpodautoscalers
+    - poddisruptionbudgets
+    - limitranges
+    - resourcequotas
+  
+  # 第六批: 入口资源
+  6:
+    - ingresses
+
+# 资源类型详细配置
+resource_types:
+  deployments:
+    api_version: "apps/v1"
+    kind: "Deployment"
+    namespaced: true
+    export_command: "kubectl get deployments -o yaml"
+    dependencies: ["configmaps", "secrets", "serviceaccounts"]
+    post_create_wait: 30
+    validation:
+      - check_replicas
+      - check_pod_status
+  
+  services:
+    api_version: "v1"
+    kind: "Service"
+    namespaced: true
+    export_command: "kubectl get services -o yaml"
+    dependencies: []
+    post_create_wait: 5
+    validation:
+      - check_endpoints
+  
+  configmaps:
+    api_version: "v1"
+    kind: "ConfigMap"
+    namespaced: true
+    export_command: "kubectl get configmaps -o yaml"
+    dependencies: []
+    post_create_wait: 0
+    sensitive: false
+  
+  secrets:
+    api_version: "v1"
+    kind: "Secret"
+    namespaced: true
+    export_command: "kubectl get secrets -o yaml"
+    dependencies: []
+    post_create_wait: 0
+    sensitive: true
+    exclude_types:
+      - "kubernetes.io/service-account-token"
+      - "helm.sh/release.v1"
+  
+  ingresses:
+    api_version: "networking.k8s.io/v1"
+    kind: "Ingress"
+    namespaced: true
+    export_command: "kubectl get ingresses -o yaml"
+    dependencies: ["services", "secrets"]
+    post_create_wait: 60
+    validation:
+      - check_ingress_status
+  
+  persistentvolumeclaims:
+    api_version: "v1"
+    kind: "PersistentVolumeClaim"
+    namespaced: true
+    export_command: "kubectl get pvc -o yaml"
+    dependencies: []
+    post_create_wait: 30
+    validation:
+      - check_pvc_status
+    special_handling: true
+    notes: "需要确保目标集群有相应的 StorageClass"
+  
+  serviceaccounts:
+    api_version: "v1"
+    kind: "ServiceAccount"
+    namespaced: true
+    export_command: "kubectl get serviceaccounts -o yaml"
+    dependencies: []
+    post_create_wait: 5
+    sensitive: true
+    exclude_default: true
+  
+  roles:
+    api_version: "rbac.authorization.k8s.io/v1"
+    kind: "Role"
+    namespaced: true
+    export_command: "kubectl get roles -o yaml"
+    dependencies: []
+    post_create_wait: 0
+    sensitive: true
+  
+  rolebindings:
+    api_version: "rbac.authorization.k8s.io/v1"
+    kind: "RoleBinding"
+    namespaced: true
+    export_command: "kubectl get rolebindings -o yaml"
+    dependencies: ["roles", "serviceaccounts"]
+    post_create_wait: 0
+    sensitive: true
+  
+  networkpolicies:
+    api_version: "networking.k8s.io/v1"
+    kind: "NetworkPolicy"
+    namespaced: true
+    export_command: "kubectl get networkpolicies -o yaml"
+    dependencies: []
+    post_create_wait: 10
+  
+  horizontalpodautoscalers:
+    api_version: "autoscaling/v2"
+    kind: "HorizontalPodAutoscaler"
+    namespaced: true
+    export_command: "kubectl get hpa -o yaml"
+    dependencies: ["deployments", "statefulsets"]
+    post_create_wait: 15
+    validation:
+      - check_hpa_status
+  
+  poddisruptionbudgets:
+    api_version: "policy/v1"
+    kind: "PodDisruptionBudget"
+    namespaced: true
+    export_command: "kubectl get pdb -o yaml"
+    dependencies: ["deployments", "statefulsets"]
+    post_create_wait: 5
+  
+  statefulsets:
+    api_version: "apps/v1"
+    kind: "StatefulSet"
+    namespaced: true
+    export_command: "kubectl get statefulsets -o yaml"
+    dependencies: ["configmaps", "secrets", "serviceaccounts", "persistentvolumeclaims"]
+    post_create_wait: 60
+    validation:
+      - check_replicas
+      - check_pod_status
+    special_handling: true
+  
+  daemonsets:
+    api_version: "apps/v1"
+    kind: "DaemonSet"
+    namespaced: true
+    export_command: "kubectl get daemonsets -o yaml"
+    dependencies: ["configmaps", "secrets", "serviceaccounts"]
+    post_create_wait: 45
+    validation:
+      - check_desired_nodes
+      - check_pod_status
+  
+  jobs:
+    api_version: "batch/v1"
+    kind: "Job"
+    namespaced: true
+    export_command: "kubectl get jobs -o yaml"
+    dependencies: ["configmaps", "secrets", "serviceaccounts"]
+    post_create_wait: 0
+    validation:
+      - check_job_status
+  
+  cronjobs:
+    api_version: "batch/v1"
+    kind: "CronJob"
+    namespaced: true
+    export_command: "kubectl get cronjobs -o yaml"
+    dependencies: ["configmaps", "secrets", "serviceaccounts"]
+    post_create_wait: 0
+  
+  limitranges:
+    api_version: "v1"
+    kind: "LimitRange"
+    namespaced: true
+    export_command: "kubectl get limitranges -o yaml"
+    dependencies: []
+    post_create_wait: 0
+  
+  resourcequotas:
+    api_version: "v1"
+    kind: "ResourceQuota"
+    namespaced: true
+    export_command: "kubectl get resourcequotas -o yaml"
+    dependencies: []
+    post_create_wait: 5
+
+# 不支持迁移的资源类型
+unsupported_resources:
+  - nodes
+  - persistentvolumes
+  - storageclasses
+  - clusterroles
+  - clusterrolebindings
+  - customresourcedefinitions
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  - priorityclasses
+  - runtimeclasses
+  - volumeattachments
+  - csidrivers
+  - csinodes
+  - csistoragecapacities
+
+# 需要特殊处理的资源
+special_handling:
+  secrets:
+    - type: "kubernetes.io/service-account-token"
+      action: "skip"
+      reason: "自动生成的 token，无需迁移"
+    - type: "helm.sh/release.v1"
+      action: "skip"
+      reason: "Helm release 信息，需要通过 Helm 重新部署"
+  
+  persistentvolumeclaims:
+    - condition: "status.phase != Bound"
+      action: "warn"
+      reason: "PVC 未绑定，可能需要手动处理"
+  
+  ingresses:
+    - annotation: "kubernetes.io/ingress.class"
+      action: "validate"
+      reason: "检查目标集群是否有相应的 Ingress Controller"
+
+# 资源清理规则
+cleanup_rules:
+  # 清理字段
+  remove_fields:
+    - "metadata.uid"
+    - "metadata.resourceVersion"
+    - "metadata.generation"
+    - "metadata.creationTimestamp"
+    - "metadata.deletionTimestamp"
+    - "metadata.deletionGracePeriodSeconds"
+    - "metadata.selfLink"
+    - "status"
+  
+  # 清理注解
+  remove_annotations:
+    - "deployment.kubernetes.io/revision"
+    - "kubectl.kubernetes.io/last-applied-configuration"
+    - "control-plane.alpha.kubernetes.io/leader"
+  
+  # 清理标签
+  remove_labels: []
+  
+  # 添加标签
+  add_labels:
+    "migration.tool": "pop-migrate"
+    "migration.timestamp": "{{ .Timestamp }}"
+    "migration.source": "{{ .SourceProject }}"
+
+# 验证规则
+validation_rules:
+  deployments:
+    - name: "check_replicas"
+      description: "检查副本数是否匹配"
+      command: "kubectl get deployment {name} -o jsonpath='{.status.readyReplicas}'"
+    - name: "check_pod_status"
+      description: "检查 Pod 状态"
+      command: "kubectl get pods -l app={name} --field-selector=status.phase=Running"
+  
+  services:
+    - name: "check_endpoints"
+      description: "检查服务端点"
+      command: "kubectl get endpoints {name} -o jsonpath='{.subsets[*].addresses[*].ip}'"
+  
+  ingresses:
+    - name: "check_ingress_status"
+      description: "检查 Ingress 状态"
+      command: "kubectl get ingress {name} -o jsonpath='{.status.loadBalancer.ingress[0].ip}'"

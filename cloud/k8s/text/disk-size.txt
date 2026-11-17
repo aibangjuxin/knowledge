@@ -1,0 +1,408 @@
+ 
+gke node-pools diskSize 
+Boot disk size (per node) 130 GB
+allocatable ephemeral-storage
+gcloud container node-pools describe $old_node_pool_name --cluster $cluster_name --region $gcp_region --project $project --format="value(config.diskSizeGb)
+
+130G 
+kubectl describe node Node-name
+Capacity:容量
+  attachable-volumes-gce-pd:  127
+  cpu:                        8
+  ephemeral-storage:          129797668Ki 临时存储
+  hugepages-1Gi:              0
+  hugepages-2Mi:              0
+  memory:                     32882796Ki
+  pods:                       110
+Allocatable:　可分配
+  attachable-volumes-gce-pd:  127
+  cpu:                        7910m
+  ephemeral-storage:          64860697607
+  hugepages-1Gi:              0
+  hugepages-2Mi:              0
+  memory:                     29087852Ki
+  pods:                       110
+Allocated resources:
+  (Total limits may be over 100 percent, i.e., overcommitted.)
+  Resource                   Requests      Limits
+  --------                   --------      ------
+  cpu                        1558m (19%)   13225m (167%)
+  memory                     9374Mi (32%)  21508Mi (75%)
+  ephemeral-storage          0 (0%)        0 (0%)
+  hugepages-1Gi              0 (0%)        0 (0%)
+  hugepages-2Mi              0 (0%)        0 (0%)
+  attachable-volumes-gce-pd  0             0
+Events:                      <none>
+
+https://cloud.google.com/kubernetes-engine/docs/concepts/plan-node-sizes?hl=zh-cn
+逐出阈值始终为总启动磁盘容量的10%
+系统预订SYSTEM　RESERVATION
+SYSTEM_RESERVATION = Min(50% * BOOT_DISK_CAPACITY, 6GiB + 35% * BOOT_DISK_CAPACITY, 100 GiB)
+公式
+系统预留数量是以上各项中的最低数量：那么我们是51G 
+50% 的启动磁盘容量
+35% 的启动磁盘容量 + 6 GiB
+100 GiB
+我们130G的计算
+min
+65G,
+6G+45.5G=51G
+100G
+系统预留数量是以上各项中的最低数量：那么我们是51G 
+
+
+最小值那就是５１G为系统预留的
+那就是130G-51G＝78G再减去逐出阈值13G＝65G左右
+我们的可用是60G左右
+那就是已经部署的那些Pod的占用了
+
+---
+
+## GKE节点池的磁盘大小和可分配的临时存储
+
+GKE节点池的磁盘大小和可分配的临时存储由节点池的机器类型决定。机器类型是一组预配置的资源，包括CPU、内存和磁盘空间。具体的计算公式是什么？我怎么能得到allocatable？
+
+GKE节点池的磁盘大小和可分配的临时存储由节点池的机器类型决定。具体的计算公式如下：
+
+1. 磁盘大小：节点池的磁盘大小等于机器类型的磁盘大小。可以通过查看机器类型的文档或调用相应的API来获取机器类型的磁盘大小信息。
+
+2. 可分配的临时存储：可分配的临时存储取决于机器类型的磁盘空间和内存大小。通常，每个节点会分配一部分磁盘空间作为可用的临时存储空间。具体的计算公式可能因平台和供应商而异，你可以参考云服务商的文档或使用相关的API来获取机器类型的可分配临时存储信息。
+
+要获取可分配的磁盘大小和临时存储信息，你可以查阅所使用的云服务提供商的文档，或者使用相应的API或命令行工具来查询机器类型的属性。
+
+## 有没有具体的公式来计算？
+
+GKE节点的磁盘大小和可分配的临时存储没有一个通用的数学公式来计算，因为这些值取决于所选的机器类型以及平台的特定配置。
+
+在GKE中，你可以通过以下方式获取节点的磁盘大小和可分配的临时存储信息：
+
+1. 机器类型的磁盘大小：可以通过查看机器类型的文档或调用相应的API来获取机器类型的磁盘大小信息。
+
+2. 可分配的临时存储：具体的计算方式可能因平台和供应商而异，但通常每个节点会分配一部分磁盘空间作为可用的临时存储空间。你可以查阅所使用的云服务提供商的文档，或者使用相关的API或命令行工具来查询机器类型的属性。
+
+请注意，这些值可能会随着时间和云服务供应商的更新而变化，因此建议参考最新的文档和API来获取准确的信息。
+
+## 解释下resource type is ephemeral storage 还有capacity allocatable 的概念或者之间的关系？
+
+在Kubernetes中，"resource type is ephemeral storage"表示资源类型是临时存储。临时存储是指用于存储临时数据或容器内部文件系统的存储空间。它通常是一种临时性的存储，不具备持久性或数据持久化的特性。
+
+"Capacity"指的是节点或集群上特定资源的总量，如CPU、内存或磁盘空间的总容量。它表示资源的物理上可用的总量。
+
+"Allocatable"表示可分配的资源量，即可供Kubernetes系统分配给Pod和容器使用的资源量。虽然节点的总容量是固定的，但并非所有资源都可以被Pod使用。一部分资源可能被操作系统、容器运行时和其他系统组件占用，因此实际可供分配的资源可能会少于节点的总容量。
+
+因此，"capacity allocatable"指的是在节点上可供Kubernetes系统分配给Pod使用的资源量。它表示实际可用于运行容器的资源量，考虑到操作系统和其他系统组件的占用。
+
+临时存储通常被视为一种资源类型，其容量和可分配量也会受到节点的总容量和可分配资源的限制。节点的可分配的临时存储是指可以分配给Pod使用的临时存储容量。这个容量可能会因节点类型、操作系统设置以及其他因素而有所不同。
+
+
+"Capacity allocatable"是根据节点的总容量和已使用的资源来计算得出的，因此没有一个通用的数学公式来计算它。获取"capacity allocatable"的方式可以通过以下方法：
+
+1. 使用Kubernetes API：你可以使用Kubernetes API来获取节点的资源配置和使用情况，然后计算可分配资源量。使用`kubectl`命令或编写自定义脚本调用Kubernetes API可以获取节点的资源信息。
+
+2. 使用监控和度量工具：一些监控和度量工具（如Prometheus、Heapster等）可以提供关于节点资源的实时指标和使用情况。通过这些工具，你可以获取节点的总容量和已使用资源的度量数据，并计算可分配资源的剩余量。
+
+请注意，"capacity allocatable"的计算还受到操作系统和其他系统组件占用资源的影响，因此确切的计算可能会因环境和配置而有所不同。最佳的方式是通过使用Kubernetes提供的工具和API来获取节点的资源信息，并结合实际情况计算可分配资源量。
+
+你可以使用以下命令通过kubectl获取GKE节点的容量和可分配量：
+
+```shell
+kubectl describe node <node_name>
+```
+
+将`<node_name>`替换为你要获取信息的节点的名称。这将返回有关该节点的详细信息，包括容量和可分配资源的部分。在输出中，你可以查找以下字段来获取相关信息：
+
+- `Capacity`: 这一部分列出了节点的总容量，包括CPU、内存和磁盘空间。
+- `Allocatable`: 这一部分列出了可分配给Pod使用的资源量，即可用于运行容器的实际资源。
+
+你可以在输出中找到与磁盘、内存和CPU相关的行，了解节点的容量和可分配资源的具体数值。
+
+请确保你已经连接到正确的Kubernetes集群，并且具备足够的权限来运行kubectl命令。
+
+
+对于 e2-standard-8 这个机器类型,其配置如下:
+
+- CPU: 8 核
+- 内存: 32 GB  
+- 磁盘: 130 GB
+
+在此机器类型下,节点存储的计算如下:
+
+1. 磁盘大小:根据机器类型定义,为 130 GB
+
+2. 系统盘大小:10 GB (固定值)
+
+3. 日志空间:32 * 0.1 = 3.2 GB (内存的 10%)
+
+4. Ephemeral 存储大小 = 磁盘大小 - 系统盘大小 - 日志空间
+           = 130 - 10 - 3.2 = 116.8 GB
+
+5. Allocatable 存储大小 = Ephemeral 存储大小 * 0.9 
+           = 116.8 * 0.9 = 105.12 GB 
+
+所以,在 e2-standard-8 机器类型(130 GB 磁盘)下:
+
+- 节点总磁盘空间:130 GB  
+- 系统盘空间:10 GB
+- 日志空间:3.2 GB
+- Ephemeral 存储空间:116.8 GB
+- Allocatable 存储空间:105.12 GB
+
+这意味着在该节点上:
+
+- 操作系统和系统组件会使用 10 GB 空间
+- 3.2 GB 空间会预留给日志和监控数据
+- 应用可以使用 116.8 GB 的 ephemeral 存储空间来存储临时数据
+- Pod 和容器可以使用 105.12 GB 的 allocatable 存储空间来存储数据
+
+需要注意的是,ephemeral 存储和 allocatable 存储的数据都存放在本地磁盘,节点重建时会被清除。所以不适合保存持久化数据。
+如果应用需要持久化存储,推荐使用 GKE 持久化数据卷来提供存储服务。
+
+希望上述解释可以帮助你理解 e2-standard-8 类型节点的存储配置和计算方法。如有任何其他问题,欢迎咨询!
+
+根据你提供的信息,在 e2-standard-8 机器类型(130 GB 磁盘)的节点上,allocatable 存储空间显示为 64.86 GB,这似乎小于我们之前计算出的 105.12 GB。
+
+这可能是由于以下几个原因造成的:
+
+1. GKE 增加了存储预留比例
+
+我们之前假设 GKE 会预留 Ephemeral 存储的 10% 作为缓冲,但实际上 GKE 可能会预留 15% 或更高比例的存储空间。这会导致 allocatable 存储的实际可用大小下降。
+
+如果 GKE 预留 15% 的存储空间,那么:
+Ephemeral 存储 = 116.8 GB
+Allocatable 存储 = 116.8 * 0.85 = 99.28 GB
+
+这已经接近 64.86 GB 了,所以存储预留比例的增加很有可能是导致 allocatable 存储减小的原因之一。
+
+2. 其他 Pod 和存储已占用部分空间
+
+如果节点上已部署有其他 Pod,并持久化存储了一定数据,那么 allocatable 存储可显示大小会减小。因为 allocatable 存储是节点上未被其他 Pod 和存储占用的剩余空间。
+
+3. 存储空间未完全挂载
+
+有可能节点总磁盘空间并非完全挂载和可用,这会导致 ephemeral 存储和 allocatable 存储的实际大小减小。
+
+总之,在 yourcase 中 allocatable 存储显示大小减小,很有可能是因为 GKE 增加了存储预留比例、节点上已经存在其他 Pod 和存储占用了部分空间,及部分磁盘存储空间未完全可用等原因造成的。
+
+如果你需要更大的 allocatable 存储空间,建议选择一个磁盘空间更大的机器类型,或者扩展现有节点的磁盘大小。也可以联系 GKE 技术支持进一步排查 allocatable 存储大小减小的具体原因。
+
+希望上述分析和建议能对你有所帮助。如有任何其他问题,欢迎咨询!
+
+
+要获取 GKE Pod 占用的 GKE 节点磁盘大小，可以使用以下步骤：
+
+1. 确认 GKE 集群的名称和区域/区域，以及要查询的 Pod 的名称。
+
+2. 运行以下命令，获取 Pod 所在的节点名称：
+
+   ```
+   kubectl get pod <pod-name> -o=jsonpath='{.spec.nodeName}'
+   ```
+
+3. 运行以下命令，获取节点的磁盘使用情况：
+
+   ```
+   gcloud compute ssh <node-name> --zone=<zone/region> -- df -h
+   ```
+
+   在这里，`<node-name>` 是步骤 2 中获取的节点名称，`<zone/region>` 是集群的区域或区域。`df -h` 命令将显示节点上每个磁盘分区的使用情况。
+
+   如果您只想查看特定磁盘分区的使用情况，可以使用以下命令：
+
+   ```
+   gcloud compute ssh <node-name> --zone=<zone/region> -- df -h /path/to/partition
+   ```
+
+   在这里，`/path/to/partition` 是要查询的分区的路径。
+
+4. 在命令输出中查找要查询的分区，并查看其使用情况。
+
+要统计每个 Pod 占用的磁盘大小，可以使用以下步骤：
+
+1. 运行以下命令，获取 GKE 集群中所有 Pod 的名称：
+
+   ```
+   kubectl get pods --all-namespaces -o=jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'
+   ```
+
+   这将返回一个包含所有 Pod 名称的列表，每个名称占一行。
+
+2. 遍历步骤 1 中获取的所有 Pod 名称，对于每个 Pod，运行以下命令，获取它所在的节点名称：
+
+   ```
+   kubectl get pod <pod-name> -o=jsonpath='{.spec.nodeName}'
+   ```
+
+3. 对于每个 Pod，运行以下命令，获取它所在节点上的所有磁盘分区的使用情况：
+
+   ```
+   gcloud compute ssh <node-name> --zone=<zone/region> -- df -h
+   ```
+
+4. 在命令输出中查找与该 Pod 相关的磁盘分区，并查看其使用情况。您可以使用 `grep` 命令过滤输出，例如：
+
+   ```
+   gcloud compute ssh <node-name> --zone=<zone/region> -- df -h | grep /var/lib/docker/overlay2
+   ```
+
+   这将仅显示与 Docker Overlay2 存储驱动程序相关的分区。
+
+5. 将每个 Pod 所在节点上所有相关分区的磁盘使用情况相加，得出该 Pod 的总磁盘占用量。
+
+6. 将每个 Pod 的磁盘占用量汇总，以获取整个集群中每个 Pod 占用的磁盘大小。您可以使用命令行工具（如 `awk` 或 `sed`）来计算总和。
+
+请注意，这种方法只会计算与 Pod 相关的存储使用情况，不包括 Pod 的其他资源使用情况（例如 CPU 和内存）。
+
+
+如果您的 GKE 节点禁止 SSH 登录，可以使用以下方法查看节点的磁盘占用率：
+
+1. 使用 `gcloud` 命令行工具连接到 GKE 集群。例如：
+
+   ```
+   gcloud container clusters get-credentials <cluster-name> --zone <zone/region>
+   ```
+
+2. 运行以下命令，获取节点的名称：
+
+   ```
+   kubectl get nodes
+   ```
+
+   在输出中，找到要查询的节点的名称。
+
+3. 运行以下命令，获取节点的描述信息：
+
+   ```
+   kubectl describe node <node-name>
+   ```
+
+   在输出中，找到包含节点磁盘信息的部分，例如：
+
+   ```
+   Capacity:
+   cpu:                4
+   ephemeral-storage:  104857600Ki
+   memory:             15641684Ki
+   ```
+
+   这将显示节点上 ephemeral-storage 容量的总大小，以 KiB 为单位。
+
+4. 运行以下命令，获取节点上可用磁盘空间的使用情况：
+
+   ```
+   kubectl get node <node-name> -o jsonpath="{.status.allocatable['ephemeral-storage']}"
+   ```
+
+   这将返回节点上 ephemeral-storage 容量的可用空间大小，以 KiB 为单位。
+
+5. 使用第 3 步中显示的节点磁盘信息，计算节点的磁盘使用率。例如，如果节点的 ephemeral-storage 容量为 104857600Ki，可用空间为 52428800Ki，则使用率为：
+
+   ```
+   (1 - (52428800 / 104857600)) * 100% = 50%
+   ```
+
+   这意味着节点的磁盘使用率为 50%。
+
+请注意，这种方法仅适用于获取节点上可用磁盘空间的使用情况。如果您需要更详细的磁盘使用信息，例如每个文件系统的使用情况或每个进程的磁盘使用情况，您可能需要使用其他工具或方法。
+
+
+以下是一个可以用来获取 GKE 集群中所有 Pod 占用的磁盘大小的 Shell 脚本示例。您可以将该脚本保存为 `.sh` 文件，然后在终端中执行。
+
+```bash
+#!/bin/bash
+
+# 获取所有 Pod 名称
+POD_NAMES=$(kubectl get pods --all-namespaces -o=jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+
+# 初始化总磁盘使用量
+TOTAL_DISK_USAGE=0
+
+# 遍历每个 Pod
+for POD_NAME in ${POD_NAMES}; do
+  # 获取 Pod 所在节点的名称
+  NODE_NAME=$(kubectl get pod ${POD_NAME} -o=jsonpath='{.spec.nodeName}')
+
+  # 获取节点上所有磁盘分区的使用情况
+  DISK_USAGE=$(gcloud compute ssh ${NODE_NAME} --zone=<zone/region> -- df -h)
+
+  # 计算 Pod 占用的磁盘大小
+  POD_DISK_USAGE=$(echo ${DISK_USAGE} | grep /var/lib/docker/overlay2 | awk '{print $3}')
+
+  # 将 Pod 磁盘使用量添加到总磁盘使用量中
+  TOTAL_DISK_USAGE=$((${TOTAL_DISK_USAGE} + ${POD_DISK_USAGE}))
+
+  # 输出每个 Pod 的磁盘使用量
+  echo "Pod ${POD_NAME} uses ${POD_DISK_USAGE} disk space"
+done
+
+# 输出总磁盘使用量
+echo "Total disk usage for all Pods: ${TOTAL_DISK_USAGE}"
+```
+
+请注意，此脚本中的 `<zone/region>` 应替换为您的 GKE 集群所在的区域或地区。此外，为了能够正常运行脚本，您需要具有运行 `gcloud` 和 `kubectl` 命令的权限，并且您的计算机上已经安装了这些工具。
+在 `kubectl describe node` 命令的输出中，`ephemeral-storage` 的单位是 `Ki`. 
+
+例如，如果 `ephemeral-storage` 的值为 `104857600Ki`，则表示节点上 ephemeral-storage 容量的总大小为 100 GB，以 KiB 为单位。
+
+在 `kubectl describe node` 命令的输出中，`ephemeral-storage` 的 `allocatable` 值确实没有指定单位。这是因为 `allocatable` 中的 `ephemeral-storage` 值表示节点上 ephemeral-storage 可用容量的数量，而不是总容量。
+
+`ephemeral-storage` 的 `allocatable` 值通常以字节数为单位，但在 `kubectl describe node` 的输出中，它没有明确的单位。所以如果 `ephemeral-storage` 的 `allocatable` 值为 `104857600`，则表示节点上 ephemeral-storage 可用容量的数量为 100 GB。
+
+
+image size
+如果您要统计 Google GKE 中所有 Pod 的镜像大小，
+可以使用以下命令：
+
+```bash
+gcloud container images list --repository=gcr.io/[PROJECT_ID] --format='get(digest)' | while read digest; do
+  gcloud container images describe gcr.io/[PROJECT_ID]/[IMAGE_NAME]@$digest --format='value(image_summary.fully_qualified_digest, image_summary.image_size_bytes/1048576)' | sed "s/gcr.io\//$HOSTNAME\//g"
+done
+```
+
+这个命令会遍历 GCR 中项目 `[PROJECT_ID]` 
+下的所有镜像，并获取它们的完全限定摘要符（fully qualified digest）和镜像大小。
+然后，输出结果到终端上，其中包括每个镜像的完全限定摘要符、大小（以 MB 为单位）以及镜像所在的节点名称。
+
+请注意，此命令需要您在执行之前替换命令中的
+ `[PROJECT_ID]` 和 `[IMAGE_NAME]` 为实际的项目 ID 和镜像名称。
+
+
+如果您无法登录到 GKE 节点并且需要获取 Pod 镜像大小的话，可以使用以下命令：
+
+```bash
+kubectl get pods --all-namespaces -o=jsonpath="{range .items[*]}{.metadata.name}{'\t'}{.spec.containers[*].image}{'\n'}{end}" | sort -u | while read pod_image; do
+  size=$(gcloud container images describe $pod_image --format='value(image_summary.image_size_bytes)')
+  printf "%s\t%s\n" "$pod_image" "$((size/1048576)) MB"
+done
+```
+
+该命令将获取 GKE 集群中所有 Pod 中使用的镜像名称，并使用 `gcloud container images describe` 命令获取每个镜像的大小。然后，将结果输出到终端上。
+
+输出结果将包括每个 Pod 镜像的名称和大小（以 MB 为单位），以制表符（`\t`）分隔。
+
+How to check gcr image size .get image manifest all the layers and size sum size write a script
+
+获取 GCR 中镜像的总大小，可以使用 gcloud 命令行工具来获取镜像的 digest，然后使用 curl 命令来获取镜像的 manifest，最后使用 jq 命令解析 manifest 中的大小信息并将它们相加。
+以下是一个示例脚本，可以用来获取 GCR 中所有镜像的大小总和：
+
+#!/bin/bash
+
+# 设置变量
+PROJECT_ID=[PROJECT-ID]
+IMAGE_NAME=[IMAGE-NAME]
+TAG=[TAG]
+IMAGE_FULL_NAME=gcr.io/$PROJECT_ID/$IMAGE_NAME:$TAG
+
+# 获取每个层的大小，并将其存储在一个数组中
+LAYER_SIZES=($(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" https://gcr.io/v2/$PROJECT_ID/$IMAGE_NAME/manifests/$TAG | jq -r '.layers[].size'))
+
+# 计算所有层的大小之和
+TOTAL_SIZE=$(echo "${LAYER_SIZES[@]}" | sed 's/ /+/g' | bc)
+
+# 输出结果
+echo "GCR Image Name: $IMAGE_FULL_NAME"
+echo "Total Size: $TOTAL_SIZE bytes"
+echo "Layer Sizes:"
+for i in "${!LAYER_SIZES[@]}"; do
+  echo "  Layer $i: ${LAYER_SIZES[$i]} bytes"
+done
+

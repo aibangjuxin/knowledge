@@ -1,0 +1,222 @@
+<mxGraphModel adaptiveColors="auto">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- TITLE -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <mxCell id="title" value="&lt;b&gt;GKE DNS Resolution Flow — Full Architecture&lt;/b&gt;" style="text;html=1;fontSize=18;fontColor=#1F4E79;align=center;" vertex="1" parent="1">
+      <mxGeometry x="340" y="10" width="600" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="subtitle" value="Pod → Node Cache → VPC Resolver → Cloud DNS Decision Engine → Upstream" style="text;html=1;fontSize=12;fontColor=#5A5A5A;align=center;" vertex="1" parent="1">
+      <mxGeometry x="380" y="42" width="520" height="20" as="geometry"/>
+    </mxCell>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- GKE CLUSTER LANE -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <mxCell id="gke_lane" value="&lt;b&gt;GKE Cluster (my-cluster)&lt;/b&gt;" style="swimlane;startSize=28;fillColor=#dae8fc;strokeColor=#1F4E79;html=1;verticalAlign=top;fontSize=12;fontColor=#1F4E79;" vertex="1" parent="1">
+      <mxGeometry x="20" y="80" width="340" height="440" as="geometry"/>
+    </mxCell>
+
+    <!-- Pod -->
+    <mxCell id="pod" value="&lt;b&gt;Pod&lt;/b&gt;&#xa;10.1.2.15&#xa;&#xa;Application" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;strokeWidth=2;" vertex="1" parent="gke_lane">
+      <mxGeometry x="20" y="46" width="120" height="70" as="geometry"/>
+    </mxCell>
+
+    <!-- resolv.conf -->
+    <mxCell id="resolv" value="&lt;b&gt;/etc/resolv.conf&lt;/b&gt;&#xa;nameserver 10.x.x.x&#xa;search ns.svc.cluster.local&#xa;         svc.cluster.local&#xa;         cluster.local&#xa;options ndots:5" style="shape=note;whiteSpace=wrap;html=1;size=10;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;spacing=4;" vertex="1" parent="gke_lane">
+      <mxGeometry x="160" y="40" width="160" height="76" as="geometry"/>
+    </mxCell>
+
+    <!-- Arrow: Pod → resolv -->
+    <mxCell id="e_pod_resolv" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#b85450;strokeWidth=1;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="gke_lane" source="pod" target="resolv">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Node Local DNS Cache -->
+    <mxCell id="nodecn" value="&lt;b&gt;Node Local DNS Cache&lt;/b&gt;&#xa;169.254.169.254&#xa;&#xa;coredns / unbound&#xa;(per-node cache)&#xa;&#xa;Cache hit → return&#xa;Cache miss → forward" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;strokeWidth=2;" vertex="1" parent="gke_lane">
+      <mxGeometry x="20" y="145" width="300" height="90" as="geometry"/>
+    </mxCell>
+
+    <!-- Arrow: Pod → Node cache -->
+    <mxCell id="e_pod_cache" value="dig / nslookup" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#9673a6;strokeWidth=2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="gke_lane" source="pod" target="nodecn">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- CoreDNS (in cluster - NOT used when Cloud DNS is VPC DNS) -->
+    <mxCell id="corends" value="&lt;b&gt;CoreDNS (kube-dns)&lt;/b&gt;&#xa;NOT USED when&#xa;Cloud DNS is VPC DNS&#xa;&#xa;(cluster-first mode only)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#a9a9a9;fontSize=10;dashed=1;align=center;" vertex="1" parent="gke_lane">
+      <mxGeometry x="20" y="255" width="300" height="60" as="geometry"/>
+    </mxCell>
+
+    <!-- GKE VPC label -->
+    <mxCell id="vpcbox" value="&lt;b&gt;VPC Network (my-vpc)&lt;/b&gt;" style="text;html=1;fontSize=11;fontColor=#1F4E79;align=center;fillColor=#dae8fc;strokeColor=#1F4E79;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="20" y="74" width="160" height="20" as="geometry"/>
+    </mxCell>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- VPC DNS RESOLVER -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <mxCell id="vpc_dns" value="&lt;b&gt;VPC DNS Resolver&lt;/b&gt;&#xa;169.254.254.254&#xa;&#xa;Cloud DNS&#xa;Managed Resolver&#xa;&#xa;(GCP-managed&#xa;anycast IP)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#1F4E79;fontSize=11;strokeWidth=2;align=center;" vertex="1" parent="1">
+      <mxGeometry x="380" y="200" width="150" height="110" as="geometry"/>
+    </mxCell>
+
+    <!-- Arrow: Node cache → VPC DNS resolver -->
+    <mxCell id="e_cache_vpc" value="cache miss&#xa;forward query" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1F4E79;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="nodecn" target="vpc_dns">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- CLOUD DNS DECISION ENGINE -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <mxCell id="decision_title" value="&lt;b&gt;Cloud DNS Decision Engine&lt;/b&gt;&#xa;&lt;font style=&quot;font-size:9px&quot;&gt;Priority Order (checked top to bottom)&lt;/font&gt;" style="text;html=1;fontSize=13;fontColor=#1F4E79;align=center;" vertex="1" parent="1">
+      <mxGeometry x="555" y="75" width="220" height="36" as="geometry"/>
+    </mxCell>
+
+    <!-- Decision arrow: VPC DNS → Decision -->
+    <mxCell id="e_vpc_decision" value="domain&#xa;suffix&#xa;check" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#1F4E79;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.3;entryDx=0;entryDy=0;" edge="1" parent="1" source="vpc_dns" target="decision">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Decision diamond -->
+    <mxCell id="decision" value="&lt;b&gt;Domain&#xa;Suffix&#xa;Match?&lt;/b&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;strokeWidth=2;" vertex="1" parent="1">
+      <mxGeometry x="555" y="185" width="110" height="80" as="geometry"/>
+    </mxCell>
+
+    <!-- Priority 1: Response Policy -->
+    <mxCell id="rp_zone" value="&lt;b&gt;1. Response Policy&lt;/b&gt;&#xa;&lt;font style=&quot;font-size:9px&quot;&gt;Highest Priority&lt;/font&gt;&#xa;&#xa;Override specific&#xa;records inline&#xa;&#xa;Returns custom&#xa;answer directly" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;strokeWidth=2;align=center;" vertex="1" parent="1">
+      <mxGeometry x="690" y="80" width="160" height="90" as="geometry"/>
+    </mxCell>
+
+    <!-- Priority 2: DNS Peering -->
+    <mxCell id="peering_zone" value="&lt;b&gt;2. DNS Peering Zone&lt;/b&gt;&#xa;&lt;font style=&quot;font-size:9px&quot;&gt;Pull from peered VPC&lt;/font&gt;&#xa;&#xa;Zone replicated&#xa;from peer VPC&#xa;over VPC Peering&#xa;&#xa;No target IP needed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;strokeWidth=2;align=center;" vertex="1" parent="1">
+      <mxGeometry x="690" y="185" width="160" height="90" as="geometry"/>
+    </mxCell>
+
+    <!-- Priority 3: Forwarding Zone -->
+    <mxCell id="fwd_zone" value="&lt;b&gt;3. Forwarding Zone&lt;/b&gt;&#xa;&lt;font style=&quot;font-size:9px&quot;&gt;Forward to target IPs&lt;/font&gt;&#xa;&#xa;Domain suffix&#xa;matched: aibang.&#xa;&#xa;FORWARD to&#xa;target IPs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;strokeWidth=2;align=center;" vertex="1" parent="1">
+      <mxGeometry x="690" y="290" width="160" height="90" as="geometry"/>
+    </mxCell>
+
+    <!-- Priority 4: Default Recursion -->
+    <mxCell id="default_rec" value="&lt;b&gt;4. Default Recursion&lt;/b&gt;&#xa;&lt;font style=&quot;font-size:9px&quot;&gt;No match&lt;/font&gt;&#xa;&#xa;Cloud DNS recurses&#xa;to public internet&#xa;&#xa;Root → TLD →&#xa;Authoritative NS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#a9a9a9;fontSize=10;strokeWidth=2;align=center;" vertex="1" parent="1">
+      <mxGeometry x="690" y="395" width="160" height="90" as="geometry"/>
+    </mxCell>
+
+    <!-- Decision → Priority 1 -->
+    <mxCell id="e_decision_rp" value="Response&#10;Policy&#10;matches" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#b85450;strokeWidth=1.5;dashed=1;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="decision" target="rp_zone">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Decision → Priority 2 -->
+    <mxCell id="e_decision_peering" value="Peering&#10;Zone&#10;matches" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#9673a6;strokeWidth=1.5;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="decision" target="peering_zone">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Decision → Priority 3 -->
+    <mxCell id="e_decision_fwd" value="Forwarding&#10;Zone&#10;matches" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#82b366;strokeWidth=2;exitX=1;exitY=0.8;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="decision" target="fwd_zone">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Decision → Priority 4 (no match) -->
+    <mxCell id="e_decision_default" value="no match" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#a9a9a9;strokeWidth=1.5;dashed=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="decision" target="default_rec">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- FORWARDING TARGET -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <mxCell id="fwd_target" value="&lt;b&gt;Target DNS Server&lt;/b&gt;&#xa;10.0.100.53&#xa;&#xa;Unbound / BIND&#xa;/ Corporate DNS&#xa;&#xa;Reachable from VPC&#xa;UDP/TCP :53" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;strokeWidth=2;align=center;" vertex="1" parent="1">
+      <mxGeometry x="875" y="285" width="130" height="100" as="geometry"/>
+    </mxCell>
+
+    <!-- Arrow: Forwarding Zone → Target -->
+    <mxCell id="e_fwd_target" value="FORWARD&#xa;UDP/TCP :53" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#82b366;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="fwd_zone" target="fwd_target">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Return arrow: Target → VPC DNS -->
+    <mxCell id="e_target_vpc" value="A record&#xa;10.0.50.20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#82b366;strokeWidth=2;strokeDashPattern=8 3;exitX=0;exitY=0.8;exitDx=0;exitDy=0;entryX=1;entryY=0.8;entryDx=0;entryDy=0;" edge="1" parent="1" source="fwd_zone" target="vpc_dns">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- PUBLIC INTERNET (Root → TLD → Auth) -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <mxCell id="publicnet" value="&lt;b&gt;Public Internet&lt;/b&gt;&#xa;&#xa;Root DNS&#xa;↓&#xa;TLD DNS (.com, .org...)&#xa;↓&#xa;Authoritative NS&#xa;(e.g. google.com)" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#a9a9a9;fontSize=10;align=center;" vertex="1" parent="1">
+      <mxGeometry x="875" y="395" width="150" height="110" as="geometry"/>
+    </mxCell>
+
+    <!-- Arrow: Default recursion → Public -->
+    <mxCell id="e_default_public" value="recurses&#xa;public DNS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#a9a9a9;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="default_rec" target="publicnet">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- Return arrow: Public → VPC DNS -->
+    <mxCell id="e_public_vpc" value="answer" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#a9a9a9;strokeWidth=2;strokeDashPattern=8 3;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.8;entryDx=0;entryDy=0;" edge="1" parent="1" source="publicnet" target="vpc_dns">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- RETURN PATH: VPC DNS → Pod -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <mxCell id="answer_pod" value="&lt;b&gt;Answer returned to Pod&lt;/b&gt;&#xa;A record: 10.0.50.20&#xa;&#xa;Cached at&#xa;Node Local DNS Cache&#xa;(for repeat queries)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;strokeWidth=2;align=center;" vertex="1" parent="1">
+      <mxGeometry x="380" y="380" width="150" height="70" as="geometry"/>
+    </mxCell>
+
+    <!-- Return: VPC DNS → Pod -->
+    <mxCell id="e_vpc_pod" value="answer" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#b85450;strokeWidth=2;strokeDashPattern=8 3;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;exitY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="vpc_dns" target="answer_pod">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- VPC BINDING BOX -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <mxCell id="vpc_binding" value="&lt;b&gt;VPC Binding — Critical!&lt;/b&gt;&#xa;&lt;font style=&quot;font-size:9px&quot;&gt;Zone is INERT until bound to VPC&lt;/font&gt;&#xa;&#xa;gcloud dns managed-zones create ... \&#xa;  --visibility=private \&#xa;  --networks=https://.../my-vpc&#xa;&#xa;gcloud dns managed-zones update ... \&#xa;  --add-private-gcp-network=...&#xa;&#xa;Check: gcloud dns managed-zones describe ZONE \&#xa;  → visibility should be &quot;private&quot;&#xa;  → forwardingConfig / peeringConfig populated" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;align=left;spacing=4;spacingTop=4;" vertex="1" parent="1">
+      <mxGeometry x="20" y="540" width="1000" height="110" as="geometry"/>
+    </mxCell>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- PROTOCOL / PORT LABELS -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <mxCell id="proto_label1" value="UDP/TCP :53" style="text;html=1;fontSize=9;fontColor=#5A5A5A;align=center;" vertex="1" parent="1">
+      <mxGeometry x="305" y="260" width="70" height="16" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="proto_label2" value="UDP/TCP :53" style="text;html=1;fontSize=9;fontColor=#5A5A5A;align=center;" vertex="1" parent="1">
+      <mxGeometry x="830" y="310" width="70" height="16" as="geometry"/>
+    </mxCell>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- LEGEND -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <mxCell id="legend" value="&lt;b&gt;Legend&lt;/b&gt;" style="text;html=1;fontSize=11;fontColor=#1F4E79;align=left;" vertex="1" parent="1">
+      <mxGeometry x="20" y="660" width="60" height="18" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="leg_red" value="&lt;b&gt;High Priority&lt;/b&gt; — Response Policy (override inline)" style="text;html=1;fontSize=9;fontColor=#b85450;align=left;fillColor=#f8cecc;strokeColor=#b85450;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="90" y="658" width="260" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg_purple" value="DNS Peering Zone (pull from peer VPC)" style="text;html=1;fontSize=9;fontColor=#9673a6;align=left;fillColor=#e1d5e7;strokeColor=#9673a6;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="355" y="658" width="230" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg_green" value="Forwarding Zone (forward to target IPs)" style="text;html=1;fontSize=9;fontColor=#82b366;align=left;fillColor=#d5e8d4;strokeColor=#82b366;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="590" y="658" width="230" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="leg_gray" value="Default Recursion (public internet)" style="text;html=1;fontSize=9;fontColor=#a9a9a9;align=left;fillColor=#f5f5f5;strokeColor=#a9a9a9;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="825" y="658" width="210" height="20" as="geometry"/>
+    </mxCell>
+
+    <!-- Priority order note -->
+    <mxCell id="priority_note" value="&lt;b&gt;Priority:&lt;/b&gt; Response Policy &gt; DNS Peering &gt; Forwarding Zone &gt; Default Recursion" style="text;html=1;fontSize=10;fontColor=#5A5A5A;align=left;fillColor=#fff2cc;strokeColor=#d6b656;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="20" y="690" width="1015" height="20" as="geometry"/>
+    </mxCell>
+
+    <!-- ndots note -->
+    <mxCell id="ndots_note" value="&lt;b&gt;ndots:5&lt;/b&gt; — If query has &amp;lt;5 dots, search domains are appended first (e.g. &quot;my-svc&quot; → &quot;my-svc.ns.svc.cluster.local&quot;).&#xa;This can cause delay for internal names if ndots is too high — consider ndots:2 for internal-heavy workloads." style="text;html=1;fontSize=9;fontColor=#5A5A5A;align=left;fillColor=#fff2cc;strokeColor=#d6b656;rounded=1;" vertex="1" parent="1">
+      <mxGeometry x="20" y="715" width="1015" height="32" as="geometry"/>
+    </mxCell>
+
+  </root>
+</mxGraphModel>

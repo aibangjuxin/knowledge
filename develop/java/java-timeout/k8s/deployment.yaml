@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: timeout-app
+  labels:
+    app: timeout-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: timeout-app
+  template:
+    metadata:
+      labels:
+        app: timeout-app
+    spec:
+      containers:
+      - name: timeout-app
+        image: gcr.io/your-project-id/timeout-api:latest
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5

@@ -1,0 +1,33 @@
+{
+  "name": "org-commit-message-convention",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "repository_name": {
+      "include": ["~ALL"],
+      "exclude": ["sandbox-*"]
+    },
+    "ref_name": {
+      "include": [
+        "~DEFAULT_BRANCH",
+        "refs/heads/release/**",
+        "refs/heads/feature/**",
+        "refs/heads/fix/**",
+        "refs/heads/hotfix/**"
+      ],
+      "exclude": []
+    }
+  },
+  "bypass_actors": [],
+  "rules": [
+    {
+      "type": "commit_message_pattern",
+      "parameters": {
+        "name": "commit subject 必须以 CR<6位数字> 开头",
+        "negate": false,
+        "operator": "regex",
+        "pattern": "^CR[0-9]{6}(\\s|$)"
+      }
+    }
+  ]
+}

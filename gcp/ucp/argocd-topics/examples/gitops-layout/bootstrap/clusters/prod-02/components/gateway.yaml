@@ -1,0 +1,12 @@
+# 组件启用清单：prod-02 × gateway
+#
+# 每个集群的 Gateway 声明独立：
+#   apps/gateway/overlays/cluster/prod-02/
+# prod-02 可以配不同的域名、不同的副本数、不同的连接超时。
+
+component: gateway
+cluster: prod-02
+server: https://prod-02.k8s.example.com
+env: prod
+project: platform-prod
+namespace: platform-prod

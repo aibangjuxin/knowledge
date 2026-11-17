@@ -1,0 +1,390 @@
+#!/usr/bin/env zsh
+# netdiag — 网络连通性诊断包 (不装 mtr / nmap / dig)
+#
+# 设计目标:
+#   - 公司 Mac 受限,装不了 mtr / nmap / dig / nslookup,
+#     但要排查"连不上 / 很慢 / 走错路"这三类问题
+#   - 一次跑完一整条诊断链,不用来回切命令:
+#       ① DNS 解析      —— 名字能不能解析,解析成什么(是不是 fake-ip)
+#       ② ICMP 延迟     —— ping 的 min/avg/max + 丢包率
+#       ③ TCP 端口探测  —— nc -z 探指定端口(icmp 被墙时唯一出路)
+#       ④ 路径追踪      —— traceroute 逐跳,看在哪一跳开始变慢/超时
+#       ⑤ 网关延迟      —— 到本地网关多少 ms(区分"内网慢"还是"外网慢")
+#       ⑥ MTU 探测      —— 决定 VPN/隧道下大包会不会被丢
+#       ⑦ 路由出口      —— 目标走哪条路(配合 netpath)
+#       ⑧ 丢包定位      —— 哪一跳开始丢
+#   - 只读:只发探测包,不改任何配置
+#
+# 用法:
+#   netdiag                          # 诊断默认目标(网关 + 公网 DNS)
+#   netdiag github.com               # 诊断指定主机
+#   netdiag github.com 443           # 同时探测 TCP 443
+#   netdiag github.com 80,443,22     # 多个端口
+#   netdiag --hops 12 github.com     # traceroute 跳数
+#   netdiag --no-traceroute <host>   # 跳过 traceroute(它很慢)
+#   netdiag --quick <host>           # 只做 ping + 端口,跳过 trace/MTU
+#
+# 注意:traceroute 默认走 UDP,很多中间设备会静默丢弃 → 出现大量 * 是正常的,
+#       要区分"被限速丢"和"被墙丢"用 --tcp 选项。
+
+emulate -L zsh
+setopt errexit nounset pipefail
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+
+typeset TARGET='' PORTS='' QUICK=false DO_TRACE=true
+typeset -i HOPS=8 PING_COUNT=4 TIMEOUT_S=3
+typeset TCP_MODE=false
+
+usage() {
+  echo "用法: $SCRIPT_NAME [主机] [端口[,端口...]] [选项]"
+  echo ""
+  echo "  主机          目标主机名或 IP(不带 = 网关 + 公网 DNS 双目标)"
+  echo "  端口          TCP 端口探测,如 443 或 80,443,22(默认探测 80,443)"
+  echo ""
+  echo "  --hops N      traceroute 最大跳数(默认 8)"
+  echo "  --count N     ping 次数(默认 4)"
+  echo "  --timeout N   单步超时秒(默认 3)"
+  echo "  --tcp         traceroute 走 TCP(默认 UDP;UDP 会被中间设备静默丢弃)"
+  echo "  --no-traceroute 跳过路径追踪(它最慢)"
+  echo "  --quick       只做 ping + 端口探测"
+  echo "  --version     显示版本"
+  echo "  --help        本帮助"
+}
+
+while (( $# > 0 )); do
+  case $1 in
+    --hops)           HOPS=$2; shift 2 ;;
+    --count)          PING_COUNT=$2; shift 2 ;;
+    --timeout)        TIMEOUT_S=$2; shift 2 ;;
+    --tcp)            TCP_MODE=true; shift ;;
+    --no-traceroute)  DO_TRACE=false; shift ;;
+    --quick)          QUICK=true; DO_TRACE=false; shift ;;
+    --version)        echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)        usage; exit 0 ;;
+    -*) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+    # 纯数字或端口列表 → 端口;否则是目标
+    <->|*,*)
+      if [[ -n $TARGET ]]; then PORTS=$1; else TARGET=$1; fi
+      shift ;;
+    *) TARGET=$1; shift ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_BLUE=$'\033[34m'
+  C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_BLUE='' C_CYAN=''
+fi
+
+# ---- 工具函数 -------------------------------------------------------------
+_ok()   { print -r -- "${C_GREEN}✓${C_RESET} $1" }
+_warn() { print -r -- "${C_YELLOW}!${C_RESET} $1" }
+_bad()  { print -r -- "${C_RED}✗${C_RESET} $1" }
+_info() { print -r -- "${C_DIM}  $1${C_RESET}" }
+
+_section() {
+  echo
+  echo "${C_BOLD}  $1${C_RESET} ${C_DIM}$2${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+}
+
+# 目标是不是 IPv4 字面量(不要用 [[ != *[!0-9.]* ]] —— emulate -L zsh 下不可靠)
+_is_ipv4() {
+  local s=$1
+  [[ -z $s ]] && return 1
+  case $s in
+    <->.<->.<->.<->) return 0 ;;
+    *)              return 1 ;;
+  esac
+}
+
+# ---- ① DNS 解析 ------------------------------------------------------------
+_dns_probe() {
+  local host=$1
+  if _is_ipv4 "$host"; then
+    _info "$host 已是 IP,跳过解析"
+    return
+  fi
+  local out v4 v6
+  out=$(dscacheutil -q host -a name "$host" 2>&1 || true)
+  if print -r -- "$out" | grep -q 'ip_address'; then
+    v4=$(print -r -- "$out" | awk -F': ' '/ip_address/ { print $2; exit }')
+    _ok "IPv4  $v4"
+    v6=$(print -r -- "$out" | awk -F': ' '/ipv6_address/ { print $2; exit }' || true)
+    [[ -n $v6 ]] && _info "IPv6  $v6"
+    # fake-ip 检测:198.0.0.0/8 是 RFC 2544 保留段,被代理用来做域名→假地址映射
+    local a rest b
+    a=${v4%%.*}; rest=${v4#*.}; b=${rest%%.*}
+    if [[ $a == 198 ]] && (( b <= 25 )); then
+      echo
+      _warn "$v4 落在 198.0.0.0/8 —— fake-ip,不是真实服务器"
+      _info "本地 DNS 被代理接管,真实连接由代理端发起"
+      _info "ping/curl 这个 IP 只到本地代理入口,不代表服务器真实延迟"
+      _info "看真实链路请在代理客户端关 fake-ip 后重测"
+    fi
+  else
+    _bad "解析失败 —— 检查 DNS 或 /etc/hosts"
+    _info "$(print -r -- "$out" | head -1)"
+  fi
+}
+
+# ---- ② ICMP 延迟 -----------------------------------------------------------
+_ping_probe() {
+  local host=$1
+  local out stats loss rtt
+  out=$(ping -c $PING_COUNT -t $TIMEOUT_S "$host" 2>&1 || true)
+  if print -r -- "$out" | grep -q 'round-trip'; then
+    stats=$(print -r -- "$out" | grep 'round-trip' | head -1)
+    rtt=$(print -r -- "$stats" | sed -n 's/.*= //p')
+    _ok "rtt  $rtt"
+    loss=$(print -r -- "$out" | grep 'packet loss' | head -1)
+    # "2 packets transmitted, 2 packets received, 0.0% packet loss"
+    loss=$(print -r -- "$loss" | sed -n 's/.*, \([0-9.]*\)% packet loss/\1/p')
+    if [[ -n $loss ]]; then
+      local ploss=${loss%%.*}
+      if (( ploss == 0 )); then
+        _ok "丢包  $loss%"
+      elif (( ploss < 20 )); then
+        _warn "丢包  $loss% —— 偶发丢包,网页可能感觉卡"
+      else
+        _bad "丢包  $loss% —— 严重丢包,先查链路再查应用"
+      fi
+    fi
+  else
+    _bad "ICMP 无响应 —— 不代表服务不可用(很多服务/防火墙禁 ICMP)"
+    _info "继续用 TCP 端口探测确认实际可达性"
+  fi
+}
+
+# ---- ③ TCP 端口探测 --------------------------------------------------------
+_port_probe() {
+  local host=$1
+  local -a ports
+  if [[ -n $PORTS ]]; then
+    ports=(${=PORTS//,/ })
+  else
+    ports=(80 443)
+  fi
+  # local 全部提到循环外 —— zsh 里循环体内重复 local 会把上一轮的值回显到 stdout
+  local p color rc out
+  for p in $ports; do
+    # nc -z 只探测不发数据;-G 是连接超时,-w 是最终超时。
+    #
+    # 关键:必须兜住退出码 —— nc 对"端口关闭"返回非 0,在 setopt errexit 下
+    # 会直接杀掉整个脚本(实测 ./netdiag --quick <host> 22 输出到第 2 个端口就静默中断,
+    # zsh -x 显示 trace 停在 out=$(nc ...) 那一行,没有任何报错)。
+    #
+    # 退出码要用 PIPESTATUS 之外的写法取:`out=$(...) || rc=$?` 在 zsh 里可行,
+    # 但更稳的是 `rc=0; out=$(...) || rc=$?` —— 明确初始化,失败时才覆盖。
+    rc=0
+    out=$(nc -z -G $TIMEOUT_S -w $TIMEOUT_S "$host" "$p" 2>&1) || rc=$?
+    # nc 失败时 stdout 可能是空的,按内容判定比只看退出码稳
+    if print -r -- "$out" | grep -q 'succeeded'; then
+      print -r -- "  ${C_GREEN}✓${C_RESET} 端口 $p ${C_DIM}开放${C_RESET}"
+    elif print -r -- "$out" | grep -q 'timed out'; then
+      print -r -- "  ${C_YELLOW}?${C_RESET} 端口 $p ${C_DIM}超时(被静默丢弃 / 防火墙 DROP)${C_RESET}"
+      _info "$(print -r -- "$out" | head -1)"
+    elif print -r -- "$out" | grep -q 'refused'; then
+      print -r -- "  ${C_RED}✗${C_RESET} 端口 $p ${C_DIM}连接被拒(RST = 服务明确没开)${C_RESET}"
+    elif [[ -z $out ]]; then
+      print -r -- "  ${C_RED}✗${C_RESET} 端口 $p ${C_DIM}无响应(nc 退出码 $rc,无输出)${C_RESET}"
+    else
+      print -r -- "  ${C_YELLOW}?${C_RESET} 端口 $p ${C_DIM}$(print -r -- "$out" | head -1)${C_RESET}"
+    fi
+  done
+}
+
+# ---- ④ 路径追踪 ------------------------------------------------------------
+_trace_probe() {
+  local host=$1
+  local -a cmd
+  cmd=(traceroute -n -m $HOPS -w 1 -q 1)
+  if $TCP_MODE; then
+    cmd+=(-P tcp -p 443)
+  fi
+  cmd+=("$host")
+
+  local raw
+  raw=$(timeout $(( TIMEOUT_S * HOPS + 5 )) "${cmd[@]}" 2>&1 || true)
+  if [[ -z $raw ]]; then
+    _bad "traceroute 无输出"
+    return
+  fi
+
+  # 解析每跳: hop_no  ip  time  (时间可能是 * 表示超时)
+  print -r -- "$raw" | awk -v bold="$C_BOLD" -v dim="$C_DIM" -v green="$C_GREEN" \
+    -v yellow="$C_YELLOW" -v red="$C_RED" -v reset="$C_RESET" '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    /^traceroute to/ { next }
+    /^[[:space:]]*$/  { next }
+    {
+      hop = $1
+      ip = ""
+      for (i = 2; i <= NF; i++) {
+        if ($i ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ || $i ~ /^\*/) { ip = $i; break }
+      }
+      t = $NF
+      if (t ~ /^[0-9.]+$/) {
+        ms = t + 0
+        c = green
+        if (ms >= 200) c = red
+        else if (ms >= 80) c = yellow
+        printf "  %s%2s%s  %-16s %s%8s ms%s\n", bold, hop, reset, ip, c, t, reset
+      } else {
+        printf "  %s%2s%s  %-16s %s%8s%s  %s(超时/被静默丢弃)%s\n", bold, hop, reset, ip, red, "*", reset, dim, reset
+      }
+    }
+  '
+
+  # 统计:从哪一跳开始出现 *
+  local first_star
+  first_star=$(print -r -- "$raw" | awk '
+    /^traceroute to/ { next }
+    NF {
+      if ($NF ~ /^\*$/) { print $1; exit }
+    }
+  ' || true)
+  echo
+  if [[ -n $first_star ]]; then
+    _warn "第 $first_star 跳开始超时"
+    if ! $TCP_MODE; then
+      _info "UDP traceroute 被中间设备静默丢弃是常态 —— 不代表后续跳真的不通"
+      _info "想确认真实可达性:加 --tcp 走 TCP 追踪,或看第 ③ 步端口探测结果"
+    fi
+  else
+    _ok "全程无超时跳"
+  fi
+}
+
+# ---- ⑤ 网关延迟 ------------------------------------------------------------
+# 注意:VPN 全局模式下 `route -n get default` 会返回 utun 接口直连(没有 gateway 行),
+#       这时拿不到"本地网关"。必须回退到物理接口(en*/bridge*)的真实网关,
+#       否则测的是隧道而不是 Wi-Fi —— 而用户想知道的恰恰是 Wi-Fi 有没有问题。
+_gateway_probe() {
+  local raw iface gw
+  raw=$(route -n get default 2>/dev/null || true)
+  if [[ -z $raw ]]; then
+    _bad "没有默认路由 —— 网络未连接"
+    return
+  fi
+  iface=$(print -r -- "$raw" | awk -F': *' '/^[[:space:]]*interface:/ { print $2; exit }')
+  gw=$(print -r -- "$raw" | awk -F': *' '/^[[:space:]]*gateway:/ { print $2; exit }')
+
+  if [[ -z $gw || $iface == utun* ]]; then
+    # 默认路由在隧道上 —— 找物理接口自己的网关
+    _warn "默认路由在 $iface(隧道)上 —— 改测物理接口网关"
+    local phy phy_gw
+    phy=$(netstat -rn -f inet 2>/dev/null | awk '$1 == "default" && $NF !~ /^utun/ { print $NF; exit }')
+    if [[ -n $phy ]]; then
+      phy_gw=$(netstat -rn -f inet 2>/dev/null | awk -v i="$phy" '$1 == "default" && $NF == i { print $2; exit }')
+      _info "物理接口 $phy 存在独立 default 路由"
+      if [[ -n $phy_gw && $phy_gw != link* ]]; then
+        iface=$phy
+        gw=$phy_gw
+      else
+        _warn "$phy 的 default 是接口直连(无网关),无法测网关延迟"
+        _info "典型场景:Wi-Fi 用 169.254.x.x 自DHCP 地址,或网络本身就没有网关"
+        return
+      fi
+    else
+      _bad "找不到物理接口的 default 路由"
+      _info "可能处于纯 VPN 模式或飞行模式"
+      return
+    fi
+  fi
+
+  _ok "网关 $gw (接口 $iface)"
+  local out rtt
+  out=$(ping -c $PING_COUNT -t $TIMEOUT_S "$gw" 2>&1 || true)
+  if print -r -- "$out" | grep -q 'round-trip'; then
+    rtt=$(print -r -- "$out" | grep 'round-trip' | sed -n 's/.*= //p')
+    local avg
+    avg=${rtt#*/}; avg=${avg%%/*}
+    _ok "网关 rtt  $rtt"
+    # 网关延迟 > 20ms 基本就是 Wi-Fi 信号/干扰问题,而不是外网问题
+    local base=${avg%%.*}
+    if (( base > 20 )); then
+      _warn "网关延迟 ${avg}ms 偏高 —— 先解决 Wi-Fi,再看外网结果"
+    else
+      _ok "本地链路正常 —— 后续外网问题与 Wi-Fi 无关"
+    fi
+  else
+    _warn "网关不响应 ICMP(正常,很多路由禁用)—— 继续看外网结果"
+  fi
+}
+
+# ---- ⑥ MTU 探测 ------------------------------------------------------------
+# ping -D 只发不分片包,逐步减小尺寸直到能通 —— 定位路径 MTU
+_mtu_probe() {
+  local host=$1
+  _info "探测到 $host 的路径 MTU(ping -D 禁分片,逐步降尺寸)"
+  local size
+  for size in 1500 1400 1300 1200 1000 576; do
+    if ping -D -s $size -c 1 -t 2 "$host" >/dev/null 2>&1; then
+      _ok "MTU 可达 $size 字节 payload(整包约 $(( size + 28 )) 字节含头)"
+      if (( size < 1500 )); then
+        _warn "路径 MTU 被限制在 $(( size + 28 )) —— 典型是 VPN/隧道加了额外封装头"
+        _info "大包(视频流/大文件上传)卡顿但小页面正常时,通常就是这个原因"
+      fi
+      return
+    fi
+  done
+  _bad "576 字节都不通 —— 链路严重异常"
+}
+
+# ---- 主流程 ----------------------------------------------------------------
+_diagnose() {
+  local host=$1
+  _section "目标" "$host"
+  _dns_probe "$host"
+  _section "ICMP 延迟" "ping -c $PING_COUNT"
+  _ping_probe "$host"
+  _section "TCP 端口探测" "nc -z —— ICMP 被禁时这步才是真相"
+  _port_probe "$host"
+  if $DO_TRACE; then
+    _section "路径追踪" "traceroute -n -m $HOPS $( $TCP_MODE && echo '(TCP)' || echo '(UDP)')"
+    _trace_probe "$host"
+  fi
+  if ! $QUICK; then
+    _section "路径 MTU" "ping -D 禁分片"
+    _mtu_probe "$host"
+  fi
+}
+
+_render() {
+  echo "${C_BOLD}${C_CYAN}═══ 网络连通性诊断 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读:只发探测包,不改配置${C_RESET}"
+
+  _section "默认路由" "先确认走哪条路"
+  _gateway_probe
+
+  if [[ -z $TARGET ]]; then
+    echo
+    _info "未指定目标,诊断公网 DNS (223.5.5.5) 作为连通性基线"
+    _diagnose '223.5.5.5'
+    echo
+    _info "也可以诊断指定主机: $SCRIPT_NAME github.com 443"
+  else
+    _diagnose "$TARGET"
+  fi
+
+  echo
+  echo "${C_BOLD}  结论提示${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  echo "  ${C_DIM}  ① 网关就慢/丢包  → Wi-Fi 或交换机问题,先解决本地链路${C_RESET}"
+  echo "  ${C_DIM}  ② 网关正常但目标慢 → 外网或 VPN 隧道问题${C_RESET}"
+  echo "  ${C_DIM}  ③ ICMP 不通但 TCP 通 → 正常,只是 ICMP 被禁,服务是可用的${C_RESET}"
+  echo "  ${C_DIM}  ④ MTU 被限但小请求正常 → 大文件/视频卡顿的典型原因${C_RESET}"
+  echo "  ${C_DIM}  ⑤ traceroute 中间跳超时但目标可达 → UDP 被丢,不是真断${C_RESET}"
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: ping, nc, traceroute, dscacheutil, route${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+_render

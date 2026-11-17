@@ -1,0 +1,31 @@
+Gke network 
+
+In GKE, when a Pod initiates an outbound (egress) connection to a destination external to the cluster, the source IP address of the connection is either the Pod's IP address or the IP address of the GKE node that the Pod is running on, depending on how the cluster networking is configured.
+By default, GKE uses a network address translation (NAT) gateway to perform egress traffic from Pods. When egress traffic flows through the NAT gateway, the source IP address is the IP address of the GKE node that the Pod is running on. This is because the NAT gateway replaces the source IP address of the outgoing packets with its own IP address.
+However, GKE also supports using the Pod CIDR block as the source IP address for egress traffic. This is achieved by configuring the "ipMasq" setting in the network policy configuration for the cluster. When this setting is enabled, egress traffic from Pods is masqueraded with the Pod's IP address as the source IP address. This can be useful for scenarios where the destination service requires the source IP address to be the same as the Pod IP address.
+In summary, the source IP address of egress traffic from a Pod in GKE can be either the Pod's IP address or the IP address of the GKE node that the Pod is running on, depending on how the cluster networking is configured.
+
+在 GKE 中，当 Pod 向集群外的目标发起出站（egress）连接时，连接的源 IP 地址是 Pod 的 IP 地址或 Pod 所在的 GKE 节点的 IP 地址，这取决于集群网络的配置方式。
+默认情况下，GKE 使用网络地址转换（NAT）网关执行 Pod 的出站流量。当出站流量通过 NAT 网关时，源 IP 地址是 Pod 所在的 GKE 节点的 IP 地址。这是因为 NAT 网关会使用自己的 IP 地址替换出站数据包的源 IP 地址。
+然而，GKE 也支持使用 Pod CIDR 块作为出站流量的源 IP 地址。这可以通过在集群的网络策略配置中配置 "ipMasq" 设置来实现。当启用此设置时，出站流量会使用 Pod 的 IP 地址作为源 IP 地址进行伪装。这对于需要目标服务要求源 IP 地址与 Pod IP 地址相同的情况非常有用。
+总之，在 GKE 中，来自 Pod 的出站流量的源 IP 地址可以是 Pod 的 IP 地址或 Pod 所在的 GKE 节点的 IP 地址，这取决于集群网络的配置方式。
+
+在 GKE 中配置网络策略配置中的 "ipMasq" 设置，可以将 Pod 的 IP 地址作为出站流量的源 IP 地址进行伪装。
+下面是如何在 GKE 中配置网络策略配置中的 "ipMasq" 设置：
+1. 打开 GKE 控制台，并选择要配置的集群。
+2. 在左侧导航栏中选择 "网络"。
+3. 在 "网络" 页面中，选择 "网络策略" 选项卡。
+4. 单击 "创建网络策略" 按钮，然后输入策略名称和描述。
+5. 在 "规则" 部分，选择 "出站规则"，并单击 "添加规则"。
+6. 在 "规则编辑器" 中，选择 "ipMasqueradeConfigs" 字段，并单击 "添加条目"。
+7. 在 "条目编辑器" 中，选择 "podCIDR" 字段，并输入 Pod CIDR 块。
+8. 单击 "保存" 保存配置。
+9. 返回 "网络策略" 页面，单击 "应用策略" 按钮，将新策略应用到集群中的所有节点。
+完成上述步骤后，Pod 的出站流量将使用 Pod 的 IP 地址作为源 IP 地址进行伪装。注意，启用此设置可能会对网络性能产生影响，因此需要谨慎评估和测试。
+
+
+在 GKE 中，可以使用 Network Address Translation（NAT）或 IP Masquerade（IP 伪装）来为集群中的 Pod 提供 Internet 访问。这两种技术的主要区别在于，NAT 使用一个公共 IP 地址代表整个集群，而 IP Masquerade 则使用 Pod 的 IP 地址来作为源 IP 地址进行伪装。
+具体来说，NAT 在 GKE 中使用 Cloud NAT 服务，将所有出站流量路由到一个公共 IP 地址上，然后在该地址上进行网络地址转换，将流量发送到目标地址。在这种情况下，所有 Pod 的出站流量都将使用该公共 IP 地址作为源 IP 地址，而不是使用 Pod 的 IP 地址。
+相比之下，IP Masquerade 使用 Pod 的 IP 地址来作为源 IP 地址进行伪装。这意味着出站流量将使用 Pod 的 IP 地址作为源 IP 地址发送到目标地址，而不是使用一个公共 IP 地址。使用 IP Masquerade 可以更好地跟踪和管理流量，并允许更灵活的网络配置。
+需要注意的是，启用 IP Masquerade 可能会影响网络性能，并且需要进行仔细的评估和测试。此外，IP Masquerade 还需要在网络策略中进行配置。
+

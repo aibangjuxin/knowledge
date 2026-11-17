@@ -1,0 +1,56 @@
+# Kubernetes Job 示例 - 用于在 K8s 环境中运行扫描
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: auth-scanner-job
+  namespace: default
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: auth-scanner
+        image: your-registry/auth-scanner:latest
+        command: ["/app/pipeline-integration.sh"]
+        args: 
+          - "/workspace/app.jar"
+          - "/workspace/config"
+          - "/workspace/reports"
+          - "true"
+        volumeMounts:
+        - name: workspace
+          mountPath: /workspace
+        - name: reports
+          mountPath: /workspace/reports
+        env:
+        - name: JAVA_OPTS
+          value: "-Xmx512m"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: workspace
+        persistentVolumeClaim:
+          claimName: build-workspace-pvc
+      - name: reports
+        persistentVolumeClaim:
+          claimName: scan-reports-pvc
+  backoffLimit: 3
+
+---
+# 用于存储扫描报告的 PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: scan-reports-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

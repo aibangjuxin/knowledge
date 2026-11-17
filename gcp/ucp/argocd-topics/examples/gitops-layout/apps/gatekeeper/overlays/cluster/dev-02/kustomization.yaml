@@ -1,0 +1,27 @@
+# gatekeeper · cluster 层 · dev-02
+#
+# dev-02 的豁免名单和 dev-01 **不一样** → 这正是"每集群一份独立配置"的意义。
+# 例：dev-02 上有个实验用的 namespace，不该被 owner/cost-center 策略管。
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../env/dev
+
+patches:
+  - target:
+      group: constraints.gatekeeper.sh
+      kind: K8sRequiredLabels
+      name: require-owner-label
+    patch: |-
+      - op: replace
+        path: /spec/match/excludedNamespaces
+        value:
+          - kube-system
+          - kube-public
+          - kube-node-lease
+          - gatekeeper-system
+          - argocd
+          - platform-dev
+          - sandbox-dev02

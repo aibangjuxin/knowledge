@@ -1,0 +1,19 @@
+# Step 5.2: Kubernetes Service for Backend Application
+# This creates a ClusterIP service to expose the backend pods internally
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minimax-api
+  namespace: minimax-runtime
+  labels:
+    app: minimax-api
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: minimax-api

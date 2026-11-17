@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: new-cluster-proxy
+  namespace: aibang-1111111111-bbdm
+  labels:
+    migration: "true"
+    target: "new-cluster"
+spec:
+  type: ExternalName
+  externalName: api-name01.kong.dev.aliyun.intracloud.cn.aibang
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+    - name: https
+      port: 443
+      targetPort: 443

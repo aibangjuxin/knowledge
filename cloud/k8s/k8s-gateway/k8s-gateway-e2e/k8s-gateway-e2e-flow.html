@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>K8s Gateway API — Multi-Tenant E2E Flow</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1300px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px;
+      background: #22d3ee;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1100px; display: block; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="header-row">
+      <div class="pulse-dot"></div>
+      <h1>K8s Gateway API — Multi-Tenant E2E Flow</h1>
+    </div>
+    <p class="subtitle">GKE + K8s Gateway (ListenerSet) + Kong DP · Direct Container vs Kong-API Routing</p>
+  </div>
+
+  <div class="diagram-container">
+    <svg viewBox="0 0 1200 860" xmlns="http://www.w3.org/2000/svg">
+
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+        </marker>
+        <marker id="arrowhead-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+        </marker>
+        <marker id="arrowhead-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/>
+        </marker>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+        </pattern>
+      </defs>
+
+      <!-- Background Grid -->
+      <rect width="100%" height="100%" fill="url(#grid)"/>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- GKE CLUSTER BOUNDARY                                  -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <rect x="20" y="60" width="1160" height="740" rx="12"
+            fill="rgba(120,53,15,0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+      <text x="36" y="80" fill="#fbbf24" font-size="10" font-weight="600">GKE Cluster</text>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- NAMESPACE BOUNDARIES                                 -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+
+      <!-- abjx-gw-int (Gateway NS) -->
+      <rect x="40" y="105" width="360" height="240" rx="8"
+            fill="rgba(6,78,59,0.12)" stroke="#34d399" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="52" y="123" fill="#34d399" font-size="9" font-weight="600">abjx-gw-int</text>
+      <text x="52" y="135" fill="#34d399" font-size="8" opacity="0.7">gateway-ns · Envoy + Kong Gateway</text>
+
+      <!-- kong-apw-kong-int (Kong DP NS) -->
+      <rect x="420" y="105" width="280" height="240" rx="8"
+            fill="rgba(251,146,60,0.08)" stroke="#fb923c" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="432" y="123" fill="#fb923c" font-size="9" font-weight="600">kong-apw-kong-int</text>
+      <text x="432" y="135" fill="#fb923c" font-size="8" opacity="0.7">kong-dp-ns · Kong Data Plane</text>
+
+      <!-- listenersets (ListenerSet NS) -->
+      <rect x="720" y="105" width="440" height="240" rx="8"
+            fill="rgba(8,51,68,0.12)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="732" y="123" fill="#22d3ee" font-size="9" font-weight="600">listenersets</text>
+      <text x="732" y="135" fill="#22d3ee" font-size="8" opacity="0.7">listener-ns · ListenerSet CRs per tenant</text>
+
+      <!-- teamname-int (Tenant Runtime NS) -->
+      <rect x="40" y="400" width="1120" height="360" rx="8"
+            fill="rgba(76,29,149,0.08)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="52" y="418" fill="#a78bfa" font-size="9" font-weight="600">teamname-int</text>
+      <text x="52" y="430" fill="#a78bfa" font-size="8" opacity="0.7">tenant-ns · Runtime Pods (KONG / NONE / ms)</text>
+
+      <!-- CROSS-NS ARROWS — drawn before component boxes so they render behind -->
+
+      <!-- Flow 1 Arrow: Envoy → HTTPRoute (no label, cyan) -->
+      <line x1="270" y1="345" x2="270" y2="400" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead)"/>
+      <text x="280" y="375" fill="#22d3ee" font-size="8">Flow 1</text>
+
+      <!-- Flow 2 Arrow: Envoy → Kong DP -->
+      <line x1="370" y1="305" x2="420" y2="305" stroke="#fb923c" stroke-width="2" marker-end="url(#arrowhead)"/>
+      <text x="375" y="295" fill="#fb923c" font-size="8">Flow 2</text>
+
+      <!-- Flow 2 Arrow: Kong DP → Tenant Kong-API Pod -->
+      <line x1="700" y1="305" x2="760" y2="305" stroke="#fb923c" stroke-width="2" marker-end="url(#arrowhead)"/>
+      <text x="708" y="295" fill="#fb923c" font-size="8">Flow 2</text>
+
+      <!-- Flow 2 return arrow: Kong DP → tenant NS ingress -->
+      <line x1="560" y1="345" x2="560" y2="400" stroke="#fb923c" stroke-width="2" marker-end="url(#arrowhead)"/>
+      <text x="570" y="375" fill="#fb923c" font-size="8">Flow 2</text>
+
+      <!-- ListenerSet → HTTPRoute attachment -->
+      <line x1="940" y1="345" x2="940" y2="400" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead)"/>
+      <text x="950" y="375" fill="#22d3ee" font-size="8">parentRef</text>
+
+      <!-- HTTPRoute → Service backend -->
+      <line x1="900" y1="580" x2="900" y2="640" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead)"/>
+      <text x="910" y="615" fill="#22d3ee" font-size="8">backendRef</text>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- TOP: EXTERNAL CLIENT + ILB                            -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+
+      <!-- Client -->
+      <rect x="40" y="20" width="110" height="50" rx="6"
+            fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="95" y="38" fill="white" font-size="10" font-weight="600" text-anchor="middle">External Client</text>
+      <text x="95" y="52" fill="#94a3b8" font-size="8" text-anchor="middle">HTTP/HTTPS</text>
+
+      <!-- ILB -->
+      <rect x="210" y="20" width="130" height="50" rx="6"
+            fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="275" y="38" fill="white" font-size="10" font-weight="600" text-anchor="middle">GCP Internal LB</text>
+      <text x="275" y="52" fill="#fbbf24" font-size="8" text-anchor="middle">HTTPS :443 · ILB</text>
+
+      <!-- Arrow: Client → ILB -->
+      <line x1="150" y1="45" x2="208" y2="45" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+      <text x="180" y="40" fill="#94a3b8" font-size="8" text-anchor="middle">HTTPS</text>
+
+      <!-- Arrow: ILB → Envoy (Gateway NS) -->
+      <line x1="340" y1="70" x2="340" y2="105" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrowhead-amber)"/>
+      <text x="355" y="90" fill="#fbbf24" font-size="8">ILB HC: 35.191 / 130.211</text>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- abjx-gw-int NAMESPACE COMPONENTS                    -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+
+      <!-- Envoy Gateway Pod -->
+      <rect x="60" y="180" width="200" height="80" rx="6" fill="#0f172a"/>
+      <rect x="60" y="180" width="200" height="80" rx="6"
+            fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="160" y="202" fill="white" font-size="10" font-weight="600" text-anchor="middle">abjx-gw-int</text>
+      <text x="160" y="218" fill="white" font-size="10" font-weight="600" text-anchor="middle">Gateway Pod</text>
+      <text x="160" y="234" fill="#34d399" font-size="8" text-anchor="middle">Envoy · :443/:80</text>
+      <text x="160" y="248" fill="#475569" font-size="7" text-anchor="middle">xDS → istiod (:15012)</text>
+
+      <!-- TLS Secret -->
+      <rect x="280" y="180" width="100" height="56" rx="6"
+            fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+      <text x="330" y="200" fill="white" font-size="9" font-weight="600" text-anchor="middle">TLS Secret</text>
+      <text x="330" y="214" fill="#fb7185" font-size="8" text-anchor="middle">*.team.appdev</text>
+      <text x="330" y="226" fill="#94a3b8" font-size="7" text-anchor="middle">mode: Terminate</text>
+
+      <!-- Kong Gateway -->
+      <rect x="60" y="270" width="200" height="56" rx="6"
+            fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="160" y="290" fill="white" font-size="10" font-weight="600" text-anchor="middle">Kong Gateway</text>
+      <text x="160" y="306" fill="#fb923c" font-size="8" text-anchor="middle">Kong Ingress · abjx-gw-int</text>
+      <text x="160" y="318" fill="#94a3b8" font-size="7" text-anchor="middle">plugin: rate limit, auth</text>
+
+      <!-- NetPol badges inside gateway NS -->
+      <rect x="60" y="145" width="140" height="26" rx="4" fill="transparent" stroke="#34d399" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="70" y="160" fill="#34d399" font-size="7">NetPol: default-deny-all</text>
+      <rect x="210" y="145" width="170" height="26" rx="4" fill="transparent" stroke="#34d399" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="220" y="160" fill="#34d399" font-size="7">NetPol: allow-gcp-hc, istiod, DNS</text>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- kong-apw-kong-int NAMESPACE COMPONENTS               -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+
+      <!-- Kong DP Pod -->
+      <rect x="440" y="180" width="240" height="80" rx="6" fill="#0f172a"/>
+      <rect x="440" y="180" width="240" height="80" rx="6"
+            fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="560" y="202" fill="white" font-size="10" font-weight="600" text-anchor="middle">kong-apw-kong-int</text>
+      <text x="560" y="218" fill="white" font-size="10" font-weight="600" text-anchor="middle">Kong DP Pod</text>
+      <text x="560" y="234" fill="#fb923c" font-size="8" text-anchor="middle">kdp: cap-int-kdp · :80/:443/:8443</text>
+      <text x="560" y="248" fill="#94a3b8" font-size="7" text-anchor="middle">Route via HTTPRoute → svc</text>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- listenersets NAMESPACE COMPONENTS                    -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+
+      <!-- ListenerSet CR -->
+      <rect x="740" y="175" width="200" height="100" rx="6" fill="#0f172a"/>
+      <rect x="740" y="175" width="200" height="100" rx="6"
+            fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="840" y="196" fill="white" font-size="10" font-weight="600" text-anchor="middle">abjx-listenerset-int</text>
+      <text x="840" y="210" fill="#22d3ee" font-size="9" text-anchor="middle">ListenerSet CR</text>
+      <text x="840" y="225" fill="#94a3b8" font-size="8" text-anchor="middle">hostname: *.team.appdev.aibang</text>
+      <text x="840" y="238" fill="#94a3b8" font-size="8" text-anchor="middle">tls.mode: Terminate</text>
+      <text x="840" y="251" fill="#94a3b8" font-size="8" text-anchor="middle">port: 443 · protocol: HTTPS</text>
+      <text x="840" y="264" fill="#22d3ee" font-size="7" text-anchor="middle">parentRef: shared-gateway</text>
+
+      <!-- Gateway CR reference -->
+      <rect x="960" y="185" width="180" height="80" rx="6"
+            fill="rgba(251,191,36,0.1)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="4,4"/>
+      <text x="1050" y="203" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">infrastructure</text>
+      <text x="1050" y="218" fill="white" font-size="9" font-weight="600" text-anchor="middle">shared-gateway</text>
+      <text x="1050" y="232" fill="#fbbf24" font-size="8" text-anchor="middle">Gateway CR · kgateway</text>
+      <text x="1050" y="246" fill="#94a3b8" font-size="8" text-anchor="middle">allowedRoutes: namespaces</text>
+      <text x="1050" y="258" fill="#94a3b8" font-size="7" text-anchor="middle">allowedListeners: selector</text>
+
+      <!-- Arrow: ListenerSet → Gateway -->
+      <line x1="940" y1="225" x2="958" y2="225" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrowhead-amber)"/>
+      <text x="944" y="218" fill="#fbbf24" font-size="7">parentRef</text>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- teamname-int NAMESPACE COMPONENTS                    -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+
+      <!-- HTTPRoute CR -->
+      <rect x="760" y="420" width="180" height="130" rx="6" fill="#0f172a"/>
+      <rect x="760" y="420" width="180" height="130" rx="6"
+            fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="850" y="442" fill="#22d3ee" font-size="9" font-weight="600" text-anchor="middle">teamname-int</text>
+      <text x="850" y="456" fill="white" font-size="10" font-weight="600" text-anchor="middle">HTTPRoute CR</text>
+      <text x="850" y="472" fill="#94a3b8" font-size="8" text-anchor="middle">parentRef: abjx-listenerset-int</text>
+      <text x="850" y="485" fill="#94a3b8" font-size="8" text-anchor="middle">hostnames: *.team.appdev.aibang</text>
+      <text x="850" y="498" fill="#94a3b8" font-size="8" text-anchor="middle">rules[].matches[].path</text>
+      <text x="850" y="511" fill="#94a3b8" font-size="8" text-anchor="middle">rules[].timeouts.backendTimeout</text>
+      <text x="850" y="524" fill="#94a3b8" font-size="7" text-anchor="middle">timeouts.request (Extended Support)</text>
+
+      <!-- Tenant Runtime: Kong-API Pod -->
+      <rect x="80" y="470" width="160" height="70" rx="6" fill="#0f172a"/>
+      <rect x="80" y="470" width="160" height="70" rx="6"
+            fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="160" y="492" fill="white" font-size="10" font-weight="600" text-anchor="middle">Kong-API Pod</text>
+      <text x="160" y="508" fill="#fb923c" font-size="8" text-anchor="middle">apigateway: KONG</text>
+      <text x="160" y="522" fill="#94a3b8" font-size="7" text-anchor="middle">teamname-int · port 8080</text>
+
+      <!-- Tenant Runtime: Direct Container Pod -->
+      <rect x="260" y="470" width="160" height="70" rx="6" fill="#0f172a"/>
+      <rect x="260" y="470" width="160" height="70" rx="6"
+            fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="340" y="492" fill="white" font-size="10" font-weight="600" text-anchor="middle">Direct Container Pod</text>
+      <text x="340" y="508" fill="#34d399" font-size="8" text-anchor="middle">apigateway: NONE</text>
+      <text x="340" y="522" fill="#94a3b8" font-size="7" text-anchor="middle">teamname-int · port 8080</text>
+
+      <!-- Tenant Runtime: Microservice Pod -->
+      <rect x="440" y="470" width="140" height="70" rx="6" fill="#0f172a"/>
+      <rect x="440" y="470" width="140" height="70" rx="6"
+            fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="510" y="492" fill="white" font-size="10" font-weight="600" text-anchor="middle">Microservice Pod</text>
+      <text x="510" y="508" fill="#a78bfa" font-size="8" text-anchor="middle">type: ms</text>
+      <text x="510" y="522" fill="#94a3b8" font-size="7" text-anchor="middle">teamname-int · port 8080</text>
+
+      <!-- Tenant SVC -->
+      <rect x="80" y="555" width="140" height="50" rx="6"
+            fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="150" y="575" fill="white" font-size="10" font-weight="600" text-anchor="middle">teamname-svc</text>
+      <text x="150" y="590" fill="#94a3b8" font-size="8" text-anchor="middle">ClusterIP :8080</text>
+
+      <!-- DestinationRule -->
+      <rect x="240" y="555" width="180" height="50" rx="6"
+            fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+      <text x="330" y="573" fill="white" font-size="10" font-weight="600" text-anchor="middle">DestinationRule</text>
+      <text x="330" y="588" fill="#fb7185" font-size="8" text-anchor="middle">timeout: 60s · connectTimeout: 10s</text>
+
+      <!-- NetPol badges inside tenant NS -->
+      <rect x="80" y="420" width="200" height="40" rx="4" fill="transparent" stroke="#a78bfa" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="88" y="433" fill="#a78bfa" font-size="7">NetPol: default-deny-all</text>
+      <text x="88" y="446" fill="#a78bfa" font-size="7">NetPol: allow-ingress-gw, allow-kong-dp</text>
+      <text x="88" y="459" fill="#a78bfa" font-size="7">NetPol: allow-egress-dns, drn, workload-identity</text>
+
+      <!-- DestinationRule arrow to svc -->
+      <line x1="240" y1="580" x2="222" y2="580" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrowhead-rose)"/>
+      <text x="226" y="573" fill="#fb7185" font-size="7">trafficPolicy</text>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- FLOW LABELS (central, large, faded)                   -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <text x="1160" y="755" fill="#1e293b" font-size="120" font-weight="700" text-anchor="end">E2E</text>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- LEGEND — placed OUTSIDE all NS boundaries             -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <text x="40" y="778" fill="white" font-size="10" font-weight="600">Legend</text>
+
+      <rect x="40" y="790" width="14" height="9" rx="2" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/>
+      <text x="60" y="798" fill="#94a3b8" font-size="8">Gateway NS / Backend</text>
+
+      <rect x="200" y="790" width="14" height="9" rx="2" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1"/>
+      <text x="220" y="798" fill="#94a3b8" font-size="8">Kong DP</text>
+
+      <rect x="310" y="790" width="14" height="9" rx="2" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+      <text x="330" y="798" fill="#94a3b8" font-size="8">HTTPRoute / ListenerSet</text>
+
+      <rect x="480" y="790" width="14" height="9" rx="2" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1"/>
+      <text x="500" y="798" fill="#94a3b8" font-size="8">Tenant Runtime NS</text>
+
+      <rect x="650" y="790" width="14" height="9" rx="2" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1"/>
+      <text x="670" y="798" fill="#94a3b8" font-size="8">TLS Secret / DestinationRule</text>
+
+      <rect x="840" y="790" width="14" height="9" rx="2" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="860" y="798" fill="#94a3b8" font-size="8">GCP ILB / Cloud</text>
+
+      <line x1="40" y="815" x2="54" y2="815" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+      <text x="60" y="818" fill="#94a3b8" font-size="8">Flow 1: Direct Container</text>
+
+      <line x1="200" y="815" x2="214" y2="815" stroke="#fb923c" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+      <text x="220" y="818" fill="#94a3b8" font-size="8">Flow 2: Kong DP</text>
+
+      <line x1="350" y="815" x2="364" y2="815" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrowhead-amber)"/>
+      <text x="370" y="818" fill="#94a3b8" font-size="8">CR Reference</text>
+
+      <rect x="500" y="807" width="14" height="9" rx="2" fill="transparent" stroke="#34d399" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="520" y="815" fill="#94a3b8" font-size="8">Namespace Boundary</text>
+
+    </svg>
+  </div>
+
+  <!-- Info Cards -->
+  <div class="cards">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot emerald"></div>
+        <h3>Flow 1 — Direct Container</h3>
+      </div>
+      <ul>
+        <li>• Client → ILB (GCP) → Envoy (abjx-gw-int)</li>
+        <li>• Envoy → HTTPRoute (teamname-int)</li>
+        <li>• HTTPRoute → teamname-svc (ClusterIP)</li>
+        <li>• → Direct Container Pod (apigateway: NONE)</li>
+        <li>• NetPol: default-deny + allow-ingress-gw</li>
+        <li>• Envoy default timeout: 5s → set DR.timeout</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot amber"></div>
+        <h3>Flow 2 — Kong DP Routing</h3>
+      </div>
+      <ul>
+        <li>• Client → ILB → Envoy (abjx-gw-int)</li>
+        <li>• Envoy → HTTPRoute → Kong DP (kong-apw-kong-int)</li>
+        <li>• Kong DP → Kong-API Pod (apigateway: KONG)</li>
+        <li>• NetPol: default-deny + allow-ingress-int-kdp</li>
+        <li>• Kong handles: auth, rate-limit, transform</li>
+        <li>• Kong plugin chain per route/service</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot violet"></div>
+        <h3>Control Plane — ListenerSet Binding</h3>
+      </div>
+      <ul>
+        <li>• Gateway (infrastructure) → allowedListeners selector</li>
+        <li>• ListenerSet (listenersets) → parentRef: shared-gateway</li>
+        <li>• HTTPRoute (teamname-int) → parentRef: ListenerSet</li>
+        <li>• allowedRoutes.namespaces: tenant label matching</li>
+        <li>• ReferenceGrant for cross-ns backendRefs</li>
+        <li>• Security: namespace not in allowedRoutes → REJECT</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot rose"></div>
+        <h3>Security — NetworkPolicy</h3>
+      </div>
+      <ul>
+        <li>• abjx-gw-int: default-deny + allow-dns/istiod/gcp-hc</li>
+        <li>• teamname-int: default-deny + allow-egress-dns/drn</li>
+        <li>• apigateway:NONE: ingress from gw-ns only</li>
+        <li>• apigateway:KONG: ingress from kong-apw-kong-int</li>
+        <li>• type:ms: ingress from ms/KONG/NONE</li>
+        <li>• NONE pod egress: ONLY other NONE pods (no KONG)</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot cyan"></div>
+        <h3>Timeouts & Resilience</h3>
+      </div>
+      <ul>
+        <li>• HTTPRoute.spec.rules[].timeouts.request (Extended)</li>
+        <li>• HTTPRoute.spec.rules[].timeouts.backendTimeout</li>
+        <li>• DestinationRule.trafficPolicy.timeout (覆盖 Envoy 5s)</li>
+        <li>• DestinationRule.trafficPolicy.connectTimeout (10s)</li>
+        <li>• Envoy UT flag → upstream timeout</li>
+        <li>• Envoy UC flag → connection failure</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot amber"></div>
+        <h3>GCP ILB Health Check</h3>
+      </div>
+      <ul>
+        <li>• GCP LB HC source: 35.191.0.0/16 + 130.211.0.0/22</li>
+        <li>• Envoy port 15021 (health check endpoint)</li>
+        <li>• NetPol: default-allow-gcp-hc-ingress required</li>
+        <li>• externalTrafficPolicy: Cluster → SNAT applies</li>
+        <li>• GKE Node CIDR: 192.168.64.0/19 must be whitelisted</li>
+        <li>•，否则 Envoy nodes marked unhealthy → 504</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="footer">
+    K8s Gateway API E2E · abjx-gw-int + kong-apw-kong-int + listenersets + teamname-int · Verify: k8s-gateway-verify.sh
+  </p>
+</div>
+</body>
+</html>

@@ -1,0 +1,29 @@
+# istiod.yaml — Istio 控制面
+# 对应 chart: oci://gcr.io/istio-release/charts/istiod
+# 详见 02-install-ambient-helm.md §4.1
+
+global:
+  hub: europe-west2-docker.pkg.dev/aibang-12345678-ajbx-dev/containers
+  tag: 1.30.3-distroless
+  platform: gke
+
+pilot:
+  cni:
+    enabled: true           # ambient 必备:istiod 与 cni 联动
+    namespace: istio-system
+  resources:
+    requests:
+      cpu: 100m             # 与原 minimal 脚本一致
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  autoscaleMin: 2
+  autoscaleMax: 3
+  replicaCount: 2
+
+meshConfig:
+  accessLogFile: /dev/stdout
+  defaultConfig:
+    proxyMetadata:
+      ISTIO_META_DNS_AUTO_ALLOCATE: "true"

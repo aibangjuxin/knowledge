@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DNS Timeout Troubleshooting Decision Tree</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #1c1a17;
+      --color-paper-2: #2a2723;
+      --color-ink:     #f1efe7;
+      --color-muted:   #a8a69d;
+      --color-accent:  #ff6a30;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Flowchart · Troubleshooting</p>
+    <h1>DNS Timeout 排障决策树</h1>
+
+    <svg viewBox="0 0 1120 800" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.9" fill="rgba(241,239,231,0.10)"/>
+        </pattern>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#a8a69d"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#ff6a30"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#60a5fa"/></marker>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#1c1a17"/>
+      <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
+
+      <!-- Arrow helpers: main vertical path -->
+      <!-- START → resolv.conf check -->
+      <line x1="560" y1="96" x2="560" y2="136" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- resolv.conf → Diamond nameserver type -->
+      <line x1="560" y1="184" x2="560" y2="220" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- 169.254.20.10 branch → right → dig @169.254.20.10 -->
+      <line x1="680" y1="288" x2="820" y2="288" stroke="#ff6a30" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+      <rect x="712" y="278" width="56" height="12" rx="2" fill="#1c1a17"/>
+      <text x="740" y="287" fill="#ff6a30" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">YES</text>
+      <rect x="824" y="278" width="24" height="12" rx="2" fill="#1c1a17"/>
+      <text x="836" y="287" fill="#a8a69d" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">NO</text>
+
+      <!-- NodeLocal YES → dig result diamond -->
+      <line x1="920" y1="288" x2="920" y2="340" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- NodeLocal result YES → node-local-dns logs -->
+      <line x1="920" y1="388" x2="920" y2="424" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="892" y="404" width="24" height="12" rx="2" fill="#1c1a17"/>
+      <text x="904" y="413" fill="#a8a69d" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">YES</text>
+      <rect x="892" y="432" width="24" height="12" rx="2" fill="#1c1a17"/>
+      <text x="904" y="441" fill="#a8a69d" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">NO</text>
+
+      <!-- 10.x kube-dns branch -->
+      <line x1="560" y1="356" x2="200" y2="356" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="200" y1="356" x2="200" y2="424" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="356" y="346" width="24" height="12" rx="2" fill="#1c1a17"/>
+      <text x="368" y="355" fill="#a8a69d" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">NO</text>
+      <rect x="100" y="428" width="24" height="12" rx="2" fill="#1c1a17"/>
+      <text x="112" y="437" fill="#a8a69d" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">YES</text>
+
+      <!-- kube-dns YES → check kube-dns -->
+      <line x1="200" y1="472" x2="200" y2="508" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- kube-dns overload? diamond -->
+      <line x1="200" y1="556" x2="200" y2="592" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="172" y="572" width="24" height="12" rx="2" fill="#1c1a17"/>
+      <text x="184" y="581" fill="#a8a69d" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">YES</text>
+      <rect x="172" y="600" width="24" height="12" rx="2" fill="#1c1a17"/>
+      <text x="184" y="609" fill="#a8a69d" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">NO</text>
+
+      <!-- kube-dns YES → scale/NodeLocal -->
+      <line x1="200" y1="640" x2="60" y2="640" stroke="#a8a69d" stroke-width="1.2"/>
+      <line x1="60" y1="640" x2="60" y2="688" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- kube-dns NO → Cloud DNS 169.254.169.254 -->
+      <line x1="280" y1="556" x2="380" y2="556" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="380" y1="556" x2="380" y2="620" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="236" y="546" width="24" height="12" rx="2" fill="#1c1a17"/>
+      <text x="248" y="555" fill="#a8a69d" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">NO</text>
+
+      <!-- Cloud DNS path → VPC VM query -->
+      <line x1="380" y1="668" x2="380" y2="704" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- VPC VM query result -->
+      <line x1="380" y1="752" x2="380" y2="780" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="352" y="768" width="24" height="12" rx="2" fill="#1c1a17"/>
+      <text x="364" y="777" fill="#a8a69d" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">YES</text>
+      <rect x="352" y="788" width="24" height="12" rx="2" fill="#1c1a17"/>
+      <text x="364" y="797" fill="#a8a69d" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">NO</text>
+
+      <!-- NO from VPC query → check Peering/Forwarding/Firewall -->
+      <line x1="460" y1="752" x2="560" y2="752" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="560" y1="752" x2="560" y2="704" stroke="#a8a69d" stroke-width="1.2"/>
+      <line x1="560" y1="704" x2="620" y2="704" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="424" y="742" width="24" height="12" rx="2" fill="#1c1a17"/>
+      <text x="436" y="751" fill="#a8a69d" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">NO</text>
+
+      <!-- NO from NodeLocal → app resolver / search path -->
+      <line x1="1000" y1="388" x2="1040" y2="388" stroke="#a8a69d" stroke-width="1.2"/>
+      <line x1="1040" y1="388" x2="1040" y2="620" stroke="#a8a69d" stroke-width="1.2"/>
+      <line x1="1040" y1="620" x2="960" y2="620" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- START oval -->
+      <rect x="420" y="40" width="280" height="56" rx="28" fill="rgba(241,239,231,0.03)" stroke="rgba(241,239,231,0.30)" stroke-width="1"/>
+      <text x="560" y="68" fill="#f1efe7" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Pod DNS Timeout</text>
+      <text x="560" y="84" fill="#a8a69d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">kubectl exec -it POD -- cat /etc/resolv.conf</text>
+
+      <!-- resolv.conf check box -->
+      <rect x="380" y="136" width="360" height="48" rx="6" fill="#2a2723" stroke="#f1efe7" stroke-width="1"/>
+      <text x="560" y="164" fill="#f1efe7" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">检查 /etc/resolv.conf nameserver</text>
+      <text x="560" y="176" fill="#a8a69d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">确认 Pod 第一跳 DNS 地址</text>
+
+      <!-- Diamond: nameserver type -->
+      <polygon points="560,220 680,288 560,356 440,288" fill="#2a2723" stroke="#f1efe7" stroke-width="1"/>
+      <text x="560" y="280" fill="#f1efe7" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">nameserver 类型?</text>
+      <text x="560" y="296" fill="#a8a69d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">169.254.20.10 / 10.x / 169.254.169.254</text>
+
+      <!-- Right: NodeLocal branch -->
+      <rect x="820" y="256" width="200" height="64" rx="8" fill="rgba(255,106,48,0.08)" stroke="#ff6a30" stroke-width="1.2"/>
+      <text x="920" y="284" fill="#f1efe7" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">NodeLocal DNSCache</text>
+      <text x="920" y="300" fill="#a8a69d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">dig @169.254.20.10 FQDN</text>
+
+      <!-- NodeLocal dig result diamond -->
+      <polygon points="920,388 1020,424 920,460 820,424" fill="#2a2723" stroke="#f1efe7" stroke-width="1"/>
+      <text x="920" y="418" fill="#f1efe7" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">NodeLocal</text>
+      <text x="920" y="432" fill="#a8a69d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">查询超时?</text>
+
+      <!-- NodeLocal timeout YES -->
+      <rect x="820" y="424" width="200" height="48" rx="6" fill="#2a2723" stroke="#a8a69d" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="920" y="448" fill="#a8a69d" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">查 node-local-dns Pod 日志</text>
+      <text x="920" y="462" fill="#78716c" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">和节点资源</text>
+
+      <!-- NodeLocal timeout NO -->
+      <rect x="820" y="536" width="220" height="64" rx="8" fill="#2a2723" stroke="#f1efe7" stroke-width="1"/>
+      <text x="930" y="564" fill="#f1efe7" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">问题在应用 resolver /</text>
+      <text x="930" y="580" fill="#a8a69d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">search path / Java 缓存</text>
+
+      <!-- Left: kube-dns branch -->
+      <rect x="80" y="424" width="240" height="48" rx="6" fill="#2a2723" stroke="#f1efe7" stroke-width="1"/>
+      <text x="200" y="448" fill="#f1efe7" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">kube-dns Service / Pod</text>
+      <text x="200" y="462" fill="#a8a69d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">检查副本数 / autoscaler</text>
+
+      <!-- kube-dns overload diamond -->
+      <polygon points="200,508 300,556 200,600 100,556" fill="#2a2723" stroke="#f1efe7" stroke-width="1"/>
+      <text x="200" y="546" fill="#f1efe7" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">kube-dns</text>
+      <text x="200" y="560" fill="#a8a69d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">过载?</text>
+
+      <!-- kube-dns YES scale/NodeLocal -->
+      <rect x="40" y="688" width="200" height="48" rx="6" fill="#2a2723" stroke="#f1efe7" stroke-width="1"/>
+      <text x="140" y="712" fill="#f1efe7" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">扩容或启用 NodeLocal</text>
+      <text x="140" y="726" fill="#a8a69d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">kubectl scale deployment</text>
+
+      <!-- Center: Cloud DNS for GKE branch -->
+      <rect x="260" y="508" width="240" height="48" rx="6" fill="#2a2723" stroke="#f1efe7" stroke-width="1"/>
+      <text x="380" y="532" fill="#f1efe7" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Cloud DNS for GKE</text>
+      <text x="380" y="546" fill="#a8a69d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">169.254.169.254</text>
+
+      <!-- VPC VM query -->
+      <rect x="260" y="620" width="240" height="48" rx="6" fill="#2a2723" stroke="#f1efe7" stroke-width="1"/>
+      <text x="380" y="644" fill="#f1efe7" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">VPC2 VM 查询 Cloud DNS</text>
+      <text x="380" y="658" fill="#a8a69d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">dig @169.254.169.254 FQDN</text>
+
+      <!-- VPC query result diamond -->
+      <polygon points="380,704 480,752 380,796 280,752" fill="#2a2723" stroke="#f1efe7" stroke-width="1"/>
+      <text x="380" y="744" fill="#f1efe7" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">VPC 查询</text>
+      <text x="380" y="758" fill="#a8a69d" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">超时?</text>
+
+      <!-- VPC YES: check forwarding/peering/firewall -->
+      <rect x="480" y="688" width="280" height="48" rx="6" fill="#2a2723" stroke="#a8a69d" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="620" y="712" fill="#a8a69d" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">查 DNS Peering / Forwarding /</text>
+      <text x="620" y="726" fill="#78716c" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Firewall / 35.199.192.0/19</text>
+
+      <!-- VPC NO: Pod network issue -->
+      <rect x="480" y="796" width="280" height="48" rx="6" fill="#2a2723" stroke="#a8a69d" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="620" y="820" fill="#a8a69d" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">查 Pod NetworkPolicy /</text>
+      <text x="620" y="834" fill="#78716c" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Service Mesh / 节点局部问题</text>
+
+      <!-- Legend -->
+      <line x1="40" y1="770" x2="1080" y2="770" stroke="rgba(241,239,231,0.10)" stroke-width="0.8"/>
+      <text x="40" y="786" fill="#a8a69d" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND · SHAPE CARRIES TYPE</text>
+      <rect x="40" y="798" width="24" height="12" rx="6" fill="rgba(241,239,231,0.03)" stroke="rgba(241,239,231,0.30)" stroke-width="1"/>
+      <text x="72" y="808" fill="#a8a69d" font-size="8.5" font-family="'Geist', sans-serif">Start / end</text>
+      <rect x="200" y="798" width="24" height="12" rx="2" fill="#2a2723" stroke="#f1efe7" stroke-width="1"/>
+      <text x="232" y="808" fill="#a8a69d" font-size="8.5" font-family="'Geist', sans-serif">Step</text>
+      <polygon points="396,804 408,798 420,804 408,810" fill="#2a2723" stroke="#f1efe7" stroke-width="1"/>
+      <text x="432" y="808" fill="#a8a69d" font-size="8.5" font-family="'Geist', sans-serif">Decision</text>
+      <line x1="588" y1="806" x2="616" y2="806" stroke="#ff6a30" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+      <text x="624" y="808" fill="#a8a69d" font-size="8.5" font-family="'Geist', sans-serif">Happy path</text>
+      <line x1="792" y1="806" x2="820" y2="806" stroke="#a8a69d" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <text x="828" y="808" fill="#a8a69d" font-size="8.5" font-family="'Geist', sans-serif">Branch</text>
+    </svg>
+  </div>
+</body>
+</html>

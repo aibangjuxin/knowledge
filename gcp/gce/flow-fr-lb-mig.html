@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GCP HTTPS LB · FR → Target Proxy → URL Map → Backend Service → MIG</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #f5f4ed;
+      --color-paper-2: #efeee5;
+      --color-ink: #0b0d0b;
+      --color-muted: #52534e;
+      --color-soft: #65655c;
+      --color-rule: rgba(11,13,11,0.12);
+      --color-accent: #f7591f;
+      --color-accent-tint: rgba(247,89,31,0.08);
+      --color-link: #1a70c7;
+      --font-sans: 'Geist', system-ui, sans-serif;
+      --font-serif: 'Instrument Serif', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      min-height: 100vh;
+      padding: 3rem 2rem;
+      color: var(--color-ink);
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { margin-bottom: 2.5rem; }
+    .header-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.75rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.75rem, 3vw + 1rem, 2.5rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      margin-bottom: 0.5rem;
+    }
+    .subtitle {
+      font-size: 1rem;
+      line-height: 1.55;
+      color: var(--color-muted);
+      max-width: 62ch;
+    }
+    .section-title {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin: 2.5rem 0 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--color-rule);
+    }
+    .diagram-container {
+      background: var(--color-paper-2);
+      border-radius: 8px;
+      border: 1px solid var(--color-rule);
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 960px; display: block; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr 0.9fr;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    @media (max-width: 820px) { .cards { grid-template-columns: 1fr; } }
+    .card {
+      background: #fff;
+      border-radius: 6px;
+      border: 1px solid var(--color-rule);
+      padding: 1.25rem;
+    }
+    .card .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.5rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.875rem;
+      padding-bottom: 0.875rem;
+      border-bottom: 1px solid rgba(11,13,11,0.08);
+    }
+    .card-dot { width: 7px; height: 7px; border-radius: 50%; }
+    .card-dot.ink { background: var(--color-ink); }
+    .card-dot.muted { background: var(--color-muted); }
+    .card-dot.coral { background: var(--color-accent); }
+    .card h3 {
+      font-size: 0.875rem;
+      font-weight: 600;
+      letter-spacing: -0.005em;
+    }
+    .card p, .card ul {
+      color: var(--color-muted);
+      font-size: 0.8125rem;
+      line-height: 1.55;
+      list-style: none;
+    }
+    .card li {
+      margin-bottom: 0.3rem;
+      padding-left: 0.875rem;
+      position: relative;
+    }
+    .card li::before {
+      content: '—';
+      position: absolute;
+      left: 0;
+      color: rgba(11,13,11,0.25);
+      font-size: 0.75rem;
+    }
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(11,13,11,0.10);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      color: var(--color-soft);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <p class="header-eyebrow">Architecture · GCP Load Balancing</p>
+      <h1>GCP HTTPS LB — how traffic walks from FR to MIG</h1>
+      <p class="subtitle">
+        Component topology and the 12-step request/response loop of a Global External HTTPS Load Balancer
+        in front of a Managed Instance Group. Health checks are a side-channel, never on the data path.
+      </p>
+    </div>
+
+    <!-- ===================== DIAGRAM 1: COMPONENT TOPOLOGY ===================== -->
+    <p class="section-title">1 · Component topology</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1040 520" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(11,13,11,0.10)"/>
+          </pattern>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#52534e"/>
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#f7591f"/>
+          </marker>
+          <marker id="arrow-dashed" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#757575"/>
+          </marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f5f4ed"/>
+        <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
+
+        <!-- ===== Arrows first (behind boxes) ===== -->
+        <!-- FR → Target HTTPS Proxy -->
+        <line x1="200" y1="232" x2="252" y2="232" stroke="#52534e" stroke-width="1.4" marker-end="url(#arrow)"/>
+        <!-- Proxy → URL Map -->
+        <line x1="412" y1="232" x2="464" y2="232" stroke="#52534e" stroke-width="1.4" marker-end="url(#arrow)"/>
+        <!-- URL Map → Backend Service (focal) -->
+        <line x1="624" y1="232" x2="676" y2="232" stroke="#f7591f" stroke-width="1.6" marker-end="url(#arrow-accent)"/>
+        <!-- Backend Service → MIG -->
+        <line x1="836" y1="232" x2="888" y2="232" stroke="#52534e" stroke-width="1.4" marker-end="url(#arrow)"/>
+        <!-- Backend Service · 关联 → Health Check (dashed, side-channel) -->
+        <line x1="756" y1="280" x2="756" y2="368" stroke="#757575" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#arrow-dashed)"/>
+        <!-- Health Check · 旁路探测 → MIG (dashed) -->
+        <line x1="888" y1="412" x2="936" y2="412" stroke="#757575" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#arrow-dashed)"/>
+
+        <!-- ===== Arrow labels (with mask rects) ===== -->
+        <!-- 1. 接收公网流量 -->
+        <rect x="208" y="212" width="48" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="232" y="222" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">RECEIVE</text>
+        <!-- 2. 解密 HTTPS -->
+        <rect x="416" y="212" width="56" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="444" y="222" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">TLS TERM</text>
+        <!-- 3. 路由匹配 -->
+        <rect x="624" y="212" width="56" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="652" y="222" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">ROUTE</text>
+        <!-- 4. 分发 -->
+        <rect x="832" y="212" width="48" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="856" y="222" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">DISPATCH</text>
+        <!-- 关联 -->
+        <rect x="764" y="318" width="36" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="782" y="328" fill="#757575" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">LINK</text>
+        <!-- 旁路探测 -->
+        <rect x="876" y="392" width="64" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="908" y="402" fill="#757575" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">PROBE :80/:443</text>
+
+        <!-- ===== Node 1: Forwarding Rule ===== -->
+        <rect x="40" y="200" width="160" height="64" rx="6" fill="#f5f4ed"/>
+        <rect x="40" y="200" width="160" height="64" rx="6" fill="rgba(82,83,78,0.10)" stroke="#65655c" stroke-width="1"/>
+        <rect x="48" y="208" width="28" height="12" rx="2" fill="transparent" stroke="rgba(101,101,92,0.40)" stroke-width="0.8"/>
+        <text x="62" y="217" fill="#65655c" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EDGE</text>
+        <text x="120" y="236" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Forwarding Rule</text>
+        <text x="120" y="252" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">TCP / UDP / HTTP(S)</text>
+
+        <!-- ===== Node 2: Target HTTPS Proxy ===== -->
+        <rect x="252" y="200" width="160" height="64" rx="6" fill="#f5f4ed"/>
+        <rect x="252" y="200" width="160" height="64" rx="6" fill="rgba(11,13,11,0.03)" stroke="rgba(11,13,11,0.30)" stroke-width="1"/>
+        <rect x="260" y="208" width="28" height="12" rx="2" fill="transparent" stroke="rgba(11,13,11,0.22)" stroke-width="0.8"/>
+        <text x="274" y="217" fill="#65655c" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PROXY</text>
+        <text x="332" y="236" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Target HTTPS Proxy</text>
+        <text x="332" y="252" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">SSL cert · TLS termination</text>
+
+        <!-- ===== Node 3: URL Map ===== -->
+        <rect x="464" y="200" width="160" height="64" rx="6" fill="#f5f4ed"/>
+        <rect x="464" y="200" width="160" height="64" rx="6" fill="rgba(11,13,11,0.03)" stroke="rgba(11,13,11,0.30)" stroke-width="1"/>
+        <rect x="472" y="208" width="28" height="12" rx="2" fill="transparent" stroke="rgba(11,13,11,0.22)" stroke-width="0.8"/>
+        <text x="486" y="217" fill="#65655c" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ROUTER</text>
+        <text x="544" y="236" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">URL Map</text>
+        <text x="544" y="252" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">host / path rules</text>
+
+        <!-- ===== Node 4: Backend Service (FOCAL — coral) ===== -->
+        <rect x="676" y="200" width="160" height="64" rx="6" fill="#f5f4ed"/>
+        <rect x="676" y="200" width="160" height="64" rx="6" fill="rgba(247,89,31,0.08)" stroke="#f7591f" stroke-width="1.2"/>
+        <rect x="684" y="208" width="40" height="12" rx="2" fill="transparent" stroke="rgba(247,89,31,0.50)" stroke-width="0.8"/>
+        <text x="704" y="217" fill="#f7591f" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">FOCAL</text>
+        <text x="844" y="258" fill="rgba(247,89,31,0.10)" font-size="32" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="end">01</text>
+        <text x="756" y="236" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Backend Service</text>
+        <text x="756" y="252" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">balancing · affinity · policy</text>
+
+        <!-- ===== Node 5: MIG ===== -->
+        <rect x="888" y="200" width="112" height="64" rx="6" fill="#f5f4ed"/>
+        <rect x="888" y="200" width="112" height="64" rx="6" fill="#ffffff" stroke="#0b0d0b" stroke-width="1"/>
+        <rect x="896" y="208" width="28" height="12" rx="2" fill="transparent" stroke="rgba(11,13,11,0.40)" stroke-width="0.8"/>
+        <text x="910" y="217" fill="#0b0d0b" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">MIG</text>
+        <text x="944" y="236" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">MIG</text>
+        <text x="944" y="252" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">VM pool</text>
+
+        <!-- ===== Node 6: Health Check (side-channel, dashed outline optional style) ===== -->
+        <rect x="676" y="368" width="160" height="64" rx="6" fill="#f5f4ed"/>
+        <rect x="676" y="368" width="160" height="64" rx="6" fill="rgba(11,13,11,0.05)" stroke="#52534e" stroke-width="1" stroke-dasharray="4 3"/>
+        <rect x="684" y="376" width="40" height="12" rx="2" fill="transparent" stroke="rgba(82,83,78,0.50)" stroke-width="0.8"/>
+        <text x="704" y="385" fill="#52534e" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PROBE</text>
+        <text x="756" y="404" fill="#0b0d0b" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Health Check</text>
+        <text x="756" y="420" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">35.191.0.0/16 · 130.211.0.0/22</text>
+
+        <!-- ===== Trust-zone hint (gcp edge) under FR ===== -->
+        <rect x="40" y="160" width="372" height="20" rx="3" fill="transparent" stroke="rgba(11,13,11,0.18)" stroke-width="0.8" stroke-dasharray="3 3"/>
+        <text x="226" y="174" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">GCP GLOBAL EDGE</text>
+
+        <!-- ===== Probe-source hint above MIG ===== -->
+        <rect x="676" y="280" width="324" height="20" rx="3" fill="transparent" stroke="rgba(117,117,117,0.40)" stroke-width="0.8" stroke-dasharray="3 3"/>
+        <text x="838" y="294" fill="#757575" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">OFF-DATA-PATH · SIDE CHANNEL</text>
+
+        <!-- ===== Legend strip ===== -->
+        <line x1="40" y1="464" x2="1000" y2="464" stroke="rgba(11,13,11,0.10)" stroke-width="0.8"/>
+        <text x="40" y="480" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+        <rect x="40" y="496" width="14" height="10" rx="2" fill="rgba(247,89,31,0.08)" stroke="#f7591f" stroke-width="1.2"/>
+        <text x="60" y="504" fill="#52534e" font-size="8.5" font-family="'Geist', sans-serif">Focal · the dispatch hub</text>
+
+        <rect x="232" y="496" width="14" height="10" rx="2" fill="#ffffff" stroke="#0b0d0b" stroke-width="1"/>
+        <text x="252" y="504" fill="#52534e" font-size="8.5" font-family="'Geist', sans-serif">Compute tier (MIG)</text>
+
+        <rect x="404" y="496" width="14" height="10" rx="2" fill="rgba(11,13,11,0.03)" stroke="rgba(11,13,11,0.30)" stroke-width="1"/>
+        <text x="424" y="504" fill="#52534e" font-size="8.5" font-family="'Geist', sans-serif">LB control plane</text>
+
+        <rect x="552" y="496" width="14" height="10" rx="2" fill="rgba(82,83,78,0.10)" stroke="#65655c" stroke-width="1"/>
+        <text x="572" y="504" fill="#52534e" font-size="8.5" font-family="'Geist', sans-serif">External / public</text>
+
+        <rect x="712" y="496" width="14" height="10" rx="2" fill="rgba(11,13,11,0.05)" stroke="#52534e" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="732" y="504" fill="#52534e" font-size="8.5" font-family="'Geist', sans-serif">Probe (off-path)</text>
+
+        <line x1="872" y1="502" x2="900" y2="502" stroke="#f7591f" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+        <text x="908" y="504" fill="#52534e" font-size="8.5" font-family="'Geist', sans-serif">Primary data path</text>
+      </svg>
+    </div>
+
+    <!-- ===================== DIAGRAM 2: REQUEST / RESPONSE / PROBE ===================== -->
+    <p class="section-title">2 · Request, response &amp; the parallel probe loop</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1040 560" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="dots2" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(11,13,11,0.10)"/>
+          </pattern>
+          <marker id="arrow2" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#0277bd"/>
+          </marker>
+          <marker id="arrow-probe" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#757575"/>
+          </marker>
+          <marker id="arrow-rsp" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#52534e"/>
+          </marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f5f4ed"/>
+        <rect width="100%" height="100%" fill="url(#dots2)" opacity="0.55"/>
+
+        <!-- ===== Lane headers ===== -->
+        <!-- Client lane -->
+        <rect x="40" y="40" width="140" height="40" rx="6" fill="rgba(82,83,78,0.10)" stroke="#65655c" stroke-width="1"/>
+        <text x="110" y="60" fill="#0b0d0b" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Client</text>
+        <text x="110" y="74" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">browser · curl</text>
+
+        <!-- GFR lane -->
+        <rect x="220" y="40" width="140" height="40" rx="6" fill="rgba(82,83,78,0.10)" stroke="#65655c" stroke-width="1"/>
+        <text x="290" y="60" fill="#0b0d0b" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Global FR</text>
+        <text x="290" y="74" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">public IP :443</text>
+
+        <!-- Proxy lane -->
+        <rect x="400" y="40" width="140" height="40" rx="6" fill="rgba(11,13,11,0.03)" stroke="rgba(11,13,11,0.30)" stroke-width="1"/>
+        <text x="470" y="60" fill="#0b0d0b" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Target Proxy</text>
+        <text x="470" y="74" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">TLS termination</text>
+
+        <!-- URL Map lane -->
+        <rect x="580" y="40" width="140" height="40" rx="6" fill="rgba(11,13,11,0.03)" stroke="rgba(11,13,11,0.30)" stroke-width="1"/>
+        <text x="650" y="60" fill="#0b0d0b" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">URL Map</text>
+        <text x="650" y="74" fill="#52534e" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">route rules</text>
+
+        <!-- Backend Service lane (focal) -->
+        <rect x="760" y="40" width="140" height="40" rx="6" fill="rgba(247,89,31,0.08)" stroke="#f7591f" stroke-width="1.2"/>
+        <text x="830" y="60" fill="#0b0d0b" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Backend Service</text>
+        <text x="830" y="74" fill="#f7591f" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">FOCAL · dispatch hub</text>
+
+        <!-- MIG lane -->
+        <rect x="940" y="40" width="60" height="40" rx="6" fill="#ffffff" stroke="#0b0d0b" stroke-width="1"/>
+        <text x="970" y="60" fill="#0b0d0b" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">MIG</text>
+        <text x="970" y="74" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">VM</text>
+
+        <!-- ===== Vertical lifelines (lanes) ===== -->
+        <line x1="110" y1="90" x2="110" y2="480" stroke="rgba(11,13,11,0.18)" stroke-width="0.8"/>
+        <line x1="290" y1="90" x2="290" y2="480" stroke="rgba(11,13,11,0.18)" stroke-width="0.8"/>
+        <line x1="470" y1="90" x2="470" y2="480" stroke="rgba(11,13,11,0.18)" stroke-width="0.8"/>
+        <line x1="650" y1="90" x2="650" y2="480" stroke="rgba(11,13,11,0.18)" stroke-width="0.8"/>
+        <line x1="830" y1="90" x2="830" y2="480" stroke="rgba(247,89,31,0.30)" stroke-width="0.8"/>
+        <line x1="970" y1="90" x2="970" y2="480" stroke="rgba(11,13,11,0.18)" stroke-width="0.8"/>
+
+        <!-- ===== Phase 1: Request path (1→5) — primary blue ===== -->
+        <!-- 1. Client → GFR (HTTPS request) -->
+        <line x1="110" y1="120" x2="290" y2="120" stroke="#0277bd" stroke-width="1.6" marker-end="url(#arrow2)"/>
+        <!-- 2. GFR → Proxy -->
+        <line x1="290" y1="148" x2="470" y2="148" stroke="#0277bd" stroke-width="1.6" marker-end="url(#arrow2)"/>
+        <!-- 3. Proxy → URL Map (TLS termination) -->
+        <line x1="470" y1="176" x2="650" y2="176" stroke="#0277bd" stroke-width="1.6" marker-end="url(#arrow2)"/>
+        <!-- 4. URL Map → Backend Service (route match) -->
+        <line x1="650" y1="204" x2="830" y2="204" stroke="#0277bd" stroke-width="1.6" marker-end="url(#arrow2)"/>
+        <!-- 5. Backend Service → MIG -->
+        <line x1="830" y1="232" x2="970" y2="232" stroke="#0277bd" stroke-width="1.6" marker-end="url(#arrow2)"/>
+
+        <!-- Request-phase labels -->
+        <rect x="170" y="110" width="60" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="200" y="120" fill="#0277bd" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">1. HTTPS REQ</text>
+        <rect x="350" y="138" width="60" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="380" y="148" fill="#0277bd" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">2. FORWARD</text>
+        <rect x="524" y="166" width="76" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="562" y="176" fill="#0277bd" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">3. TLS DECRYPT</text>
+        <rect x="708" y="194" width="64" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="740" y="204" fill="#0277bd" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">4. ROUTE MATCH</text>
+        <rect x="870" y="222" width="60" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="900" y="232" fill="#0277bd" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">5. TO VM</text>
+
+        <!-- ===== Phase 2: VM processing (6) ===== -->
+        <line x1="970" y1="270" x2="970" y2="270" stroke="#52534e" stroke-width="1.2"/>
+        <rect x="900" y="264" width="140" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="970" y="274" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">6. VM HANDLES REQUEST</text>
+        <rect x="900" y="252" width="140" height="16" rx="3" fill="rgba(11,13,11,0.05)" stroke="rgba(11,13,11,0.18)" stroke-width="0.8"/>
+
+        <!-- ===== Phase 3: Parallel probe (7) — dashed grey ===== -->
+        <line x1="830" y1="304" x2="970" y2="304" stroke="#757575" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#arrow-probe)"/>
+        <rect x="846" y="294" width="108" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="900" y="304" fill="#757575" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">7. PROBE (PARALLEL)</text>
+
+        <!-- ===== Phase 4: Response path (8→12) — muted grey, returns ===== -->
+        <line x1="970" y1="340" x2="830" y2="340" stroke="#52534e" stroke-width="1.4" marker-end="url(#arrow-rsp)"/>
+        <line x1="830" y1="368" x2="650" y2="368" stroke="#52534e" stroke-width="1.4" marker-end="url(#arrow-rsp)"/>
+        <line x1="650" y1="396" x2="470" y2="396" stroke="#52534e" stroke-width="1.4" marker-end="url(#arrow-rsp)"/>
+        <line x1="470" y1="424" x2="290" y2="424" stroke="#52534e" stroke-width="1.4" marker-end="url(#arrow-rsp)"/>
+        <line x1="290" y1="452" x2="110" y2="452" stroke="#52534e" stroke-width="1.4" marker-end="url(#arrow-rsp)"/>
+
+        <!-- Response-phase labels -->
+        <rect x="850" y="330" width="76" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="888" y="340" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">8. HTTP/S RSP</text>
+        <rect x="700" y="358" width="80" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="740" y="368" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">9. BACK TO URL MAP</text>
+        <rect x="510" y="386" width="100" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="560" y="396" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">10. BACK TO PROXY</text>
+        <rect x="324" y="414" width="112" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="380" y="424" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">11. TLS RE-ENCRYPT</text>
+        <rect x="156" y="442" width="84" height="12" rx="2" fill="#f5f4ed"/>
+        <text x="198" y="452" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">12. HTTPS RSP</text>
+
+        <!-- ===== Legend ===== -->
+        <line x1="40" y1="500" x2="1000" y2="500" stroke="rgba(11,13,11,0.10)" stroke-width="0.8"/>
+        <text x="40" y="516" fill="#52534e" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+        <line x1="40" y1="538" x2="68" y2="538" stroke="#0277bd" stroke-width="1.6" marker-end="url(#arrow2)"/>
+        <text x="76" y="540" fill="#52534e" font-size="8.5" font-family="'Geist', sans-serif">Request path (1–5)</text>
+
+        <line x1="240" y1="538" x2="268" y2="538" stroke="#52534e" stroke-width="1.4" marker-end="url(#arrow-rsp)"/>
+        <text x="276" y="540" fill="#52534e" font-size="8.5" font-family="'Geist', sans-serif">Response path (8–12)</text>
+
+        <line x1="456" y1="538" x2="484" y2="538" stroke="#757575" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#arrow-probe)"/>
+        <text x="492" y="540" fill="#52534e" font-size="8.5" font-family="'Geist', sans-serif">Probe (off-path, parallel)</text>
+
+        <rect x="724" y="532" width="14" height="10" rx="2" fill="rgba(247,89,31,0.08)" stroke="#f7591f" stroke-width="1.2"/>
+        <text x="744" y="540" fill="#52534e" font-size="8.5" font-family="'Geist', sans-serif">Focal lane (dispatch)</text>
+      </svg>
+    </div>
+
+    <!-- ===================== SUMMARY CARDS ===================== -->
+    <div class="cards">
+      <div class="card">
+        <p class="eyebrow">THE HEADLINE</p>
+        <div class="card-header"><span class="card-dot coral"></span><h3>Backend Service is the dispatch hub</h3></div>
+        <p>Every Global HTTPS Load Balancer chain funnels into one Backend Service. It holds the balancing mode, session affinity, Cloud Armor policy, the binding to one or more MIGs or NEGs, and the live health of every backend. Strip any other component and traffic breaks; strip this one and there is no load balancing.</p>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-dot ink"></span><h3>Health checks are off the data path</h3></div>
+        <ul>
+          <li>GCP probe ranges 35.191.0.0/16 &amp; 130.211.0.0/22 hit VMs on TCP/HTTP/HTTPS</li>
+          <li>Only the Backend Service reads the result; FR / Proxy / URL Map never see probes</li>
+          <li>Unhealthy VMs are taken out of the dispatch pool, not the LB chain</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-dot muted"></span><h3>Why the chain order matters</h3></div>
+        <p>FR pins IP and port. Proxy unwraps TLS. URL Map chooses a Backend Service by host / path. Backend Service picks a healthy VM. Each object is created and referenced left-to-right — gcloud rejects out-of-order dependencies.</p>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>GCP · Global External HTTPS Load Balancer · MIG</span>
+      <span>companion diagram for flow-fr-lb-mig.md</span>
+    </div>
+  </div>
+</body>
+</html>

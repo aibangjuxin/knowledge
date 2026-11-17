@@ -1,0 +1,1 @@
+19-solo-agentgateway-ambient-install.md

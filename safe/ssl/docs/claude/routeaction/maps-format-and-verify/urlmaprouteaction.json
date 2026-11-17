@@ -1,0 +1,105 @@
+{
+  "name": "abjx-env-uk-lex-poc-urlmap-routeaction",
+  "description": "Regional URL map using routeRules for transparent proxy host and path rewrites.",
+  "defaultService": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/abjx-abjx-lex-default-bs",
+  "hostRules": [
+    {
+      "hosts": [
+        "env-shortname.gcp.google.aibang"
+      ],
+      "pathMatcher": "default-matcher"
+    },
+    {
+      "hosts": [
+        "springboot-app.aibang-id.uk.aibang"
+      ],
+      "pathMatcher": "routeaction-matcher"
+    },
+    {
+      "hosts": [
+        "springboot-app2.aibang-id.uk.aibang"
+      ],
+      "pathMatcher": "routeaction-matcher-app2"
+    }
+  ],
+  "pathMatchers": [
+    {
+      "name": "default-matcher",
+      "defaultService": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/abjx-abjx-lex-default-bs"
+    },
+    {
+      "name": "routeaction-matcher",
+      "defaultService": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/abjx-abjx-lex-default-bs",
+      "routeRules": [
+        {
+          "priority": 10,
+          "description": "Transparent proxy for springboot-app host while keeping the browser URL unchanged.",
+          "matchRules": [
+            {
+              "prefixMatch": "/"
+            }
+          ],
+          "routeAction": {
+            "urlRewrite": {
+              "hostRewrite": "env-shortname.gcp.google.aibang",
+              "pathPrefixRewrite": "/springboot-app"
+            },
+            "weightedBackendServices": [
+              {
+                "backendService": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/lex-terminal-po-backend-service",
+                "weight": 100
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "routeaction-matcher-app2",
+      "defaultService": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/abjx-abjx-lex-default-bs",
+      "routeRules": [
+        {
+          "priority": 10,
+          "description": "Transparent proxy for springboot-app2 host while keeping the browser URL unchanged.",
+          "matchRules": [
+            {
+              "prefixMatch": "/"
+            }
+          ],
+          "routeAction": {
+            "urlRewrite": {
+              "hostRewrite": "env-shortname.gcp.google.aibang",
+              "pathPrefixRewrite": "/springboot-app2"
+            },
+            "weightedBackendServices": [
+              {
+                "backendService": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/lex-terminal-po-backend-service",
+                "weight": 100
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "description": "long host should rewrite transparently to the terminal backend",
+      "host": "springboot-app.aibang-id.uk.aibang",
+      "path": "/actuator/health",
+      "service": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/lex-terminal-po-backend-service"
+    },
+    {
+      "description": "default host should still use the default backend",
+      "host": "env-shortname.gcp.google.aibang",
+      "path": "/",
+      "service": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/abjx-abjx-lex-default-bs"
+    },
+    {
+      "description": "long host app2 should rewrite transparently to the terminal backend with prefix /springboot-app2",
+      "host": "springboot-app2.aibang-id.uk.aibang",
+      "path": "/api/test",
+      "service": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/lex-terminal-po-backend-service"
+    }
+  ]
+}

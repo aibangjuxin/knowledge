@@ -1,0 +1,157 @@
+# ==============================================================================
+# 网络策略：把"只能经 nginx 出网"这条管控真正落地
+#
+# 策略清单（共 5 条）：
+#   app-workload ns : default-deny-egress          → 所有出站默认拒绝
+#                     allow-egress-via-proxy      → 只放行代理 + DNS
+#   platform-net ns : default-deny-egress          → 所有出站默认拒绝（防漏网）
+#                     nginx-egress-proxy-egress   → nginx 只放行中间服务 + DNS
+#                     egress-partner-client-egress→ 中间服务才可出网到外部
+#
+# ⚠️ 前置条件：集群必须启用 Dataplane V2（GKE 的 networkPolicyConfig.enabled）
+#    gcloud container clusters describe CLUSTER --zone ZONE \
+#      --format="value(networkConfig.datapathProvider)"   # 期望 NETWORK_POLICY
+#
+# ⚠️ 启用 NetworkPolicy 会关闭 container-native load balancing，
+#    受影响的对外 Service 需加 cloud.google.com/neg 注解。
+#
+# ⚠️ ipBlock 在 Dataplane V2 下【不覆盖 Pod 之间流量】，
+#    Pod 间放行必须用 podSelector / namespaceSelector。
+# ==============================================================================
+
+# ---------- 1. 业务命名空间：默认拒绝一切出站 ----------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+  namespace: app-workload
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress: []
+---
+# ---------- 2. 业务命名空间：只允许访问代理 + DNS ----------
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-via-proxy
+  namespace: app-workload
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # 允许访问出口代理（8082 = L7 主通道，8080 = L4 备用通道）
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: nginx-egress-proxy
+          namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform-net
+      ports:
+        - protocol: TCP
+          port: 8082
+        - protocol: TCP
+          port: 8080
+    # 必须放行 DNS，否则 default-deny 会把域名解析掐断（表现为间歇性 502）
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# ---------- 3. 代理命名空间：默认拒绝一切出站 ----------
+# 没有这条，platform-net 里任何没被后续策略选中的 Pod 都能自由出网。
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+  namespace: platform-net
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress: []
+---
+# ---------- 4. nginx Pod：只允许访问"集群内中间服务" + DNS ----------
+# 这一条是本方案的关键：nginx 本身【不允许】直接出网。
+# 变体（nginx 直接出网，B-1）：把下面 ipBlock 规则加进来，并删除对中间服务的放行。
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nginx-egress-proxy-egress
+  namespace: platform-net
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: nginx-egress-proxy
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: egress-partner-client
+          namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: platform-net
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# ---------- 5. 中间服务 Pod：允许出网到外部 + DNS ----------
+# 出网主体在这里；出口 IP 由 Cloud NAT / 节点池决定，不是 nginx 决定。
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-partner-client-egress
+  namespace: platform-net
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: egress-partner-client
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              # 排除 VPC 私有网段与元数据服务，避免代理被用于横向探测内网
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.169.254/32
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

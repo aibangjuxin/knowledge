@@ -1,0 +1,31 @@
+# render-check 的策略文件
+#
+# 渲染检查（render-check.py）的规则可以在这里调：
+#   · severities：把某条规则的级别改成 error / warn / info / off
+#   · ignores：  「路径:规则」—— 这条规则在这个路径上不报
+#
+# 路径支持 glob（* 和 ?），会同时对**相对路径**和**文件名**做匹配。
+
+# ---------------------------------------------------------------------------
+# 级别调整
+# ---------------------------------------------------------------------------
+severities:
+  # 生产环境必须打镜像 tag，不能用 latest
+  pinned-image: warn
+  # 缺探针：生产是错误，示例里当警告
+  require-probes: warn
+  # 缺 resources：这是硬伤，直接当错误
+  require-resources: error
+  # prod 环境副本数
+  prod-replicas: warn
+  # StatefulSet 没有 PVC
+  no-pvc: info
+
+# ---------------------------------------------------------------------------
+# 已知例外
+# ---------------------------------------------------------------------------
+ignores:
+  # redis 示例故意用 emptyDir（演示"没有持久化是什么样"）。
+  # 真实业务请照 ../examples/redis-statefulset-pvc.yaml 改成
+  # StatefulSet + volumeClaimTemplates。
+  - "apps/redis/*:no-pvc"

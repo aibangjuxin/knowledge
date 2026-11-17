@@ -1,0 +1,117 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: istio-ingressgateway-int-sa
+  namespace: istio-ingressgateway-int
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: istio-ingressgateway-int
+  namespace: istio-ingressgateway-int
+  labels:
+    app: istio-ingressgateway-int
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: istio-ingressgateway-int
+  template:
+    metadata:
+      labels:
+        app: istio-ingressgateway-int
+        istio: ingressgateway-int
+      annotations:
+        inject.istio.io/templates: gateway
+    spec:
+      serviceAccountName: istio-ingressgateway-int-sa
+      containers:
+      - name: istio-proxy
+        image: auto
+        ports:
+        - name: https
+          containerPort: 8443
+        - name: status-port
+          containerPort: 15021
+        readinessProbe:
+          httpGet:
+            path: /healthz/ready
+            port: 15021
+          initialDelaySeconds: 1
+          periodSeconds: 2
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: "1"
+            memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: istio-ingressgateway-int
+  namespace: istio-ingressgateway-int
+  labels:
+    app: istio-ingressgateway-int
+spec:
+  type: ClusterIP
+  selector:
+    app: istio-ingressgateway-int
+  ports:
+  - name: https
+    port: 443
+    targetPort: 8443
+  - name: status-port
+    port: 15021
+    targetPort: 15021
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: istio-ingressgateway-int
+  namespace: istio-ingressgateway-int
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: istio-ingressgateway-int
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: istio-ingressgateway-int
+  namespace: istio-ingressgateway-int
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: istio-ingressgateway-int
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: team-a-gateway
+  namespace: istio-ingressgateway-int
+spec:
+  selector:
+    app: istio-ingressgateway-int
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    hosts:
+    - "*.team-a.appdev.aibang"
+    tls:
+      mode: SIMPLE
+      credentialName: team-a-gateway-tls

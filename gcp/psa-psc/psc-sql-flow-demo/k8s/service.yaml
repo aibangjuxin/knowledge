@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-app-service
+  namespace: psc-demo
+  labels:
+    app: db-app
+    component: service
+  annotations:
+    # 负载均衡器配置
+    cloud.google.com/load-balancer-type: "Internal"
+spec:
+  type: ClusterIP
+  selector:
+    app: db-app
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  sessionAffinity: None
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-app-headless
+  namespace: psc-demo
+  labels:
+    app: db-app
+    component: headless-service
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: db-app
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP

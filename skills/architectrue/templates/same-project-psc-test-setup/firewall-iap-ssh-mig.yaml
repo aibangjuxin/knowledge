@@ -1,0 +1,22 @@
+># Firewall rule: allow IAP-tunneled SSH into MIG VMs by their tag.
+#
+# Why needed: the default `allow-ssh-from-iap` rule that ships with most
+# GCP environments has target-tags=bastion only — MIG VMs with a
+# different tag (e.g., 'tenant-backend') can't be reached via IAP
+# unless you add a new rule.
+#
+# Apply once per MIG tag. This is a regional-agnostic global rule.
+
+- name: ajbx-allow-iap-ssh-to-mig
+  gcloud: |
+    gcloud compute firewall-rules create {{ rule_name }} \
+      --project={{ project }} \
+      --direction=INGRESS --action=ALLOW \
+      --rules=tcp:22 \
+      --source-ranges=35.235.240.0/20 \
+      --network={{ network }} \
+      --target-tags={{ mig_tag }}
+  notes: |
+    After applying, IAP-tunneled SSH to MIG instances works:
+      gcloud compute ssh {{ mig_instance }} --zone={{ zone }} \
+        --tunnel-through-iap --command="systemctl status tenant-server"

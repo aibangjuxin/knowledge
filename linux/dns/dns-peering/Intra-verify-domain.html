@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Internal DNS Verify</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --accent-color: #10.721; /* Emerald for Internal feel */
+            --accent-hover: #059669;
+            --success: #22c55e;
+            --warning: #eab308;
+            --error: #ef4444;
+            --local: #06b6d4;
+            --border-radius: 12px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-color);
+            /* Different gradient to distinguish from public tool */
+            background-image: 
+                radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            animation: fadeInDown 0.8s ease-out;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(to right, #34d399, #60a5fa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+        }
+
+        .badge-internal {
+            background: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+            padding: 0.2rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            vertical-align: middle;
+            margin-left: 0.5rem;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        p.subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .search-box {
+            background: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            animation: fadeInUp 0.8s ease-out 0.2s backwards;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 0.8rem 1.2rem;
+            color: var(--text-primary);
+            font-size: 1.1rem;
+            transition: var(--transition);
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
+        }
+
+        button {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        button:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .loader {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .results-container {
+            display: none; /* Hidden by default */
+            animation: fadeInUp 0.5s ease-out;
+        }
+
+        .verdict-card {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            padding: 2rem;
+            text-align: center;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .verdict-title {
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .verdict-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+        }
+
+        .peering-status {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            font-size: 0.9rem;
+        }
+
+        .peering-icon {
+            margin-right: 0.5rem;
+        }
+
+        .servers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .server-card {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: var(--transition);
+        }
+
+        .server-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+        }
+
+        .server-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 0.8rem;
+        }
+
+        .server-name {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .server-desc {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .status-success { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
+        .status-error { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+        .status-loading { background: rgba(96, 165, 250, 0.2); color: #60a5fa; }
+
+        .ip-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .ip-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+            font-family: 'SF Mono', 'Roboto Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        .ip-item:last-child { margin-bottom: 0; }
+
+        .ip-type-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+
+        .type-Public { background-color: var(--success); box-shadow: 0 0 8px var(--success); }
+        .type-Private { background-color: var(--warning); box-shadow: 0 0 8px var(--warning); }
+        .type-Local { background-color: var(--local); box-shadow: 0 0 8px var(--local); }
+        .type-Other, .type-Reserved, .type-Unknown { background-color: var(--text-secondary); }
+
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Footer */
+        footer {
+            margin-top: auto;
+            padding: 2rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Internal DNS Verify <span class="badge-internal">INTRA</span></h1>
+            <p class="subtitle">System Dig • Internal Peering • Private Network</p>
+        </header>
+
+        <div class="search-box">
+            <input type="text" id="domainInput" placeholder="Enter domain (e.g., internal-service.lan)" autocomplete="off">
+            <button id="checkBtn" onclick="runCheck()">Resolve</button>
+        </div>
+
+        <div id="resultsArea" class="results-container">
+            <div class="verdict-card" id="verdictCard">
+                <div class="verdict-title">Final Verdict</div>
+                <div id="finalVerdict" class="verdict-value">--</div>
+                <div id="peeringStatus" class="peering-status">
+                    <span class="peering-icon">❓</span> <span id="peeringText">Checking...</span>
+                </div>
+            </div>
+
+            <div class="servers-grid" id="serversGrid">
+                <!-- Cards will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        Internal Tool • Powered by Antigravity
+    </footer>
+
+    <script>
+        const API_ENDPOINT = '/api/check';
+
+        // --- UI Functions ---
+        const domainInput = document.getElementById('domainInput');
+        
+        domainInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                runCheck();
+            }
+        });
+
+        async function runCheck() {
+            const domain = domainInput.value.trim();
+            if (!domain) return;
+
+            // Reset UI
+            document.getElementById('resultsArea').style.display = 'block';
+            document.getElementById('serversGrid').innerHTML = '';
+            document.getElementById('checkBtn').disabled = true;
+            document.getElementById('checkBtn').innerHTML = '<span class="loader"></span>Processing';
+            
+            document.getElementById('finalVerdict').textContent = '...';
+            document.getElementById('finalVerdict').style.color = 'var(--text-secondary)';
+            document.getElementById('peeringText').textContent = 'Querying backend...';
+
+            try {
+                // Fetch from Python Backend
+                const response = await fetch(`${API_ENDPOINT}?domain=${encodeURIComponent(domain)}`);
+                
+                if (!response.ok) {
+                    throw new Error(`Server Error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Render Results
+                renderResults(data);
+
+            } catch (error) {
+                console.error("Analysis Failed:", error);
+                document.getElementById('finalVerdict').textContent = "ERROR";
+                document.getElementById('finalVerdict').style.color = "var(--error)";
+                document.getElementById('peeringText').textContent = error.message;
+            } finally {
+                // Reset Button
+                document.getElementById('checkBtn').disabled = false;
+                document.getElementById('checkBtn').textContent = 'Resolve';
+            }
+        }
+
+        function renderResults(data) {
+            // Data format follows the JSON output of the bash script
+            // {
+            //   "domain": "...",
+            //   "peering_status": "MATCHED/UNMATCHED",
+            //   "verdict": "PUBLIC/PRIVATE/...",
+            //   "dns_servers": [ ... ]
+            // }
+
+            // 1. Peering Status
+            const peeringText = document.getElementById('peeringText');
+            const peeringIcon = document.querySelector('.peering-icon');
+            
+            if (data.peering_status === "MATCHED") {
+                peeringText.textContent = "Matched (In Peering List)";
+                peeringText.style.color = "var(--success)";
+                peeringIcon.textContent = "✅";
+            } else {
+                peeringText.textContent = "Unmatched";
+                peeringText.style.color = "var(--warning)";
+                peeringIcon.textContent = "ℹ️";
+            }
+
+            // 2. Final Verdict
+            const verdictEl = document.getElementById('finalVerdict');
+            verdictEl.textContent = data.verdict;
+            
+            if (data.verdict === 'PUBLIC') verdictEl.style.color = "var(--success)";
+            else if (data.verdict === 'PRIVATE') verdictEl.style.color = "var(--warning)";
+            else if (data.verdict === 'LOCAL') verdictEl.style.color = "var(--local)";
+            else verdictEl.style.color = "var(--text-secondary)";
+
+            // 3. DNS Servers
+            const grid = document.getElementById('serversGrid');
+            
+            if (data.dns_servers && data.dns_servers.length > 0) {
+                data.dns_servers.forEach(server => {
+                    const card = document.createElement('div');
+                    card.className = 'server-card';
+                    
+                    let statusClass = 'status-success';
+                    if (server.status !== 'SUCCESS') statusClass = 'status-error';
+
+                    let ipListHtml = '';
+                    if (server.records && server.records.length > 0) {
+                        ipListHtml = `<ul class="ip-list">` + 
+                            server.records.map(rec => `
+                                <li class="ip-item">
+                                    <span class="ip-type-dot type-${rec.type}"></span>${rec.ip}
+                                </li>
+                            `).join('') + 
+                            `</ul>`;
+                    } else if (server.status === 'SUCCESS') {
+                         ipListHtml = `<div style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.5rem">No records found</div>`;
+                    } else {
+                         ipListHtml = `<div style="color:var(--error);font-size:0.9rem;margin-top:0.5rem">Query Failed</div>`;
+                    }
+
+                    card.innerHTML = `
+                        <div class="server-header">
+                            <div>
+                                <div class="server-name">${server.address}</div>
+                                <div class="server-desc">${server.description}</div>
+                            </div>
+                            <span class="status-badge ${statusClass}">${server.status}</span>
+                        </div>
+                        ${ipListHtml}
+                    `;
+                    grid.appendChild(card);
+                });
+            } else {
+                 grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text-secondary)">No DNS server results returned.</div>';
+            }
+        }
+    </script>
+</body>
+</html>

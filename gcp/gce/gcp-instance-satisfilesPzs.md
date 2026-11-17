@@ -1,0 +1,1 @@
+在Google Cloud中，satisfiesPzs（满足PZS）是一个布尔值属性，表示实例是否满足Sole-Tenant节点的放置要求（Placement Zone Selection）。当为true时，表示实例被成功放置在符合PZS（Placement Zone Selection）要求的区域中；当为false时，表示实例不满足PZS要求。这通常与独占节点（Sole-tenant nodes）和工作负载隔离策略相关，用于确保实例在特定的物理位置或区域运行，以满足特定的安全性和隔离需求。

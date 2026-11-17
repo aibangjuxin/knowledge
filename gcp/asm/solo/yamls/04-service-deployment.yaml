@@ -1,0 +1,71 @@
+# =====================================================================
+# File: 04-service-deployment.yaml
+# 作用: 业务 Service + Deployment(Ambient 模式下回归"裸 HTTP")
+#
+# ⭐ **Ambient 最大的架构红利在这一文件体现**:
+#   业务容器不再需要在 spec 内部:
+#     - 监听 443 + 挂通配证书 volumeMount
+#     - 任何 skip-verify / 任何 TLS 配置
+#   容器只 listen 一个 HTTP 端口(这里 8080),中间人攻击面由
+#   ztunnel 在节点级透明加密(SPIFFE mTLS),对应用完全无感
+#   这也是 background.md "Pod 还是走自己的 Https" 痛点的解药
+# =====================================================================
+---
+# Service:ClusterIP 即可,gateway-api 链路仍不需 NodePort/LB
+apiVersion: v1
+kind: Service
+metadata:
+  name: tenant-app-svc
+  namespace: tenant-runtime
+spec:
+  type: ClusterIP
+  selector:
+    app: tenant-app
+  ports:
+    # ⭐ 容器内只 listen 8080/http;**不必 listen 443/https**
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+
+---
+# Deployment — 业务容器
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tenant-app
+  namespace: tenant-runtime
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: tenant-app
+  template:
+    metadata:
+      labels:
+        app: tenant-app
+      # ⭐ Ambient 下不需要 sidecar.istio.io/inject 注解
+      # (打入 namespace 的 `istio.io/dataplane-mode=ambient` 已经足够)
+    spec:
+      containers:
+        - name: tenant-app
+          # 任何 HTTP 服务镜像均可 — 这里示例用 httpbin / nginx / echo 都行
+          image: gcr.io/google-samples/microservices-demo/frontend:v0.3.8
+          ports:
+            - containerPort: 8080
+          # ⭐ 容器只需要 listen HTTP — 没有 tls volumeMount,没有证书
+          env:
+            - name: PORT
+              value: "8080"
+          # 健康检查(Lab 默认即可)
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      # ⭐ 强制不提 sidecar(ambient 模式下也没人帮你注入)
+      # istio-proxy 容器**不该出现** — 如果自动注入了反而说明 namespace
+      # 没有正确打 ambient 标签,排查:
+      #   kubectl get ns tenant-runtime --show-labels
+      #   kubectl describe deploy tenant-app -n tenant-runtime

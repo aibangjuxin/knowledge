@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: python-health-demo-svc
+  labels:
+    app: python-health-demo
+spec:
+  type: ClusterIP
+  selector:
+    # 选择所有带有此 app 标签的 Pod (包含 v2025.11.24 和 v2025.11.25)
+    app: python-health-demo
+  ports:
+  - port: 8443
+    targetPort: 8443
+    protocol: TCP
+    name: https

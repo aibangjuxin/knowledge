@@ -1,0 +1,10 @@
+set history=500
+set pastetoggle=<F10>
+set number
+set paste
+set tabstop=2
+set shiftwidth=2
+set expandtab
+set autoindent
+set smartindent
+autocmd FileType yaml setlocal tabstop=2 shiftwidth=2 expandtab

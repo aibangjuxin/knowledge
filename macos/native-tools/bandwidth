@@ -1,0 +1,654 @@
+#!/usr/bin/env zsh
+# bandwidth — 带宽 / 响应性实测 + 历史趋势(networkQuality 的封装与解读)
+#
+# 设计目标:
+#   - 系统设置里那个"网络"面板只给一个模糊的信号格;`networkQuality` 有完整数据,
+#     但它默认把原始 JSON 甩给你。这里把 Mbps / 响应性 / 缓冲膨胀 / 延迟分布
+#     翻译成人能直接下结论的表,并且记住历史,能看出"最近一周在变差"。
+#   - 免 brew / 免 jq / 免 python:只 zsh + networkQuality + awk + scutil
+#   - 显示:
+#       ① 测速前的现场快照:走哪条路、有没有代理 / VPN(不然后面全是误读)
+#       ② 下行 / 上行吞吐(注意单位是 bit/s,不是 byte/s)
+#       ③ 响应性 = 满载延迟;与空闲 RTT 的差值就是缓冲膨胀(bufferbloat)
+#       ④ 延迟样本的 p50 / p90 / p99 + 文本直方图
+#       ⑤ 协议与链路细节(HTTP 版本、Wi-Fi 蜂窝 RAT、ECN、L4S、是否被代理)
+#       ⑥ 历史趋势(默认存 ~/.cache/native-tools/bandwidth.tsv,最多留 200 条)
+#       ⑦ 结论:该换网 / 该关代理 / 该换 DNS
+#   - 只读:不下载安装任何东西,只发一次测速流量(默认约 20 秒)
+#
+# 用法:
+#   bandwidth                    # 完整测速(下行 + 上行,约 20s)
+#   bandwidth --seconds 10       # 缩短测速时间
+#   bandwidth --quick            # 只测下行(不测上传,更接近“看片流畅度”)
+#   bandwidth --interface en0    # 绑定到指定网卡(绕开 VPN 隧道)
+#   bandwidth --history          # 只看历史,不测速
+#   bandwidth --json
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -r _TAB=$'\t'
+typeset -r HIST_DIR="$HOME/.cache/native-tools"
+typeset -r HIST_FILE="$HIST_DIR/bandwidth.tsv"
+typeset -i SECONDS_BUDGET=20
+typeset -i RECENT_N=10
+typeset QUICK=false HISTORY_ONLY=false
+typeset BIND_IF=''
+typeset AS_JSON=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --seconds)    SECONDS_BUDGET=$2; shift 2 ;;
+    --seconds=*)  SECONDS_BUDGET=${1#*=}; shift ;;
+    --quick)      QUICK=true; shift ;;
+    --interface)  BIND_IF=$2; shift 2 ;;
+    --history)    HISTORY_ONLY=true; shift ;;
+    --recent)     RECENT_N=$2; shift 2 ;;
+    --json)       AS_JSON=true; shift ;;
+    --version)    echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--seconds N] [--quick] [--interface IF] [--history] [--recent N] [--json]"
+      echo ""
+      echo "  --seconds N     测速时长上限(默认 $SECONDS_BUDGET 秒,越大越准)"
+      echo "  --quick         只测下行(跳过上传测试)"
+      echo "  --interface IF  绑定到指定网卡(如 en0),用来绕开 VPN 隧道"
+      echo "  --history       只看历史记录,不发起测速"
+      echo "  --recent N      历史表显示最近 N 条(默认 $RECENT_N)"
+      echo "  --json          TSV 输出"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 && $AS_JSON == false ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+typeset -g J_DL_MBPS='?' J_UL_MBPS='?' J_RESP='?' J_RTT='?' J_IFACE='?' J_OS=''
+typeset -g J_DUR='?' J_FLOWS_DL='?' J_FLOWS_UL='?' J_DL_BYTES='?' J_UL_BYTES='?'
+typeset -g J_HTTP_VER='?' J_RAT='?' J_PROXY='?' J_ECTYPE='?' J_ECN='?' J_L4S='?' J_PORTS='?'
+typeset -g J_P50='?' J_P90='?' J_P99='?' J_IDLE_P50='?' J_BLOAT='?'
+typeset -g J_LAT_N=0 J_ERR=''
+# 这些声明必须放在文件头这一段:之前它们写在 _calc_latency 之后,一次重构顺手删掉,
+# 结果 _render_human 引用 J_ERR 直接 "parameter not set"。
+typeset -g -a J_LAT=()      # 直方图桶:bucket<TAB>count<TAB>ms_range
+typeset -g -a J_PRE=()      # 测速前现场:key<TAB>value<TAB>note
+typeset -g -a J_TREND=()    # when<TAB>down<TAB>up<TAB>resp<TAB>iface
+
+# ---- ① 测速前现场 --------------------------------------------------------
+# 这一节的价值:networkQuality 报的 interface_name 经常是 utun*(VPN 隧道),
+# 这时候测出来的数是"经过代理之后"的,拿它评价宽带会得出完全错误的结论。
+# 不跑 networkQuality 也能先看清楚自己在哪条路上。
+_collect_pre() {
+  local gw dev proxy_on='' vpn=''
+  # 默认路由的接口与网关
+  local route_line
+  route_line=$(route -n get default 2>/dev/null | awk -F': ' '/interface:|gateway:/ {print $1 "=" $2}' | tr '\n' ' ')
+  J_PRE+=("default_route${_TAB}${route_line:-?}${_TAB}这个接口才是真实出口")
+
+  # 系统代理(HTTP/HTTPS/SOCKS)——有代理则 networkQuality 也会走它
+  proxy_on=$(scutil --proxy 2>/dev/null | LC_ALL=C awk -F': ' '
+    /HTTPEnable|HTTPSEnable|SOCKSEnable/ { en[$1] = $2 }
+    /HTTPProxy|HTTPSProxy|SOCKSProxy/ { ad[$1] = $2 }
+    END {
+      s = ""
+      if (en["HTTPEnable"] == "1")    s = s " http=" ad["HTTPProxy"]
+      if (en["HTTPSEnable"] == "1")   s = s " https=" ad["HTTPSProxy"]
+      if (en["SOCKSEnable"] == "1")   s = s " socks=" ad["SOCKSProxy"]
+      print s
+    }' | sed 's/^ *//; s/ *$//')
+  J_PRE+=("system_proxy${_TAB}${proxy_on:-无}${_TAB}有代理时测速反映的是代理链路")
+
+  # 正在生效的 VPN(utun 接口 + 默认路由里有没有 utun)
+  local utuns
+  utuns=$(ifconfig 2>/dev/null | LC_ALL=C awk '/^utun/ {print $1}' | tr '\n' ' ')
+  utuns=${utuns% }
+  if [[ $route_line == *utun* ]]; then
+    vpn='默认路由走 utun(全局 VPN / TUN 模式)'
+  elif [[ -n $utuns ]]; then
+    vpn="存在 $utuns 但默认路由没走它(分流 / 分应用模式)"
+  else
+    vpn='无'
+  fi
+  J_PRE+=("vpn${_TAB}${vpn}${_TAB}有 TUN 全局模式时建议加 --interface en0 重测")
+
+  # 出口接口的链路类型:Wi-Fi 还是有线
+  dev=$(print -r -- "$route_line" | sed -nE 's/.*interface=([^ ]+).*/\1/p')
+  local medium
+  medium=$(networksetup -listallhardwareports 2>/dev/null | LC_ALL=C awk -v d="${dev}" '
+    /^Hardware Port:/ { port = $3 }
+    /^Device:/       { if ($2 == d) { print port; exit } }')
+  if [[ $dev == utun* ]]; then
+    J_PRE+=("link${_TAB}${dev}${_TAB}VPN 隧道(无物理链路)${_TAB}物理链路要单独看 en0/en1")
+  else
+    J_PRE+=("link${_TAB}${dev:-?}${_TAB}${medium:-未知}${_TAB}链路类型决定抖动上限")
+  fi
+}
+
+# ---- ② 跑测速 ------------------------------------------------------------
+# 坑(单位):networkQuality 的 `dl_throughput` / `ul_throughput` 是 **bit/s**,
+# 不是 byte/s。实测 905216013 字节 / 19.9 秒 = 363 Mbps,而字段值 385357120
+# 正好是 385 Mbps —— 除以 1e6 即可,再乘 8 就会离谱地放大 8 倍。
+# 坑(运行时长):不传 -M 它自己会跑 20 秒以上;`-M` 给的是总时长上限。
+# 入参:networkQuality -c 的 JSON 文件路径
+_run_measure() {
+  local nq_tmp=$1
+  [[ -s $nq_tmp ]] || { J_ERR='networkQuality 没有输出'; return 1 }
+
+  # JSON 解析交给 awk:不支持 jq,也不把整个 JSON 塞进 shell 变量(见 README 坑 #38)。
+  # 只提取标量字段,数组字段(延迟样本)单独算好再输出。
+  LC_ALL=C awk '
+    # 标量字段
+    #
+    # 坑(很隐蔽):networkQuality 的 JSON 排版是  "key" : value,
+    # **冒号前面有空格**。于是 awk 的 $1 = 加上引号的键名、$2 = ":",
+    # 按 `$2` 取值拿到的是一串冒号,所有数字全变 0(实测下行显示 0.0 Mbps)。
+    # 不要用 $1/$2 拆 JSON:键名里自取(sub(/".*/))、值把"到第一个冒号为止"的前缀去掉。
+    /^[[:space:]]*"(dl_throughput|ul_throughput|responsiveness|base_rtt|interface_name|dl_phase_duration|ul_phase_duration|dl_flows|ul_flows|dl_bytes_transferred|ul_bytes_transferred|os_version)"[[:space:]]*:/ {
+      line = $0
+      key = line; sub(/^[[:space:]]*"/, "", key); sub(/".*/, "", key)
+      val = line; sub(/^[^:]*:[[:space:]]*/, "", val)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", val)
+      gsub(/,$/, "", val)
+      gsub(/^"|"$/, "", val)
+      printf "S\t%s\t%s\n", key, val
+    }
+    # other 里的链路信息。它是**嵌套三层**的,而且排版是多行的:
+    #     "other" : {
+    #       "interface-type" : {
+    #         "wifi" : 70
+    #       },
+    #       …}
+    # 坑:早先按"一行里同时有外层键和内层值"来解析,只对单行紧凑格式有效;
+    # 换到多行格式后取到的永远是外层键名(wifi 变成 wifi:wifi,协议永远 "?"),
+    # 表现就是"链路类型/协议/代理状态全是 ?"。改成状态机:
+    # 记住外层键,再吃下一行的内层键 + 计数。
+    /^[[:space:]]*"(ecn_values|interface-type|rat|proxy_state|l4s_enablement|protocols_seen)"[[:space:]]*:[[:space:]]*\{/ {
+      line = $0
+      outer = line; sub(/^[[:space:]]*"/, "", outer); sub(/".*/, "", outer)
+      expect = 1
+      next
+    }
+    expect {
+      line = $0
+      if (line ~ /\}/) { expect = 0; next }
+      inner = line
+      sub(/^[[:space:]]*"/, "", inner); sub(/".*/, "", inner)
+      if (inner != "") printf "O\t%s\t%s\n", outer, inner
+      expect = 0
+    }
+  ' "$nq_tmp" > "$nq_tmp.flat" || true
+
+  local kind a b
+  while IFS=$_TAB read -r kind a b; do
+    case $kind in
+      S)
+        case $a in
+          dl_throughput)   J_DL_MBPS=$(awk -v v="$b" 'BEGIN{printf "%.1f", v/1e6}') ;;
+          ul_throughput)   J_UL_MBPS=$(awk -v v="$b" 'BEGIN{printf "%.1f", v/1e6}') ;;
+          responsiveness)  J_RESP=$(awk -v v="$b" 'BEGIN{printf "%.0f", v}') ;;
+          base_rtt)        J_RTT=$(awk -v v="$b" 'BEGIN{printf "%.0f", v}') ;;
+          interface_name)  J_IFACE=$b ;;
+          dl_phase_duration) J_DUR=$(awk -v v="$b" 'BEGIN{printf "%.1f", v}') ;;
+          dl_flows)        J_FLOWS_DL=$b ;;
+          ul_flows)        J_FLOWS_UL=$b ;;
+          dl_bytes_transferred) J_DL_BYTES=$(awk -v v="$b" 'BEGIN{printf "%.0f", v/1048576}') ;;
+          ul_bytes_transferred) J_UL_BYTES=$(awk -v v="$b" 'BEGIN{printf "%.0f", v/1048576}') ;;
+          os_version)      J_OS=$b ;;
+        esac
+        ;;
+      O)
+        # 现在 $a = 外层键(interface-type),$b = 内层值(wifi / h2 / not_proxied …)
+        case $b in
+          wifi)         J_ECTYPE='Wi-Fi' ;;
+          wired)        J_ECTYPE='有线(以太网)' ;;
+          cellular)     J_ECTYPE='蜂窝数据' ;;
+          lte|4g|5g)    J_ECTYPE='蜂窝' ;;
+          h2)           J_HTTP_VER='HTTP/2' ;;
+          h3)           J_HTTP_VER='HTTP/3 (QUIC)' ;;
+          http/1.1)     J_HTTP_VER='HTTP/1.1' ;;
+          not_proxied)  J_PROXY='未被代理' ;;
+          disabled)     J_L4S='未启用' ;;
+          enabled)      J_L4S='已启用' ;;
+          ecn_disabled) J_ECN='ECN 关闭(拥塞时更容易断崖掉速)' ;;
+          ecn_enabled)  J_ECN='ECN 开启(拥塞控制更温和)' ;;
+          unknown)      ;;   # rat=unknown 很常见,不用单独记
+        esac
+        # rat 单独处理:只有它不是 unknown 时才值得提(移动网络是 4g/5g,
+        # 家用宽带是 unknown)。注意这一行在 case 的 esac 之后。
+        if [[ $a == 'rat' && $b != 'unknown' ]]; then
+          J_ECTYPE="${J_ECTYPE:-$b}(蜂窝 $b)"
+        fi
+        ;;
+    esac
+  done < "$nq_tmp.flat"
+  rm -f "$nq_tmp.flat"
+  return 0
+}
+
+# ---- ③ 延迟分布 ----------------------------------------------------------
+# JSON 里两组数组(都可能跨多行,必须用状态机,不能假设一行):
+#   il_h2_req_resp           空闲 RTT 样本(几个)
+#   lud_foreign_h2_req_resp  满载 RTT 样本(几百个)—— 这才是"卡不卡"的关键
+#
+# BSD awk 没有 asort(那是 gawk 扩展),百分位用插入排序冒泡(300 个样本瞬间完成)。
+_calc_latency() {
+  local nq_tmp=$1
+  [[ -f $nq_tmp ]] || return 0
+  local flat
+  flat=$(mktemp)
+
+  # 坑:数组值是逗号分隔的数字流,正则要把 `]`/`[` 换成空格再切,
+  # 而且要用 $0 而不是逐字段处理(一行里可能有很多个数)。
+  LC_ALL=C awk -v IDLE="${flat}.i" -v LOAD="${flat}.l" '
+    function emit(   i) {
+      if (mode == "") return
+      n = count
+      bubble(vals, n)
+      if (mode == "idle") {
+        printf "P\tidle_p50\t%.0f\n", n ? pctl(n, 0.5) : -1
+      } else {
+        printf "P\tp50\t%.0f\n", n ? pctl(n, 0.5) : -1
+        printf "P\tp90\t%.0f\n", n ? pctl(n, 0.9) : -1
+        printf "P\tp99\t%.0f\n", n ? pctl(n, 0.99) : -1
+        printf "P\tcount\t%d\n", n
+        # 固定桶的直方图,便于跨次比较
+        lim[1] = 20;   lab[1] = "<20ms"
+        lim[2] = 50;   lab[2] = "20-50"
+        lim[3] = 100;  lab[3] = "50-100"
+        lim[4] = 200;  lab[4] = "100-200"
+        lim[5] = 400;  lab[5] = "200-400"
+        lim[6] = 1e9;  lab[6] = ">400ms"
+        for (i = 1; i <= n; i++) for (b = 1; b <= 6; b++) if (vals[i] <= lim[b]) { hist[b]++; break }
+        for (b = 1; b <= 6; b++) printf "H\t%s\t%d\n", lab[b], hist[b] + 0
+      }
+      delete vals; delete hist; count = 0; mode = ""
+    }
+    function pctl(n, p,   idx) {
+      idx = int(p * n + 0.9999); if (idx < 1) idx = 1; if (idx > n) idx = n
+      return vals[idx]
+    }
+    function bubble(a, n,   i, j, t) {
+      for (i = 2; i <= n; i++) { t = a[i]; for (j = i - 1; j >= 1 && a[j] > t; j--) a[j + 1] = a[j]; a[j + 1] = t }
+    }
+    {
+      line = $0
+      if (line ~ /"il_h2_req_resp"/)              { if (mode != "") emit(); mode = "idle" }
+      else if (line ~ /"lud_foreign_h2_req_resp"/) { if (mode != "") emit(); mode = "load" }
+      else if (line ~ /^\s*"/)                    { if (mode != "") emit() }
+      if (mode == "") next
+      # 只在数组体内抠数字
+      if (line ~ /\[/ || mode != "") {
+        body = line
+        if (body ~ /:/) { sub(/^[^:]*:/, "", body) }
+        gsub(/[^0-9.eE+-]/, " ", body)
+        m = split(body, w, /[ \t]+/)
+        for (i = 1; i <= m; i++) {
+          if (w[i] ~ /^-?[0-9]+(\.[0-9]+)?$/) { count++; vals[count] = w[i] + 0 }
+        }
+      }
+      if (line ~ /\]/) emit()
+    }
+    END { if (mode != "") emit() }
+  ' "$nq_tmp" > "$flat" 2>/dev/null || true
+
+  local kind a b
+  while IFS=$_TAB read -r kind a b; do
+    case $kind in
+      P)
+        case $a in
+          idle_p50) J_IDLE_P50=$b ;;
+          p50)      J_P50=$b ;;
+          p90)      J_P90=$b ;;
+          p99)      J_P99=$b ;;
+          count)    J_LAT_N=$b ;;
+        esac
+        ;;
+      H) J_LAT+=("${a}${_TAB}${b}") ;;
+    esac
+  done < "$flat"
+  rm -f "$flat"
+
+  # 缓冲膨胀 = 满载 p50 − 空闲 RTT
+  if [[ $J_P50 != '?' && $J_RTT != '?' ]]; then
+    J_BLOAT=$(( J_P50 - J_RTT ))
+  fi
+  return 0
+}
+
+# ---- ④ 历史 --------------------------------------------------------------
+_append_history() {
+  mkdir -p "$HIST_DIR" 2>/dev/null || return 0
+  local when
+  when=$(date '+%Y-%m-%d %H:%M:%S')
+  print -r -- "${when}${_TAB}${J_DL_MBPS}${_TAB}${J_UL_MBPS}${_TAB}${J_RESP}${_TAB}${J_IFACE}" >> "$HIST_FILE" 2>/dev/null || true
+  # 只留最近 200 条
+  if [[ -f $HIST_FILE ]]; then
+    local lines
+    lines=$(wc -l < "$HIST_FILE" 2>/dev/null || print 0)
+    lines=${lines// /}
+    if (( lines > 200 )); then
+      local tmpf="$HIST_FILE.tmp.$$"
+      tail -n 200 "$HIST_FILE" > "$tmpf" 2>/dev/null && mv "$tmpf" "$HIST_FILE"
+      rm -f "$tmpf"
+    fi
+  fi
+}
+
+_load_history() {
+  [[ -f $HIST_FILE ]] || return 0
+  local when dl up resp iface line
+  while IFS=$_TAB read -r when dl up resp iface; do
+    [[ -n $when ]] || continue
+    J_TREND+=("${when}${_TAB}${dl}${_TAB}${up}${_TAB}${resp}${_TAB}${iface}")
+  done < "$HIST_FILE"
+}
+
+# ---- ⑤ 结论 --------------------------------------------------------------
+_verdicts() {
+  local bad=0 warn=0
+  local dl=$J_DL_MBPS ul=$J_UL_MBPS resp=$J_RESP
+
+  # 带宽分档(参照 macOS「网络」面板的信号格)
+  local dl_tag
+  if [[ $dl == '?' ]]; then
+    dl_tag='未知'
+  elif awk -v v="$dl" 'BEGIN{exit !(v >= 1000)}'; then dl_tag='极高(千兆以上)'
+  elif awk -v v="$dl" 'BEGIN{exit !(v >= 500)}';  then dl_tag='高'
+  elif awk -v v="$dl" 'BEGIN{exit !(v >= 100)}';  then dl_tag='中'
+  elif awk -v v="$dl" 'BEGIN{exit !(v >= 20)}';   then dl_tag='低'
+  else dl_tag='很慢(基本没法看视频)'; fi
+  printf "info\t下行 %s Mbps\t%s\t4K 视频要 ≥25,多设备并发要 ≥200\n" "$dl" "$dl_tag"
+
+  if [[ $ul != '?' ]]; then
+    local ul_tag
+    if awk -v v="$ul" 'BEGIN{exit !(v >= 100)}'; then ul_tag='很充裕(云备份/直播没问题)'
+    elif awk -v v="$ul" 'BEGIN{exit !(v >= 20)}'; then ul_tag='一般'
+    else ul_tag='偏低(上传大会把下载也拖慢)'; fi
+    printf "info\t上行 %s Mbps\t%s\t视频会议靠它\n" "$ul" "$ul_tag"
+  fi
+
+  # 响应性是"卡不卡"的真身
+  local resp_tag resp_col
+  if [[ $resp == '?' ]]; then
+    resp_tag='?'; resp_col=$C_DIM
+  elif (( resp < 50 )); then resp_tag='极高'; resp_col=$C_GREEN
+  elif (( resp < 100 )); then resp_tag='高';   resp_col=$C_GREEN
+  elif (( resp < 200 )); then resp_tag='中';   resp_col=$C_YELLOW
+  else resp_tag='低(会明显卡)'; resp_col=$C_RED; fi
+  printf "%s\t响应性(满载延迟)%s ms\t%s\t<50 好,>200 打电话都会卡\n" \
+    "$( [[ $resp_col == $C_GREEN ]] && print ok || print warn )" "$resp" "$resp_tag"
+
+  # 缓冲膨胀
+  if [[ $J_BLOAT != '?' ]]; then
+    if (( J_BLOAT > 100 )); then
+      # 说明里带中文引号要写成「」,直接嵌 ASCII 双引号会把外层字符串提前闭合
+      printf "bad\t缓冲膨胀 +%d ms\t空闲 %d → 满载 p50 %d\t队列积压,典型的「带宽够但很卡」\n" \
+        "$J_BLOAT" "$J_RTT" "$J_P50"
+      (( bad = bad + 1 ))
+    elif (( J_BLOAT > 40 )); then
+      printf "warn\t缓冲膨胀 +%d ms\t空闲 %d → 满载 p50 %d\t轻度积压\n" "$J_BLOAT" "$J_RTT" "$J_P50"
+      (( warn = warn + 1 ))
+    else
+      printf "ok\t缓冲膨胀 +%d ms\t空闲 %d → 满载 p50 %d\t链路很干净\n" "$J_BLOAT" "$J_RTT" "$J_P50"
+    fi
+  fi
+
+  # 测的是不是隧道
+  if [[ $J_IFACE == utun* ]]; then
+    printf "bad\t测速走的是 %s 隧道\t-\t这不是宽带本身的成绩;加 --interface en0 重测\n" "$J_IFACE"
+    (( bad = bad + 1 ))
+  elif [[ -n $BIND_IF ]]; then
+    printf "ok\t测速绑定在 %s\t-\t-\n" "$BIND_IF"
+  fi
+
+  [[ $J_PROXY != '?' && $J_PROXY != '未被代理' ]] && printf "warn\t链路被代理(%s)\t-\t数字含代理成本\n" "$J_PROXY"
+  [[ $J_HTTP_VER == 'HTTP/1.1' ]] && printf "info\t协议只到 HTTP/1.1\t-\t运营商/CDN 可能没开 h2/h3,换 DNS 或换节点能改善\n"
+  [[ $J_ECN == *'ECN 关闭'* ]] && printf "info\tECN 关闭\t-\t拥塞时更容易断崖式掉速\n"
+
+  printf "info\t统计\tbad=%d warn=%d\t先修 bad\n" "$bad" "$warn"
+}
+
+# ---- 渲染 ----------------------------------------------------------------
+_kv() { printf "%s\t%s\t%s\t%s\n" "$1" "$2" "$3" "$4"; }
+
+_render_kv() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return s }
+    NF < 2 { next }
+    {
+      if ($1 == "ok")       { col = g;   mark = "✓" }
+      else if ($1 == "warn") { col = y;   mark = "!" }
+      else if ($1 == "bad")  { col = red; mark = "✗" }
+      else                  { col = d;   mark = "·" }
+      printf "  %s%s%s %s%s%s  %s%s  %s  %s\n", col, mark, r, b, pad($2, 26), r, pad($3, 28), d, $4, r
+    }
+  '
+}
+
+_render_bars() {
+  # 数值条:把 Mbps 映射到 0-40 格
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED '
+    NF < 2 { next }
+    {
+      v = $2 + 0
+      # 每行用自己的量程(cap),否则上行 68Mbps 会把 1500 的条子画成一小截,
+      # 而下行 300Mbps 在 200 的量程下又永远是满条 —— 两条都失去意义。
+      if ($1 ~ /下行/)      { cap = 1500; col = (v >= 500 ? g : (v >= 100 ? y : red)); unit = "Mbps(满格 1500)" }
+      else if ($1 ~ /上行/) { cap = 100;  col = (v >= 50 ? g : (v >= 20 ? y : red)); unit = "Mbps(满格 100)" }
+      else if ($1 ~ /响应/) { cap = 300;  col = (v < 50 ? g : (v < 200 ? y : red)); unit = "ms(满格 300,越小越好)" }
+      else                  { col = d; unit = "" }
+      n = int(v * 40 / cap); if (n < 1 && v > 0) n = 1; if (n > 40) n = 40
+      bar = ""
+      for (i = 0; i < n; i++) bar = bar "█"
+      for (i = n; i < 40; i++) bar = bar "░"
+      printf "  %s%-8s%s %s%s%s %6s  %s%s%s\n", b, $1, r, col, bar, r, $2, d, unit, r
+    }
+  '
+}
+
+_render_hist() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v y=$C_YELLOW -v limit="$RECENT_N" '
+    # 两个坑:
+    #  ① awk 里字符串不能像数组那样下标(那是 Python 的写法),会报 syntax error。
+    #  ② `split(s, a, "")` 在 **BSD awk** 里不是"按字符切"(那是 gawk 的行为),
+    #     它会退回按空白切,整个字符串变成一个元素。
+    #  ③ 想用 UTF-8 阶梯字符 ▁▂▃▄… 得考虑 substr/length 都是**按字节**的,
+    #     按字符索引会切出半个字(输出乱码)。这里干脆用纯 ASCII 阶梯,稳。
+    BEGIN { s = ".:-=+*#%@"; for (i = 1; i <= length(s); i++) SP[i] = substr(s, i, 1) }
+    function spark(v, max,   i, n, s, lvl) {
+      if (max <= 0) return ""
+      n = int(v * 10 / max); if (n < 1) n = 1; if (n > 10) n = 10
+      lvl = 1 + int((n - 1) * 7 / 9)
+      s = ""
+      for (i = 0; i < n; i++) s = s SP[lvl]
+      return s
+    }
+    NF < 5 { next }
+    {
+      n++
+      if (n > limit) { over++; next }
+      if ($2 + 0 > maxd) maxd = $2 + 0
+      if ($3 + 0 > maxu) maxu = $3 + 0
+      rows[n] = $0
+    }
+    END {
+      if (!n) { printf "  %s(还没有历史记录)%s\n", d, r; exit }
+      for (i = 1; i <= n; i++) {
+        split(rows[i], f, "\t")
+        t = f[1]; gsub(/^[0-9]{4}-/, "", t); sub(/ /, " ", t)
+        # 15 个转换符对 15 个参数(踩坑 #48:少一个 %s,末尾整列会静默消失)
+        printf "  %s%-11s%s %s%-10s%s %s%-10s%s %s%5s ms%s  %s%s%s\n", \
+          d, t, r, b, spark(f[2] + 0, maxd), r, b, spark(f[3] + 0, maxu), r, y, f[4], r, d, f[5], r
+      }
+      if (over) printf "  %s… 另有 %d 条更早的记录(共 %d 条)%s\n", d, over, n + over, r
+    }
+  '
+}
+
+_section() {
+  echo "${C_BOLD}$1${C_RESET}"
+  echo "  ${C_DIM}───────────────────────────────────────────────────────${C_RESET}"
+}
+
+_render_human() {
+  [[ -t 1 ]] && printf '\033[?25l\033[2J\033[H'
+  echo "${C_BOLD}${C_CYAN}═══ 带宽 / 响应性 实测 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  免 sudo  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  if ! $HISTORY_ONLY; then
+    _section "测速前:我现在走的是哪条路"
+    print -rl -- $J_PRE | LC_ALL=C awk -F'\t' -v d=$C_DIM -v r=$C_RESET -v b=$C_BOLD '
+      function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return s }
+      NF < 3 { next }
+      { printf "  %s%-12s%s %s%s  %s%s%s\n", b, $1, r, pad($2, 30), r, d, $3, r }
+    '
+    echo
+
+    if [[ -n $J_ERR ]]; then
+      _section "结果"
+      printf "  ${C_RED}✗${C_RESET} %s\n" "$J_ERR"
+      echo "  ${C_DIM}排查: 先看上面“测速前”的出口路径;需要外部网络,内网/离线环境跑不了${C_RESET}"
+      echo
+      return 0
+    fi
+
+    echo "  ${C_DIM}测速中(约 $SECONDS_BUDGET 秒)…${C_RESET}"
+    echo
+    _section "吞吐与响应性"
+    {
+      printf "下行\t%s\n" "$J_DL_MBPS"
+      printf "上行\t%s\n" "$J_UL_MBPS"
+      printf "响应性\t%s\n" "$J_RESP"
+    } | _render_bars
+    echo
+
+    _section "延迟细节"
+    {
+      _kv "info" "空闲 RTT"        "${J_RTT} ms"    "没有任何负载时的往返"
+      _kv "info" "满载 p50"         "${J_P50} ms"    "一半请求落在这个时间内"
+      _kv "info" "满载 p90"         "${J_P90} ms"    "最慢 10% 的请求"
+      _kv "info" "满载 p99"         "${J_P99} ms"    "最慢 1%,偶尔卡就是它"
+      _kv "info" "缓冲膨胀"          "${J_BLOAT} ms"  "满载 p50 − 空闲 RTT"
+      _kv "info" "样本数"            "${J_LAT_N}"     "满载期间采样"
+    } | _render_kv
+    if (( ${#J_LAT} > 0 )); then
+      echo
+      echo "  ${C_BOLD}满载延迟分布${C_RESET}"
+      print -rl -- $J_LAT | LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET '
+        NF < 2 { next }
+        {
+          # 直方图条:按最大值归一
+          if ($2 + 0 > max) max = $2 + 0
+          n[NR] = $1; c[NR] = $2 + 0
+        }
+        END {
+          for (i = 1; i <= NR; i++) {
+            w = int(c[i] * 30 / (max > 0 ? max : 1)); if (c[i] > 0 && w < 1) w = 1
+            bar = ""; for (k = 0; k < w; k++) bar = bar "█"
+            printf "  %s%-9s%s %s%-30s%s %4d 次\n", b, n[i], r, d, bar, r, c[i]
+          }
+        }
+      '
+    fi
+    echo
+
+    _section "链路细节"
+    {
+      _kv "info" "测速所用接口"     "$J_IFACE"     "networkQuality 实际走的接口"
+      _kv "info" "链路类型"         "${J_ECTYPE:-?}"  "other.interface-type"
+      _kv "info" "最高协商协议"     "${J_HTTP_VER:-?}" "http/1.1 说明没走 h2/h3"
+      _kv "info" "代理状态"         "${J_PROXY:-?}"   "not_proxied = 没被代理"
+      _kv "info" "ECN"              "${J_ECN:-?}"     "拥塞控制的额外信号"
+      _kv "info" "L4S"              "${J_L4S:-?}"     "低延迟队列,运营商支持才有"
+      _kv "info" "下行传输量/流数"  "${J_DL_BYTES} MB / ${J_FLOWS_DL}" "并发流越多越能跑满带宽"
+      _kv "info" "上行传输量/流数"  "${J_UL_BYTES} MB / ${J_FLOWS_UL}" "上传弱时并发流会自动减少"
+    } | _render_kv
+    echo
+  fi
+
+  _section "历史趋势 (下行 / 上行 / 响应性)"
+  if (( ${#J_TREND} == 0 )); then
+    echo "  ${C_DIM}(还没有历史记录,跑一次测速就会记下来)${C_RESET}"
+  else
+    print -rl -- $J_TREND | _render_hist
+  fi
+  echo
+
+  if ! $HISTORY_ONLY && [[ -z $J_ERR ]]; then
+    _section "结论"
+    _verdicts | _render_kv
+    echo
+  fi
+
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: networkQuality -c, scutil --proxy, route, ifconfig${C_RESET}"
+  echo "${C_DIM}  历史文件: $HIST_FILE${C_RESET}"
+  echo "${C_DIM}  相关工具: netwatch(实时吞吐) · netdiag(连通性) · proxytrace(代理链路) · netpath(这个包走哪条路)${C_RESET}"
+}
+
+_render_json() {
+  local a b c d
+  print -r -- "meta${_TAB}${SCRIPT_NAME}${_TAB}${VERSION}${_TAB}$(date '+%Y-%m-%d %H:%M:%S')"
+  print -r -- "dl_mbps${_TAB}${J_DL_MBPS}"
+  print -r -- "ul_mbps${_TAB}${J_UL_MBPS}"
+  print -r -- "responsiveness_ms${_TAB}${J_RESP}"
+  print -r -- "base_rtt_ms${_TAB}${J_RTT}"
+  print -r -- "p50${_TAB}${J_P50}${_TAB}p90${_TAB}${J_P90}${_TAB}p99${_TAB}${J_P99}"
+  print -r -- "bufferbloat_ms${_TAB}${J_BLOAT}"
+  print -r -- "interface${_TAB}${J_IFACE}"
+  print -r -- "link${_TAB}${J_ECTYPE}${_TAB}${J_HTTP_VER}${_TAB}${J_PROXY}${_TAB}${J_ECN}${_TAB}${J_L4S}"
+  local row
+  for row in $J_PRE;   do print -r -- "pre${_TAB}${row}"; done
+  for row in $J_LAT;   do print -r -- "histogram${_TAB}${row}"; done
+  for row in $J_TREND; do print -r -- "trend${_TAB}${row}"; done
+  local vout
+  vout=$(_verdicts)
+  while IFS=$_TAB read -r a b c d; do print -r -- "verdict${_TAB}${a}${_TAB}${b}${_TAB}${c}${_TAB}${d}"; done <<< "$vout"
+}
+
+# 采集一次测速:两种输出模式共用这一段,避免 --json 走另一套逻辑后自己腐烂
+_measure_once() {
+  local nq_json
+  nq_json=$(mktemp)
+  local -a nq_args
+  # 坑:`-c` 的参数是"可选文件名",虽然 help 写成 [-c[optional filename]],
+  # 但**不要**把 -c 放在前面:某些版本会把下一个参数当输出文件名。
+  # 顺序固定成 "-M N [-I IF] [-u] -c",-c 永远在最后。
+  nq_args=(-M "$SECONDS_BUDGET")
+  [[ -n $BIND_IF ]] && nq_args+=(-I "$BIND_IF")
+  $QUICK && nq_args+=(-u)          # -u: 不跑上传测试
+  nq_args+=(-c)
+
+  if networkQuality "${nq_args[@]}" > "$nq_json" 2>/dev/null && [[ -s $nq_json ]]; then
+    _run_measure "$nq_json"
+    _calc_latency "$nq_json"
+    _append_history
+  else
+    J_ERR='networkQuality 执行失败(没网?被防火墙拦了?或者只连了内网)'
+  fi
+  rm -f "$nq_json"
+  return 0
+}
+
+_cleanup() { [[ -t 1 ]] && printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+if $AS_JSON; then
+  trap - EXIT INT TERM
+  _collect_pre
+  $HISTORY_ONLY || _measure_once
+  _load_history
+  _render_json
+  exit 0
+fi
+
+_collect_pre
+$HISTORY_ONLY || _measure_once
+_load_history
+_render_human

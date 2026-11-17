@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GCP HTTPS LB · FR → Target Proxy → URL Map → Backend Service → MIG · Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+
+    .container { max-width: 1280px; margin: 0 auto; }
+
+    .header { margin-bottom: 2rem; }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .pulse-dot {
+      width: 12px;
+      height: 12px;
+      background: #22d3ee;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    .subtitle {
+      color: #94a3b8;
+      font-size: 0.875rem;
+      margin-left: 1.75rem;
+      max-width: 72ch;
+      line-height: 1.5;
+    }
+
+    .subtitle .accent { color: #fb7185; }
+
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+
+    svg { width: 100%; min-width: 980px; display: block; }
+
+    .section-tag {
+      display: inline-block;
+      color: #475569;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin: 2rem 0 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #1e293b;
+      width: 100%;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr 0.9fr;
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+
+    @media (max-width: 820px) { .cards { grid-template-columns: 1fr; } }
+
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan    { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet  { background: #a78bfa; }
+    .card-dot.amber   { background: #fbbf24; }
+    .card-dot.rose    { background: #fb7185; }
+    .card-dot.slate   { background: #94a3b8; }
+
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+
+    .card p {
+      color: #94a3b8;
+      font-size: 0.75rem;
+      line-height: 1.55;
+    }
+
+    .card ul {
+      list-style: none;
+      color: #94a3b8;
+      font-size: 0.75rem;
+      line-height: 1.55;
+    }
+
+    .card li {
+      margin-bottom: 0.4rem;
+      padding-left: 0.875rem;
+      position: relative;
+    }
+
+    .card li::before {
+      content: '›';
+      position: absolute;
+      left: 0;
+      color: #475569;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      color: #475569;
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>GCP HTTPS LB — FR → MIG data flow</h1>
+      </div>
+      <p class="subtitle">
+        Global External HTTPS Load Balancer in front of a Managed Instance Group.
+        Five object types in chain order, plus a side-channel probe loop that GCP runs from
+        <span class="accent">35.191.0.0/16</span> &amp; <span class="accent">130.211.0.0/22</span>.
+      </p>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- DIAGRAM 1 — COMPONENT TOPOLOGY                                -->
+    <!-- ============================================================ -->
+    <p class="section-tag">① Component topology · chain order matters</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1080 540" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+          </marker>
+          <marker id="arrowhead-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/>
+          </marker>
+          <marker id="arrowhead-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+          </marker>
+          <marker id="arrowhead-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/>
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <!-- Background grid -->
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- ===== Region boundary: GCP Global Edge ===== -->
+        <rect x="60" y="100" width="430" height="120" rx="12" fill="rgba(34, 211, 238, 0.04)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,4" opacity="0.85"/>
+        <rect x="76" y="116" width="200" height="18" rx="3" fill="#020617"/>
+        <text x="82" y="129" fill="#22d3ee" font-size="10" font-weight="600">GCP · Global Edge (Premium Tier)</text>
+
+        <!-- ===== Region boundary: Compute (Region/Zonal) ===== -->
+        <rect x="730" y="100" width="280" height="120" rx="12" fill="rgba(167, 139, 250, 0.05)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="8,4" opacity="0.85"/>
+        <rect x="746" y="116" width="120" height="18" rx="3" fill="#020617"/>
+        <text x="752" y="129" fill="#a78bfa" font-size="10" font-weight="600">Compute · Region</text>
+
+        <!-- ===== Region boundary: Probe side-channel ===== -->
+        <rect x="610" y="320" width="400" height="120" rx="12" fill="rgba(251, 113, 133, 0.05)" stroke="#fb7185" stroke-width="1" stroke-dasharray="8,4" opacity="0.85"/>
+        <rect x="626" y="336" width="180" height="18" rx="3" fill="#020617"/>
+        <text x="632" y="349" fill="#fb7185" font-size="10" font-weight="600">Off-data-path · Probe channel</text>
+
+        <!-- ===================================================== -->
+        <!-- Arrows (drawn first so boxes sit on top)               -->
+        <!-- ===================================================== -->
+
+        <!-- FR → Target Proxy -->
+        <line x1="220" y1="208" x2="288" y2="208" stroke="#22d3ee" stroke-width="1.6" marker-end="url(#arrowhead-cyan)"/>
+        <!-- Proxy → URL Map -->
+        <line x1="448" y1="208" x2="516" y2="208" stroke="#22d3ee" stroke-width="1.6" marker-end="url(#arrowhead-cyan)"/>
+        <!-- URL Map → Backend Service -->
+        <line x1="676" y1="208" x2="744" y2="208" stroke="#22d3ee" stroke-width="1.8" marker-end="url(#arrowhead-cyan)"/>
+        <!-- Backend Service → MIG -->
+        <line x1="904" y1="208" x2="972" y2="208" stroke="#34d399" stroke-width="1.6" marker-end="url(#arrowhead-emerald)"/>
+
+        <!-- Backend Service ↘ Health Check (dashed rose) -->
+        <line x1="810" y1="240" x2="810" y2="320" stroke="#fb7185" stroke-width="1.4" stroke-dasharray="5,5" marker-end="url(#arrowhead-rose)"/>
+        <!-- Health Check → MIG (dashed rose, off-data-path) -->
+        <line x1="940" y1="378" x2="940" y2="240" stroke="#fb7185" stroke-width="1.4" stroke-dasharray="5,5" marker-end="url(#arrowhead-rose)"/>
+
+        <!-- Arrow labels -->
+        <text x="254" y="200" fill="#22d3ee" font-size="9" text-anchor="middle">:443</text>
+        <text x="482" y="200" fill="#22d3ee" font-size="9" text-anchor="middle">TLS term</text>
+        <text x="710" y="200" fill="#22d3ee" font-size="9" text-anchor="middle">route match</text>
+        <text x="938" y="200" fill="#34d399" font-size="9" text-anchor="middle">dispatch</text>
+        <text x="826" y="288" fill="#fb7185" font-size="9">link</text>
+        <text x="952" y="312" fill="#fb7185" font-size="9">probe :80</text>
+
+        <!-- ===================================================== -->
+        <!-- COMPONENTS                                              -->
+        <!-- ===================================================== -->
+
+        <!-- 1. Forwarding Rule (slate / edge) -->
+        <rect x="80" y="176" width="140" height="64" rx="6" fill="rgba(30, 41, 59, 0.7)" stroke="#94a3b8" stroke-width="1.5"/>
+        <rect x="88" y="184" width="32" height="14" rx="2" fill="transparent" stroke="#94a3b8" stroke-width="0.8" opacity="0.6"/>
+        <text x="104" y="194" fill="#94a3b8" font-size="7" font-weight="500" text-anchor="middle">EDGE</text>
+        <text x="150" y="206" fill="white" font-size="12" font-weight="600" text-anchor="middle">Forwarding Rule</text>
+        <text x="150" y="222" fill="#94a3b8" font-size="9" text-anchor="middle">TCP / UDP / HTTP(S)</text>
+        <text x="150" y="234" fill="#94a3b8" font-size="8" text-anchor="middle">public IP :80/:443</text>
+
+        <!-- 2. Target Proxy (cyan) -->
+        <rect x="288" y="176" width="160" height="64" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <rect x="296" y="184" width="48" height="14" rx="2" fill="transparent" stroke="#22d3ee" stroke-width="0.8" opacity="0.7"/>
+        <text x="320" y="194" fill="#22d3ee" font-size="7" font-weight="500" text-anchor="middle">PROXY</text>
+        <text x="368" y="206" fill="white" font-size="12" font-weight="600" text-anchor="middle">Target HTTPS Proxy</text>
+        <text x="368" y="222" fill="#94a3b8" font-size="9" text-anchor="middle">SSL cert · TLS termination</text>
+
+        <!-- 3. URL Map (cyan) -->
+        <rect x="516" y="176" width="160" height="64" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <rect x="524" y="184" width="56" height="14" rx="2" fill="transparent" stroke="#22d3ee" stroke-width="0.8" opacity="0.7"/>
+        <text x="552" y="194" fill="#22d3ee" font-size="7" font-weight="500" text-anchor="middle">ROUTER</text>
+        <text x="596" y="206" fill="white" font-size="12" font-weight="600" text-anchor="middle">URL Map</text>
+        <text x="596" y="222" fill="#94a3b8" font-size="9" text-anchor="middle">host / path rules</text>
+
+        <!-- 4. Backend Service (amber · focal) -->
+        <rect x="744" y="176" width="160" height="64" rx="6" fill="rgba(120, 53, 15, 0.4)" stroke="#fbbf24" stroke-width="2"/>
+        <rect x="752" y="184" width="56" height="14" rx="2" fill="transparent" stroke="#fbbf24" stroke-width="0.8"/>
+        <text x="780" y="194" fill="#fbbf24" font-size="7" font-weight="600" text-anchor="middle">FOCAL</text>
+        <text x="824" y="206" fill="white" font-size="12" font-weight="700" text-anchor="middle">Backend Service</text>
+        <text x="824" y="222" fill="#fbbf24" font-size="9" text-anchor="middle">dispatch hub · policy</text>
+
+        <!-- 5. MIG (violet) -->
+        <rect x="972" y="176" width="120" height="64" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <rect x="980" y="184" width="32" height="14" rx="2" fill="transparent" stroke="#a78bfa" stroke-width="0.8" opacity="0.7"/>
+        <text x="996" y="194" fill="#a78bfa" font-size="7" font-weight="500" text-anchor="middle">MIG</text>
+        <text x="1032" y="206" fill="white" font-size="12" font-weight="600" text-anchor="middle">MIG</text>
+        <text x="1032" y="222" fill="#94a3b8" font-size="9" text-anchor="middle">VM pool · autoscaling</text>
+
+        <!-- 6. Health Check (emerald / dashed border = probe) -->
+        <rect x="730" y="346" width="160" height="60" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <rect x="738" y="354" width="56" height="14" rx="2" fill="transparent" stroke="#34d399" stroke-width="0.8" opacity="0.7"/>
+        <text x="766" y="364" fill="#34d399" font-size="7" font-weight="500" text-anchor="middle">PROBE</text>
+        <text x="810" y="376" fill="white" font-size="12" font-weight="600" text-anchor="middle">Health Check</text>
+        <text x="810" y="392" fill="#94a3b8" font-size="9" text-anchor="middle">TCP / HTTP / HTTPS</text>
+
+        <!-- ===== Client (External — slate) ===== -->
+        <rect x="80" y="40" width="140" height="48" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <rect x="88" y="48" width="32" height="14" rx="2" fill="transparent" stroke="#94a3b8" stroke-width="0.8" opacity="0.6"/>
+        <text x="104" y="58" fill="#94a3b8" font-size="7" font-weight="500" text-anchor="middle">EXT</text>
+        <text x="150" y="72" fill="white" font-size="11" font-weight="600" text-anchor="middle">Client</text>
+
+        <line x1="150" y1="88" x2="150" y2="172" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <text x="166" y="124" fill="#94a3b8" font-size="8">HTTPS req</text>
+
+        <!-- ===== Legend (bottom-right, outside boundaries) ===== -->
+        <rect x="820" y="460" width="232" height="64" rx="6" fill="rgba(15, 23, 42, 0.6)" stroke="#1e293b" stroke-width="1"/>
+        <text x="828" y="476" fill="white" font-size="9" font-weight="600">LEGEND</text>
+
+        <rect x="828" y="486" width="14" height="10" rx="2" fill="rgba(120, 53, 15, 0.4)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="846" y="494" fill="#94a3b8" font-size="8">focal · dispatch</text>
+
+        <rect x="828" y="502" width="14" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="846" y="510" fill="#94a3b8" font-size="8">compute · MIG</text>
+
+        <line x1="958" y1="491" x2="976" y2="491" stroke="#22d3ee" stroke-width="1.4" marker-end="url(#arrowhead-cyan)"/>
+        <text x="982" y="494" fill="#94a3b8" font-size="8">data path</text>
+
+        <line x1="958" y1="510" x2="976" y2="510" stroke="#fb7185" stroke-width="1.4" stroke-dasharray="5,5" marker-end="url(#arrowhead-rose)"/>
+        <text x="982" y="513" fill="#94a3b8" font-size="8">probe · off-path</text>
+      </svg>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- DIAGRAM 2 — REQUEST / RESPONSE / PROBE LOOP                   -->
+    <!-- ============================================================ -->
+    <p class="section-tag">② Request · response · parallel probe (12 steps)</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1080 620" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="ah-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8"/>
+          </marker>
+          <marker id="ah-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/>
+          </marker>
+          <marker id="ah-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+          </marker>
+          <marker id="ah-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+          </marker>
+          <marker id="ah-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/>
+          </marker>
+          <marker id="ah-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/>
+          </marker>
+          <pattern id="grid2" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid2)"/>
+
+        <!-- ====== Swimlane headers (top) ====== -->
+        <!-- Client -->
+        <rect x="40" y="40" width="120" height="36" rx="6" fill="rgba(30, 41, 59, 0.7)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="100" y="58" fill="white" font-size="11" font-weight="600" text-anchor="middle">Client</text>
+        <text x="100" y="70" fill="#94a3b8" font-size="8" text-anchor="middle">browser</text>
+
+        <!-- Global FR -->
+        <rect x="190" y="40" width="120" height="36" rx="6" fill="rgba(30, 41, 59, 0.7)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="250" y="58" fill="white" font-size="11" font-weight="600" text-anchor="middle">Global FR</text>
+        <text x="250" y="70" fill="#94a3b8" font-size="8" text-anchor="middle">public :443</text>
+
+        <!-- Target Proxy -->
+        <rect x="340" y="40" width="120" height="36" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="400" y="58" fill="white" font-size="11" font-weight="600" text-anchor="middle">Target Proxy</text>
+        <text x="400" y="70" fill="#22d3ee" font-size="8" text-anchor="middle">TLS terminate</text>
+
+        <!-- URL Map -->
+        <rect x="490" y="40" width="120" height="36" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="550" y="58" fill="white" font-size="11" font-weight="600" text-anchor="middle">URL Map</text>
+        <text x="550" y="70" fill="#22d3ee" font-size="8" text-anchor="middle">route rules</text>
+
+        <!-- Backend Service (focal) -->
+        <rect x="640" y="40" width="140" height="36" rx="6" fill="rgba(120, 53, 15, 0.4)" stroke="#fbbf24" stroke-width="1.8"/>
+        <text x="710" y="58" fill="white" font-size="11" font-weight="700" text-anchor="middle">Backend Service</text>
+        <text x="710" y="70" fill="#fbbf24" font-size="8" text-anchor="middle">FOCAL · dispatch hub</text>
+
+        <!-- MIG -->
+        <rect x="810" y="40" width="120" height="36" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="870" y="58" fill="white" font-size="11" font-weight="600" text-anchor="middle">MIG</text>
+        <text x="870" y="70" fill="#a78bfa" font-size="8" text-anchor="middle">VM pool</text>
+
+        <!-- Health Check -->
+        <rect x="960" y="40" width="100" height="36" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <text x="1010" y="58" fill="white" font-size="11" font-weight="600" text-anchor="middle">Health Check</text>
+        <text x="1010" y="70" fill="#34d399" font-size="8" text-anchor="middle">probe</text>
+
+        <!-- ====== Lifelines ====== -->
+        <line x1="100" y1="84" x2="100" y2="500" stroke="#1e293b" stroke-width="1" stroke-dasharray="2,3"/>
+        <line x1="250" y1="84" x2="250" y2="500" stroke="#1e293b" stroke-width="1" stroke-dasharray="2,3"/>
+        <line x1="400" y1="84" x2="400" y2="500" stroke="#1e293b" stroke-width="1" stroke-dasharray="2,3"/>
+        <line x1="550" y1="84" x2="550" y2="500" stroke="#1e293b" stroke-width="1" stroke-dasharray="2,3"/>
+        <line x1="710" y1="84" x2="710" y2="500" stroke="rgba(251, 191, 36, 0.4)" stroke-width="1.2" stroke-dasharray="2,3"/>
+        <line x1="870" y1="84" x2="870" y2="500" stroke="#1e293b" stroke-width="1" stroke-dasharray="2,3"/>
+        <line x1="1010" y1="84" x2="1010" y2="500" stroke="#1e293b" stroke-width="1" stroke-dasharray="2,3"/>
+
+        <!-- ====== Phase A: REQUEST PATH (1-5) — cyan arrows ====== -->
+        <!-- 1. Client → FR -->
+        <line x1="100" y1="120" x2="244" y2="120" stroke="#22d3ee" stroke-width="1.8" marker-end="url(#ah-cyan)"/>
+        <text x="172" y="112" fill="#22d3ee" font-size="9" text-anchor="middle">① HTTPS REQ</text>
+
+        <!-- 2. FR → Proxy -->
+        <line x1="250" y1="152" x2="394" y2="152" stroke="#22d3ee" stroke-width="1.8" marker-end="url(#ah-cyan)"/>
+        <text x="322" y="144" fill="#22d3ee" font-size="9" text-anchor="middle">② FORWARD</text>
+
+        <!-- 3. Proxy → URL Map -->
+        <line x1="400" y1="184" x2="544" y2="184" stroke="#22d3ee" stroke-width="1.8" marker-end="url(#ah-cyan)"/>
+        <text x="472" y="176" fill="#22d3ee" font-size="9" text-anchor="middle">③ TLS DECRYPT</text>
+
+        <!-- 4. URL Map → Backend Service -->
+        <line x1="550" y1="216" x2="704" y2="216" stroke="#22d3ee" stroke-width="1.8" marker-end="url(#ah-cyan)"/>
+        <text x="627" y="208" fill="#22d3ee" font-size="9" text-anchor="middle">④ ROUTE MATCH</text>
+
+        <!-- 5. Backend Service → MIG -->
+        <line x1="710" y1="248" x2="864" y2="248" stroke="#34d399" stroke-width="1.8" marker-end="url(#ah-emerald)"/>
+        <text x="787" y="240" fill="#34d399" font-size="9" text-anchor="middle">⑤ TO VM</text>
+
+        <!-- ====== Phase B: VM processing (6) ====== -->
+        <rect x="800" y="280" width="140" height="32" rx="6" fill="rgba(76, 29, 149, 0.5)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="870" y="299" fill="white" font-size="10" font-weight="600" text-anchor="middle">⑥ VM HANDLES</text>
+
+        <!-- ====== Phase C: PROBE (parallel, off-path) — dashed rose ====== -->
+        <!-- 7. Backend Service → Health Check → MIG (continuous, marked as probe loop) -->
+        <line x1="710" y1="356" x2="1004" y2="356" stroke="#fb7185" stroke-width="1.6" stroke-dasharray="5,5" marker-end="url(#ah-rose)"/>
+        <text x="857" y="348" fill="#fb7185" font-size="9" text-anchor="middle">⑦ PROBE — runs every check_interval seconds</text>
+        <text x="857" y="372" fill="#fb7185" font-size="8" text-anchor="middle">from 35.191.0.0/16 &amp; 130.211.0.0/22 → VM :port</text>
+
+        <!-- ====== Phase D: RESPONSE PATH (8-12) — slate, returns ====== -->
+        <!-- 8. MIG → Backend Service -->
+        <line x1="870" y1="400" x2="716" y2="400" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ah-slate)"/>
+        <text x="793" y="392" fill="#94a3b8" font-size="9" text-anchor="middle">⑧ HTTP/S RSP</text>
+
+        <!-- 9. Backend Service → URL Map -->
+        <line x1="710" y1="424" x2="556" y2="424" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ah-slate)"/>
+        <text x="633" y="416" fill="#94a3b8" font-size="9" text-anchor="middle">⑨ BACK TO URL MAP</text>
+
+        <!-- 10. URL Map → Proxy -->
+        <line x1="550" y1="448" x2="406" y2="448" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ah-slate)"/>
+        <text x="478" y="440" fill="#94a3b8" font-size="9" text-anchor="middle">⑩ BACK TO PROXY</text>
+
+        <!-- 11. Proxy → FR -->
+        <line x1="400" y1="472" x2="256" y2="472" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ah-slate)"/>
+        <text x="328" y="464" fill="#94a3b8" font-size="9" text-anchor="middle">⑪ TLS RE-ENCRYPT</text>
+
+        <!-- 12. FR → Client -->
+        <line x1="250" y1="496" x2="106" y2="496" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ah-slate)"/>
+        <text x="178" y="488" fill="#94a3b8" font-size="9" text-anchor="middle">⑫ HTTPS RSP</text>
+
+        <!-- ====== Phase labels (left margin) ====== -->
+        <text x="20" y="184" fill="#22d3ee" font-size="8" font-weight="600" transform="rotate(-90 20 184)">REQUEST</text>
+        <text x="20" y="356" fill="#fb7185" font-size="8" font-weight="600" transform="rotate(-90 20 356)">PROBE</text>
+        <text x="20" y="448" fill="#94a3b8" font-size="8" font-weight="600" transform="rotate(-90 20 448)">RESPONSE</text>
+
+        <!-- ====== Legend ====== -->
+        <rect x="40" y="540" width="1000" height="56" rx="6" fill="rgba(15, 23, 42, 0.6)" stroke="#1e293b" stroke-width="1"/>
+        <text x="56" y="558" fill="white" font-size="9" font-weight="600">LEGEND</text>
+
+        <line x1="56" y1="576" x2="80" y2="576" stroke="#22d3ee" stroke-width="1.6" marker-end="url(#ah-cyan)"/>
+        <text x="88" y="579" fill="#94a3b8" font-size="8">Request path ①–⑤</text>
+
+        <line x1="216" y1="576" x2="240" y2="576" stroke="#94a3b8" stroke-width="1.6" marker-end="url(#ah-slate)"/>
+        <text x="248" y="579" fill="#94a3b8" font-size="8">Response path ⑧–⑫</text>
+
+        <line x1="392" y1="576" x2="416" y2="576" stroke="#fb7185" stroke-width="1.6" stroke-dasharray="5,5" marker-end="url(#ah-rose)"/>
+        <text x="424" y="579" fill="#94a3b8" font-size="8">Probe ⑦ (parallel, off-path)</text>
+
+        <rect x="620" y="570" width="14" height="10" rx="2" fill="rgba(120, 53, 15, 0.4)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="640" y="579" fill="#94a3b8" font-size="8">focal lane</text>
+
+        <rect x="724" y="570" width="14" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="744" y="579" fill="#94a3b8" font-size="8">compute · MIG</text>
+
+        <line x1="852" y1="576" x2="876" y2="576" stroke="#34d399" stroke-width="1.4" marker-end="url(#ah-emerald)"/>
+        <text x="884" y="579" fill="#94a3b8" font-size="8">dispatch</text>
+      </svg>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- INFO CARDS                                                   -->
+    <!-- ============================================================ -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>Why Backend Service is the focal point</h3>
+        </div>
+        <p>Every HTTPS LB chain funnels into one Backend Service. It holds the balancing mode, session affinity, Cloud Armor policy, the binding to MIGs or NEGs, and the live health of every backend. Strip any other component and traffic breaks; strip this one and there is no load balancing.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>Health check is off the data path</h3>
+        </div>
+        <ul>
+          <li>GCP probe ranges 35.191.0.0/16 &amp; 130.211.0.0/22 hit VMs on TCP/HTTP/HTTPS</li>
+          <li>Only the Backend Service reads the result — FR, Proxy, URL Map never see probes</li>
+          <li>Unhealthy VMs are pulled from the dispatch pool, not the LB chain</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>Why the chain order matters</h3>
+        </div>
+        <ul>
+          <li>Forwarding Rule pins IP &amp; port</li>
+          <li>Target Proxy unwraps TLS</li>
+          <li>URL Map picks a Backend Service by host / path</li>
+          <li>Backend Service picks a healthy VM</li>
+          <li>gcloud rejects out-of-order dependencies</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      GCP · Global External HTTPS Load Balancer · MIG · companion diagram for flow-fr-lb-mig.md
+    </p>
+  </div>
+</body>
+</html>

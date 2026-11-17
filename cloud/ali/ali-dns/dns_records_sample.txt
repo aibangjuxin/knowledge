@@ -1,0 +1,21 @@
+# DNS Records List
+# Format: record_name record_value
+# Lines starting with # are comments and will be ignored
+
+# Web services
+web01 192.168.1.10
+web02 192.168.1.11
+api 192.168.1.20
+
+# Database servers
+db01 192.168.1.30
+db02 192.168.1.31
+
+# Load balancers
+lb01 192.168.1.40
+lb02 192.168.1.41
+
+# Development environments
+dev-api 192.168.2.10
+test-api 192.168.2.20
+staging-api 192.168.2.30

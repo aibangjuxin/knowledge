@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Argo CD 里三个名字很像的家伙（讲给五岁小孩）</title>
+<style>
+  :root{--bg:#020617;--panel:#0b1220;--line:#1e293b;--fg:#e2e8f0;--dim:#94a3b8;--cyan:#22d3ee;--green:#34d399;--amber:#fbbf24}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+  main{max-width:960px;margin:0 auto;padding:3rem 1.25rem 4rem}
+  h1{font-size:2.1rem;line-height:1.25;margin:0 0 .5rem;letter-spacing:0}
+  .sub{color:var(--dim);margin:0 0 2.5rem;font-size:1.05rem}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:1.75rem 1.5rem;margin-bottom:1.75rem}
+  .panel h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.12em;color:var(--cyan);margin:0 0 .75rem}
+  .panel p{margin:0 0 .75rem;font-size:1.08rem}
+  .panel p:last-child{margin-bottom:0}
+  .cap{color:var(--dim);font-size:.95rem;margin-top:.9rem !important}
+  .card{background:#0f1c33;border:1px solid var(--line);border-radius:8px;padding:1rem 1.1rem;margin-bottom:.9rem}
+  .card:last-child{margin-bottom:0}
+  .card h3{margin:0 0 .35rem;font-size:1.05rem;color:var(--green)}
+  .card p{margin:0;font-size:.98rem;color:var(--fg)}
+  .card .tag{display:inline-block;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:.1rem .45rem;margin-bottom:.5rem}
+  .no{color:var(--amber);font-weight:650}
+  .aside{border-left:3px solid var(--cyan);padding:.35rem 0 .35rem .9rem;color:var(--dim)}
+  .aside b{color:var(--fg)}
+  .tree{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.95rem;color:var(--fg);background:#0f1c33;border:1px solid var(--line);border-radius:8px;padding:.9rem 1rem;overflow-x:auto}
+</style>
+</head>
+<body>
+<main>
+  <h1>三个名字很像的朋友，谁是谁？</h1>
+  <p class="sub">Argo CD 的零件们 · 讲给五岁小孩</p>
+
+  <section class="panel">
+    <h2>三个零件</h2>
+    <div class="card">
+      <span class="tag">会干活的人</span>
+      <h3>applicationset controller</h3>
+      <p>扫 Git 的目录，批量造出一张张“任务单”。</p>
+    </div>
+    <div class="card">
+      <span class="tag">会干活的人</span>
+      <h3>application controller</h3>
+      <p>拿任务单去对比真实情况，该改的改。<span class="no">它才真的动手。</span></p>
+    </div>
+    <div class="card">
+      <span class="tag">会干活的人</span>
+      <h3>repo server</h3>
+      <p>专门去 Git 取货、展开、缓存。</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>两个不是人的东西</h2>
+    <div class="card">
+      <span class="tag">一张单子</span>
+      <h3>Application</h3>
+      <p>写着“从哪个仓库哪个目录来、送到哪个集群、什么时候同步”。它自己<span class="no">什么都不做</span>。</p>
+    </div>
+    <div class="card">
+      <span class="tag">一张规则</span>
+      <h3>ApplicationSet</h3>
+      <p>“每个文件夹造一张单子”的规则。</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>谁不干活会怎样？</h2>
+    <p class="aside"><b>applicationset controller 停</b> → 没有单子。<br>
+    <b>application controller 停</b> → 有单子，但永远不动手。<br>
+    <b>repo server 停</b> → 两个都取不到货。</p>
+  </section>
+
+  <section class="panel">
+    <h2>文件夹就是规矩</h2>
+    <div class="tree">teams/team-a/project-a/ → 单子 team-a-project-a<br>                            → 放进 project-a 这个房间</div>
+    <p class="cap">文件夹名 = 房间名 = 允许名单里写的名字。三处一样才不吵架。</p>
+  </section>
+</main>
+<!-- cite: /Users/lex/git/gcp/ucp/poc-argocd-git-to-apply-trigger.md §1, §2 -->
+<!-- cite: /Users/lex/git/gcp/ucp/poc-argocd-integration.md §3.2, §3.4, §6.2 -->
+</body>
+</html>

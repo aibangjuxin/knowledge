@@ -1,0 +1,1341 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>团队时区时钟</title>
+    <link rel="icon" href="https://vectorcraftr.com/library/blink/Young%20woman%20with%20headphones.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+      /* ============================================================
+         Design tokens — modern minimal, Notion/Linear/Vercel adjacent
+         Light is the default; .dark-mode toggles the alternate set.
+         ============================================================ */
+      :root {
+        --bg: #fafafa;
+        --bg-elevated: #ffffff;
+        --bg-subtle: #f4f4f5;
+        --bg-overlay: rgba(255, 255, 255, 0.8);
+        --border: #e4e4e7;
+        --border-strong: #d4d4d8;
+
+        --text-primary: #18181b;
+        --text-secondary: #52525b;
+        --text-muted: #a1a1aa;
+        --text-inverse: #fafafa;
+
+        --accent: #18181b;
+        --accent-hover: #27272a;
+        --accent-text: #fafafa;
+        --focus-ring: rgba(24, 24, 27, 0.12);
+
+        --status-working: #16a34a;
+        --status-working-bg: #dcfce7;
+        --status-off: #dc2626;
+        --status-off-bg: #fee2e2;
+        --status-current: #ea580c;
+        --status-current-bg: #ffedd5;
+
+        --radius-sm: 6px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+        --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+        --shadow-lg: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+
+        --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        --font-mono: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+
+        --transition: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      .dark-mode {
+        --bg: #0a0a0a;
+        --bg-elevated: #111113;
+        --bg-subtle: #18181b;
+        --bg-overlay: rgba(17, 17, 19, 0.85);
+        --border: #27272a;
+        --border-strong: #3f3f46;
+
+        --text-primary: #fafafa;
+        --text-secondary: #a1a1aa;
+        --text-muted: #71717a;
+        --text-inverse: #0a0a0a;
+
+        --accent: #fafafa;
+        --accent-hover: #e4e4e7;
+        --accent-text: #0a0a0a;
+        --focus-ring: rgba(250, 250, 250, 0.18);
+
+        --status-working: #4ade80;
+        --status-working-bg: rgba(74, 222, 128, 0.12);
+        --status-off: #f87171;
+        --status-off-bg: rgba(248, 113, 113, 0.12);
+        --status-current: #fb923c;
+        --status-current-bg: rgba(251, 146, 60, 0.12);
+
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+        --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+        --shadow-lg: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+      }
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      html { font-size: 16px; }
+
+      body {
+        font-family: var(--font-sans);
+        background: var(--bg);
+        color: var(--text-primary);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 32px 24px 96px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        transition: background-color var(--transition), color var(--transition);
+      }
+
+      /* Skip-link for keyboard users */
+      .skip-link {
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        background: var(--accent);
+        color: var(--accent-text);
+        padding: 8px 12px;
+        border-radius: var(--radius-sm);
+        z-index: 100;
+      }
+      .skip-link:focus { left: 16px; top: 16px; }
+
+      /* ============================================================
+         Layout shell
+         ============================================================ */
+      .page {
+        width: 100%;
+        max-width: 1280px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
+      /* ============================================================
+         Header
+         ============================================================ */
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        flex-wrap: wrap;
+      }
+      .header-titles h1 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--text-primary);
+        margin-bottom: 4px;
+      }
+      .header-titles p {
+        font-size: 0.9375rem;
+        color: var(--text-secondary);
+      }
+
+      /* ============================================================
+         Theme toggle — top right pill
+         ============================================================ */
+      .theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        background: var(--bg-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        font-family: inherit;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all var(--transition);
+        box-shadow: var(--shadow-sm);
+      }
+      .theme-toggle:hover {
+        background: var(--bg-subtle);
+        border-color: var(--border-strong);
+      }
+      .theme-toggle:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .theme-toggle i { font-size: 0.875rem; }
+
+      /* ============================================================
+         Search
+         ============================================================ */
+      .search-container {
+        position: relative;
+        width: 100%;
+      }
+      .search-box {
+        width: 100%;
+        padding: 12px 16px 12px 44px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-family: inherit;
+        font-size: 0.9375rem;
+        transition: all var(--transition);
+        box-shadow: var(--shadow-sm);
+      }
+      .search-box::placeholder { color: var(--text-muted); }
+      .search-box:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 4px var(--focus-ring);
+      }
+      .search-container > i {
+        position: absolute;
+        left: 16px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        font-size: 0.875rem;
+        pointer-events: none;
+      }
+
+      /* ============================================================
+         Stats bar
+         ============================================================ */
+      .stats-bar {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        background: var(--border);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+      }
+      .stat-item {
+        background: var(--bg-elevated);
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        transition: background-color var(--transition);
+      }
+      .stat-item:hover { background: var(--bg-subtle); }
+      .stat-number {
+        font-family: var(--font-mono);
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        letter-spacing: -0.02em;
+      }
+      .stat-label {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      /* ============================================================
+         Two-column main
+         ============================================================ */
+      .main-content {
+        display: grid;
+        grid-template-columns: minmax(320px, 1fr) minmax(0, 2fr);
+        gap: 24px;
+      }
+      .left-column, .right-column {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        min-width: 0;
+      }
+
+      /* ============================================================
+         Card — shared shell for calendar / sidebar / clock card
+         ============================================================ */
+      .card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        box-shadow: var(--shadow-sm);
+        transition: border-color var(--transition), box-shadow var(--transition);
+      }
+      .card:hover {
+        border-color: var(--border-strong);
+        box-shadow: var(--shadow-md);
+      }
+      .card-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 20px;
+        letter-spacing: -0.01em;
+      }
+      .card-title i {
+        color: var(--text-muted);
+        font-size: 0.875rem;
+      }
+
+      /* ============================================================
+         Calendar
+         ============================================================ */
+      .calendar-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+      .calendar-title-block h3 {
+        font-size: 1.0625rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        letter-spacing: -0.01em;
+      }
+      .calendar-title-block p {
+        font-size: 0.8125rem;
+        color: var(--text-muted);
+        margin-top: 2px;
+      }
+      .nav-btn {
+        width: 32px;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all var(--transition);
+      }
+      .nav-btn:hover {
+        background: var(--bg-subtle);
+        color: var(--text-primary);
+        border-color: var(--border-strong);
+      }
+      .nav-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .nav-btn i { font-size: 0.75rem; }
+
+      .weekdays {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+        margin-bottom: 8px;
+      }
+      .weekday {
+        text-align: center;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 8px 0;
+      }
+      .days-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+      }
+      .day {
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--text-primary);
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: all var(--transition);
+      }
+      .day:hover {
+        background: var(--bg-subtle);
+        border-color: var(--border);
+      }
+      .day:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+      }
+      .day.other-month { color: var(--text-muted); opacity: 0.45; }
+      .day.today {
+        background: var(--accent);
+        color: var(--accent-text);
+        font-weight: 600;
+      }
+      .day.today:hover { background: var(--accent-hover); }
+      .day.selected {
+        background: var(--bg-subtle);
+        border-color: var(--accent);
+        font-weight: 600;
+      }
+
+      .calendar-footer {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .today-label {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-weight: 500;
+      }
+      .today-date {
+        font-size: 0.8125rem;
+        color: var(--text-primary);
+        font-weight: 500;
+      }
+
+      /* ============================================================
+         Timezone converter
+         ============================================================ */
+      .converter-form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .converter-input,
+      .form-input,
+      .form-select {
+        width: 100%;
+        padding: 10px 12px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-family: inherit;
+        font-size: 0.875rem;
+        transition: all var(--transition);
+      }
+      .form-select[multiple] { min-height: 120px; }
+      .converter-input:focus,
+      .form-input:focus,
+      .form-select:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 4px var(--focus-ring);
+      }
+      .submit-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 16px;
+        background: var(--accent);
+        color: var(--accent-text);
+        border: 1px solid var(--accent);
+        border-radius: var(--radius-md);
+        font-family: inherit;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all var(--transition);
+      }
+      .submit-btn:hover {
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
+      }
+      .submit-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .submit-btn i { font-size: 0.8125rem; }
+
+      .converter-result {
+        margin-top: 4px;
+        padding: 14px 16px;
+        background: var(--bg-subtle);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        line-height: 1.5;
+      }
+      .converter-result strong {
+        display: block;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 6px;
+      }
+      .converter-result .converted-time {
+        font-family: var(--font-mono);
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+      }
+      .converter-result .converted-route {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+      }
+
+      /* ============================================================
+         Clock cards
+         ============================================================ */
+      .clock-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+      }
+      .clock-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 20px;
+        box-shadow: var(--shadow-sm);
+        transition: all var(--transition);
+        position: relative;
+        cursor: default;
+      }
+      .clock-card:hover {
+        border-color: var(--border-strong);
+        box-shadow: var(--shadow-md);
+        transform: translateY(-1px);
+      }
+
+      .card-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+      .country-flag {
+        font-size: 1.75rem;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .country-info { flex: 1; min-width: 0; }
+      .country-name {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 2px;
+        letter-spacing: -0.01em;
+      }
+      .timezone-info {
+        font-family: var(--font-mono);
+        font-size: 0.6875rem;
+        color: var(--text-muted);
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .delete-btn {
+        opacity: 0;
+        width: 24px;
+        height: 24px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all var(--transition);
+        font-size: 0.75rem;
+        flex-shrink: 0;
+      }
+      .clock-card:hover .delete-btn { opacity: 1; }
+      .delete-btn:hover {
+        background: var(--status-off-bg);
+        color: var(--status-off);
+      }
+      .delete-btn:focus-visible {
+        opacity: 1;
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .time-section {
+        padding: 16px 0;
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 12px;
+      }
+      .time-display {
+        font-family: var(--font-mono);
+        font-size: 2rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        letter-spacing: -0.04em;
+        line-height: 1.1;
+        margin-bottom: 6px;
+        font-variant-numeric: tabular-nums;
+      }
+      .date-display {
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        font-weight: 500;
+      }
+
+      .status-section {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .status-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        transition: all var(--transition);
+      }
+      .status-indicator::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        flex-shrink: 0;
+      }
+      .working-hours {
+        background: var(--status-working-bg);
+        color: var(--status-working);
+      }
+      .off-hours {
+        background: var(--status-off-bg);
+        color: var(--status-off);
+      }
+      .current-timezone {
+        background: var(--status-current-bg);
+        color: var(--status-current);
+      }
+      .time-diff {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        font-weight: 500;
+      }
+
+      /* ============================================================
+         Footer
+         ============================================================ */
+      .footer {
+        text-align: center;
+        padding: 20px 0;
+        font-size: 0.8125rem;
+        color: var(--text-muted);
+      }
+
+      /* ============================================================
+         Floating control buttons (fullscreen / refresh / add tz)
+         ============================================================ */
+      .controls {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        z-index: 50;
+      }
+      .control-btn {
+        width: 40px;
+        height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        color: var(--text-secondary);
+        cursor: pointer;
+        box-shadow: var(--shadow-sm);
+        transition: all var(--transition);
+        font-size: 0.875rem;
+      }
+      .control-btn:hover {
+        background: var(--bg-subtle);
+        color: var(--text-primary);
+        border-color: var(--border-strong);
+        box-shadow: var(--shadow-md);
+      }
+      .control-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .control-btn:active { transform: scale(0.96); }
+
+      /* ============================================================
+         Notification
+         ============================================================ */
+      .notification {
+        position: fixed;
+        top: 24px;
+        right: 24px;
+        padding: 12px 16px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--accent);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-size: 0.875rem;
+        font-weight: 500;
+        box-shadow: var(--shadow-lg);
+        z-index: 100;
+        transform: translateX(120%);
+        transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+        max-width: 360px;
+      }
+      .notification.show { transform: translateX(0); }
+      .notification.error { border-left-color: var(--status-off); }
+      .notification.success { border-left-color: var(--status-working); }
+
+      /* ============================================================
+         Scrollbar
+         ============================================================ */
+      ::-webkit-scrollbar { width: 10px; height: 10px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border-strong);
+        border-radius: 999px;
+        border: 2px solid var(--bg);
+      }
+      ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+      /* ============================================================
+         Selection
+         ============================================================ */
+      ::selection { background: var(--focus-ring); color: var(--text-primary); }
+
+      /* ============================================================
+         Responsive
+         ============================================================ */
+      @media (max-width: 1024px) {
+        .main-content { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 640px) {
+        body { padding: 20px 16px 80px; }
+        .header h1 { font-size: 1.375rem; }
+        .stats-bar { grid-template-columns: repeat(2, 1fr); }
+        .stat-number { font-size: 1.25rem; }
+        .time-display { font-size: 1.75rem; }
+        .clock-card, .card { padding: 18px; }
+        .theme-toggle span { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+
+    <div class="page">
+      <header class="header">
+        <div class="header-titles">
+          <h1>团队时区时钟</h1>
+          <p>全球团队实时同步 · 协作更高效</p>
+        </div>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="切换主题">
+          <i class="fas fa-moon"></i>
+          <span>深色模式</span>
+        </button>
+      </header>
+
+      <div class="search-container" role="search">
+        <i class="fas fa-search" aria-hidden="true"></i>
+        <input
+          type="text"
+          class="search-box"
+          id="searchBox"
+          placeholder="搜索时区或国家…"
+          onkeyup="filterClocks()"
+          aria-label="搜索时区或国家"
+        >
+      </div>
+
+      <div class="stats-bar" id="statsBar" aria-live="polite">
+        <!-- 统计信息由 JS 动态生成 -->
+      </div>
+
+      <main class="main-content" id="main">
+        <section class="left-column" aria-label="辅助工具">
+          <!-- 日历 -->
+          <div class="card calendar-container">
+            <div class="calendar-header">
+              <button class="nav-btn" onclick="previousMonth()" aria-label="上个月">
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              <div class="calendar-title-block">
+                <h3 id="calendarMonth"></h3>
+                <p id="calendarYear"></p>
+              </div>
+              <button class="nav-btn" onclick="nextMonth()" aria-label="下个月">
+                <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+            <div class="calendar-grid">
+              <div class="weekdays" aria-hidden="true">
+                <div class="weekday">日</div>
+                <div class="weekday">一</div>
+                <div class="weekday">二</div>
+                <div class="weekday">三</div>
+                <div class="weekday">四</div>
+                <div class="weekday">五</div>
+                <div class="weekday">六</div>
+              </div>
+              <div class="days-grid" id="daysGrid">
+                <!-- 日期由 JS 动态生成 -->
+              </div>
+            </div>
+            <div class="calendar-footer">
+              <span class="today-label">今天</span>
+              <span class="today-date" id="todayDate"></span>
+            </div>
+          </div>
+
+          <!-- 时区转换器 -->
+          <div class="card">
+            <div class="card-title">
+              <i class="fas fa-exchange-alt" aria-hidden="true"></i>
+              <span>时区转换器</span>
+            </div>
+            <div class="converter-form">
+              <input
+                type="datetime-local"
+                class="converter-input"
+                id="converterTime"
+                aria-label="选择时间"
+              >
+              <select class="converter-input" id="converterFrom" aria-label="从时区">
+                <!-- 选项由 JS 动态生成 -->
+              </select>
+              <select class="converter-input" id="converterTo" aria-label="到时区">
+                <!-- 选项由 JS 动态生成 -->
+              </select>
+              <button class="submit-btn" onclick="convertTime()">
+                <i class="fas fa-sync-alt" aria-hidden="true"></i>
+                转换时间
+              </button>
+              <div class="converter-result" id="converterResult" aria-live="polite">
+                请选择时间和时区进行转换
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="right-column" aria-label="团队时区">
+          <div class="clock-container" id="clockContainer">
+            <!-- 时钟卡片由 JS 动态生成 -->
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <p>每秒自动更新 · 实时同步全球时间</p>
+      </footer>
+    </div>
+
+    <div class="controls" role="toolbar" aria-label="快捷操作">
+      <button class="control-btn" onclick="toggleFullscreen()" title="全屏模式 (F)" aria-label="全屏模式">
+        <i class="fas fa-expand" aria-hidden="true"></i>
+      </button>
+      <button class="control-btn" onclick="updateAllClocks()" title="手动刷新 (R)" aria-label="手动刷新">
+        <i class="fas fa-sync-alt" aria-hidden="true"></i>
+      </button>
+      <button class="control-btn" onclick="addCustomTimezone()" title="添加时区 (+)" aria-label="添加时区">
+        <i class="fas fa-plus" aria-hidden="true"></i>
+      </button>
+    </div>
+
+    <script>
+      // ============================================================
+      // Timezone data — single source of truth
+      // ============================================================
+      const timezones = [
+        { name: "中国",        flag: "🇨🇳", timezone: "Asia/Shanghai",      workingHours: [9, 18] },
+        { name: "印度",        flag: "🇮🇳", timezone: "Asia/Kolkata",       workingHours: [9, 18] },
+        { name: "英国",        flag: "🇬🇧", timezone: "Europe/London",      workingHours: [9, 17] },
+        { name: "UTC",        flag: "🌐",  timezone: "UTC",                workingHours: [9, 18] },
+        { name: "美国西海岸",  flag: "🇺🇸", timezone: "America/Los_Angeles", workingHours: [9, 18] },
+        { name: "当前位置",    flag: "📍",  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, workingHours: [9, 18], isCurrent: true },
+      ];
+
+      let currentCalendarDate = new Date();
+      let selectedDate = null;
+
+      const monthNames = [
+        "一月", "二月", "三月", "四月", "五月", "六月",
+        "七月", "八月", "九月", "十月", "十一月", "十二月",
+      ];
+
+      // ============================================================
+      // Status helpers
+      // ============================================================
+      function getWorkingStatus(hour, workingHours, isCurrent = false) {
+        if (isCurrent) return "current-timezone";
+        return hour >= workingHours[0] && hour < workingHours[1] ? "working-hours" : "off-hours";
+      }
+
+      function getStatusText(hour, workingHours, isCurrent = false) {
+        if (isCurrent) return "当前时区";
+        return hour >= workingHours[0] && hour < workingHours[1] ? "工作时间" : "非工作时间";
+      }
+
+      function formatTime(date) {
+        return date.toLocaleTimeString("zh-CN", {
+          hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit",
+        });
+      }
+
+      function formatDate(date) {
+        return date.toLocaleDateString("zh-CN", {
+          year: "numeric", month: "long", day: "numeric", weekday: "long",
+        });
+      }
+
+      // ============================================================
+      // Clock cards
+      // ============================================================
+      function createClockCard(timezone) {
+        const now = new Date();
+        const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone.timezone }));
+        const hour = localTime.getHours();
+
+        const timeDiff = Math.round((localTime.getTime() - now.getTime()) / (1000 * 60 * 60));
+        const timeDiffText = timeDiff === 0
+          ? '本地时间'
+          : timeDiff > 0
+            ? `+${timeDiff} 小时`
+            : `${timeDiff} 小时`;
+
+        const statusClass = getWorkingStatus(hour, timezone.workingHours, timezone.isCurrent);
+        const statusText = getStatusText(hour, timezone.workingHours, timezone.isCurrent);
+
+        return `
+          <article class="clock-card" data-timezone-name="${timezone.name.toLowerCase()}">
+            <div class="card-header">
+              <span class="country-flag" aria-hidden="true">${timezone.flag}</span>
+              <div class="country-info">
+                <div class="country-name">
+                  ${timezone.name}
+                  ${!timezone.isCurrent
+                    ? `<button class="delete-btn" onclick="removeTimezone('${timezone.timezone}')" title="删除时区" aria-label="删除时区 ${timezone.name}"><i class="fas fa-trash-alt" aria-hidden="true"></i></button>`
+                    : ''}
+                </div>
+                <div class="timezone-info">${timezone.timezone}</div>
+              </div>
+            </div>
+
+            <div class="time-section">
+              <div class="time-display" data-timezone="${timezone.timezone}">${formatTime(localTime)}</div>
+              <div class="date-display" data-timezone="${timezone.timezone}">${formatDate(localTime)}</div>
+            </div>
+
+            <div class="status-section">
+              <span class="status-indicator ${statusClass}">${statusText}</span>
+              <span class="time-diff">${timeDiffText}</span>
+            </div>
+          </article>
+        `;
+      }
+
+      function createStatsBar() {
+        const now = new Date();
+        let workingCount = 0;
+        let offCount = 0;
+
+        timezones.forEach(tz => {
+          if (tz.isCurrent) return;
+          const localTime = new Date(now.toLocaleString("en-US", { timeZone: tz.timezone }));
+          const hour = localTime.getHours();
+          if (hour >= tz.workingHours[0] && hour < tz.workingHours[1]) workingCount++;
+          else offCount++;
+        });
+
+        return `
+          <div class="stat-item">
+            <span class="stat-number">${timezones.length}</span>
+            <span class="stat-label">时区总数</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">${workingCount}</span>
+            <span class="stat-label">工作时间</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">${offCount}</span>
+            <span class="stat-label">非工作时间</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">${formatTime(now)}</span>
+            <span class="stat-label">本地时间</span>
+          </div>
+        `;
+      }
+
+      function updateAllClocks() {
+        document.getElementById("clockContainer").innerHTML = timezones.map(createClockCard).join("");
+        document.getElementById("statsBar").innerHTML = createStatsBar();
+        updateTimezoneOptions();
+      }
+
+      function updateTimes() {
+        timezones.forEach((timezone) => {
+          const now = new Date();
+          const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone.timezone }));
+          const hour = localTime.getHours();
+
+          const timeElements = document.querySelectorAll(`[data-timezone="${timezone.timezone}"]`);
+          timeElements.forEach((element) => {
+            if (element.classList.contains("time-display")) {
+              element.textContent = formatTime(localTime);
+            } else if (element.classList.contains("date-display")) {
+              element.textContent = formatDate(localTime);
+            }
+          });
+
+          const card = timeElements[0]?.closest(".clock-card");
+          if (card) {
+            const statusElement = card.querySelector(".status-indicator");
+            statusElement.className = `status-indicator ${getWorkingStatus(hour, timezone.workingHours, timezone.isCurrent)}`;
+            statusElement.textContent = getStatusText(hour, timezone.workingHours, timezone.isCurrent);
+          }
+        });
+
+        document.getElementById("statsBar").innerHTML = createStatsBar();
+      }
+
+      // ============================================================
+      // Theme
+      // ============================================================
+      function toggleTheme() {
+        const body = document.body;
+        const themeBtn = document.querySelector('.theme-toggle');
+        const icon = themeBtn.querySelector('i');
+        const text = themeBtn.querySelector('span');
+
+        body.classList.toggle('dark-mode');
+
+        if (body.classList.contains('dark-mode')) {
+          icon.className = 'fas fa-sun';
+          text.textContent = '浅色模式';
+        } else {
+          icon.className = 'fas fa-moon';
+          text.textContent = '深色模式';
+        }
+
+        localStorage.setItem('theme', body.classList.contains('dark-mode') ? 'dark' : 'light');
+      }
+
+      // ============================================================
+      // Calendar
+      // ============================================================
+      function generateCalendar(date) {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const today = new Date();
+
+        document.getElementById('calendarMonth').textContent = monthNames[month];
+        document.getElementById('calendarYear').textContent = year + ' 年';
+
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const firstDayWeek = firstDay.getDay();
+        const daysInMonth = lastDay.getDate();
+        const prevMonth = new Date(year, month, 0);
+        const daysInPrevMonth = prevMonth.getDate();
+
+        const daysGrid = document.getElementById('daysGrid');
+        daysGrid.innerHTML = '';
+
+        for (let i = firstDayWeek - 1; i >= 0; i--) {
+          daysGrid.appendChild(createDayElement(daysInPrevMonth - i, true));
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dayElement = createDayElement(day, false);
+          const currentDate = new Date(year, month, day);
+          if (currentDate.toDateString() === today.toDateString()) dayElement.classList.add('today');
+          if (selectedDate && currentDate.toDateString() === selectedDate.toDateString()) dayElement.classList.add('selected');
+          daysGrid.appendChild(dayElement);
+        }
+
+        const totalCells = daysGrid.children.length;
+        const remainingCells = 42 - totalCells;
+        for (let day = 1; day <= remainingCells; day++) {
+          daysGrid.appendChild(createDayElement(day, true));
+        }
+
+        updateTodayInfo();
+      }
+
+      function createDayElement(day, isOtherMonth) {
+        const dayElement = document.createElement('div');
+        dayElement.className = 'day';
+        dayElement.textContent = day;
+        dayElement.setAttribute('role', 'button');
+        dayElement.setAttribute('tabindex', '0');
+
+        if (isOtherMonth) dayElement.classList.add('other-month');
+
+        dayElement.addEventListener('click', function () {
+          if (!isOtherMonth) {
+            document.querySelectorAll('.day.selected').forEach(el => el.classList.remove('selected'));
+            dayElement.classList.add('selected');
+            selectedDate = new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth(), day);
+            updateTodayInfo();
+          }
+        });
+
+        dayElement.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            dayElement.click();
+          }
+        });
+
+        return dayElement;
+      }
+
+      function updateTodayInfo() {
+        const today = new Date();
+        const displayDate = selectedDate || today;
+        const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+        document.getElementById('todayDate').textContent = displayDate.toLocaleDateString('zh-CN', options);
+      }
+
+      function previousMonth() {
+        currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
+        generateCalendar(currentCalendarDate);
+      }
+
+      function nextMonth() {
+        currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
+        generateCalendar(currentCalendarDate);
+      }
+
+      // ============================================================
+      // Search
+      // ============================================================
+      function filterClocks() {
+        const searchTerm = document.getElementById('searchBox').value.toLowerCase();
+        const cards = document.querySelectorAll('.clock-card');
+
+        cards.forEach(card => {
+          const name = card.getAttribute('data-timezone-name');
+          card.style.display = name.includes(searchTerm) ? '' : 'none';
+        });
+      }
+
+      // ============================================================
+      // Add / remove timezones
+      // ============================================================
+      function addCustomTimezone() {
+        const timezone = prompt("请输入时区标识符 (例如 Asia/Tokyo):");
+        if (!timezone) return;
+
+        try {
+          Intl.DateTimeFormat(undefined, { timeZone: timezone });
+          const name = prompt("请输入时区名称:", timezone.split("/").pop());
+          if (!name) return;
+
+          timezones.push({ name, flag: "🌍", timezone, workingHours: [9, 18] });
+          updateAllClocks();
+          showNotification(`已添加时区: ${name}`, 'success');
+        } catch (e) {
+          showNotification("无效的时区标识符，请重试", 'error');
+        }
+      }
+
+      function removeTimezone(timezoneId) {
+        const index = timezones.findIndex(tz => tz.timezone === timezoneId);
+        if (index === -1 || timezones[index].isCurrent) {
+          showNotification("无法删除当前位置时区", 'error');
+          return;
+        }
+        if (!confirm(`确定要删除 ${timezones[index].name} 吗?`)) return;
+
+        const removedName = timezones[index].name;
+        timezones.splice(index, 1);
+        updateAllClocks();
+        showNotification(`已删除时区: ${removedName}`, 'success');
+      }
+
+      // ============================================================
+      // Converter
+      // ============================================================
+      function updateTimezoneOptions() {
+        const fromSelect = document.getElementById('converterFrom');
+        const toSelect = document.getElementById('converterTo');
+
+        fromSelect.innerHTML = '';
+        toSelect.innerHTML = '';
+
+        timezones.forEach(tz => {
+          const o1 = document.createElement('option');
+          o1.value = tz.timezone;
+          o1.textContent = `${tz.flag} ${tz.name} (${tz.timezone})`;
+          fromSelect.appendChild(o1);
+
+          const o2 = o1.cloneNode(true);
+          toSelect.appendChild(o2);
+        });
+
+        if (timezones.length > 0) {
+          fromSelect.value = timezones[0].timezone;
+          toSelect.value = timezones[timezones.length - 1].timezone;
+        }
+      }
+
+      function convertTime() {
+        const timeInput = document.getElementById('converterTime').value;
+        const fromTimezone = document.getElementById('converterFrom').value;
+        const toTimezone = document.getElementById('converterTo').value;
+        const resultElement = document.getElementById('converterResult');
+
+        if (!timeInput) {
+          resultElement.textContent = "请选择时间";
+          return;
+        }
+
+        try {
+          const date = new Date(timeInput);
+          const formatter = new Intl.DateTimeFormat('zh-CN', {
+            timeZone: toTimezone,
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+          });
+          const convertedTime = formatter.format(date);
+          const fromTz = timezones.find(tz => tz.timezone === fromTimezone);
+          const toTz = timezones.find(tz => tz.timezone === toTimezone);
+
+          resultElement.innerHTML = `
+            <strong>转换结果</strong>
+            <div class="converted-time">${convertedTime}</div>
+            <div class="converted-route">${fromTz ? fromTz.flag + ' ' + fromTz.name : fromTimezone} → ${toTz ? toTz.flag + ' ' + toTz.name : toTimezone}</div>
+          `;
+        } catch (e) {
+          resultElement.textContent = "转换失败，请检查输入";
+        }
+      }
+
+      // ============================================================
+      // Fullscreen
+      // ============================================================
+      function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(err => console.log(`Fullscreen error: ${err.message}`));
+        } else {
+          document.exitFullscreen();
+        }
+      }
+
+      // ============================================================
+      // Notification (right-side slide-in, minimal)
+      // ============================================================
+      function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+
+        // Slide in
+        requestAnimationFrame(() => notification.classList.add('show'));
+
+        setTimeout(() => {
+          notification.classList.remove('show');
+          setTimeout(() => notification.remove(), 250);
+        }, 2800);
+      }
+
+      // ============================================================
+      // Keyboard shortcuts
+      // ============================================================
+      document.addEventListener('keydown', function (e) {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+
+        switch (e.key.toLowerCase()) {
+          case 'f': e.preventDefault(); toggleFullscreen(); break;
+          case 't': e.preventDefault(); toggleTheme(); break;
+          case 'r': e.preventDefault(); updateAllClocks(); break;
+          case 'arrowleft': e.preventDefault(); previousMonth(); break;
+          case 'arrowright': e.preventDefault(); nextMonth(); break;
+          case '+':
+          case '=': e.preventDefault(); addCustomTimezone(); break;
+        }
+      });
+
+      // ============================================================
+      // Init + tickers
+      // ============================================================
+      document.addEventListener('DOMContentLoaded', function () {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme !== 'light') {
+          document.body.classList.add('dark-mode');
+          const themeBtn = document.querySelector('.theme-toggle');
+          themeBtn.querySelector('i').className = 'fas fa-sun';
+          themeBtn.querySelector('span').textContent = '浅色模式';
+        }
+
+        updateAllClocks();
+        generateCalendar(currentCalendarDate);
+        updateTimezoneOptions();
+
+        const now = new Date();
+        const formattedNow = now.toISOString().slice(0, 16);
+        document.getElementById('converterTime').value = formattedNow;
+
+        setTimeout(() => showNotification("欢迎使用团队时区时钟", 'success'), 800);
+      });
+
+      setInterval(updateTimes, 1000);
+
+      setInterval(() => {
+        // Refresh clock cards once a minute (less DOM churn than every second
+        // for stats / labels), and rebuild full layout on visibility change
+        // and on focus.
+        const now = new Date();
+        document.getElementById('statsBar').innerHTML = createStatsBar();
+      }, 60000);
+
+      setInterval(() => {
+        if (new Date().getHours() === 0 && new Date().getMinutes() === 0) {
+          generateCalendar(currentCalendarDate);
+        }
+      }, 60000);
+
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) updateAllClocks(); });
+      window.addEventListener('focus', updateAllClocks);
+    </script>
+  </body>
+</html>

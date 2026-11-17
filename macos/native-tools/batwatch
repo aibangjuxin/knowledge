@@ -1,0 +1,219 @@
+#!/usr/bin/env zsh
+# batwatch — 电池健康 + pmset 电源设置观察器 (MacBook only)
+#
+# 设计目标:
+#   - 公司配 MacBook Pro,无 brew / 无 python,只 zsh + pmset / system_profiler / ioreg
+#   - 显示:
+#       ① 充电状态 (AC / Battery / Charged) + 剩余百分比 + 剩余时间
+#       ② 电池健康 (Cycle Count + Condition) — system_profiler SPPowerDataType
+#       ③ pmset 当前电源配置 (电池 / 性能 / 显示器睡眠)
+#       ④ Low Power Mode (Apple Silicon 才有的省电模式)
+#       ⑤ 当前进程对电源的唤醒请求 (pmset -g assertions)
+#   - 5s 刷新
+#
+# 用法:
+#   batwatch                # 持续观察
+#   batwatch --once         # 单次
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i INTERVAL=5
+typeset ONCE=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --interval|-i) INTERVAL=$2; shift 2 ;;
+    --once)        ONCE=true;    shift ;;
+    --version)     echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--interval N] [--once]"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+# ---- 电池基本信息 ----------------------------------------------------------
+# system_profiler SPPowerDataType 输出:
+#   Battery Information:
+#     Model Information:
+#       Manufacturer: SMP
+#       ...
+#     Charge Information:
+#       State of Charge (%): 100
+#       Charging: No
+#       Full Charge Capacity (mAh): 5000
+#       ...
+#     Health Information:
+#       Cycle Count: 32
+#       Condition: Normal
+_battery_info() {
+  local out
+  out=$(system_profiler SPPowerDataType 2>/dev/null)
+  if [[ -z $out ]]; then
+    echo "  ${C_DIM}(无电池信息 - 这是台式机或 iMac?)${C_RESET}"
+    return 1
+  fi
+
+  # Battery Installed?
+  if ! echo "$out" | grep -q "Battery Installed: Yes"; then
+    echo "  ${C_DIM}(未检测到电池)${C_RESET}"
+    return 1
+  fi
+
+  local soc charging full_charge design_charge cycle_count condition
+  soc=$(echo "$out" | awk -F': *' '/State of Charge/ {print $2}' | tr -d '%')
+  charging=$(echo "$out" | awk -F': *' '/Charging:/ {print $2}')
+  full_charge=$(echo "$out" | awk -F': *' '/Full Charge Capacity/ {print $2}')
+  design_charge=$(echo "$out" | awk -F': *' '/Design Capacity/ {print $2}')
+  cycle_count=$(echo "$out" | awk -F': *' '/Cycle Count:/ {print $2}')
+  condition=$(echo "$out" | awk -F': *' '/Condition:/ {print $2}')
+  # 第一次出现 "Time Remaining:" 在充电信息里
+  local time_remaining
+  time_remaining=$(echo "$out" | awk -F': *' '/Time Remaining/ {print $2}' | head -1)
+  local time_to_full
+  time_to_full=$(echo "$out" | awk -F': *' '/Time to Full Charge/ {print $2}' | head -1)
+
+  # 电量颜色
+  local pct_color=$C_GREEN
+  if [[ -z $soc ]]; then
+    soc='?'
+  else
+    if (( soc < 20 )); then pct_color=$C_RED
+    elif (( soc < 50 )); then pct_color=$C_YELLOW
+    fi
+  fi
+
+  echo "${C_BOLD}  电池状态${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+
+  # 来源图标
+  local source_icon
+  if [[ $charging == Yes ]]; then source_icon='⚡ Charging'
+  elif [[ $charging == No && -n $time_remaining && $time_remaining != "0:00" ]]; then source_icon='🔋 On Battery'
+  else source_icon='✓ Charged'
+  fi
+
+  printf '  电量: ${pct_color}${C_BOLD}%s%%${C_RESET}  状态: ${C_BOLD}%s${C_RESET}\n' \
+    "${soc:-?}" "$source_icon"
+
+  if [[ -n $time_remaining && $time_remaining != "(no estimate)" ]]; then
+    printf '  剩余时间: ${C_BOLD}%s${C_RESET}\n' "$time_remaining"
+  fi
+  if [[ -n $time_to_full && $time_to_full != "0:00" ]]; then
+    printf '  充满预计: ${C_BOLD}%s${C_RESET}\n' "$time_to_full"
+  fi
+
+  echo
+  echo "${C_BOLD}  电池健康${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  printf '  状态:       ${C_BOLD}%s${C_RESET}\n' "${condition:-Unknown}"
+  printf '  循环次数:   ${C_BOLD}%s${C_RESET}  ${C_DIM}(MacBook 一般 1000 次上限)${C_RESET}\n' \
+    "${cycle_count:-?}"
+
+  # 健康度 = full / design * 100
+  if [[ -n $full_charge && -n $design_charge ]] \
+      && [[ $full_charge =~ ^[0-9]+$ ]] && [[ $design_charge =~ ^[0-9]+$ ]] \
+      && (( design_charge > 0 )); then
+    local health_pct=$(( full_charge * 100 / design_charge ))
+    local health_color=$C_GREEN
+    if (( health_pct < 80 )); then health_color=$C_RED
+    elif (( health_pct < 90 )); then health_color=$C_YELLOW
+    fi
+    printf '  设计容量:   %s mAh\n' "$design_charge"
+    printf '  当前容量:   %s mAh\n' "$full_charge"
+    printf '  健康度:     ${health_color}${C_BOLD}%d%%${C_RESET}  ${C_DIM}(< 80% 该考虑换电池)${C_RESET}\n' "$health_pct"
+  fi
+}
+
+# ---- pmset 电源配置 --------------------------------------------------------
+_pmset_settings() {
+  echo
+  echo "${C_BOLD}  当前电源配置 (pmset -g)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  pmset -g 2>/dev/null | awk '
+    /^Currently drawing from/ {
+      icon = "🔌"
+      if ($NF == "Battery") icon = "🔋"
+      printf "  电源:       %s %s %s %s %s\n", icon, $4, $5, $6, $7
+      next
+    }
+    /Battery Power:/ || /AC Power:/ {
+      mode = ($1 == "Battery" ? "电池模式" : "插电模式")
+      printf "  %s:\n", mode
+      next
+    }
+    /^[[:space:]]+(sleep|disable|wake|power|display|darkwake|ring|reducespeed|httpringenable|proximitywake|standbydelay|autopoweroff|autorestart|tcpkeepalive|gpuswitch|powernap)/ {
+      printf "    %s\n", $0
+    }
+  '
+}
+
+# ---- Low Power Mode (Apple Silicon) ----------------------------------------
+_low_power() {
+  # pmset -g | grep lowpowermode  或  sysctl hw.lpm
+  local lpm
+  lpm=$(pmset -g 2>/dev/null | grep -i 'low power mode' | head -1)
+  if [[ -n $lpm ]]; then
+    local icon='⚪ Off'
+    if [[ $lpm == *Yes* ]]; then icon='🟢 On'; fi
+    echo
+    echo "  ${C_BOLD}Low Power Mode:${C_RESET} $icon"
+    echo "  ${C_DIM}(Apple Silicon 特有省电模式,系统级限制后台活动)${C_RESET}"
+  fi
+}
+
+# ---- 当前电源唤醒请求 (谁在阻止系统睡眠) -----------------------------------
+_wake_assertions() {
+  echo
+  echo "${C_BOLD}  当前唤醒/阻止睡眠的进程${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  pmset -g assertions 2>/dev/null | awk '
+    /No assertions/ { print "  (无)"; exit }
+    /pid \([0-9]+\)/ {
+      # 抓 PID + 进程名 + 原因
+      pid = $3; gsub(/[()]/, "", pid)
+      proc = ""
+      for (i=5; i<=NF; i++) proc = proc " " $i
+      printf "  PID %s%s\n", pid, proc
+    }
+  ' | head -10
+}
+
+_render() {
+  printf '\033[?25l\033[2J\033[H'
+
+  echo "${C_BOLD}${C_CYAN}═══ 电池 / 电源 观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  刷新间隔 ${INTERVAL}s  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  if ! _battery_info; then
+    echo "  ${C_DIM}退出:本机器没有电池${C_RESET}"
+    printf '\033[?25h\033[0m'
+    return 0
+  fi
+
+  _pmset_settings
+  _low_power
+  _wake_assertions
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: system_profiler SPPowerDataType, pmset${C_RESET}"
+}
+
+_cleanup() {
+  printf '\033[?25h\033[0m'; echo
+}
+trap _cleanup EXIT INT TERM
+
+if $ONCE; then _render; else while true; do _render; sleep $INTERVAL; done; fi

@@ -1,0 +1,111 @@
+# =============================================================================
+# 07-authz.yaml
+# =============================================================================
+# 东西向授权 —— 证明"同 ns 内调用"仍然有身份边界
+#
+# ★ 老场景的一个陷阱(这里刻意不重复)★
+#   ../case-lex/03-mesh-security.yaml 里有一条 ns 级 DENY-all:
+#       action: DENY
+#       rules: [{}]        # 空规则 = 匹配所有
+#   Istio 的评估顺序是 DENY 优先于 ALLOW —— DENY 一旦命中就直接拒绝,
+#   后面的 ALLOW 策略无法"救回来"。
+#   → 也就是说:一条 ns 级 deny-all 会把整个 ns 的流量(包含 ALLOW 的)全挡掉。
+#   → 本 PoC 不写 deny-all,用"只写 ALLOW + 明确来源"的方式收敛。
+#     如需默认拒绝,正确做法是把 DENY 收窄到具体 workload(用 targetRefs),
+#     而不是 ns 级空规则。
+#
+# 严格定义 (principal 格式):
+#   "cluster.local/ns/<namespace>/sa/<service-account-name>"
+#   — Istio AuthorizationPolicy docs
+#
+# 严格定义 (targetRefs):
+#   targetRefs 把策略绑到具体 Service / Gateway 上。
+#   ambient 下推荐用 targetRefs 取代 selector.matchLabels ——
+#   绑 Service 时策略在 waypoint(L7)执行,能看到**原始调用方**身份,
+#   而不是 waypoint 自己代发时的身份。
+#   — Istio AuthorizationPolicy reference / ../../06-policy-capabilities.md
+# -----------------------------------------------------------------------------
+
+---
+# -----------------------------------------------------------------------------
+# AuthZ-1: 允许调用方 SA 调用被调方 Service
+# targetRefs 绑 Service → 在 waypoint 执行 → source.principals 是原始调用方
+# -----------------------------------------------------------------------------
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-caller-to-api2
+  namespace: ba000000-lex-intra-call
+  labels:
+    app: lex-api2
+    app.kubernetes.io/part-of: ba000000-lex-intra-call
+spec:
+  targetRefs:
+    - kind: Service
+      group: ""
+      name: lex-api2-service
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/ba000000-lex-intra-call/sa/lex-api1-ksa"
+      to:
+        - operation:
+            methods: ["GET", "POST"]
+            paths: ["/", "/healthz", "/resource", "/v1/*", "/v2/*"]
+
+---
+# -----------------------------------------------------------------------------
+# AuthZ-2(可选,排障用):允许 waypoint SA
+#
+# 如果调用返回 403,且日志里 source principal 显示的是 waypoint 的 SA
+# (而不是 lex-api1-ksa),说明这条链路上 waypoint 代发了请求、
+# 原始身份没有透传到策略评估点 —— 此时放开 waypoint SA 作为兜底。
+#
+# ⚠️ 这条会放宽边界(任何能到 waypoint 的流量都可能通过),只在排障期开启
+#
+# 如何查 waypoint 的 SA 名:
+#   kubectl get deploy -n ba000000-lex-intra-call \
+#     -l gateway.networking.k8s.io/gateway-name=waypoint-intra \
+#     -o jsonpath='{.items[0].spec.template.spec.serviceAccountName}'
+# -----------------------------------------------------------------------------
+# apiVersion: security.istio.io/v1beta1
+# kind: AuthorizationPolicy
+# metadata:
+#   name: allow-waypoint-sa-to-api2
+#   namespace: ba000000-lex-intra-call
+# spec:
+#   targetRefs:
+#     - kind: Service
+#       group: ""
+#       name: lex-api2-service
+#   action: ALLOW
+#   rules:
+#     - from:
+#         - source:
+#             principals:
+#               - "cluster.local/ns/ba000000-lex-intra-call/sa/waypoint-intra"
+
+---
+# -----------------------------------------------------------------------------
+# PeerAuthentication: mesh mTLS
+#
+# 严格定义 (ambient 语义变化):
+#   ambient 下 STRICT 的含义是"**必须走 mesh**",而不是 sidecar 时代的
+#   "必须用 mTLS 访问本 pod" —— 明文直连会被拒绝。
+#   ambient 不支持 DISABLE mode,也不支持 portLevelMtls。
+#   — ../../06-policy-capabilities.md §1
+#
+# 注意: ambient 默认就是加密的,这条显式写出来是为了让意图可审计。
+# -----------------------------------------------------------------------------
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default-strict
+  namespace: ba000000-lex-intra-call
+  labels:
+    app.kubernetes.io/part-of: ba000000-lex-intra-call
+spec:
+  mtls:
+    mode: STRICT

@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: python-health-demo-v2025-11-25
+  labels:
+    app: python-health-demo
+    version: v2025.11.25
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: python-health-demo
+      version: v2025.11.25
+  template:
+    metadata:
+      labels:
+        app: python-health-demo
+        version: v2025.11.25
+    spec:
+      containers:
+        - name: python-health-demo
+          image: aibangjuxin/python:python-health-demo
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8443
+              name: https
+          env:
+            - name: API_NAME
+              value: "api-name-spring-samples"
+            - name: MINOR_VERSION
+              value: "2025.11.25"
+            - name: BASE_PATH
+              value: "/api-name-spring-samples/v2025.11.25"
+            - name: HTTPS_CERT_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: python-health-demo-secret
+                  key: https-cert-pwd
+
+          # 探针配置
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /api-name-spring-samples/v2025.11.25/well-known/liveness
+              port: 8443
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /api-name-spring-samples/v2025.11.25/well-known/readiness
+              port: 8443
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+          startupProbe:
+            httpGet:
+              scheme: HTTPS
+              path: /api-name-spring-samples/v2025.11.25/well-known/startup
+              port: 8443
+            failureThreshold: 10
+            periodSeconds: 2

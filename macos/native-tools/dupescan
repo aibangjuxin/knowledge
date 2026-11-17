@@ -1,0 +1,408 @@
+#!/usr/bin/env zsh
+# dupescan — 重复文件扫描器(只读,先按大小筛,再按内容校验)
+#
+# 设计目标:
+#   - 找big 只能告诉你"哪些目录大",但真正能安全删掉的往往是重复文件:
+#     装包解压出来的重复 tarball、备份留下的两份照片、复制粘贴出来的文档
+#   - 免 brew / 免 python:只 zsh + find + stat + shasum + awk
+#   - 两阶段扫描(这是能不能跑得动的关键):
+#       ① 按**字节大小**分组 —— 纯 stat,极快
+#       ② 只有"同大小且 ≥2 个"的文件才做 **shasum 内容校验** ——
+#          大小相同但内容不同的假阳性在这里被干掉
+#   - 绝对只读:不删、不移动、不改权限
+#
+# 用法:
+#   dupescan                        # 扫 ~/Downloads ~/Documents ~/Desktop
+#   dupescan ~/Pictures             # 扫指定目录
+#   dupescan --dir A --dir B        # 多个目录
+#   dupescan --min-size 10M         # 最小文件大小(默认 1M)
+#   dupescan --max-groups 20        # 最多列出多少组(默认 15)
+#   dupescan --no-hash              # 只按大小判重(快但有假阳性)
+#   dupescan --all                  # 包含隐藏目录(默认不含)
+#   dupescan --json
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -r _TAB=$'\t'
+# 坑(README 踩坑 #24):zsh 的函数必须在**调用前**定义完,解析参数时就会用到 _to_kb,
+# 写在参数解析后面会直接 "command not found: _to_kb" 然后静默用默认值继续跑。
+# 大小后缀换算成 KB
+_to_kb() {
+  local v=$1
+  case $v in
+    *K|*k) echo $(( ${v%[Kk]} )) ;;
+    *M|*m) echo $(( ${v%[Mm]} * 1024 )) ;;
+    *G|*g) echo $(( ${v%[Gg]} * 1024 * 1024 )) ;;
+    *)     echo $(( v )) ;;
+  esac
+}
+
+typeset -i MIN_KB=1024          # 默认 1 MB
+typeset -i MAX_GROUPS=15
+typeset NO_HASH=false ALL=false
+typeset AS_JSON=false
+typeset -a DIRS=()
+
+while (( $# > 0 )); do
+  case $1 in
+    --dir)        DIRS+=("$2"); shift 2 ;;
+    --min-size)   MIN_KB=$(_to_kb "$2"); shift 2 ;;
+    --min-size=*) MIN_KB=$(_to_kb "${1#*=}"); shift ;;
+    --max-groups) MAX_GROUPS=$2; shift 2 ;;
+    --no-hash)    NO_HASH=true; shift ;;
+    --all)        ALL=true; shift ;;
+    --json)       AS_JSON=true; shift ;;
+    --version)    echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [目录...] [--dir D] [--min-size 10M] [--max-groups N] [--no-hash] [--all] [--json]"
+      echo ""
+      echo "  目录…            要扫的目录(默认 ~/Downloads ~/Documents ~/Desktop ~/Movies)"
+      echo "  --dir D          追加一个目录(可重复)"
+      echo "  --min-size 10M   只看 ≥10M 的文件(支持 K/M/G 后缀,默认 1M)"
+      echo "  --max-groups N   最多列 N 组(默认 $MAX_GROUPS)"
+      echo "  --no-hash        跳过内容校验(快,但同大小不同内容的会被误报)"
+      echo "  --all            连隐藏目录一起扫(慢很多)"
+      echo "  --json           TSV 输出"
+      exit 0
+      ;;
+    -*) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+    *)  DIRS+=("$1"); shift ;;
+  esac
+done
+
+(( ${#DIRS} == 0 )) && DIRS=("$HOME/Downloads" "$HOME/Documents" "$HOME/Desktop" "$HOME/Movies")
+
+if [[ -t 1 && $AS_JSON == false ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+typeset -g -a J_GROUP=()      # wasted<TAB>size<TAB>count<TAB>ext<TAB>paths(逗号分隔)
+typeset -g -a J_FAKES=()      # size<TAB>count<TAB>paths(同大小不同内容,被 hash 排除)
+typeset -g J_TOTAL_WASTED=0 J_TOTAL_GROUPS=0 J_TOTAL_FILES=0 J_SCANNED=0 J_CANDIDATES=0
+
+# ---- ① 按大小分组 ---------------------------------------------------------
+# 坑(两个,都很关键):
+#   ① `find ... -exec stat -f ... {} \;` 每个文件 fork 一次 stat,
+#     扫个 ~/Downloads 要几分钟。必须 `-exec ... {} +` 批量。
+#   ② **不要在 awk 里把一组文件拼成"多行字符串"再交给 `while read`** ——
+#     read 是按行读的,多行值会被截断成第一行,剩下的行变成垃圾记录,
+#     表现是"文件明明重复却一条都找不到"。整个流程保持"一行一条记录"。
+#      路径集合要用 zsh 关联数组在内存里攒,别过管道。
+_collect_by_size() {
+  local dir out f_all f_cand
+  f_all=/tmp/dupescan_all.$$
+  f_cand=/tmp/dupescan_cand.$$
+  : > "$f_all"; : > "$f_cand"
+  for dir in $DIRS; do
+    [[ -d $dir ]] || continue
+    local -a findargs
+    findargs=("$dir" -type f -size "+${MIN_KB}k")
+    $ALL || findargs+=(-not -path '*/.*')
+    out=$(find $findargs -exec stat -f '%z	%N' {} + 2>/dev/null || true)
+    [[ -z $out ]] && out=''
+    [[ -z $out ]] && continue
+    # 每行:size<TAB>path,一行一个文件
+    print -r -- "$out" | LC_ALL=C awk -F'\t' '
+      {
+        size = $1
+        if (size + 0 <= 0) next
+        path = ""
+        for (i = 2; i <= NF; i++) path = path (i > 2 ? "\t" : "") $i
+        cnt[size]++
+        print "F\t" size "\t" path
+      }
+      END { for (s in cnt) if (cnt[s] > 1) print "C\t" s "\t" cnt[s] }
+    ' >> "$f_all"
+  done
+  LC_ALL=C grep '^C' "$f_all" > "$f_cand" 2>/dev/null || true
+  J_SCANNED=$(LC_ALL=C grep -c '^F' "$f_all" 2>/dev/null || print 0)
+}
+
+# ---- ② 内容校验 -----------------------------------------------------------
+# 对一组"同大小"的文件做 SHA-256。**一次 shasum 算完整组**,不是每文件一次。
+# shasum 的输出是 "<hash>  <path>",按 hash 分组后只保留组内 ≥2 的。
+_verify_paths() {
+  # 入参:换行分隔的路径列表(来自关联数组)
+  # 出参:两行式 —— H<TAB>hash<TAB>path 一行一个文件,HC<TAB>hash<TAB>count 收尾
+  #
+  # 坑:曾经把一组同 hash 的路径在 awk 里拼成"多行字符串"再用 `while read n same`
+  # 拆,read 只拿到第一行,剩下的行被当成新记录 → 产生 count=0 的垃圾组
+  # (wasted 算成负数)。凡是"一组多行"的数据,一律回到行式流 + 关联数组。
+  local -a files
+  files=(${(f)1})
+  (( ${#files} > 0 )) || return
+  local tmp
+  tmp=$(mktemp)
+  # -0 传参:路径里有空格也不会错位
+  print -rl -- $files | tr '\n' '\0' | xargs -0 shasum -a 256 2>/dev/null \
+    | LC_ALL=C awk '
+        {
+          h = $1
+          path = substr($0, index($0, $2))
+          cnt[h]++
+          printf "H\t%s\t%s\n", h, path
+        }
+        END { for (h in cnt) if (cnt[h] > 1) printf "HC\t%s\t%d\n", h, cnt[h] }
+      ' > "$tmp" 2>/dev/null || true
+  cat "$tmp"
+  rm -f "$tmp"
+}
+
+_collect_verified() {
+  local f_all=/tmp/dupescan_all.$$ f_cand=/tmp/dupescan_cand.$$
+  local f_out=/tmp/dupescan_out.$$
+  [[ -f $f_cand ]] || return
+
+  # 局部变量千万别叫 path —— zsh 里 path 和 PATH 绑定,
+  # `local path` 会把 PATH 清空,连被调用函数里的外部命令也一起废掉
+  local kind size count pth h n
+  local -A paths_of hash_paths
+  : > "$f_out"
+
+  # 第一遍:候选 size -> 该组全部文件
+  while IFS=$_TAB read -r kind size pth; do
+    [[ $kind == 'F' ]] || continue
+    paths_of[$size]+="${pth}"$'\n'
+  done < "$f_all"
+
+  # 第二遍:逐组校验
+  while IFS=$_TAB read -r kind size count; do
+    [[ $kind == 'C' && -n $size ]] || continue
+    J_CANDIDATES=$(( J_CANDIDATES + count ))
+
+    if $NO_HASH; then
+      # 不校验:同大小就算重复(页面上会标注是"疑似")
+      print -r -- "${paths_of[$size]%$'\n'}" | LC_ALL=C awk -v s="$size" -v c="$count" '
+        { p[NR] = $0 }
+        END { printf "%d\t%d\t%d\t%s\n", s * (c - 1), s, c, join(p, " | ") }
+        function join(a, sep,   i, out) { for (i = 1; i <= length(a); i++) out = out (i > 1 ? sep : "") a[i]; return out }
+      ' >> "$f_out"
+      continue
+    fi
+
+    hash_paths=()
+    local hashed_rc=0
+    local hashed
+    hashed=$(_verify_paths "${paths_of[$size]}") || hashed_rc=$?
+    if [[ -z $hashed ]]; then
+      # 同大小、内容两两不同 —— 假阳性,单列出来
+      local joined
+      joined=$(print -r -- "${paths_of[$size]%$'\n'}" | tr '\n' '|')
+      J_FAKES+=("${size}${_TAB}${count}${_TAB}${joined}")
+      continue
+    fi
+    # 收集 hash -> 路径
+    local tmpf=/tmp/dupescan_h.$$
+    print -r -- "$hashed" > "$tmpf"
+    while IFS=$_TAB read -r kind h pth; do
+      [[ $kind == 'H' ]] || continue
+      hash_paths[$h]+="${pth}"$'\n'
+    done < "$tmpf"
+    while IFS=$_TAB read -r kind h n; do
+      [[ $kind == 'HC' && -n $h ]] || continue
+      print -r -- "${hash_paths[$h]%$'\n'}" | LC_ALL=C awk -v s="$size" -v c="$n" '
+        { p[NR] = $0 }
+        function join(a, sep,   i, out) { for (i = 1; i <= length(a); i++) out = out (i > 1 ? sep : "") a[i]; return out }
+        END { printf "%d\t%d\t%d\t%s\n", s * (c - 1), s, c, join(p, " | ") }
+      ' >> "$f_out"
+    done < "$tmpf"
+    rm -f "$tmpf"
+  done < "$f_cand"
+
+  local sorted w s2 n2 paths
+  sorted=$(LC_ALL=C sort -t $'\t' -k1,1nr "$f_out" 2>/dev/null)
+  rm -f "$f_out" "$f_all" "$f_cand"
+  [[ -z $sorted ]] && return
+  while IFS=$_TAB read -r w s2 n2 paths; do
+    [[ -n $w ]] || continue
+    J_GROUP+=("${w}${_TAB}${s2}${_TAB}${n2}${_TAB}${paths}")
+    J_TOTAL_WASTED=$(( J_TOTAL_WASTED + w ))
+    J_TOTAL_GROUPS=$(( J_TOTAL_GROUPS + 1 ))
+    J_TOTAL_FILES=$(( J_TOTAL_FILES + n2 ))
+  done <<< "$sorted"
+}
+
+# ---- 结论 -----------------------------------------------------------------
+_verdicts() {
+  local bad=0 warn=0
+  if (( J_SCANNED == 0 )); then
+    printf "warn\t没扫到任何文件\t-\t检查目录是否存在,或用 --min-size 调小阈值\n"
+    (( warn = warn + 1 ))
+  else
+    printf "info\t扫描文件数\t%d\t阈值 ≥ %d KB\n" "$J_SCANNED" "$MIN_KB"
+  fi
+  if (( J_TOTAL_GROUPS == 0 )); then
+    $NO_HASH && printf "ok\t没有发现重复文件\t-\t未做内容校验,可能有假阳性\n" \
+              || printf "ok\t没有发现重复文件\t-\t已按 SHA-256 内容校验\n"
+  else
+    local h
+    h=$(awk -v b="$J_TOTAL_WASTED" 'BEGIN{
+      if (b >= 1073741824)      printf "%.2f GB", b / 1073741824
+      else if (b >= 1048576)    printf "%.1f MB", b / 1048576
+      else                      printf "%d KB", b / 1024
+    }')
+    if (( J_TOTAL_WASTED > 10737418240 )); then
+      printf "warn\t重复文件可回收 %s\t%d 组 / %d 个文件\t删之前先确认哪份才是新的\n" "$h" "$J_TOTAL_GROUPS" "$J_TOTAL_FILES"
+      (( warn = warn + 1 ))
+    else
+      printf "ok\t重复文件可回收 %s\t%d 组 / %d 个文件\t量不大\n" "$h" "$J_TOTAL_GROUPS" "$J_TOTAL_FILES"
+    fi
+  fi
+  if (( ${#J_FAKES} > 0 )); then
+    printf "info\t%d 组同大小但内容不同\t-\t已被内容校验排除,不是真重复\n" "${#J_FAKES}"
+  fi
+  printf "info\t统计\tbad=%d warn=%d\t先看 warn\n" "$bad" "$warn"
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_kv() { printf "%s\t%s\t%s\t%s\n" "$1" "$2" "$3" "$4"; }
+
+_render_kv() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return s }
+    NF < 2 { next }
+    {
+      if ($1 == "ok")       { col = g;   mark = "✓" }
+      else if ($1 == "warn") { col = y;   mark = "!" }
+      else if ($1 == "bad")  { col = red; mark = "✗" }
+      else                  { col = d;   mark = "·" }
+      printf "  %s%s%s %s%s%s  %s%s  %s  %s\n", col, mark, r, b, pad($2, 26), r, pad($3, 26), d, $4, r
+    }
+  '
+}
+
+_render_groups() {
+  local -i hashed=1
+  $NO_HASH && hashed=0
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v y=$C_YELLOW -v limit="$MAX_GROUPS" -v hashed="$hashed" '
+    function human(b) {
+      if (b + 0 >= 1073741824) return sprintf("%.2f GB", b / 1073741824)
+      if (b + 0 >= 1048576)    return sprintf("%.1f MB", b / 1048576)
+      return sprintf("%d KB", b / 1024)
+    }
+    function base(p,   n, a) {
+      n = split(p, a, "/")
+      return a[n]
+    }
+    function ext(p,   n, a, e) {
+      n = split(p, a, "/")
+      p = a[n]
+      if (p !~ /\./) return "(无扩展名)"
+      e = p
+      sub(/^.*\./, "", e)
+      return "." e
+    }
+    NF < 4 { next }
+    {
+      n++
+      if (n > limit) { over++; next }
+      delete plist
+      # hashed=0 时是 --no-hash 模式,只是"同大小",不算确证
+      # 第 4 字段是 " | " 连接的完整路径列表,拆开逐行缩进打印
+      cnt_paths = split($4, plist, / \| /)
+      head = plist[1]
+      printf "  %s#%-2d%s %-10s ×%d  %s可回收 %s%s  %s%s%s%s\n", y, n, r, human($2), $3, b, human($1), r, d, ext(head), r, (hashed ? "" : "  (未校验内容,仅同大小)")
+      for (i = 2; i <= cnt_paths; i++) printf "        %s%s%s\n", d, plist[i], r
+    }
+    END { if (over) printf "  %s… 另有 %d 组(--max-groups 调大)%s\n", d, over, r }
+  '
+}
+
+# 路径已经在 _render_groups 里逐行列出了,这里保留一个占位以便以后单独打印
+_render_paths() {
+  LC_ALL=C awk -F'\t' -v want="$1" -v d=$C_DIM -v y=$C_YELLOW '
+    NF < 4 { next }
+    { n++; if (n == want) printf "  %s第 %d 组:%s\n", y, want, "" }
+  '
+}
+
+_section() {
+  echo "${C_BOLD}$1${C_RESET}"
+  echo "  ${C_DIM}───────────────────────────────────────────────────────${C_RESET}"
+}
+
+_render_human() {
+  local mode_all mode_hash
+  local -i shown
+  [[ -t 1 ]] && printf '\033[?25l\033[2J\033[H'
+  echo "${C_BOLD}${C_CYAN}═══ 重复文件扫描 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读不删  ·  目录: ${DIRS[*]}${C_RESET}"
+  echo
+  # 坑:`"$X == true && echo a || echo b"` 写在双引号里只是普通文本,不会执行。
+  # 先把三段文案算好再拼进 echo。
+  $ALL     && mode_all='含隐藏目录' || mode_all='不含隐藏目录'
+  $NO_HASH && mode_hash='未做内容校验(可能有假阳性)' || mode_hash='已做 SHA-256 内容校验'
+  echo "  ${C_DIM}阈值 ≥ $MIN_KB KB · $mode_all · $mode_hash${C_RESET}"
+  echo
+
+  _section "重复组 (按可回收空间排序)"
+  if (( ${#J_GROUP} == 0 )); then
+    echo "  ${C_DIM}(没有找到重复文件)${C_RESET}"
+  else
+    print -rl -- $J_GROUP | _render_groups
+  fi
+  echo
+
+  if (( ${#J_FAKES} > 0 )); then
+    _section "同大小但内容不同(已排除)"
+    shown=0
+    local row
+    for row in $J_FAKES; do
+      (( shown < 5 )) || break
+      (( shown = shown + 1 ))
+      print -r -- "$row" | LC_ALL=C awk -F'\t' -v d=$C_DIM -v r=$C_RESET '
+        function human(b) {
+          if (b + 0 >= 1048576) return sprintf("%.1f MB", b / 1048576)
+          return sprintf("%d KB", b / 1024)
+        }
+        NF < 3 { next }
+        { printf "  %-10s ×%d  %s%s%s\n", human($1), $2, d, $3, r }
+      '
+    done
+    echo
+  fi
+
+  _section "结论"
+  _verdicts | _render_kv
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: find, stat, shasum, awk${C_RESET}"
+  echo "${C_DIM}  提示: 本脚本不删任何文件。确认后自己 rm,或者先开废纸篓丢一份再删${C_RESET}"
+}
+
+_render_json() {
+  local a b c d vout
+  print -r -- "meta${_TAB}${SCRIPT_NAME}${_TAB}${VERSION}${_TAB}$(date '+%Y-%m-%d %H:%M:%S')"
+  print -r -- "scanned${_TAB}${J_SCANNED}"
+  print -r -- "min_kb${_TAB}${MIN_KB}"
+  $NO_HASH && print -r -- "hashed${_TAB}no" || print -r -- "hashed${_TAB}yes"
+  print -r -- "total_wasted_bytes${_TAB}${J_TOTAL_WASTED}"
+  print -r -- "total_groups${_TAB}${J_TOTAL_GROUPS}"
+  local row
+  for row in $J_GROUP; do print -r -- "group${_TAB}${row}"; done
+  for row in $J_FAKES; do print -r -- "falsepositive${_TAB}${row}"; done
+  vout=$(_verdicts)
+  while IFS=$_TAB read -r a b c d; do print -r -- "verdict${_TAB}${a}${_TAB}${b}${_TAB}${c}${_TAB}${d}"; done <<< "$vout"
+}
+
+_cleanup() {
+  [[ -t 1 ]] && printf '\033[?25h\033[0m'
+  rm -f /tmp/dupescan_all.$$ /tmp/dupescan_cand.$$ /tmp/dupescan_out.$$
+}
+trap _cleanup EXIT INT TERM
+if $AS_JSON; then
+  trap - EXIT INT TERM
+  _collect_by_size
+  _collect_verified
+  _render_json
+  exit 0
+fi
+
+_collect_by_size
+_collect_verified
+_render_human

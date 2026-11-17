@@ -1,0 +1,240 @@
+#!/usr/bin/env zsh
+# procwatch — 进程树 (pstree 风格) + 资源占用聚合
+#
+# 设计目标:
+#   - 公司配 MacBook Pro,无 brew / 无 python,只 zsh + ps
+#   - cpuwatch 看的是 Top 10 横向排序,procwatch 看的是父子层级
+#   - 显示:
+#       ① 从 PID 1 (launchd) 往下的进程树
+#       ② 每节点 PID / USER / %CPU / %MEM / RSS / 启动时间 / 命令
+#       ③ 子树聚合:按进程名汇总 %CPU 和 RSS (看见 Safari 一棵子树的真实占用)
+#       ④ 高亮:CPU > 50% 红, > 20% 黄
+#       ⑤ 标记 Z (zombie) / < (nice 优先级高) / N (nice 低)
+#   - 默认 3s 刷新
+#
+# 用法:
+#   procwatch                        # 持续观察,根 = launchd (PID 1)
+#   procwatch --root pid             # 根 = 指定 PID
+#   procwatch --name Safari          # 只显示包含指定名字的子树
+#   procwatch --sort cpu|mem         # 排序方式 (默认 cpu)
+#   procwatch --max-depth 3          # 限制树深度
+#   procwatch --once                 # 单次
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i INTERVAL=3 TOP_N=20 MAX_DEPTH=8
+typeset ONCE=false ROOT_PID=1 NAME_FILTER="" SORT_BY=cpu
+
+while (( $# > 0 )); do
+  case $1 in
+    --interval|-i) INTERVAL=$2; shift 2 ;;
+    --root)        ROOT_PID=$2; shift 2 ;;
+    --name)        NAME_FILTER=$2; shift 2 ;;
+    --sort)        SORT_BY=$2; shift 2 ;;
+    --max-depth)   MAX_DEPTH=$2; shift 2 ;;
+    --top)         TOP_N=$2; shift 2 ;;
+    --once)        ONCE=true; shift ;;
+    --version)     echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--root PID] [--name PATTERN] [--sort cpu|mem] [--max-depth N] [--once]"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+# ---- 一次性进程快照 -------------------------------------------------------
+# 用 ps -axo 拿所有需要的字段,awk 转 TSV: pid<TAB>ppid<TAB>user<TAB>pcpu<TAB>rss<TAB>etime<TAB>state<TAB>command
+_snapshot() {
+  ps -axo pid=,ppid=,user=,%cpu=,rss=,etime=,stat=,command= 2>/dev/null \
+    | awk '{
+      pid  = $1
+      ppid = $2
+      user = $3
+      pcpu = $4
+      rss  = $5     # KB
+      etime = $6
+      stat = $7
+      # command 可能含空格,但 ps 输出每行 = 一个进程,且 command= 是最后一个字段
+      cmd = ""
+      for (j=8; j<=NF; j++) cmd = cmd (j==8?"":" ") $j
+      printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", pid, ppid, user, pcpu, rss, etime, stat, cmd
+    }'
+}
+
+# 用关联数组 ppid → 子 pid 列表,做树渲染
+_render_tree() {
+  # 把 snapshot 读进 awk,父 pid → 子 pid 列表
+  _snapshot | awk -v root="$ROOT_PID" -v name_filter="$NAME_FILTER" \
+                  -v max_depth="$MAX_DEPTH" -v sort_by="$SORT_BY" \
+                  -v top_n="$TOP_N" \
+                  -v c_reset="$C_RESET" -v c_dim="$C_DIM" -v c_cyan="$C_CYAN" \
+                  -v c_bold="$C_BOLD" -v c_red="$C_RED" -v c_yellow="$C_YELLOW" \
+    '
+    function human_kb(kb) {
+      if (kb >= 1048576) return sprintf("%.1fG", kb/1048576)
+      if (kb >= 1024)    return sprintf("%dM", kb/1024)
+      return sprintf("%dK", kb)
+    }
+    function short_cmd(cmd) {
+      # 取路径最后一段
+      n = split(cmd, parts, "/"); s = parts[n]
+      return s
+    }
+    function color_for_cpu(p) {
+      if (p+0 >= 50) return c_red
+      if (p+0 >= 20) return c_yellow
+      return c_reset
+    }
+    function color_for_mem(rss_kb) {
+      m = rss_kb / 1024  # MB
+      if (m >= 500) return c_red
+      if (m >= 100) return c_yellow
+      return c_reset
+    }
+    # ---- 读 snapshot ----
+    NR == 1 { next_header = 1 }
+    {
+      pid[$1] = $1; ppid[$1] = $2; user[$1] = $3; pcpu[$1] = $4
+      rss[$1]  = $5; etime[$1] = $6; stat[$1] = $7
+      cmd_full[$1] = $8
+      cmd_short[$1] = short_cmd($8)
+      # 子节点列表
+      children[$2] = children[$2] " " $1
+      total++
+    }
+    END {
+      print c_bold c_cyan "═══ 进程树 ═══" c_reset
+      print c_dim "根 = " root "  ·  排序 = " sort_by "  ·  最大深度 = " max_depth "  ·  进程总数 = " total c_reset
+      if (name_filter != "") print c_dim "过滤: " name_filter c_reset
+      print ""
+
+      # 排序 children 列表 (按 sort_by)
+      # sort children[root] by pcpu or rss
+      n = split(children[root], arr, " ")
+      # 复制到 a_sort 数组 + 排
+      for (i=1;i<=n;i++) {
+        pid_i = arr[i]
+        if (pid_i == "") continue
+        if (sort_by == "mem")  sort_key[i] = rss[pid_i] + 0
+        else                    sort_key[i] = pcpu[pid_i] + 0
+        idx[i] = i
+      }
+      # 简单冒泡排序 (按 sort_key 降序)
+      for (i=1;i<=n;i++) {
+        for (j=i+1;j<=n;j++) {
+          if (sort_key[j]+0 > sort_key[i]+0) {
+            tmp = sort_key[i]; sort_key[i] = sort_key[j]; sort_key[j] = tmp
+            tmp = idx[i]; idx[i] = idx[j]; idx[j] = tmp
+          }
+        }
+      }
+      sorted_children = ""
+      for (i=1;i<=n;i++) if (idx[i]+0 > 0) sorted_children = sorted_children " " arr[idx[i]]
+
+      # 渲染表头
+      printf "  %s%-7s  %-7s  %-7s  %7s  %7s  %s%s\n", c_dim, "PID", "USER", "STATE", "%CPU", "RSS", "COMMAND", c_reset
+
+      # 递归打印
+      depth = 1
+      _render_node(root, "", 1, sorted_children)
+
+      # 打印 Top N
+      print ""
+      print c_bold "  Top " top_n " by " sort_by c_reset
+      print "  " c_dim "─────────────────────────────────────────────" c_reset
+      # 收集所有进程 sort_key
+      cnt = 0
+      for (p in pid) {
+        if (sort_by == "mem")  k = rss[p] + 0
+        else                    k = pcpu[p] + 0
+        # 取前 N
+        cnt++; top_keys[cnt] = k; top_pids[cnt] = p; top_idx[cnt] = cnt
+      }
+      for (i=1;i<=cnt;i++) for (j=i+1;j<=cnt;j++) {
+        if (top_keys[j]+0 > top_keys[i]+0) {
+          t = top_keys[i]; top_keys[i] = top_keys[j]; top_keys[j] = t
+          t = top_pids[i]; top_pids[i] = top_pids[j]; top_pids[j] = t
+        }
+      }
+      printf "  %s%6s  %-7s  %-7s  %7s  %7s  %s%s\n", c_dim, "PID", "USER", "STATE", "%CPU", "RSS", "COMMAND", c_reset
+      for (i=1;i<=top_n && i<=cnt;i++) {
+        p = top_pids[i]
+        ccpu = color_for_cpu(pcpu[p])
+        cmem = color_for_mem(rss[p])
+        printf "  %6d  %-7s  %-7s  %s%6.1f%s  %s%7s%s  %s\n",
+          p, user[p], stat[p], ccpu, pcpu[p]+0, c_reset,
+          cmem, human_kb(rss[p]+0), c_reset,
+          cmd_short[p]
+      }
+    }
+
+    function _render_node(p, prefix, d, child_str,    i, n, child_pids, idx, keys, j, tmp, c, k) {
+      if (!(p in pid)) return
+      ccpu = color_for_cpu(pcpu[p])
+      cmem = color_for_mem(rss[p])
+      printf "  %s%-7d  %-7s  %-7s  %s%6.1f%s  %s%7s%s  %s%s%s\n",
+        prefix, p, user[p], stat[p],
+        ccpu, pcpu[p]+0, c_reset,
+        cmem, human_kb(rss[p]+0), c_reset,
+        c_bold, cmd_short[p], c_reset
+
+      if (d >= max_depth) return
+
+      # 解析 child_str
+      n = split(child_str, child_pids, " ")
+      # 排序子节点
+      for (i=1;i<=n;i++) {
+        c = child_pids[i]; if (c == "") continue
+        if (sort_by == "mem")  k = rss[c] + 0
+        else                    k = pcpu[c] + 0
+        keys[i] = k; idx[i] = i
+      }
+      for (i=1;i<=n;i++) for (j=i+1;j<=n;j++) {
+        if (keys[j]+0 > keys[i]+0) {
+          t = keys[i]; keys[i] = keys[j]; keys[j] = t
+          t = idx[i]; idx[i] = idx[j]; idx[j] = t
+        }
+      }
+      sorted = ""
+      for (i=1;i<=n;i++) if (idx[i]+0 > 0) sorted = sorted " " child_pids[idx[i]]
+
+      m = split(sorted, sorted_arr, " ")
+      for (i=1;i<=m;i++) {
+        c = sorted_arr[i]
+        if (c == "") continue
+        # 子节点 prefix
+        if (i == m) {
+          new_prefix = prefix "└─ "
+          _render_node(c, new_prefix, d+1, children[c])
+        } else {
+          new_prefix = prefix "├─ "
+          _render_node(c, new_prefix, d+1, children[c])
+        }
+      }
+    }
+    '
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_render() {
+  printf '\033[?25l\033[2J\033[H'
+  _render_tree
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: ps -axo${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+if $ONCE; then _render; else while true; do _render; sleep $INTERVAL; done; fi

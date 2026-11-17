@@ -1,0 +1,942 @@
+apiVersion: v1
+items:
+- apiVersion: constraints.gatekeeper.sh/v1beta1
+  kind: K8sNoEnvVarSecrets
+  metadata:
+    annotations:
+      policycontroller.gke.io/bundleVersion: "202403.0"
+      policycontroller.gke.io/constraintData: |-
+        "{
+          bundleName: 'policy-essentials-v2022',
+          bundleDisplayName: 'Policy Essentials v2022',
+          bundleLink: 'https://cloud.google.com/anthos-config-management/docs/how-to/using-policy-essentials-v2022',
+          bundleVersion: '202403.0',
+          bundleDescription: 'Use the Policy Essentials v2022 policy bundle with Policy Controller to apply Google recommended best practices to your cluster resources.',
+          controlNumbers: '[]',
+          severity: 'UNSPECIFIED',
+          description: 'Restricts the use of secrets as environment variables in container definitions. Instead, use mounted secret files in data volumes.',
+          remediation: 'Container definitions cannot use secrets as environment variables. Use a mounted secret file in a data volume. See "Using Secrets as files from a Pod" for more information https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-files-from-a-pod',
+          minimumTemplateLibraryVersion: '1.10.2',
+          constraintHash: '6853a2d8343cb0c596beec6472f3e9e4fc48aeb7ce9f403657e9c33097c4e199'
+        }"
+    creationTimestamp: "2026-04-29T01:14:51Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/managed-by: anthospolicycontroller.googleapis.com
+      policycontroller.gke.io/bundleName: policy-essentials-v2022
+    name: policy-essentials-v2022-no-secrets-as-env-vars
+    resourceVersion: "1777602858159167016"
+    uid: a9334641-5d5f-41a2-9342-24e90fa607d9
+  spec:
+    enforcementAction: dryrun
+    match:
+      excludedNamespaces:
+      - config-management-system
+      - gke-connect
+      - kube-system
+      - apigee
+      kinds:
+      - apiGroups:
+        - ""
+        kinds:
+        - Pod
+  status:
+    auditTimestamp: "2026-05-01T02:33:56Z"
+    byPod:
+    - constraintUID: a9334641-5d5f-41a2-9342-24e90fa607d9
+      enforced: true
+      id: gatekeeper-audit-57b4b9bbf9-vz9v2
+      observedGeneration: 1
+      operations:
+      - audit
+      - status
+    - constraintUID: a9334641-5d5f-41a2-9342-24e90fa607d9
+      enforced: true
+      id: gatekeeper-controller-manager-79ff65dddb-gzqnx
+      observedGeneration: 1
+      operations:
+      - webhook
+    totalViolations: 0
+- apiVersion: constraints.gatekeeper.sh/v1beta1
+  kind: K8sPodsRequireSecurityContext
+  metadata:
+    annotations:
+      policycontroller.gke.io/bundleVersion: "202403.0"
+      policycontroller.gke.io/constraintData: |-
+        "{
+          bundleName: 'policy-essentials-v2022',
+          bundleDisplayName: 'Policy Essentials v2022',
+          bundleLink: 'https://cloud.google.com/anthos-config-management/docs/how-to/using-policy-essentials-v2022',
+          bundleVersion: '202403.0',
+          bundleDescription: 'Use the Policy Essentials v2022 policy bundle with Policy Controller to apply Google recommended best practices to your cluster resources.',
+          controlNumbers: '[]',
+          severity: 'UNSPECIFIED',
+          description: 'Requires that Pods define `securityContext`.',
+          remediation: 'Containers cannot run without a `securityContext` defined. Set your containers `securityContext: `. See "Set the security context for a Pod" for more information: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod',
+          minimumTemplateLibraryVersion: '1.14.3',
+          constraintHash: '15277b142d0976eae0bf2fce4eb8bdb49210df870954efbee80d7ff83fdfe369'
+        }"
+    creationTimestamp: "2026-04-29T01:14:51Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/managed-by: anthospolicycontroller.googleapis.com
+      policycontroller.gke.io/bundleName: policy-essentials-v2022
+    name: policy-essentials-v2022-pods-require-security-context
+    resourceVersion: "1777602856963935009"
+    uid: 8a9fa0e2-0852-4274-b2f5-b0f7f3b238c2
+  spec:
+    enforcementAction: dryrun
+    match:
+      excludedNamespaces:
+      - kube-system
+      - config-management-system
+      - asm-system
+      - anthos-identity-service
+      - apigee
+      kinds:
+      - apiGroups:
+        - ""
+        kinds:
+        - Pod
+    parameters:
+      exemptImages:
+      - gcr.io/anthos-baremetal-release/*
+  status:
+    auditTimestamp: "2026-05-01T02:33:56Z"
+    byPod:
+    - constraintUID: 8a9fa0e2-0852-4274-b2f5-b0f7f3b238c2
+      enforced: true
+      id: gatekeeper-audit-57b4b9bbf9-vz9v2
+      observedGeneration: 1
+      operations:
+      - audit
+      - status
+    - constraintUID: 8a9fa0e2-0852-4274-b2f5-b0f7f3b238c2
+      enforced: true
+      id: gatekeeper-controller-manager-79ff65dddb-gzqnx
+      observedGeneration: 1
+      operations:
+      - webhook
+    totalViolations: 3
+    violations:
+    - enforcementAction: dryrun
+      group: ""
+      kind: Pod
+      message: securityContext must be defined for all Pod containers
+      name: nginx-deployment-d5ff86d69-hdvpd
+      namespace: policy-controller-demo
+      version: v1
+    - enforcementAction: dryrun
+      group: ""
+      kind: Pod
+      message: securityContext must be defined for all Pod containers
+      name: nginx-deployment-d5ff86d69-2pzrr
+      namespace: policy-controller-demo
+      version: v1
+    - enforcementAction: dryrun
+      group: ""
+      kind: Pod
+      message: securityContext must be defined for all Pod initContainers
+      name: kube-state-metrics-0
+      namespace: gke-managed-cim
+      version: v1
+- apiVersion: constraints.gatekeeper.sh/v1beta1
+  kind: K8sProhibitRoleWildcardAccess
+  metadata:
+    annotations:
+      policycontroller.gke.io/bundleVersion: "202403.0"
+      policycontroller.gke.io/constraintData: |-
+        "{
+          bundleName: 'policy-essentials-v2022',
+          bundleDisplayName: 'Policy Essentials v2022',
+          bundleLink: 'https://cloud.google.com/anthos-config-management/docs/how-to/using-policy-essentials-v2022',
+          bundleVersion: '202403.0',
+          bundleDescription: 'Use the Policy Essentials v2022 policy bundle with Policy Controller to apply Google recommended best practices to your cluster resources.',
+          controlNumbers: '[]',
+          severity: 'UNSPECIFIED',
+          description: 'Restricts the use of wildcards in `Roles` and `ClusterRoles`.',
+          remediation: 'Cannot use the wildcard character in `Roles` and `ClusterRoles. Remove all wildcards from your `Roles` and `ClusterRoles`. See "RoleBinding and ClusterRoleBinding" for more information: https://kubernetes.io/docs/reference/access-authn-authz/rbac/#rolebinding-and-clusterrolebinding',
+          minimumTemplateLibraryVersion: '1.12.0',
+          constraintHash: '85ca11f53b0728ff32324b3a366ec2bed146fd2f0053497db1f76f9a8c1bc025'
+        }"
+    creationTimestamp: "2026-04-29T01:14:51Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/managed-by: anthospolicycontroller.googleapis.com
+      policycontroller.gke.io/bundleName: policy-essentials-v2022
+    name: policy-essentials-v2022-prohibit-role-wildcard-access
+    resourceVersion: "1777602857320303007"
+    uid: 2a87bb03-943b-4bb1-8bd3-1494040dac56
+  spec:
+    enforcementAction: dryrun
+    match:
+      excludedNamespaces:
+      - gke-connect
+      - resource-group-system
+      - apigee
+      kinds:
+      - apiGroups:
+        - rbac.authorization.k8s.io
+        kinds:
+        - ClusterRole
+        - Role
+    parameters:
+      exemptions:
+        clusterRoles:
+        - name: config-management-operator
+        - name: configsync.gke.io:ns-reconciler
+        - name: configsync.gke.io:root-reconciler
+        - name: cluster-admin
+        - name: external-metrics-reader
+        - name: gatekeeper-manager-role
+        - name: ^istio-reader-clusterrole-asm-[0-9]{4}-[0-9]-istio-system$
+          regexMatch: true
+        - name: istio-reader-istio-system
+        - name: ^istiod-clusterrole-asm-[0-9]{4}-[0-9]-istio-system$
+          regexMatch: true
+        - name: istiod-istio-system
+        - name: istiod-gke-system
+        - name: kubelet-api-admin
+        - name: metering
+        - name: resource-group-manager-role
+        - name: servicemesh
+        - name: anet-operator-cluster-role
+        - name: cilium
+        - name: cilium-operator
+        - name: stackdriver-operator
+        - name: system:controller:disruption-controller
+        - name: system:controller:generic-garbage-collector
+        - name: system:controller:horizontal-pod-autoscaler
+        - name: system:controller:namespace-controller
+        - name: system:controller:resourcequota-controller
+        - name: system:gcp-controller-manager
+        - name: system:gke-common-webhooks
+        - name: system:gke-hpa-actor
+        - name: system:gke-master-resourcequota
+        - name: system:glbc-status
+        - name: system:kube-controller-manager
+        - name: system:kubestore-collector
+        - name: system:kubelet-api-admin
+        - name: system:managed-certificate-controller
+        - name: lifecycle-controllers-deployer
+        - name: metrics-server-operator
+        - name: vmruntime-vmruntime-manager-role
+        - name: capi-aggregated-manager-role
+        - name: ^capi-manager-role-[0-9].[0-9]+.[0-9]+$
+          regexMatch: true
+        - name: istio-reader-clusterrole-managed
+        - name: mdp-controller
+        - name: system:cloud-controller-manager
+        - name: cloudbuild
+        - name: metadata-agent
+        - name: system:gke-vpa-target-reader
+        - name: policycontroller
+        - name: apigee
+        - name: apigee-init
+  status:
+    auditTimestamp: "2026-05-01T02:33:56Z"
+    byPod:
+    - constraintUID: 2a87bb03-943b-4bb1-8bd3-1494040dac56
+      enforced: true
+      id: gatekeeper-audit-57b4b9bbf9-vz9v2
+      observedGeneration: 1
+      operations:
+      - audit
+      - status
+    - constraintUID: 2a87bb03-943b-4bb1-8bd3-1494040dac56
+      enforced: true
+      id: gatekeeper-controller-manager-79ff65dddb-gzqnx
+      observedGeneration: 1
+      operations:
+      - webhook
+    totalViolations: 2
+    violations:
+    - enforcementAction: dryrun
+      group: rbac.authorization.k8s.io
+      kind: ClusterRole
+      message: <system:metrics-server-nanny> has rule <verbs> wildcard match
+      name: system:metrics-server-nanny
+      version: v1
+    - enforcementAction: dryrun
+      group: rbac.authorization.k8s.io
+      kind: Role
+      message: <gke-spiffe-leaderelection> has rule <verbs> wildcard match
+      name: gke-spiffe-leaderelection
+      namespace: kube-system
+      version: v1
+- apiVersion: constraints.gatekeeper.sh/v1beta1
+  kind: K8sPSPAllowedUsers
+  metadata:
+    annotations:
+      policycontroller.gke.io/bundleVersion: "202403.0"
+      policycontroller.gke.io/constraintData: |-
+        "{
+          bundleName: 'policy-essentials-v2022',
+          bundleDisplayName: 'Policy Essentials v2022',
+          bundleLink: 'https://cloud.google.com/anthos-config-management/docs/how-to/using-policy-essentials-v2022',
+          bundleVersion: '202403.0',
+          bundleDescription: 'Use the Policy Essentials v2022 policy bundle with Policy Controller to apply Google recommended best practices to your cluster resources.',
+          controlNumbers: '[]',
+          severity: 'UNSPECIFIED',
+          description: 'Restricts containers from running as the root user.',
+          remediation: 'Containers cannot run with `runAsUser` set to `root`. Set your containers with `runAsUser: ` to a non-root user ID. See "Set the security context for a Pod" for more information: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod',
+          minimumTemplateLibraryVersion: '1.11.1',
+          constraintHash: '2d9d3335370e2d3b867bc40cd1fd474cce3d5498b17be5ddeee1a56b27afdcd2'
+        }"
+    creationTimestamp: "2026-04-29T01:14:51Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/managed-by: anthospolicycontroller.googleapis.com
+      policycontroller.gke.io/bundleName: policy-essentials-v2022
+    name: policy-essentials-v2022-psp-pods-must-run-as-nonroot
+    resourceVersion: "1777602857252671005"
+    uid: 2c67fb40-f73e-4a27-aa51-b26040329a18
+  spec:
+    enforcementAction: dryrun
+    match:
+      excludedNamespaces:
+      - kube-system
+      - asm-system
+      - config-management-system
+      - cert-manager
+      - anthos-identity-service
+      - apigee
+      kinds:
+      - apiGroups:
+        - ""
+        kinds:
+        - Pod
+    parameters:
+      exemptImages:
+      - gcr.io/gke-release/asm/proxyv2:*
+      - gcr.io/anthos-baremetal-release/*
+      - gke.gcr.io/*
+      runAsUser:
+        rule: MustRunAsNonRoot
+  status:
+    auditTimestamp: "2026-05-01T02:33:56Z"
+    byPod:
+    - constraintUID: 2c67fb40-f73e-4a27-aa51-b26040329a18
+      enforced: true
+      id: gatekeeper-audit-57b4b9bbf9-vz9v2
+      observedGeneration: 1
+      operations:
+      - audit
+      - status
+    - constraintUID: 2c67fb40-f73e-4a27-aa51-b26040329a18
+      enforced: true
+      id: gatekeeper-controller-manager-79ff65dddb-gzqnx
+      observedGeneration: 1
+      operations:
+      - webhook
+    totalViolations: 3
+    violations:
+    - enforcementAction: dryrun
+      group: ""
+      kind: Pod
+      message: Container nginx is attempting to run without a required securityContext/runAsNonRoot
+        or securityContext/runAsUser != 0
+      name: nginx-deployment-d5ff86d69-hdvpd
+      namespace: policy-controller-demo
+      version: v1
+    - enforcementAction: dryrun
+      group: ""
+      kind: Pod
+      message: Container nginx is attempting to run without a required securityContext/runAsNonRoot
+        or securityContext/runAsUser != 0
+      name: nginx-deployment-d5ff86d69-2pzrr
+      namespace: policy-controller-demo
+      version: v1
+    - enforcementAction: dryrun
+      group: ""
+      kind: Pod
+      message: Container token-broker-adc-init is attempting to run without a required
+        securityContext/runAsNonRoot or securityContext/runAsUser != 0
+      name: kube-state-metrics-0
+      namespace: gke-managed-cim
+      version: v1
+- apiVersion: constraints.gatekeeper.sh/v1beta1
+  kind: K8sPSPAllowPrivilegeEscalationContainer
+  metadata:
+    annotations:
+      policycontroller.gke.io/bundleVersion: "202403.0"
+      policycontroller.gke.io/constraintData: |-
+        "{
+          bundleName: 'policy-essentials-v2022',
+          bundleDisplayName: 'Policy Essentials v2022',
+          bundleLink: 'https://cloud.google.com/anthos-config-management/docs/how-to/using-policy-essentials-v2022',
+          bundleVersion: '202403.0',
+          bundleDescription: 'Use the Policy Essentials v2022 policy bundle with Policy Controller to apply Google recommended best practices to your cluster resources.',
+          controlNumbers: '[]',
+          severity: 'UNSPECIFIED',
+          description: 'Restricts containers with `allowPrivilegeEscalation` set to `true`.',
+          remediation: 'Containers cannot run with `allowPrivilegeEscalation` set to `true`. Set your containers with `allowPrivilegeEscalation: false`.',
+          minimumTemplateLibraryVersion: '1.11.1',
+          constraintHash: 'd24bf9cb3555de60037a675a2198760b1eb17b452adb3be6d7b47106424cb38e'
+        }"
+    creationTimestamp: "2026-04-29T01:14:51Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/managed-by: anthospolicycontroller.googleapis.com
+      policycontroller.gke.io/bundleName: policy-essentials-v2022
+    name: policy-essentials-v2022-psp-allow-privilege-escalation
+    resourceVersion: "1777602856862975022"
+    uid: 1895aa4e-6985-418c-aa4b-2e1cfc21a2b5
+  spec:
+    enforcementAction: dryrun
+    match:
+      excludedNamespaces:
+      - kube-system
+      - gke-system
+      - istio-system
+      - asm-system
+      - config-management-system
+      - config-management-monitoring
+      - resource-group-system
+      - cert-manager
+      - anthos-identity-service
+      - apigee
+      kinds:
+      - apiGroups:
+        - ""
+        kinds:
+        - Pod
+    parameters:
+      exemptImages:
+      - gcr.io/anthos-baremetal-release/*
+  status:
+    auditTimestamp: "2026-05-01T02:33:56Z"
+    byPod:
+    - constraintUID: 1895aa4e-6985-418c-aa4b-2e1cfc21a2b5
+      enforced: true
+      id: gatekeeper-audit-57b4b9bbf9-vz9v2
+      observedGeneration: 1
+      operations:
+      - audit
+      - status
+    - constraintUID: 1895aa4e-6985-418c-aa4b-2e1cfc21a2b5
+      enforced: true
+      id: gatekeeper-controller-manager-79ff65dddb-gzqnx
+      observedGeneration: 1
+      operations:
+      - webhook
+    totalViolations: 3
+    violations:
+    - enforcementAction: dryrun
+      group: ""
+      kind: Pod
+      message: 'Privilege escalation container is not allowed: nginx'
+      name: nginx-deployment-d5ff86d69-hdvpd
+      namespace: policy-controller-demo
+      version: v1
+    - enforcementAction: dryrun
+      group: ""
+      kind: Pod
+      message: 'Privilege escalation container is not allowed: nginx'
+      name: nginx-deployment-d5ff86d69-2pzrr
+      namespace: policy-controller-demo
+      version: v1
+    - enforcementAction: dryrun
+      group: ""
+      kind: Pod
+      message: 'Privilege escalation container is not allowed: token-broker-adc-init'
+      name: kube-state-metrics-0
+      namespace: gke-managed-cim
+      version: v1
+- apiVersion: constraints.gatekeeper.sh/v1beta1
+  kind: K8sPSPCapabilities
+  metadata:
+    annotations:
+      policycontroller.gke.io/bundleVersion: "202403.0"
+      policycontroller.gke.io/constraintData: |-
+        "{
+          bundleName: 'policy-essentials-v2022',
+          bundleDisplayName: 'Policy Essentials v2022',
+          bundleLink: 'https://cloud.google.com/anthos-config-management/docs/how-to/using-policy-essentials-v2022',
+          bundleVersion: '202403.0',
+          bundleDescription: 'Use the Policy Essentials v2022 policy bundle with Policy Controller to apply Google recommended best practices to your cluster resources.',
+          controlNumbers: '[]',
+          severity: 'UNSPECIFIED',
+          description: 'Containers must drop the `NET_RAW` capability and are not permitted to add back any capabilities.',
+          remediation: 'Set your containers with `securityContext.capabilities.add: []` and `securityContext.capabilities.drop: ["NET_RAW"]`. See "Set capabilities for a Container" for more information: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-capabilities-for-a-container',
+          minimumTemplateLibraryVersion: '1.10.2',
+          constraintHash: '1cbd5a3a7d5299f5df17319f38da6e01fa1d3a096dbd871abe731bcdad2b2826'
+        }"
+    creationTimestamp: "2026-04-29T01:14:51Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/managed-by: anthospolicycontroller.googleapis.com
+      policycontroller.gke.io/bundleName: policy-essentials-v2022
+    name: policy-essentials-v2022-psp-capabilities
+    resourceVersion: "1777602857199887014"
+    uid: cee5219c-bb6b-484a-94cd-519bd12127e4
+  spec:
+    enforcementAction: dryrun
+    match:
+      excludedNamespaces:
+      - kube-system
+      - config-management-system
+      - config-management-monitoring
+      - resource-group-system
+      - asm-system
+      - gke-connect
+      - cert-manager
+      - anthos-identity-service
+      - apigee
+      kinds:
+      - apiGroups:
+        - ""
+        kinds:
+        - Pod
+    parameters:
+      allowedCapabilities: []
+      exemptImages:
+      - gcr.io/gke-release/*
+      - gcr.io/config-management-release/*
+      - gcr.io/kubebuilder/*
+      - gcr.io/anthos-baremetal-release/*
+      - gcr.io/gke-on-prem-release/*
+      - gcr.io/gke-multi-cloud-release/*
+      - gke.gcr.io/*
+      requiredDropCapabilities:
+      - NET_RAW
+  status:
+    auditTimestamp: "2026-05-01T02:33:56Z"
+    byPod:
+    - constraintUID: cee5219c-bb6b-484a-94cd-519bd12127e4
+      enforced: true
+      id: gatekeeper-audit-57b4b9bbf9-vz9v2
+      observedGeneration: 1
+      operations:
+      - audit
+      - status
+    - constraintUID: cee5219c-bb6b-484a-94cd-519bd12127e4
+      enforced: true
+      id: gatekeeper-controller-manager-79ff65dddb-gzqnx
+      observedGeneration: 1
+      operations:
+      - webhook
+    totalViolations: 3
+    violations:
+    - enforcementAction: dryrun
+      group: ""
+      kind: Pod
+      message: container <nginx> is not dropping all required capabilities. Container
+        must drop all of ["NET_RAW"] or "ALL"
+      name: nginx-deployment-d5ff86d69-hdvpd
+      namespace: policy-controller-demo
+      version: v1
+    - enforcementAction: dryrun
+      group: ""
+      kind: Pod
+      message: container <nginx> is not dropping all required capabilities. Container
+        must drop all of ["NET_RAW"] or "ALL"
+      name: nginx-deployment-d5ff86d69-2pzrr
+      namespace: policy-controller-demo
+      version: v1
+    - enforcementAction: dryrun
+      group: ""
+      kind: Pod
+      message: init container <token-broker-adc-init> is not dropping all required
+        capabilities. Container must drop all of ["NET_RAW"] or "ALL"
+      name: kube-state-metrics-0
+      namespace: gke-managed-cim
+      version: v1
+- apiVersion: constraints.gatekeeper.sh/v1beta1
+  kind: K8sPSPHostNamespace
+  metadata:
+    annotations:
+      policycontroller.gke.io/bundleVersion: "202403.0"
+      policycontroller.gke.io/constraintData: |-
+        "{
+          bundleName: 'policy-essentials-v2022',
+          bundleDisplayName: 'Policy Essentials v2022',
+          bundleLink: 'https://cloud.google.com/anthos-config-management/docs/how-to/using-policy-essentials-v2022',
+          bundleVersion: '202403.0',
+          bundleDescription: 'Use the Policy Essentials v2022 policy bundle with Policy Controller to apply Google recommended best practices to your cluster resources.',
+          controlNumbers: '[]',
+          severity: 'UNSPECIFIED',
+          description: 'Restricts containers with `hostPID` or `hostIPC` set to `true`.',
+          remediation: 'Containers cannot run with `hostPID` or `hostIPC` set to `true`. Set your containers with both `hostPID: false` and `hostIPC: false`.',
+          minimumTemplateLibraryVersion: '1.11.1',
+          constraintHash: '7cd7a7cd30116b463e3e0405e6b0df0a1f2c0e2b61291425fc3becf841c12c3e'
+        }"
+    creationTimestamp: "2026-04-29T01:14:51Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/managed-by: anthospolicycontroller.googleapis.com
+      policycontroller.gke.io/bundleName: policy-essentials-v2022
+    name: policy-essentials-v2022-psp-host-namespace
+    resourceVersion: "1777602857099951019"
+    uid: 9c0fc4c8-1305-4173-bb12-b3f412158631
+  spec:
+    enforcementAction: dryrun
+    match:
+      excludedNamespaces:
+      - kube-system
+      kinds:
+      - apiGroups:
+        - ""
+        kinds:
+        - Pod
+  status:
+    auditTimestamp: "2026-05-01T02:33:56Z"
+    byPod:
+    - constraintUID: 9c0fc4c8-1305-4173-bb12-b3f412158631
+      enforced: true
+      id: gatekeeper-audit-57b4b9bbf9-vz9v2
+      observedGeneration: 1
+      operations:
+      - audit
+      - status
+    - constraintUID: 9c0fc4c8-1305-4173-bb12-b3f412158631
+      enforced: true
+      id: gatekeeper-controller-manager-79ff65dddb-gzqnx
+      observedGeneration: 1
+      operations:
+      - webhook
+    totalViolations: 0
+- apiVersion: constraints.gatekeeper.sh/v1beta1
+  kind: K8sPSPHostNetworkingPorts
+  metadata:
+    annotations:
+      policycontroller.gke.io/bundleVersion: "202403.0"
+      policycontroller.gke.io/constraintData: |-
+        "{
+          bundleName: 'policy-essentials-v2022',
+          bundleDisplayName: 'Policy Essentials v2022',
+          bundleLink: 'https://cloud.google.com/anthos-config-management/docs/how-to/using-policy-essentials-v2022',
+          bundleVersion: '202403.0',
+          bundleDescription: 'Use the Policy Essentials v2022 policy bundle with Policy Controller to apply Google recommended best practices to your cluster resources.',
+          controlNumbers: '[]',
+          severity: 'UNSPECIFIED',
+          description: 'Restricts containers from running with the `hostNetwork` flag set to `true`.',
+          remediation: 'Containers cannot run with `hostNetwork` set to `true`. Remove `hostNetwork: true` from your containers.',
+          minimumTemplateLibraryVersion: '1.11.1',
+          constraintHash: '0a5a8fab505744697e9c36858e534c6204888d96e7c81e8d04279f4e0f7287d7'
+        }"
+    creationTimestamp: "2026-04-29T01:14:52Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/managed-by: anthospolicycontroller.googleapis.com
+      policycontroller.gke.io/bundleName: policy-essentials-v2022
+    name: policy-essentials-v2022-psp-host-network-ports
+    resourceVersion: "1777602857049375019"
+    uid: 52d6d7c2-a43e-42f0-98a8-ca985a34fe8a
+  spec:
+    enforcementAction: dryrun
+    match:
+      excludedNamespaces:
+      - kube-system
+      kinds:
+      - apiGroups:
+        - ""
+        kinds:
+        - Pod
+    parameters:
+      hostNetwork: false
+      max: 65535
+      min: 1
+  status:
+    auditTimestamp: "2026-05-01T02:33:56Z"
+    byPod:
+    - constraintUID: 52d6d7c2-a43e-42f0-98a8-ca985a34fe8a
+      enforced: true
+      id: gatekeeper-audit-57b4b9bbf9-vz9v2
+      observedGeneration: 1
+      operations:
+      - audit
+      - status
+    - constraintUID: 52d6d7c2-a43e-42f0-98a8-ca985a34fe8a
+      enforced: true
+      id: gatekeeper-controller-manager-79ff65dddb-gzqnx
+      observedGeneration: 1
+      operations:
+      - webhook
+    totalViolations: 0
+- apiVersion: constraints.gatekeeper.sh/v1beta1
+  kind: K8sPSPPrivilegedContainer
+  metadata:
+    annotations:
+      policycontroller.gke.io/bundleVersion: "202403.0"
+      policycontroller.gke.io/constraintData: |-
+        "{
+          bundleName: 'policy-essentials-v2022',
+          bundleDisplayName: 'Policy Essentials v2022',
+          bundleLink: 'https://cloud.google.com/anthos-config-management/docs/how-to/using-policy-essentials-v2022',
+          bundleVersion: '202403.0',
+          bundleDescription: 'Use the Policy Essentials v2022 policy bundle with Policy Controller to apply Google recommended best practices to your cluster resources.',
+          controlNumbers: '[]',
+          severity: 'UNSPECIFIED',
+          description: 'Restricts containers with `securityContext.privileged` set to `true`.',
+          remediation: 'Containers cannot run with `securityContext.privileged` set to `true`. Remove `securityContext.privileged: true` from your containers. See "Configure a Security Context for a Pod or Container" for more information: https://kubernetes.io/docs/tasks/configure-pod-container/security-context',
+          minimumTemplateLibraryVersion: '1.11.1',
+          constraintHash: '873189cf522a88880548ef043f8c61b64b10ebe533c22974007633439994b2bb'
+        }"
+    creationTimestamp: "2026-04-29T01:14:51Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/managed-by: anthospolicycontroller.googleapis.com
+      policycontroller.gke.io/bundleName: policy-essentials-v2022
+    name: policy-essentials-v2022-psp-privileged-container
+    resourceVersion: "1777602856912559004"
+    uid: 812814eb-f8d2-4157-9876-b8bd88e050e6
+  spec:
+    enforcementAction: dryrun
+    match:
+      excludedNamespaces:
+      - kube-system
+      kinds:
+      - apiGroups:
+        - ""
+        kinds:
+        - Pod
+  status:
+    auditTimestamp: "2026-05-01T02:33:56Z"
+    byPod:
+    - constraintUID: 812814eb-f8d2-4157-9876-b8bd88e050e6
+      enforced: true
+      id: gatekeeper-audit-57b4b9bbf9-vz9v2
+      observedGeneration: 1
+      operations:
+      - audit
+      - status
+    - constraintUID: 812814eb-f8d2-4157-9876-b8bd88e050e6
+      enforced: true
+      id: gatekeeper-controller-manager-79ff65dddb-gzqnx
+      observedGeneration: 1
+      operations:
+      - webhook
+    totalViolations: 0
+- apiVersion: constraints.gatekeeper.sh/v1beta1
+  kind: K8sPSPSeccomp
+  metadata:
+    annotations:
+      policycontroller.gke.io/bundleVersion: "202403.0"
+      policycontroller.gke.io/constraintData: |-
+        "{
+          bundleName: 'policy-essentials-v2022',
+          bundleDisplayName: 'Policy Essentials v2022',
+          bundleLink: 'https://cloud.google.com/anthos-config-management/docs/how-to/using-policy-essentials-v2022',
+          bundleVersion: '202403.0',
+          bundleDescription: 'Use the Policy Essentials v2022 policy bundle with Policy Controller to apply Google recommended best practices to your cluster resources.',
+          controlNumbers: '[]',
+          severity: 'UNSPECIFIED',
+          description: 'Requires that Pods have seccomp profile set to runtime/default or docker/default.',
+          remediation: 'Containers cannot run with a `seccomp` profile other than `runtime/default` or `docker/default`. Remove or set the `seccomp` annotation to `runtime/default` or `docker/default`. See "Set the Seccomp Profile for a Container" for more information: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-seccomp-profile-for-a-container',
+          minimumTemplateLibraryVersion: '1.11.1',
+          constraintHash: 'b4ee26e63bef478c264ab11d207c0a113f09d418b62427bb3249818c9fe29e56'
+        }"
+    creationTimestamp: "2026-04-29T01:14:51Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/managed-by: anthospolicycontroller.googleapis.com
+      policycontroller.gke.io/bundleName: policy-essentials-v2022
+    name: policy-essentials-v2022-psp-seccomp-default
+    resourceVersion: "1777602857917231004"
+    uid: 7cb34d62-69d7-41be-9e51-33944bd11086
+  spec:
+    enforcementAction: dryrun
+    match:
+      excludedNamespaces:
+      - kube-system
+      - gatekeeper-system
+      - config-management-monitoring
+      - config-management-system
+      - asm-system
+      - resource-group-system
+      - istio-system
+      - gke-connect
+      - gke-system
+      - anthos-identity-service
+      - gke-managed-metrics-server
+      - cert-manager
+      - apigee
+      - apigee-system
+      kinds:
+      - apiGroups:
+        - ""
+        kinds:
+        - Pod
+    parameters:
+      allowedProfiles:
+      - runtime/default
+      - docker/default
+      exemptImages:
+      - gcr.io/gke-release/asm/proxyv2:*
+      - gcr.io/anthos-baremetal-release/*
+  status:
+    auditTimestamp: "2026-05-01T02:33:56Z"
+    byPod:
+    - constraintUID: 7cb34d62-69d7-41be-9e51-33944bd11086
+      enforced: true
+      id: gatekeeper-audit-57b4b9bbf9-vz9v2
+      observedGeneration: 1
+      operations:
+      - audit
+      - status
+    - constraintUID: 7cb34d62-69d7-41be-9e51-33944bd11086
+      enforced: true
+      id: gatekeeper-controller-manager-79ff65dddb-gzqnx
+      observedGeneration: 1
+      operations:
+      - webhook
+    totalViolations: 3
+    violations:
+    - enforcementAction: dryrun
+      group: ""
+      kind: Pod
+      message: 'Seccomp profile ''not configured'' is not allowed for container ''nginx''.
+        Found at: no explicit profile found. Allowed profiles: {"RuntimeDefault",
+        "docker/default", "runtime/default"}'
+      name: nginx-deployment-d5ff86d69-hdvpd
+      namespace: policy-controller-demo
+      version: v1
+    - enforcementAction: dryrun
+      group: ""
+      kind: Pod
+      message: 'Seccomp profile ''not configured'' is not allowed for container ''nginx''.
+        Found at: no explicit profile found. Allowed profiles: {"RuntimeDefault",
+        "docker/default", "runtime/default"}'
+      name: nginx-deployment-d5ff86d69-2pzrr
+      namespace: policy-controller-demo
+      version: v1
+    - enforcementAction: dryrun
+      group: ""
+      kind: Pod
+      message: 'Seccomp profile ''not configured'' is not allowed for container ''token-broker-adc-init''.
+        Found at: no explicit profile found. Allowed profiles: {"RuntimeDefault",
+        "docker/default", "runtime/default"}'
+      name: kube-state-metrics-0
+      namespace: gke-managed-cim
+      version: v1
+- apiVersion: constraints.gatekeeper.sh/v1beta1
+  kind: K8sRequiredLabels
+  metadata:
+    annotations:
+      kubectl.kubernetes.io/last-applied-configuration: |
+        {"apiVersion":"constraints.gatekeeper.sh/v1beta1","kind":"K8sRequiredLabels","metadata":{"annotations":{},"name":"require-labels-for-demo-namespace"},"spec":{"enforcementAction":"dryrun","match":{"kinds":[{"apiGroups":["apps"],"kinds":["Deployment"]}],"namespaces":["policy-controller-demo"]},"parameters":{"labels":[{"key":"app"},{"allowedRegex":"^(prod|staging|dev|demo)$","key":"environment"}]}}}
+    creationTimestamp: "2026-04-29T08:17:27Z"
+    generation: 1
+    name: require-labels-for-demo-namespace
+    resourceVersion: "1777602857152255023"
+    uid: 2b2860ec-6954-468a-9fe3-98f1c12ae834
+  spec:
+    enforcementAction: dryrun
+    match:
+      kinds:
+      - apiGroups:
+        - apps
+        kinds:
+        - Deployment
+      namespaces:
+      - policy-controller-demo
+    parameters:
+      labels:
+      - key: app
+      - allowedRegex: ^(prod|staging|dev|demo)$
+        key: environment
+  status:
+    auditTimestamp: "2026-05-01T02:33:56Z"
+    byPod:
+    - constraintUID: 2b2860ec-6954-468a-9fe3-98f1c12ae834
+      enforced: true
+      id: gatekeeper-audit-57b4b9bbf9-vz9v2
+      observedGeneration: 1
+      operations:
+      - audit
+      - status
+    - constraintUID: 2b2860ec-6954-468a-9fe3-98f1c12ae834
+      enforced: true
+      id: gatekeeper-controller-manager-79ff65dddb-gzqnx
+      observedGeneration: 1
+      operations:
+      - webhook
+    totalViolations: 0
+- apiVersion: constraints.gatekeeper.sh/v1beta1
+  kind: K8sRestrictRoleBindings
+  metadata:
+    annotations:
+      policycontroller.gke.io/bundleVersion: "202403.0"
+      policycontroller.gke.io/constraintData: |-
+        "{
+          bundleName: 'policy-essentials-v2022',
+          bundleDisplayName: 'Policy Essentials v2022',
+          bundleLink: 'https://cloud.google.com/anthos-config-management/docs/how-to/using-policy-essentials-v2022',
+          bundleVersion: '202403.0',
+          bundleDescription: 'Use the Policy Essentials v2022 policy bundle with Policy Controller to apply Google recommended best practices to your cluster resources.',
+          controlNumbers: '[]',
+          severity: 'UNSPECIFIED',
+          description: 'Restricts the use of the `cluster-admin` role.',
+          remediation: 'Cannot use the cluster-admin `ClusterRole` for Role-based access control (RBAC). Use a different role. See "Using RBAC Authorization" for more information: https://kubernetes.io/docs/reference/access-authn-authz/rbac/#user-facing-roles',
+          minimumTemplateLibraryVersion: '1.10.1',
+          constraintHash: 'ac5260c6134d9b1be59afb4da0b5576ae2fda24fb4178a60f295660b5f702f26'
+        }"
+    creationTimestamp: "2026-04-29T01:14:52Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/managed-by: anthospolicycontroller.googleapis.com
+      policycontroller.gke.io/bundleName: policy-essentials-v2022
+    name: policy-essentials-v2022-restrict-clusteradmin-rolebindings
+    resourceVersion: "1777602857004623005"
+    uid: 57f76525-8413-4e88-8365-331653efb81e
+  spec:
+    enforcementAction: dryrun
+    match:
+      kinds:
+      - apiGroups:
+        - rbac.authorization.k8s.io
+        kinds:
+        - ClusterRoleBinding
+        - RoleBinding
+    parameters:
+      allowedSubjects:
+      - apiGroup: rbac.authorization.k8s.io
+        kind: Group
+        name: system:masters
+      - apiGroup: rbac.authorization.k8s.io
+        kind: User
+        name: ^service-[0-9]+@gcp-sa-gkehub.iam.gserviceaccount.com$
+        regexMatch: true
+      - apiGroup: rbac.authorization.k8s.io
+        kind: User
+        name: ^service-[0-9]+@gcp-sa-anthosconfigmanagement.iam.gserviceaccount.com$
+        regexMatch: true
+      - kind: ServiceAccount
+        name: reconciler-manager
+      - kind: ServiceAccount
+        name: admission-webhook
+      - apiGroup: rbac.authorization.k8s.io
+        kind: User
+        name: system:storageversionmigrator
+      - kind: ServiceAccount
+        name: ^root-reconciler[a-z0-9-]*$
+        regexMatch: true
+      - kind: ServiceAccount
+        name: system:gke-vpa-target-reader
+      - kind: ServiceAccount
+        name: serviceaccount-cluster-admin
+      restrictedRole:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: cluster-admin
+  status:
+    auditTimestamp: "2026-05-01T02:33:56Z"
+    byPod:
+    - constraintUID: 57f76525-8413-4e88-8365-331653efb81e
+      enforced: true
+      id: gatekeeper-audit-57b4b9bbf9-vz9v2
+      observedGeneration: 1
+      operations:
+      - audit
+      - status
+    - constraintUID: 57f76525-8413-4e88-8365-331653efb81e
+      enforced: true
+      id: gatekeeper-controller-manager-79ff65dddb-gzqnx
+      observedGeneration: 1
+      operations:
+      - webhook
+    totalViolations: 0
+kind: List
+metadata:
+  resourceVersion: ""

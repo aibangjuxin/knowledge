@@ -1,0 +1,46 @@
+# Argo CD · bootstrap/ 的 Kustomize 入口
+#
+# ⭐ 这个文件决定"根应用到底会 apply 什么"。
+#    只有这里列出的资源才会被 apply；没有列出的目录会被 Kustomize 忽略。
+#
+#    为什么需要它：bootstrap/clusters/ 下的清单文件（cluster.yaml、
+#    components/*.yaml）**不是** K8s 资源，它们只是给 ApplicationSet 的
+#    git 文件生成器读的。如果不用 kustomization.yaml 限定，
+#    Argo CD 的目录源会递归扫描并尝试 apply 这些文件 → 报
+#    "failed to generate manifest for source"。
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # ---- 边界层 ------------------------------------------------------------
+  - appprojects/platform.yaml
+  - appprojects/platform-dev.yaml
+  - appprojects/platform-prod.yaml
+
+  # ---- 生成层 ------------------------------------------------------------
+  # 每个组件一个 AppSet。组件分两类：
+  #   · 环境级（nginx/api/redis）→ source.path 用 {{.env}}
+  #   · 集群级（gatekeeper/gateway）→ source.path 用 {{.cluster}}
+  #     （每个集群一份独立 overlay）
+  - applicationsets/component-nginx.yaml
+  - applicationsets/component-api.yaml
+  - applicationsets/component-redis.yaml
+  - applicationsets/component-gatekeeper.yaml
+  - applicationsets/component-gateway.yaml
+
+  # ---- 凭据 --------------------------------------------------------------
+  - repositories.yaml
+
+  # ---- 根应用自己（自举）--------------------------------------------------
+  # 不列也可以（首次手动 apply 后不再需要它管理自己）；
+  # 列上则表示"根应用也由 Git 管理"，改分支/改 path 走 PR。
+  - root-application.yaml
+
+# ❌ 故意不列 clusters/：
+#    那是 ApplicationSet 的输入数据，不是 Argo CD 资源。
+#
+# ❌ 也不列 applicationsets/_alternatives/：
+#    那是"规模化后再切 Merge 生成器"的备选模板，现在不启用。
+#    （切换时把它列进来，并按 bootstrap/clusters/README.md §12
+#      同步精简 clusters/*/components/*.yaml 的字段）

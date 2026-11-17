@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  test.server: |
+    api-name01.kong.dev.aliyun.intracloud.cn.aibang {
+        hosts {
+            10.43.0.1 api-name01.kong.dev.aliyun.intracloud.cn.aibang
+            fallthrough
+        }
+    }

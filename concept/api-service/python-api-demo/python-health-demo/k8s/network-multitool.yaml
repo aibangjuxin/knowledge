@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: network-multitool
+  namespace: python-demo
+  labels:
+    app: network-multitool
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: network-multitool
+  template:
+    metadata:
+      labels:
+        app: network-multitool
+    spec:
+      containers:
+        - name: network-multitool
+          image: praqma/network-multitool
+          command: ["/bin/sh", "-c", "sleep 3600"]
+          env:
+            - name: HTTP_PROXY
+              value: "http://192.168.31.198:7222"
+            - name: HTTPS_PROXY
+              value: "http://192.168.31.198:7222"
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+            requests:
+              memory: "64Mi"
+              cpu: "100m"

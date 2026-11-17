@@ -1,0 +1,182 @@
+# Argo CD HA · Helm values 覆盖示例
+#
+# 用途：把单实例 Argo CD 升级为高可用。
+# 应用：helm upgrade argocd argo/argo-cd -n argocd -f ha-values-override.yaml
+#
+# ⚠️ 前置条件：
+#   ① 单实例已稳定运行（见 ../08-implementation-playbook.md 阶段 1）
+#   ② 业务 Redis 已确认独立处理（见 ../01-redis-persistence.md）
+#   ③ 备份已完成
+#
+# ⚠️ 三个关键约束（详见 ../02-ha.md §2）：
+#   ① ARGOCD_API_SERVER_REPLICAS 必须 == argocd-server 的 replicas
+#      否则登录会被限流误拒（上游 issue #11387 / #15223）
+#   ② dex-server **必须保持 1 副本**（内存数据库，多副本会导致登录态不均匀）
+#   ③ Argo CD 官方 Redis HA 是 3 master + 3 sentinel + HAProxy
+#      sentinel **不支持扩缩容**，不是 2 也不是 5
+
+# ---------------------------------------------------------------------------
+# 副本数
+# ---------------------------------------------------------------------------
+controller:
+  replicas: 3
+
+server:
+  replicas: 3
+  # ⭐ 必须与 server.replicas 一致！
+  env:
+    - name: ARGOCD_API_SERVER_REPLICAS
+      value: "3"
+
+repoServer:
+  replicas: 3
+  # repo-server 的 gRPC 消息大小上限。
+  # 大 manifest 同步超时（"grpc: received message larger than max"）时调大。
+  env:
+    - name: ARGOCD_GRPC_MAX_SIZE_MB
+      value: "400"
+
+applicationSet:
+  replicas: 3
+  # 启用 git generator 的多仓库支持
+  env:
+    - name: ARGOCD_APPLICATIONSET_CONTROLLER_ENABLE_APPLICATION_SET_GENERATOR
+      value: "true"
+
+dex:
+  # ⚠️ 保持 1 副本！dex 用内存存储，多副本会导致登录态在各副本间不一致
+  replicas: 1
+
+# ---------------------------------------------------------------------------
+# Redis HA（官方提供）
+#
+# 拓扑：3 个 master + 3 个 sentinel + 1 个 haproxy
+#
+# ⚠️ 重要：Argo CD 内部 Redis **不需要持久化**。
+#    官方清单不带 volumeClaimTemplates 就是这个原因。
+#    加 PVC 反而有害（RWO + 滚动更新 → Multi-Attach 冲突）。
+#    业务 Redis 是另一回事，见 ../01-redis-persistence.md。
+#
+# 如果你想用外部 Redis（Memorystore 等），用下面注释掉的配置。
+# ---------------------------------------------------------------------------
+redis:
+  enabled: true
+  # 保持官方 HA 拓扑，不要改
+  image:
+    tag: 8.2.3-alpine
+
+  # ---- 外部 Redis 方案（替代官方 HA Redis）----
+  # redis-ha:
+  #   enabled: false
+  # redis:
+  #   enabled: false
+  #   external:
+  #     host: redis.example.internal
+  #     port: 6379
+  #     passwordSecret:
+  #       name: redis-auth
+  #       key: password
+
+# ---------------------------------------------------------------------------
+# Controller：分片 + 资源
+# ---------------------------------------------------------------------------
+controllerContainer:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+serverContainer:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+repoServerContainer:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+dexContainer:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ---------------------------------------------------------------------------
+# 网络 / 入口
+# ---------------------------------------------------------------------------
+global:
+  domain: argocd.example.com
+  # ingress 配置按你的集群实际情况调整
+  ingress:
+    enabled: true
+    className: gce
+    annotations:
+      # GKE 上的常见配置
+      kubernetes.io/ingress.global-static-ip-name: argocd-static-ip
+      # cert-manager 自动签发
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+
+# ---------------------------------------------------------------------------
+# 安全
+# ---------------------------------------------------------------------------
+configs:
+  params:
+    # 登录限流：必须 >= server.replicas，否则会误拒正常登录
+    server.insecure: "false"
+
+  cm:
+    # URL 必须与实际访问地址一致，否则 Dex 回调会失败
+    url: https://argocd.example.com
+    # ⭐ 自定义 health check（CRD 场景必做，否则 selfHeal 空转）
+    # 完整示例见 ../06-opa-gatekeeper-impact.md §5
+    resource.customizations.health.argoproj.io_Rollout: |
+      hs = {}
+      if obj.status ~= nil then
+        if obj.status.phase == "Healthy" then
+          hs.status = "Healthy"
+          hs.message = "Healthy"
+        else
+          hs.status = "Progressing"
+          hs.message = obj.status.phase
+        end
+      end
+      hs = hs
+    # 忽略 kubectl 注入的字段，避免无意义的 diff
+    resource.customizations.ignoreDifferences.all: |
+      jqPathExpressions:
+        - '.metadata.managedFields[]'
+        - '.metadata.annotations."kubectl.kubernetes.io/restartedAt"'
+
+  rbac:
+    # ⭐ 必须包含 groups，否则组映射不生效
+    scopes: '[groups, email]'
+    policy.matchMode: 'glob'
+    policy.csv: |
+      p, role:authenticated, applications, get, *, allow
+      p, role:authenticated, projects, get, *, allow
+      g, my-org:devops-admin, role:admin
+
+# ---------------------------------------------------------------------------
+# 可观测性
+# ---------------------------------------------------------------------------
+metrics:
+  enabled: true
+  service:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8083"

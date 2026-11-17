@@ -1,0 +1,77 @@
+# Argo CD · 父项目 platform（公共约束，被 platform-dev / platform-prod 继承）
+#
+# ⚠️ 命名里的 '-' 会触发 **project inheritance**：
+#    platform-dev / platform-prod 会自动继承 platform 的
+#    sourceRepos / sourceNamespaces / clusterResource*List / namespaceResource*List。
+#    继承只对「白名单类」字段生效；destinations 和 roles 是**覆盖**而非合并。
+#
+# ⚠️ 本文件必须**先于**根应用 apply —— 否则根应用引用的 project 不存在，
+#    第一次同步会报 "project not found"。
+
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform
+spec:
+  description: Platform team - 跨环境公共约束（父项目）
+
+  # ---- 允许的源仓库（glob，'!' 前缀排除）-----------------------------------
+  sourceRepos:
+  - 'https://github.com/example/platform.git'
+  - '!https://github.com/example/platform-legacy.git'
+
+  # ---- 允许的源目录（path 作为 source 时生效）------------------------------
+  sourceNamespaces:
+  - 'apps/*'
+
+  # ---- 允许的目标（子项目会覆盖这里）--------------------------------------
+  destinations:
+  - server: '*'
+    namespace: 'platform-*'
+
+  # ---- 集群级资源白名单 ----------------------------------------------------
+  clusterResourceWhitelist:
+  - group: 'apiextensions.k8s.io'
+    kind: CustomResourceDefinition
+  - group: 'networking.k8s.io'
+    kind: IngressClass
+  - group: ''
+    kind: Namespace
+    name: 'platform-*'
+
+  # ---- 集群级资源黑名单（优先级高于白名单）--------------------------------
+  clusterResourceBlacklist:
+  - group: ''
+    kind: Namespace
+    name: 'kube-*'
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRole
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRoleBinding
+
+  # ---- 命名空间级资源 ------------------------------------------------------
+  namespaceResourceWhitelist:
+  - group: '*'
+    kind: '*'
+
+  namespaceResourceBlacklist:
+  - group: 'rbac.authorization.k8s.io'
+    kind: Role
+  - group: 'rbac.authorization.k8s.io'
+    kind: RoleBinding
+  # 禁止在业务 namespace 里创建 webhook（防止绕过 Gatekeeper）
+  - group: 'admissionregistration.k8s.io'
+    kind: ValidatingWebhookConfiguration
+
+  # ---- 项目角色（名字必须严格是 proj:<project>:<role>）---------------------
+  roles:
+  - name: admin
+    description: Platform 管理员
+    policies:
+    - p, proj:platform:admin, applications, *, platform/*, allow
+    - p, proj:platform:admin, applicationsets, *, platform/*, allow
+    groups:
+    - my-org:devops-platform

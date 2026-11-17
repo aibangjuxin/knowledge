@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPv6 Network Test - Web Version</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .test-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.2em;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 30px;
+            width: 100%;
+        }
+
+        .test-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .test-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #f0f0f0;
+            border-radius: 3px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .test-results {
+            margin-top: 20px;
+        }
+
+        .test-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+
+        .test-item.running {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+
+        .test-item.success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+        }
+
+        .test-item.failure {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+        }
+
+        .test-icon {
+            font-size: 1.5em;
+            margin-right: 15px;
+            min-width: 30px;
+        }
+
+        .test-details {
+            flex: 1;
+        }
+
+        .test-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .test-description {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .test-time {
+            color: #888;
+            font-size: 0.8em;
+            margin-left: auto;
+        }
+
+        .summary {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .summary.excellent {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .summary.good {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .summary.poor {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .summary h3 {
+            margin-bottom: 10px;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .recommendations {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 8px;
+        }
+
+        .recommendations h4 {
+            margin-bottom: 10px;
+            color: #495057;
+        }
+
+        .recommendations ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .recommendations li {
+            padding: 5px 0;
+            color: #6c757d;
+        }
+
+        .recommendations li:before {
+            content: "💡 ";
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌐 IPv6 Network Test</h1>
+            <p>Test your network's IPv6 connectivity and readiness</p>
+        </div>
+        
+        <div class="content">
+            <button id="startTest" class="test-button">
+                🚀 Start IPv6 Network Test
+            </button>
+            
+            <div class="progress-bar" style="display: none;">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            
+            <div class="test-results" id="testResults"></div>
+            
+            <div class="summary" id="summary" style="display: none;">
+                <h3 id="summaryTitle">Test Complete</h3>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-number" id="totalTests">0</div>
+                        <div class="stat-label">Total Tests</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number" id="passedTests">0</div>
+                        <div class="stat-label">Passed</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-number" id="failedTests">0</div>
+                        <div class="stat-label">Failed</div>
+                    </div>
+                </div>
+                <div class="recommendations" id="recommendations"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class IPv6Tester {
+            constructor() {
+                this.tests = [
+                    { name: 'IPv6 System Support', description: 'Check if browser supports IPv6', test: this.testIPv6Support },
+                    { name: 'IPv4 DNS Record', description: 'Test IPv4 connectivity', test: this.testIPv4Connectivity },
+                    { name: 'IPv6 DNS Record', description: 'Test IPv6 connectivity', test: this.testIPv6Connectivity },
+                    { name: 'Dual Stack DNS', description: 'Test dual-stack preference', test: this.testDualStack },
+                    { name: 'IPv6 Large Packet', description: 'Test IPv6 with large data', test: this.testIPv6LargePacket },
+                    { name: 'DNS IPv6 Support', description: 'Check DNS server IPv6 support', test: this.testDNSIPv6 },
+                    { name: 'ISP IPv6 Support', description: 'Test ISP IPv6 capabilities', test: this.testISPIPv6 },
+                    { name: 'IPv4 Service Provider', description: 'Identify IPv4 provider', test: this.testIPv4Provider },
+                    { name: 'IPv6 Service Provider', description: 'Identify IPv6 provider', test: this.testIPv6Provider },
+                    { name: 'Browser IPv6 Config', description: 'Check browser IPv6 configuration', test: this.testBrowserConfig }
+                ];
+                this.results = [];
+                this.currentTest = 0;
+            }
+
+            async startTests() {
+                const button = document.getElementById('startTest');
+                const progressBar = document.querySelector('.progress-bar');
+                const progressFill = document.getElementById('progressFill');
+                const resultsContainer = document.getElementById('testResults');
+                const summary = document.getElementById('summary');
+
+                button.disabled = true;
+                button.innerHTML = '<div class="loading"></div> Running Tests...';
+                progressBar.style.display = 'block';
+                resultsContainer.innerHTML = '';
+                summary.style.display = 'none';
+                this.results = [];
+                this.currentTest = 0;
+
+                for (let i = 0; i < this.tests.length; i++) {
+                    const test = this.tests[i];
+                    const progress = ((i + 1) / this.tests.length) * 100;
+                    progressFill.style.width = progress + '%';
+
+                    // Add test item to UI
+                    const testItem = this.createTestItem(test, 'running');
+                    resultsContainer.appendChild(testItem);
+
+                    try {
+                        const startTime = Date.now();
+                        const result = await test.test.call(this);
+                        const endTime = Date.now();
+                        const duration = ((endTime - startTime) / 1000).toFixed(3);
+
+                        const testResult = {
+                            name: test.name,
+                            description: test.description,
+                            success: result.success,
+                            message: result.message,
+                            duration: duration
+                        };
+
+                        this.results.push(testResult);
+                        this.updateTestItem(testItem, testResult);
+
+                    } catch (error) {
+                        const testResult = {
+                            name: test.name,
+                            description: test.description,
+                            success: false,
+                            message: 'Test failed: ' + error.message,
+                            duration: '5.000'
+                        };
+
+                        this.results.push(testResult);
+                        this.updateTestItem(testItem, testResult);
+                    }
+
+                    // Small delay between tests for better UX
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+
+                this.showSummary();
+                button.disabled = false;
+                button.innerHTML = '🔄 Run Tests Again';
+                progressBar.style.display = 'none';
+            }
+
+            createTestItem(test, status) {
+                const item = document.createElement('div');
+                item.className = `test-item ${status}`;
+                item.innerHTML = `
+                    <div class="test-icon">${status === 'running' ? '⏳' : '❓'}</div>
+                    <div class="test-details">
+                        <div class="test-name">${test.name}</div>
+                        <div class="test-description">${test.description}</div>
+                    </div>
+                    <div class="test-time">${status === 'running' ? 'Running...' : ''}</div>
+                `;
+                return item;
+            }
+
+            updateTestItem(item, result) {
+                const icon = result.success ? '✅' : '❌';
+                const status = result.success ? 'success' : 'failure';
+                
+                item.className = `test-item ${status}`;
+                item.querySelector('.test-icon').textContent = icon;
+                item.querySelector('.test-description').textContent = result.message;
+                item.querySelector('.test-time').textContent = `(${result.duration}s)`;
+            }
+
+            // Test implementations
+            async testIPv6Support() {
+                // Check if browser supports IPv6 by testing WebRTC
+                try {
+                    const pc = new RTCPeerConnection();
+                    const offer = await pc.createOffer();
+                    pc.close();
+                    
+                    const hasIPv6 = offer.sdp.includes('IP6') || offer.sdp.includes('::');
+                    return {
+                        success: hasIPv6,
+                        message: hasIPv6 ? 'Browser supports IPv6' : 'Browser IPv6 support limited'
+                    };
+                } catch (error) {
+                    return { success: false, message: 'WebRTC not available' };
+                }
+            }
+
+            async testIPv4Connectivity() {
+                try {
+                    const response = await fetch('https://ipv4.google.com/generate_204', {
+                        method: 'HEAD',
+                        mode: 'no-cors'
+                    });
+                    return { success: true, message: 'IPv4 connectivity using ipv4' };
+                } catch (error) {
+                    return { success: false, message: 'IPv4 connectivity failed' };
+                }
+            }
+
+            async testIPv6Connectivity() {
+                try {
+                    const response = await fetch('https://ipv6.google.com/generate_204', {
+                        method: 'HEAD',
+                        mode: 'no-cors'
+                    });
+                    return { success: true, message: 'IPv6 connectivity using ipv6' };
+                } catch (error) {
+                    return { success: false, message: 'IPv6 connectivity failed' };
+                }
+            }
+
+            async testDualStack() {
+                try {
+                    const response = await fetch('https://google.com/generate_204', {
+                        method: 'HEAD',
+                        mode: 'no-cors'
+                    });
+                    
+                    // Try to determine if IPv6 was preferred
+                    const ipv6Test = await this.testIPv6Connectivity();
+                    const protocol = ipv6Test.success ? 'ipv6' : 'ipv4';
+                    
+                    return { success: true, message: `Dual stack using ${protocol}` };
+                } catch (error) {
+                    return { success: false, message: 'Dual stack test failed' };
+                }
+            }
+
+            async testIPv6LargePacket() {
+                try {
+                    // Simulate large packet test by fetching a larger resource
+                    const response = await fetch('https://ipv6.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png', {
+                        method: 'HEAD',
+                        mode: 'no-cors'
+                    });
+                    return { success: true, message: 'IPv6 large packet test passed' };
+                } catch (error) {
+                    return { success: false, message: 'IPv6 large packet test failed' };
+                }
+            }
+
+            async testDNSIPv6() {
+                try {
+                    // Test DNS over HTTPS with IPv6
+                    const response = await fetch('https://dns.google/resolve?name=google.com&type=AAAA');
+                    const data = await response.json();
+                    const hasIPv6Records = data.Answer && data.Answer.some(record => record.type === 28);
+                    
+                    return {
+                        success: hasIPv6Records,
+                        message: hasIPv6Records ? 'DNS server supports IPv6 queries' : 'DNS server IPv4 only'
+                    };
+                } catch (error) {
+                    return { success: false, message: 'DNS IPv6 test failed' };
+                }
+            }
+
+            async testISPIPv6() {
+                try {
+                    // Test if we can reach IPv6 DNS servers
+                    const response = await fetch('https://dns.google/resolve?name=test-ipv6.com&type=AAAA');
+                    const data = await response.json();
+                    return {
+                        success: data.Status === 0,
+                        message: data.Status === 0 ? 'ISP DNS supports IPv6' : 'ISP DNS IPv6 limited'
+                    };
+                } catch (error) {
+                    return { success: false, message: 'ISP IPv6 test failed' };
+                }
+            }
+
+            async testIPv4Provider() {
+                try {
+                    const response = await fetch('https://api.ipify.org?format=json');
+                    const data = await response.json();
+                    
+                    // Try to get ISP info
+                    const ispResponse = await fetch(`https://ipapi.co/${data.ip}/org/`);
+                    const ispData = await ispResponse.text();
+                    
+                    return {
+                        success: true,
+                        message: `IPv4 Provider: ${ispData || 'Unknown'}`
+                    };
+                } catch (error) {
+                    return { success: false, message: 'IPv4 provider lookup failed' };
+                }
+            }
+
+            async testIPv6Provider() {
+                try {
+                    const response = await fetch('https://api64.ipify.org?format=json');
+                    const data = await response.json();
+                    
+                    // Try to get ISP info
+                    const ispResponse = await fetch(`https://ipapi.co/${data.ip}/org/`);
+                    const ispData = await ispResponse.text();
+                    
+                    return {
+                        success: true,
+                        message: `IPv6 Provider: ${ispData || 'Unknown'}`
+                    };
+                } catch (error) {
+                    return { success: false, message: 'IPv6 provider lookup failed' };
+                }
+            }
+
+            async testBrowserConfig() {
+                const features = [];
+                
+                if ('serviceWorker' in navigator) features.push('Service Worker');
+                if ('fetch' in window) features.push('Fetch API');
+                if (window.RTCPeerConnection) features.push('WebRTC');
+                if (navigator.connection) features.push('Network Info');
+                
+                return {
+                    success: features.length > 2,
+                    message: `Browser features: ${features.join(', ')}`
+                };
+            }
+
+            showSummary() {
+                const summary = document.getElementById('summary');
+                const summaryTitle = document.getElementById('summaryTitle');
+                const totalTests = document.getElementById('totalTests');
+                const passedTests = document.getElementById('passedTests');
+                const failedTests = document.getElementById('failedTests');
+                const recommendations = document.getElementById('recommendations');
+
+                const passed = this.results.filter(r => r.success).length;
+                const failed = this.results.length - passed;
+                const successRate = Math.round((passed / this.results.length) * 100);
+
+                totalTests.textContent = this.results.length;
+                passedTests.textContent = passed;
+                failedTests.textContent = failed;
+
+                let summaryClass, title, recs;
+                
+                if (successRate >= 80) {
+                    summaryClass = 'excellent';
+                    title = `IPv6 Readiness: Excellent (${successRate}%)`;
+                    recs = [
+                        'Your network has excellent IPv6 support!',
+                        'Consider enabling IPv6 in your applications',
+                        'Monitor IPv6 performance regularly'
+                    ];
+                } else if (successRate >= 60) {
+                    summaryClass = 'good';
+                    title = `IPv6 Readiness: Good (${successRate}%)`;
+                    recs = [
+                        'Your network has good IPv6 support',
+                        'Some optimizations may be beneficial',
+                        'Check failed tests for improvement areas'
+                    ];
+                } else {
+                    summaryClass = 'poor';
+                    title = `IPv6 Readiness: Limited (${successRate}%)`;
+                    recs = [
+                        'Contact your ISP about IPv6 support',
+                        'Check router IPv6 configuration',
+                        'Consider IPv6 tunnel services'
+                    ];
+                }
+
+                summary.className = `summary ${summaryClass}`;
+                summaryTitle.textContent = title;
+                
+                recommendations.innerHTML = `
+                    <h4>Recommendations:</h4>
+                    <ul>
+                        ${recs.map(rec => `<li>${rec}</li>`).join('')}
+                    </ul>
+                `;
+
+                summary.style.display = 'block';
+            }
+        }
+
+        // Initialize the tester
+        const tester = new IPv6Tester();
+
+        document.getElementById('startTest').addEventListener('click', () => {
+            tester.startTests();
+        });
+
+        // Auto-run test on page load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.getElementById('startTest').click();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

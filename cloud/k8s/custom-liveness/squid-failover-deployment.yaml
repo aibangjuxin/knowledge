@@ -1,0 +1,274 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squid-proxy-primary
+  labels:
+    proxy-tier: primary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: squid-proxy
+      tier: primary
+  template:
+    metadata:
+      labels:
+        app: squid-proxy
+        tier: primary
+    spec:
+      containers:
+      - name: squid
+        image: squid:latest
+        ports:
+        - containerPort: 3128
+        volumeMounts:
+        - name: squid-config
+          mountPath: /etc/squid/squid.conf
+          subPath: squid.conf
+        livenessProbe:
+          tcpSocket:
+            port: 3128
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        readinessProbe:
+          tcpSocket:
+            port: 3128
+          initialDelaySeconds: 5
+          periodSeconds: 3
+      volumes:
+      - name: squid-config
+        configMap:
+          name: squid-primary-config
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squid-proxy-secondary
+  labels:
+    proxy-tier: secondary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: squid-proxy
+      tier: secondary
+  template:
+    metadata:
+      labels:
+        app: squid-proxy
+        tier: secondary
+    spec:
+      containers:
+      - name: squid
+        image: squid:latest
+        ports:
+        - containerPort: 3128
+        volumeMounts:
+        - name: squid-config
+          mountPath: /etc/squid/squid.conf
+          subPath: squid.conf
+        livenessProbe:
+          tcpSocket:
+            port: 3128
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        readinessProbe:
+          tcpSocket:
+            port: 3128
+          initialDelaySeconds: 5
+          periodSeconds: 3
+      volumes:
+      - name: squid-config
+        configMap:
+          name: squid-secondary-config
+
+---
+# 主代理服务
+apiVersion: v1
+kind: Service
+metadata:
+  name: squid-proxy-primary
+spec:
+  selector:
+    app: squid-proxy
+    tier: primary
+  ports:
+  - port: 3128
+    targetPort: 3128
+  type: ClusterIP
+
+---
+# 备用代理服务
+apiVersion: v1
+kind: Service
+metadata:
+  name: squid-proxy-secondary
+spec:
+  selector:
+    app: squid-proxy
+    tier: secondary
+  ports:
+  - port: 3128
+    targetPort: 3128
+  type: ClusterIP
+
+---
+# 智能代理选择器服务
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: proxy-selector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: proxy-selector
+  template:
+    metadata:
+      labels:
+        app: proxy-selector
+    spec:
+      containers:
+      - name: proxy-selector
+        image: python:3.9-slim
+        ports:
+        - containerPort: 8080
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          pip install flask requests &&
+          python /app/proxy-selector.py
+        volumeMounts:
+        - name: proxy-selector-script
+          mountPath: /app
+        env:
+        - name: PRIMARY_PROXY
+          value: "http://squid-proxy-primary:3128"
+        - name: SECONDARY_PROXY
+          value: "http://squid-proxy-secondary:3128"
+        - name: TEST_URL
+          value: "https://www.baidu.com"
+      volumes:
+      - name: proxy-selector-script
+        configMap:
+          name: proxy-selector-script
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: proxy-selector
+spec:
+  selector:
+    app: proxy-selector
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: proxy-selector-script
+data:
+  proxy-selector.py: |
+    #!/usr/bin/env python3
+    import requests
+    import time
+    import os
+    from flask import Flask, jsonify, request
+    import logging
+
+    app = Flask(__name__)
+    logging.basicConfig(level=logging.INFO)
+
+    PRIMARY_PROXY = os.getenv('PRIMARY_PROXY', 'http://squid-proxy-primary:3128')
+    SECONDARY_PROXY = os.getenv('SECONDARY_PROXY', 'http://squid-proxy-secondary:3128')
+    TEST_URL = os.getenv('TEST_URL', 'https://www.baidu.com')
+    REQUEST_TIMEOUT = 5
+
+    def test_proxy(proxy_url):
+        """测试代理是否可用"""
+        proxies = {
+            'http': proxy_url,
+            'https': proxy_url
+        }
+        try:
+            response = requests.get(TEST_URL, timeout=REQUEST_TIMEOUT, proxies=proxies)
+            return response.status_code == 200
+        except Exception as e:
+            logging.error(f"Proxy {proxy_url} failed: {str(e)}")
+            return False
+
+    def get_available_proxy():
+        """获取可用的代理"""
+        if test_proxy(PRIMARY_PROXY):
+            return PRIMARY_PROXY, "primary"
+        elif test_proxy(SECONDARY_PROXY):
+            return SECONDARY_PROXY, "secondary"
+        else:
+            return None, "none"
+
+    @app.route('/proxy')
+    def get_proxy():
+        """返回可用的代理"""
+        proxy_url, tier = get_available_proxy()
+        if proxy_url:
+            return jsonify({
+                "proxy": proxy_url,
+                "tier": tier,
+                "status": "available",
+                "timestamp": time.time()
+            }), 200
+        else:
+            return jsonify({
+                "proxy": None,
+                "tier": "none",
+                "status": "unavailable",
+                "timestamp": time.time()
+            }), 503
+
+    @app.route('/health')
+    def health_check():
+        """健康检查"""
+        proxy_url, tier = get_available_proxy()
+        if proxy_url:
+            return jsonify({"status": "healthy", "active_proxy": tier}), 200
+        else:
+            return jsonify({"status": "unhealthy", "active_proxy": "none"}), 503
+
+    if __name__ == '__main__':
+        app.run(host='0.0.0.0', port=8080)
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: squid-primary-config
+data:
+  squid.conf: |
+    http_port 3128
+    acl all src 0.0.0.0/0
+    http_access allow all
+    cache_dir ufs /var/spool/squid 100 16 256
+    access_log /var/log/squid/access.log
+    cache_log /var/log/squid/cache.log
+    # 主代理配置
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: squid-secondary-config
+data:
+  squid.conf: |
+    http_port 3128
+    acl all src 0.0.0.0/0
+    http_access allow all
+    cache_dir ufs /var/spool/squid 100 16 256
+    access_log /var/log/squid/access.log
+    cache_log /var/log/squid/cache.log
+    # 备用代理配置

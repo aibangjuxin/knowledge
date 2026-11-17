@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ASM No-Sidecar Gateway 架构图</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px; background: #22d3ee;
+      border-radius: 50%; animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 900px; display: block; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem; margin-top: 2rem;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.rose { background: #fb7185; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.orange { background: #fb923c; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="header-row">
+      <div class="pulse-dot"></div>
+      <h1>ASM No-Sidecar Gateway 架构</h1>
+    </div>
+    <p class="subtitle">Istio Ingress Gateway TLS 终止 + 无 Sidecar 后端 — 3 段流量</p>
+  </div>
+
+  <div class="diagram-container">
+    <svg viewBox="0 0 1100 720">
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+        </marker>
+        <marker id="arrowhead-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+        </marker>
+        <marker id="arrowhead-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+        </marker>
+        <marker id="arrowhead-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" />
+        </marker>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#grid)" />
+
+      <!-- ============ GCP Region Boundary ============ -->
+      <rect x="20" y="20" width="1060" height="680" rx="12"
+            fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+      <text x="32" y="38" fill="#fbbf24" font-size="10" font-weight="600">GCP Project: aibang-12345678-ajbx-dev  |  Region: europe-west2</text>
+
+      <!-- ============ Internet ============ -->
+      <rect x="40" y="100" width="100" height="50" rx="6"
+            fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="90" y="120" fill="white" font-size="11" font-weight="600" text-anchor="middle">Client</text>
+      <text x="90" y="136" fill="#94a3b8" font-size="9" text-anchor="middle">curl / Browser</text>
+
+      <!-- ============ GCP LB ============ -->
+      <rect x="200" y="90" width="120" height="70" rx="6"
+            fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="260" y="113" fill="white" font-size="11" font-weight="600" text-anchor="middle">GCP LoadBalancer</text>
+      <text x="260" y="129" fill="#94a3b8" font-size="9" text-anchor="middle">88.88.243.168:443</text>
+      <text x="260" y="145" fill="#fbbf24" font-size="8" text-anchor="middle">Cloud Armor (可选)</text>
+
+      <!-- ============ Gateway Namespace Boundary ============ -->
+      <rect x="360" y="50" width="360" height="350" rx="10"
+            fill="rgba(59, 130, 246, 0.05)" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="6,3"/>
+      <text x="372" y="68" fill="#3b82f6" font-size="10" font-weight="600">命名空间: istio-ingressgateway-int</text>
+      <text x="372" y="82" fill="#3b82f6" font-size="8">istio.io/rev=asm-managed (ASM 托管控制平面)</text>
+
+      <!-- Gateway Pod -->
+      <rect x="420" y="140" width="180" height="100" rx="8"
+            fill="rgba(52, 211, 153, 0.15)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="510" y="163" fill="white" font-size="11" font-weight="600" text-anchor="middle">istio-ingressgateway-int</text>
+      <text x="510" y="180" fill="#94a3b8" font-size="9" text-anchor="middle">Pod (image:auto)</text>
+      <text x="510" y="195" fill="#94a3b8" font-size="9" text-anchor="middle">ASM Managed Sidecar</text>
+      <text x="510" y="215" fill="#fbbf24" font-size="8" text-anchor="middle">:8443 (HTTPS 监听)</text>
+
+      <!-- Gateway CRDs (right side of pod) -->
+      <rect x="640" y="130" width="60" height="50" rx="6"
+            fill="rgba(52, 211, 153, 0.2)" stroke="#34d399" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="670" y="150" fill="#34d399" font-size="8" text-anchor="middle">Gateway</text>
+      <text x="670" y="163" fill="#34d399" font-size="7" text-anchor="middle">SIMPLE</text>
+      <text x="670" y="176" fill="#94a3b8" font-size="7" text-anchor="middle">*.team-a</text>
+
+      <rect x="640" y="188" width="60" height="50" rx="6"
+            fill="rgba(52, 211, 153, 0.2)" stroke="#34d399" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="670" y="208" fill="#34d399" font-size="8" text-anchor="middle">VS</text>
+      <text x="670" y="221" fill="#94a3b8" font-size="7" text-anchor="middle">team-a</text>
+      <text x="670" y="234" fill="#94a3b8" font-size="7" text-anchor="middle">→ :8443</text>
+
+      <!-- ============ Runtime Namespace Boundary ============ -->
+      <rect x="360" y="420" width="360" height="260" rx="10"
+            fill="rgba(251, 146, 60, 0.05)" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="6,3"/>
+      <text x="372" y="438" fill="#fb923c" font-size="10" font-weight="600">命名空间: teama-nosidecare-rt-ns-int</text>
+      <text x="372" y="452" fill="#fb923c" font-size="8">sidecar.istio.io/inject: "false" (无 Sidecar)</text>
+
+      <!-- Runtime Pod -->
+      <rect x="420" y="490" width="180" height="100" rx="8"
+            fill="rgba(251, 113, 133, 0.15)" stroke="#fb7185" stroke-width="1.5"/>
+      <text x="510" y="513" fill="white" font-size="11" font-weight="600" text-anchor="middle">env0-region-runtimepod</text>
+      <text x="510" y="530" fill="#94a3b8" font-size="9" text-anchor="middle">nginx (无 Sidecar)</text>
+      <text x="510" y="545" fill="#94a3b8" font-size="9" text-anchor="middle">HTTPS :8443 (自签名证书)</text>
+      <text x="510" y="565" fill="#fb7185" font-size="8" text-anchor="middle">NetworkPolicy: default-deny</text>
+      <text x="510" y="580" fill="#94a3b8" font-size="8" text-anchor="middle">allow-from-gateway-int:8443</text>
+
+      <!-- Runtime Service -->
+      <rect x="420" y="610" width="100" height="40" rx="6"
+            fill="rgba(251, 113, 133, 0.2)" stroke="#fb7185" stroke-width="1"/>
+      <text x="470" y="628" fill="white" font-size="9" font-weight="600" text-anchor="middle">ClusterIP</text>
+      <text x="470" y="642" fill="#94a3b8" font-size="8" text-anchor="middle">:8443</text>
+
+      <!-- DestinationRule -->
+      <rect x="640" y="490" width="60" height="50" rx="6"
+            fill="rgba(251, 113, 133, 0.2)" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="670" y="510" fill="#fb7185" font-size="8" text-anchor="middle">DestRule</text>
+      <text x="670" y="523" fill="#94a3b8" font-size="7" text-anchor="middle">TLS</text>
+      <text x="670" y="536" fill="#94a3b8" font-size="7" text-anchor="middle">SIMPLE</text>
+
+      <!-- TLS Secret (file mounted) -->
+      <rect x="640" y="560" width="60" height="40" rx="6"
+            fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="670" y="578" fill="white" font-size="8" font-weight="600" text-anchor="middle">Secret</text>
+      <text x="670" y="592" fill="#94a3b8" font-size="7" text-anchor="middle">tls.crt/key</text>
+
+      <!-- ============ Arrows: Internet → LB ============ -->
+      <line x1="140" y1="125" x2="198" y2="125"
+            stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead-cyan)"/>
+      <text x="169" y="119" fill="#22d3ee" font-size="9" text-anchor="middle">HTTPS :443</text>
+      <text x="169" y="133" fill="#94a3b8" font-size="8" text-anchor="middle">SNI: *.team-a.appdev.aibang</text>
+
+      <!-- Arrow: LB → Gateway Pod -->
+      <line x1="320" y1="125" x2="418" y2="165"
+            stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead-cyan)"/>
+      <text x="360" y="140" fill="#22d3ee" font-size="9">L4→L7</text>
+      <text x="358" y="154" fill="#94a3b8" font-size="8">→ :8443</text>
+
+      <!-- Arrow: Gateway Pod → Runtime Pod (TLS origination) -->
+      <line x1="510" y1="242" x2="510" y2="488"
+            stroke="#34d399" stroke-width="2" marker-end="url(#arrowhead-emerald)"/>
+      <text x="520" y="370" fill="#34d399" font-size="9">段② TLS  origination</text>
+      <text x="520" y="384" fill="#94a3b8" font-size="8">SIMPLE mode</text>
+
+      <!-- Arrow: Runtime Pod → Service -->
+      <line x1="510" y1="592" x2="520" y2="610"
+            stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowhead-rose)"/>
+      <text x="530" y="604" fill="#94a3b8" font-size="8">→ :8443</text>
+
+      <!-- ============ TLS Certs in Gateway (annotation) ============ -->
+      <rect x="420" y="260" width="180" height="50" rx="6"
+            fill="rgba(120, 53, 15, 0.2)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="510" y="278" fill="#fbbf24" font-size="8" text-anchor="middle">Secret: team-a-gateway-tls</text>
+      <text x="510" y="292" fill="#94a3b8" font-size="8" text-anchor="middle">mount: /etc/istio/gateway-cert/</text>
+      <text x="510" y="306" fill="#94a3b8" font-size="7" text-anchor="middle">证书: *.team-a.appdev.aibang</text>
+
+      <!-- ============ Traffic Segment Labels ============ -->
+      <rect x="40" y="620" width="280" height="50" rx="6"
+            fill="rgba(34, 211, 238, 0.1)" stroke="#22d3ee" stroke-width="1"/>
+      <text x="52" y="638" fill="#22d3ee" font-size="9" font-weight="600">段① 客户端 → Gateway</text>
+      <text x="52" y="654" fill="#94a3b8" font-size="8">HTTPS TLS 终止 (SIMPLE) | 证书: *.team-a.appdev.aibang</text>
+
+      <rect x="330" y="620" width="280" height="50" rx="6"
+            fill="rgba(52, 211, 153, 0.1)" stroke="#34d399" stroke-width="1"/>
+      <text x="342" y="638" fill="#34d399" font-size="9" font-weight="600">段② Gateway → Runtime</text>
+      <text x="342" y="654" fill="#94a3b8" font-size="8">TLS 发起 (SIMPLE) | DestinationRule tls.mode=SIMPLE</text>
+
+      <rect x="620" y="620" width="260" height="50" rx="6"
+            fill="rgba(251, 113, 133, 0.1)" stroke="#fb7185" stroke-width="1"/>
+      <text x="632" y="638" fill="#fb7185" font-size="9" font-weight="600">段③ Runtime Pod 内</text>
+      <text x="632" y="654" fill="#94a3b8" font-size="8">自签证书 HTTPS :8443 | NetworkPolicy L4 边界</text>
+
+      <!-- ============ Legend ============ -->
+      <text x="880" y="68" fill="white" font-size="10" font-weight="600">图例</text>
+
+      <rect x="880" y="82" width="16" height="10" rx="2"
+            fill="rgba(52, 211, 153, 0.15)" stroke="#34d399" stroke-width="1"/>
+      <text x="902" y="90" fill="#94a3b8" font-size="8">ASM Gateway / CRD</text>
+
+      <rect x="880" y="98" width="16" height="10" rx="2"
+            fill="rgba(251, 113, 133, 0.15)" stroke="#fb7185" stroke-width="1"/>
+      <text x="902" y="106" fill="#94a3b8" font-size="8">无 Sidecar 后端</text>
+
+      <rect x="880" y="114" width="16" height="10" rx="2"
+            fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="902" y="122" fill="#94a3b8" font-size="8">GCP / Cloud 服务</text>
+
+      <rect x="880" y="130" width="16" height="10" rx="2"
+            fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+      <text x="902" y="138" fill="#94a3b8" font-size="8">互联网 / 外部</text>
+
+      <line x1="880" y1="154" x2="896" y2="154"
+            stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+      <text x="902" y="157" fill="#94a3b8" font-size="8">HTTPS/TLS 流量</text>
+
+      <line x1="880" y1="170" x2="896" y2="170"
+            stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)"/>
+      <text x="902" y="173" fill="#94a3b8" font-size="8">TLS 发起</text>
+
+      <rect x="880" y="182" width="16" height="10" rx="2"
+            fill="transparent" stroke="#3b82f6" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="902" y="190" fill="#94a3b8" font-size="8">ASM 命名空间边界</text>
+
+      <rect x="880" y="198" width="16" height="10" rx="2"
+            fill="transparent" stroke="#fb923c" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="902" y="206" fill="#94a3b8" font-size="8">Runtime NS 边界</text>
+    </svg>
+  </div>
+
+  <!-- Info Cards -->
+  <div class="cards">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot emerald"></div>
+        <h3>Gateway 命名空间配置</h3>
+      </div>
+      <ul>
+        <li>• 命名空间标签: istio.io/rev=asm-managed</li>
+        <li>• Pod: image:auto → ASM 自动注入 Sidecar</li>
+        <li>• 注解: inject.istio.io/templates: gateway</li>
+        <li>• TLS: file-mounted cert /etc/istio/gateway-cert/</li>
+        <li>• Gateway CRD: TLS SIMPLE, credentialName 方式</li>
+        <li>• Service: LoadBalancer 443→8443</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot rose"></div>
+        <h3>Runtime 命名空间配置</h3>
+      </div>
+      <ul>
+        <li>• sidecar.istio.io/inject: "false"</li>
+        <li>• 无 Envoy Sidecar — 明文网络不可达</li>
+        <li>• NetworkPolicy: default-deny + allow-gateway-int:8443</li>
+        <li>• 无 SPIFFE mTLS — 使用 DestRule SIMPLE</li>
+        <li>• 无法使用 AuthorizationPolicy (无 Sidecar)</li>
+        <li>• 这是安全降级方案，仅适合迁移过渡</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot amber"></div>
+        <h3>3 段流量说明</h3>
+      </div>
+      <ul>
+        <li><b style="color:#22d3ee">段①</b> Client → GLB → Gateway: TLS 终止</li>
+        <li><b style="color:#34d399">段②</b> Gateway → Runtime: TLS 发起 (SIMPLE)</li>
+        <li><b style="color:#fb7185">段③</b> Pod 内: nginx 自签证书 HTTPS</li>
+        <li>VirtualService 路由 *.team-a.appdev.aibang</li>
+        <li>DestinationRule: tls.mode=SIMPLE → :8443</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="footer">
+    ASM No-Sidecar Gateway 架构图 · aibang-12345678-ajbx-dev / dev-lon-cluster-xxxxxx · 2026-05-16
+  </p>
+</div>
+</body>
+</html>

@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GKE 成本计算器</title>
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --primary-dark: #1557b0;
+            --border: #dadce0;
+            --text: #202124;
+            --text-secondary: #5f6368;
+            --bg-main: #f8f9fa;
+            --bg-panel: #ffffff;
+            --shadow: 0 1px 2px rgba(60,64,67,0.3);
+            --button-bg: #f1f3f4;
+            --button-hover: #e8eaed;
+            --button-active: #dadce0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Google Sans', 'Segoe UI', Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            color: var(--text);
+            background-color: var(--bg-main);
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .calculator {
+            width: 100%;
+            max-width: 400px;
+            background-color: var(--bg-panel);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .display {
+            background-color: var(--bg-main);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .input-display {
+            font-size: 24px;
+            font-weight: 500;
+            color: var(--text);
+            text-align: right;
+            margin-bottom: 8px;
+            min-height: 36px;
+        }
+
+        .label-display {
+            font-size: 14px;
+            color: var(--text-secondary);
+            text-align: right;
+        }
+
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+
+        .key {
+            aspect-ratio: 1;
+            border: none;
+            border-radius: 8px;
+            background-color: var(--button-bg);
+            color: var(--text);
+            font-size: 20px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .key:hover {
+            background-color: var(--button-hover);
+        }
+
+        .key:active {
+            background-color: var(--button-active);
+        }
+
+        .key.operator {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .key.operator:hover {
+            background-color: var(--primary-dark);
+        }
+
+        .result {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .total-cost {
+            font-size: 32px;
+            font-weight: 500;
+            color: var(--primary);
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .cost-period {
+            text-align: center;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+
+        .cost-breakdown {
+            background-color: var(--bg-main);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .cost-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .cost-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .cost-label {
+            color: var(--text-secondary);
+        }
+
+        .cost-value {
+            font-weight: 500;
+            color: var(--text);
+        }
+    </style>
+</head>
+<body>
+    <div class="calculator">
+        <div class="display">
+            <div class="input-display" id="inputDisplay">0</div>
+            <div class="label-display" id="labelDisplay">CPU 数量 (vCPU)</div>
+        </div>
+
+        <div class="keypad">
+            <button class="key" onclick="appendNumber('7')">7</button>
+            <button class="key" onclick="appendNumber('8')">8</button>
+            <button class="key" onclick="appendNumber('9')">9</button>
+            <button class="key operator" onclick="selectField('cpu')">CPU</button>
+            <button class="key" onclick="appendNumber('4')">4</button>
+            <button class="key" onclick="appendNumber('5')">5</button>
+            <button class="key" onclick="appendNumber('6')">6</button>
+            <button class="key operator" onclick="selectField('memory')">内存</button>
+            <button class="key" onclick="appendNumber('1')">1</button>
+            <button class="key" onclick="appendNumber('2')">2</button>
+            <button class="key" onclick="appendNumber('3')">3</button>
+            <button class="key operator" onclick="selectField('replicas')">副本</button>
+            <button class="key" onclick="appendNumber('0')">0</button>
+            <button class="key" onclick="appendDecimal()">.</button>
+            <button class="key" onclick="clearInput()">C</button>
+            <button class="key operator" onclick="selectField('api')">API</button>
+        </div>
+
+        <div class="result">
+            <div class="total-cost" id="totalCostDisplay">$180.00</div>
+            <div class="cost-period">预估每月成本</div>
+
+            <div class="cost-breakdown">
+                <div class="cost-item">
+                    <div class="cost-label">基础设施成本</div>
+                    <div class="cost-value" id="baseCostDisplay">$180.00</div>
+                </div>
+                <div class="cost-item">
+                    <div class="cost-label">CPU 成本</div>
+                    <div class="cost-value" id="cpuCostDisplay">$0.00</div>
+                </div>
+                <div class="cost-item">
+                    <div class="cost-label">内存成本</div>
+                    <div class="cost-value" id="memoryCostDisplay">$0.00</div>
+                </div>
+                <div class="cost-item">
+                    <div class="cost-label">副本成本系数</div>
+                    <div class="cost-value" id="replicaFactorDisplay">x2.00</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentField = 'cpu';
+        let values = {
+            cpu: 2,
+            memory: 4,
+            replicas: 4,
+            api: 1
+        };
+        let currentInput = '';
+
+        function updateDisplay() {
+            document.getElementById('inputDisplay').textContent = currentInput || values[currentField];
+            document.getElementById('labelDisplay').textContent = getFieldLabel(currentField);
+        }
+
+        function getFieldLabel(field) {
+            const labels = {
+                cpu: 'CPU 数量 (vCPU)',
+                memory: '内存大小 (GB)',
+                replicas: '最大副本数',
+                api: 'API 数量'
+            };
+            return labels[field];
+        }
+
+        function selectField(field) {
+            if (currentInput) {
+                commitInput();
+            }
+            currentField = field;
+            currentInput = '';
+            updateDisplay();
+        }
+
+        function appendNumber(num) {
+            currentInput = (currentInput || '') + num;
+            updateDisplay();
+        }
+
+        function appendDecimal() {
+            if (!currentInput.includes('.')) {
+                currentInput = (currentInput || '0') + '.';
+                updateDisplay();
+            }
+        }
+
+        function clearInput() {
+            currentInput = '';
+            updateDisplay();
+            updateCost();
+        }
+
+        function commitInput() {
+            if (currentInput) {
+                const value = parseFloat(currentInput);
+                if (!isNaN(value)) {
+                    values[currentField] = value;
+                    updateCost();
+                }
+                currentInput = '';
+            }
+        }
+
+        function updateCost() {
+            const baseCost = 180;
+            const cpuCost = 19 * values.cpu * values.replicas / 2;
+            const memoryCost = 19 * values.memory * values.replicas / 2;
+            const totalCost = (baseCost + cpuCost + memoryCost) * values.api;
+
+            document.getElementById('totalCostDisplay').textContent = `$${totalCost.toFixed(2)}`;
+            document.getElementById('baseCostDisplay').textContent = `$${(baseCost * values.api).toFixed(2)}`;
+            document.getElementById('cpuCostDisplay').textContent = `$${(cpuCost * values.api).toFixed(2)}`;
+            document.getElementById('memoryCostDisplay').textContent = `$${(memoryCost * values.api).toFixed(2)}`;
+            document.getElementById('replicaFactorDisplay').textContent = `x${(values.replicas / 2).toFixed(2)}`;
+        }
+
+        // 初始化显示
+        updateDisplay();
+        updateCost();
+    </script>
+</body>
+</html>

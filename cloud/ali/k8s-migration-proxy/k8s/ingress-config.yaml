@@ -1,0 +1,247 @@
+# ConfigMap for Ingress Configuration Management
+# Supports hot updates and canary routing configuration
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingress-migration-config
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+    component: ingress-config
+data:
+  # Main ingress configuration
+  ingress-config.yaml: |
+    # Ingress Migration Configuration
+    # This configuration supports hot updates without restarting the Ingress Controller
+    
+    services:
+      bbdm-api:
+        enabled: true
+        old_host: "api-name01.teamname.dev.aliyun.intracloud.cn.aibang"
+        new_host: "api-name01.kong.dev.aliyun.intracloud.cn.aibang"
+        old_service: "bbdm-api"
+        new_service: "new-cluster-bbdm-api"
+        namespace: "aibang-1111111111-bbdm"
+        
+        # Canary configuration
+        canary:
+          enabled: false
+          weight: 0
+          header_name: "X-Canary"
+          header_value: "new-cluster"
+          cookie_name: "canary"
+          
+        # Path configuration
+        paths:
+          - path: "/"
+            pathType: "Prefix"
+            backend_port: 80
+          - path: "/api"
+            pathType: "Prefix"
+            backend_port: 80
+          - path: "/health"
+            pathType: "Prefix"
+            backend_port: 8080
+            
+        # TLS configuration
+        tls:
+          enabled: true
+          secret_name: "bbdm-api-tls"
+          
+        # Proxy settings
+        proxy:
+          body_size: "100m"
+          connect_timeout: 30
+          send_timeout: 30
+          read_timeout: 30
+          ssl_verify: false
+          
+        # Migration strategy
+        migration:
+          strategy: "weight"  # weight, header, cookie, ip
+          fallback_enabled: true
+          monitoring_enabled: true
+          
+    # Global settings
+    global:
+      ingress_class: "nginx"
+      ssl_redirect: true
+      force_ssl_redirect: true
+      default_backend_port: 80
+      health_check_port: 8080
+      
+      # Default proxy settings
+      default_proxy:
+        body_size: "50m"
+        connect_timeout: 15
+        send_timeout: 15
+        read_timeout: 15
+        
+      # Monitoring and logging
+      monitoring:
+        enabled: true
+        metrics_port: 9090
+        log_level: "info"
+        
+      # Security settings
+      security:
+        preserve_headers: true
+        add_forwarded_headers: true
+        enable_cors: false
+
+  # Canary routing rules
+  canary-rules.yaml: |
+    # Canary Routing Rules Configuration
+    # Defines how traffic should be split during migration
+    
+    rules:
+      # Weight-based routing
+      weight:
+        default_weight: 0
+        increment_step: 5
+        max_weight: 100
+        rollback_threshold: 10  # Error rate threshold for automatic rollback
+        
+      # Header-based routing
+      header:
+        default_header: "X-Canary"
+        default_value: "new-cluster"
+        case_sensitive: false
+        
+      # Cookie-based routing
+      cookie:
+        default_cookie: "canary"
+        default_value: "enabled"
+        max_age: 3600
+        
+      # IP-based routing (for specific user groups)
+      ip:
+        enabled: false
+        whitelist: []
+        blacklist: []
+        
+    # Rollback configuration
+    rollback:
+      auto_rollback_enabled: true
+      error_rate_threshold: 5.0  # Percentage
+      response_time_threshold: 2000  # Milliseconds
+      check_interval: 30  # Seconds
+      min_requests: 100  # Minimum requests before rollback decision
+
+  # Multi-host configuration
+  multi-host-config.yaml: |
+    # Multi-host Configuration for Complex Services
+    # Supports multiple domains and subdomains
+    
+    hosts:
+      primary:
+        - "api-name01.teamname.dev.aliyun.intracloud.cn.aibang"
+        - "api-name02.teamname.dev.aliyun.intracloud.cn.aibang"
+        
+      admin:
+        - "admin.teamname.dev.aliyun.intracloud.cn.aibang"
+        - "management.teamname.dev.aliyun.intracloud.cn.aibang"
+        
+      wildcard:
+        - "*.teamname.dev.aliyun.intracloud.cn.aibang"
+        
+    # Path-based routing
+    path_routing:
+      api_v1:
+        path: "/api/v1"
+        pathType: "Prefix"
+        service: "migration-proxy"
+        port: 80
+        
+      api_v2:
+        path: "/api/v2"
+        pathType: "Prefix"
+        service: "migration-proxy"
+        port: 80
+        
+      health:
+        path: "/health"
+        pathType: "Exact"
+        service: "migration-proxy"
+        port: 8080
+        
+      admin:
+        path: "/admin"
+        pathType: "Prefix"
+        service: "migration-proxy"
+        port: 80
+        auth_required: true
+        
+    # TLS configuration for multiple hosts
+    tls_config:
+      wildcard_cert:
+        secret_name: "wildcard-teamname-tls"
+        hosts:
+          - "*.teamname.dev.aliyun.intracloud.cn.aibang"
+          
+      individual_certs:
+        - secret_name: "bbdm-api-tls"
+          hosts:
+            - "api-name01.teamname.dev.aliyun.intracloud.cn.aibang"
+        - secret_name: "admin-tls"
+          hosts:
+            - "admin.teamname.dev.aliyun.intracloud.cn.aibang"
+
+---
+# ConfigMap for Ingress annotation templates
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingress-annotation-templates
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+    component: ingress-templates
+data:
+  # Standard migration annotations
+  standard-annotations.yaml: |
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-buffering: "on"
+    
+  # Header preservation snippet
+  header-preservation.conf: |
+    proxy_set_header X-Original-Host $host;
+    proxy_set_header X-Original-URI $request_uri;
+    proxy_set_header X-Original-Method $request_method;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    
+  # Canary annotations template
+  canary-annotations.yaml: |
+    nginx.ingress.kubernetes.io/canary: "false"
+    nginx.ingress.kubernetes.io/canary-weight: "0"
+    nginx.ingress.kubernetes.io/canary-by-header: "X-Canary"
+    nginx.ingress.kubernetes.io/canary-by-header-value: "new-cluster"
+    nginx.ingress.kubernetes.io/canary-by-cookie: "canary"
+    
+  # Advanced routing snippet
+  advanced-routing.conf: |
+    location ~* ^/api/v([0-9]+)/ {
+      proxy_pass http://upstream_backend;
+      proxy_set_header X-API-Version $1;
+    }
+    
+    location /health {
+      access_log off;
+      return 200 "healthy\n";
+      add_header Content-Type text/plain;
+    }
+    
+    location /metrics {
+      access_log off;
+      proxy_pass http://prometheus-metrics;
+    }

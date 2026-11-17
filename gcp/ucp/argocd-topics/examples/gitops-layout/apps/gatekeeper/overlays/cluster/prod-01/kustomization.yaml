@@ -1,0 +1,25 @@
+# gatekeeper · cluster 层 · prod-01
+#
+# prod 集群：豁免名单**收紧**（只豁免系统 namespace，不豁免业务 namespace）。
+# 环境层已经是 deny，这里再收紧豁免 = 生产上更严。
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../env/prod
+
+patches:
+  - target:
+      group: constraints.gatekeeper.sh
+      kind: K8sRequiredLabels
+      name: require-owner-label
+    patch: |-
+      - op: replace
+        path: /spec/match/excludedNamespaces
+        value:
+          - kube-system
+          - kube-public
+          - kube-node-lease
+          - gatekeeper-system
+          - argocd

@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1.0 → 2.0 Migration Flow — Architecture Diagram</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px; background: #22d3ee; border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+    h1 { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.8rem; margin-left: 1.75rem; }
+    .diagram-container {
+      background: rgba(15,23,42,0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1100px; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 1rem; margin-top: 1.5rem; }
+    .card {
+      background: rgba(15,23,42,0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.7rem; }
+    .card li { margin-bottom: 0.3rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.7rem; }
+    .section-label {
+      font-size: 9px; font-weight: 600; fill: #64748b; letter-spacing: 0.1em; text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-row">
+      <div class="pulse-dot"></div>
+      <h1>1.0 → 2.0 Architecture Migration Flow</h1>
+    </div>
+    <p class="subtitle">Same VPC Coexistence · Phase-by-phase Migration · Rollback at Every Step</p>
+  </div>
+
+  <!-- Main Diagram -->
+  <div class="diagram-container">
+    <svg viewBox="0 0 1300 820">
+
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+        </marker>
+        <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/>
+        </marker>
+        <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+        </marker>
+        <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+        </marker>
+        <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/>
+        </marker>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+        </pattern>
+      </defs>
+
+      <!-- Background Grid -->
+      <rect width="100%" height="100%" fill="url(#grid)"/>
+
+      <!-- ================================================================
+           SECTION 1: Architecture Overview (Top)
+           ================================================================ -->
+
+      <!-- Section label -->
+      <text x="20" y="28" class="section-label">Architecture: Same VPC Coexistence</text>
+
+      <!-- VPC Boundary -->
+      <rect x="20" y="38" width="1260" height="160" rx="12"
+        fill="rgba(251,191,36,0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+      <text x="36" y="56" fill="#fbbf24" font-size="10" font-weight="600">GCP Production VPC</text>
+      <text x="36" y="68" fill="#475569" font-size="8">Same Project · Shared VPC · Network Isolation via Subnets & Secondary Ranges</text>
+
+      <!-- 1.0 Cluster Region -->
+      <rect x="40" y="80" width="340" height="106" rx="8"
+        fill="rgba(239,68,68,0.08)" stroke="#f87171" stroke-width="1" stroke-dasharray="6,3"/>
+      <text x="52" y="97" fill="#f87171" font-size="9" font-weight="600">1.0 GKE Clusters</text>
+      <text x="52" y="109" fill="#f87171" font-size="8">cluster-01 / cluster-02</text>
+
+      <!-- 1.0 Components -->
+      <rect x="56" y="116" width="120" height="30" rx="4"
+        fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/>
+      <text x="116" y="133" fill="white" font-size="9" font-weight="500" text-anchor="middle">1.0 Runtime</text>
+      <text x="116" y="143" fill="#94a3b8" font-size="7" text-anchor="middle">Pod: 100.64.0.0/14</text>
+
+      <rect x="184" y="116" width="120" height="30" rx="4"
+        fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/>
+      <text x="244" y="133" fill="white" font-size="9" font-weight="500" text-anchor="middle">1.0 Ingress</text>
+      <text x="244" y="143" fill="#94a3b8" font-size="7" text-anchor="middle">Node: 192.168.64.0/19</text>
+
+      <rect x="56" y="152" width="308" height="26" rx="4"
+        fill="rgba(100,116,139,0.15)" stroke="#64748b" stroke-width="1"/>
+      <text x="210" y="168" fill="#94a3b8" font-size="8" text-anchor="middle">Old Tenants · Unchanged · Continue Running</text>
+
+      <!-- Arrow: Old tenants stay -->
+      <line x1="210" y1="182" x2="210" y2="200" stroke="#64748b" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="222" y="193" fill="#64748b" font-size="8">No Change</text>
+
+      <!-- 2.0 Cluster Region -->
+      <rect x="420" y="80" width="840" height="106" rx="8"
+        fill="rgba(34,211,238,0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="6,3"/>
+      <text x="432" y="97" fill="#22d3ee" font-size="9" font-weight="600">2.0 GKE Clusters (cluster-03+)</text>
+
+      <!-- 2.0 Node Subnet box -->
+      <rect x="436" y="108" width="160" height="68" rx="6"
+        fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+      <text x="516" y="124" fill="#22d3ee" font-size="8" font-weight="600" text-anchor="middle">Node Subnet</text>
+      <text x="516" y="136" fill="#94a3b8" font-size="7" text-anchor="middle">192.168.96.0/20</text>
+      <text x="516" y="147" fill="#94a3b8" font-size="7" text-anchor="middle">→ cluster-03</text>
+      <text x="516" y="158" fill="#94a3b8" font-size="7" text-anchor="middle">→ cluster-04 ...</text>
+
+      <!-- 2.0 Pod secondary -->
+      <rect x="608" y="108" width="160" height="68" rx="6"
+        fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/>
+      <text x="688" y="124" fill="#34d399" font-size="8" font-weight="600" text-anchor="middle">Pod Secondary</text>
+      <text x="688" y="136" fill="#94a3b8" font-size="7" text-anchor="middle">100.72.0.0/14</text>
+      <text x="688" y="147" fill="#94a3b8" font-size="7" text-anchor="middle">cluster-03: /18</text>
+      <text x="688" y="158" fill="#94a3b8" font-size="7" text-anchor="middle">100.72.0.0 - 100.72.63.255</text>
+
+      <!-- 2.0 Service secondary -->
+      <rect x="780" y="108" width="160" height="68" rx="6"
+        fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1"/>
+      <text x="860" y="124" fill="#a78bfa" font-size="8" font-weight="600" text-anchor="middle">Service Secondary</text>
+      <text x="860" y="136" fill="#94a3b8" font-size="7" text-anchor="middle">100.76.0.0/14</text>
+      <text x="860" y="147" fill="#94a3b8" font-size="7" text-anchor="middle">cluster-03: /18</text>
+      <text x="860" y="158" fill="#94a3b8" font-size="7" text-anchor="middle">100.76.0.0 - 100.76.63.255</text>
+
+      <!-- PSC NAT -->
+      <rect x="952" y="108" width="160" height="68" rx="6"
+        fill="rgba(251,191,36,0.15)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="1032" y="124" fill="#fbbf24" font-size="8" font-weight="600" text-anchor="middle">PSC NAT Subnet</text>
+      <text x="1032" y="136" fill="#94a3b8" font-size="7" text-anchor="middle">192.168.240.0/20</text>
+      <text x="1032" y="147" fill="#94a3b8" font-size="7" text-anchor="middle">192.168.240.0/26 (int)</text>
+      <text x="1032" y="158" fill="#94a3b8" font-size="7" text-anchor="middle">192.168.240.64/26 (ext)</text>
+
+      <!-- CP plane -->
+      <rect x="1124" y="108" width="120" height="68" rx="6"
+        fill="rgba(136,19,55,0.3)" stroke="#fb7185" stroke-width="1"/>
+      <text x="1184" y="124" fill="#fb7185" font-size="8" font-weight="600" text-anchor="middle">Control Plane</text>
+      <text x="1184" y="136" fill="#94a3b8" font-size="7" text-anchor="middle">192.168.224.64/28</text>
+      <text x="1184" y="147" fill="#94a3b8" font-size="7" text-anchor="middle">Private Cluster</text>
+      <text x="1184" y="158" fill="#94a3b8" font-size="7" text-anchor="middle">Master Auth Net</text>
+
+      <!-- New tenants arrow -->
+      <line x1="840" y1="80" x2="840" y2="62" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+      <text x="848" y="68" fill="#22d3ee" font-size="8">New Tenants → 2.0</text>
+
+
+      <!-- ================================================================
+           SECTION 2: Migration Phase Flow (Middle)
+           ================================================================ -->
+
+      <text x="20" y="226" class="section-label">Migration Phases</text>
+
+      <!-- Phase 0 -->
+      <rect x="20" y="238" width="188" height="140" rx="8"
+        fill="rgba(251,191,36,0.1)" stroke="#fbbf24" stroke-width="1.5"/>
+      <rect x="20" y="238" width="188" height="28" rx="8" fill="#fbbf24"/>
+      <rect x="20" y="252" width="188" height="14" fill="#fbbf24"/>
+      <text x="114" y="257" fill="#0f172a" font-size="10" font-weight="700" text-anchor="middle">Phase 0</text>
+      <text x="114" y="278" fill="white" font-size="9" font-weight="600" text-anchor="middle">Design Freeze</text>
+      <text x="114" y="294" fill="#94a3b8" font-size="7" text-anchor="middle">IPAM Approval</text>
+      <text x="114" y="306" fill="#94a3b8" font-size="7" text-anchor="middle">100.72.0.0/14 Pod</text>
+      <text x="114" y="318" fill="#94a3b8" font-size="7" text-anchor="middle">100.76.0.0/14 Svc</text>
+      <text x="114" y="330" fill="#94a3b8" font-size="7" text-anchor="middle">192.168.240.0/20 PSC</text>
+      <text x="114" y="344" fill="#94a3b8" font-size="7" text-anchor="middle">CIDR naming locked</text>
+      <text x="114" y="356" fill="#94a3b8" font-size="7" text-anchor="middle">Mesh mode confirmed</text>
+      <text x="114" y="370" fill="#64748b" font-size="7" text-anchor="middle">⏸ Parallel with 1.0</text>
+
+      <!-- Arrow 0→1 -->
+      <line x1="208" y1="308" x2="236" y2="308" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+      <!-- Phase 1 -->
+      <rect x="240" y="238" width="188" height="140" rx="8"
+        fill="rgba(34,211,238,0.1)" stroke="#22d3ee" stroke-width="1.5"/>
+      <rect x="240" y="238" width="188" height="28" rx="8" fill="#22d3ee"/>
+      <rect x="240" y="252" width="188" height="14" fill="#22d3ee"/>
+      <text x="334" y="257" fill="#0f172a" font-size="10" font-weight="700" text-anchor="middle">Phase 1</text>
+      <text x="334" y="278" fill="white" font-size="9" font-weight="600" text-anchor="middle">Subnet & Ranges</text>
+      <text x="334" y="294" fill="#94a3b8" font-size="7" text-anchor="middle">gcloud subnets create</text>
+      <text x="334" y="306" fill="#94a3b8" font-size="7" text-anchor="middle">--secondary-range</text>
+      <text x="334" y="318" fill="#94a3b8" font-size="7" text-anchor="middle">pods-03=100.72.0.0/18</text>
+      <text x="334" y="330" fill="#94a3b8" font-size="7" text-anchor="middle">svc-03=100.76.0.0/18</text>
+      <text x="334" y="344" fill="#94a3b8" font-size="7" text-anchor="middle">PSC NAT subnets</text>
+      <text x="334" y="356" fill="#94a3b8" font-size="7" text-anchor="middle">192.168.240.0/26</text>
+      <text x="334" y="368" fill="#64748b" font-size="7" text-anchor="middle">Rollback: delete subnets</text>
+
+      <!-- Arrow 1→2 -->
+      <line x1="428" y1="308" x2="456" y2="308" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+      <!-- Phase 2 -->
+      <rect x="460" y="238" width="188" height="140" rx="8"
+        fill="rgba(52,211,153,0.1)" stroke="#34d399" stroke-width="1.5"/>
+      <rect x="460" y="238" width="188" height="28" rx="8" fill="#34d399"/>
+      <rect x="460" y="252" width="188" height="14" fill="#34d399"/>
+      <text x="554" y="257" fill="#0f172a" font-size="10" font-weight="700" text-anchor="middle">Phase 2</text>
+      <text x="554" y="278" fill="white" font-size="9" font-weight="600" text-anchor="middle">Create cluster-03</text>
+      <text x="554" y="294" fill="#94a3b8" font-size="7" text-anchor="middle">--enable-ip-alias</text>
+      <text x="554" y="306" fill="#94a3b8" font-size="7" text-anchor="middle">--enable-private-nodes</text>
+      <text x="554" y="318" fill="#94a3b8" font-size="7" text-anchor="middle">--master-ipv4-cidr</text>
+      <text x="554" y="330" fill="#94a3b8" font-size="7" text-anchor="middle">192.168.224.64/28</text>
+      <text x="554" y="344" fill="#94a3b8" font-size="7" text-anchor="middle">Regional cluster</text>
+      <text x="554" y="356" fill="#94a3b8" font-size="7" text-anchor="middle">Sep node pools:</text>
+      <text x="554" y="368" fill="#94a3b8" font-size="7" text-anchor="middle">gateway / system / runtime</text>
+      <text x="554" y="380" fill="#64748b" font-size="7" text-anchor="middle">Rollback: delete cluster</text>
+
+      <!-- Arrow 2→3 -->
+      <line x1="648" y1="308" x2="676" y2="308" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+      <!-- Phase 3 -->
+      <rect x="680" y="238" width="188" height="140" rx="8"
+        fill="rgba(167,139,250,0.1)" stroke="#a78bfa" stroke-width="1.5"/>
+      <rect x="680" y="238" width="188" height="28" rx="8" fill="#a78bfa"/>
+      <rect x="680" y="252" width="188" height="14" fill="#a78bfa"/>
+      <text x="774" y="257" fill="#0f172a" font-size="10" font-weight="700" text-anchor="middle">Phase 3</text>
+      <text x="774" y="278" fill="white" font-size="9" font-weight="600" text-anchor="middle">PSC + ILB + Mesh GW</text>
+      <text x="774" y="294" fill="#94a3b8" font-size="7" text-anchor="middle">PSC Endpoint</text>
+      <text x="774" y="306" fill="#94a3b8" font-size="7" text-anchor="middle">→ Service Attachment</text>
+      <text x="774" y="318" fill="#94a3b8" font-size="7" text-anchor="middle">→ Internal LB</text>
+      <text x="774" y="330" fill="#94a3b8" font-size="7" text-anchor="middle">→ Mesh Gateway</text>
+      <text x="774" y="344" fill="#94a3b8" font-size="7" text-anchor="middle">Consumer accept list</text>
+      <text x="774" y="356" fill="#94a3b8" font-size="7" text-anchor="middle">Cloud Service Mesh</text>
+      <text x="774" y="368" fill="#94a3b8" font-size="7" text-anchor="middle">Istio Ingress GW</text>
+      <text x="774" y="380" fill="#64748b" font-size="7" text-anchor="middle">Rollback: delete PSC/ILB</text>
+
+      <!-- Arrow 3→4 -->
+      <line x1="868" y1="308" x2="896" y2="308" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+      <!-- Phase 4 -->
+      <rect x="900" y="238" width="188" height="140" rx="8"
+        fill="rgba(251,113,133,0.1)" stroke="#fb7185" stroke-width="1.5"/>
+      <rect x="900" y="238" width="188" height="28" rx="8" fill="#fb7185"/>
+      <rect x="900" y="252" width="188" height="14" fill="#fb7185"/>
+      <text x="994" y="257" fill="#0f172a" font-size="10" font-weight="700" text-anchor="middle">Phase 4</text>
+      <text x="994" y="278" fill="white" font-size="9" font-weight="600" text-anchor="middle">CI/CD & Onboarding</text>
+      <text x="994" y="294" fill="#94a3b8" font-size="7" text-anchor="middle">platform.version: "2.0"</text>
+      <text x="994" y="306" fill="#94a3b8" font-size="7" text-anchor="middle">cluster_id: "03"</text>
+      <text x="994" y="318" fill="#94a3b8" font-size="7" text-anchor="middle">ingress_mode: "psc"</text>
+      <text x="994" y="330" fill="#94a3b8" font-size="7" text-anchor="middle">mesh_mode: "csm"</text>
+      <text x="994" y="344" fill="#94a3b8" font-size="7" text-anchor="middle">Helm values update</text>
+      <text x="994" y="356" fill="#94a3b8" font-size="7" text-anchor="middle">Policy baseline:</text>
+      <text x="994" y="368" fill="#94a3b8" font-size="7" text-anchor="middle">NS / NetPol / AuthzPol</text>
+      <text x="994" y="380" fill="#64748b" font-size="7" text-anchor="middle">Rollback: revert pipeline</text>
+
+      <!-- Arrow 4→5 -->
+      <line x1="1088" y1="308" x2="1116" y2="308" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+      <!-- Phase 5 -->
+      <rect x="1120" y="238" width="160" height="140" rx="8"
+        fill="rgba(34,211,238,0.15)" stroke="#22d3ee" stroke-width="2"/>
+      <rect x="1120" y="238" width="160" height="28" rx="8" fill="#22d3ee"/>
+      <rect x="1120" y="252" width="160" height="14" fill="#22d3ee"/>
+      <text x="1200" y="257" fill="#0f172a" font-size="10" font-weight="700" text-anchor="middle">Phase 5</text>
+      <text x="1200" y="278" fill="white" font-size="9" font-weight="600" text-anchor="middle">Parallel Run & Migrate</text>
+      <text x="1200" y="294" fill="#94a3b8" font-size="7" text-anchor="middle">New tenants → 2.0</text>
+      <text x="1200" y="306" fill="#94a3b8" font-size="7" text-anchor="middle">Shadow env for</text>
+      <text x="1200" y="318" fill="#94a3b8" font-size="7" text-anchor="middle">low-risk tenants</text>
+      <text x="1200" y="332" fill="#94a3b8" font-size="7" text-anchor="middle">Switch by tenant:</text>
+      <text x="1200" y="344" fill="#22d3ee" font-size="7" text-anchor="middle">PSC endpoint</text>
+      <text x="1200" y="356" fill="#22d3ee" font-size="7" text-anchor="middle">ILB backend</text>
+      <text x="1200" y="368" fill="#94a3b8" font-size="7" text-anchor="middle">Monitor:</text>
+      <text x="1200" y="380" fill="#94a3b8" font-size="7" text-anchor="middle">error rate / latency</text>
+
+      <!-- ================================================================
+           SECTION 3: Traffic Flow Detail (Bottom Left)
+           ================================================================ -->
+
+      <text x="20" y="416" class="section-label">Traffic Flow: New Tenant → 2.0 Runtime</text>
+
+      <!-- Flow boxes -->
+      <rect x="20" y="428" width="150" height="44" rx="6"
+        fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="95" y="446" fill="white" font-size="9" font-weight="600" text-anchor="middle">Tenant Project</text>
+      <text x="95" y="460" fill="#94a3b8" font-size="8" text-anchor="middle">Consumer VPC / On-prem</text>
+
+      <line x1="170" y1="450" x2="198" y2="450" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+      <text x="184" y="444" fill="#22d3ee" font-size="8" text-anchor="middle">PSC</text>
+
+      <rect x="202" y="428" width="150" height="44" rx="6"
+        fill="rgba(251,191,36,0.15)" stroke="#fbbf24" stroke-width="1.5"/>
+      <text x="277" y="446" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">PSC Endpoint</text>
+      <text x="277" y="460" fill="#94a3b8" font-size="8" text-anchor="middle">abjx-2-0-pscrev-03</text>
+
+      <line x1="352" y1="450" x2="380" y2="450" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+      <text x="366" y="444" fill="#22d3ee" font-size="8" text-anchor="middle">Attachment</text>
+
+      <rect x="384" y="428" width="130" height="44" rx="6"
+        fill="rgba(100,116,139,0.2)" stroke="#64748b" stroke-width="1"/>
+      <text x="449" y="446" fill="#94a3b8" font-size="9" font-weight="600" text-anchor="middle">Svc Attachment</text>
+      <text x="449" y="460" fill="#64748b" font-size="8" text-anchor="middle">Producer project</text>
+
+      <line x1="514" y1="450" x2="542" y2="450" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+      <text x="528" y="444" fill="#22d3ee" font-size="8" text-anchor="middle">ILB</text>
+
+      <rect x="546" y="428" width="130" height="44" rx="6"
+        fill="rgba(34,211,238,0.15)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="611" y="446" fill="#22d3ee" font-size="9" font-weight="600" text-anchor="middle">Int. Load Balancer</text>
+      <text x="611" y="460" fill="#94a3b8" font-size="8" text-anchor="middle">L7 ILB backend</text>
+
+      <line x1="676" y1="450" x2="704" y2="450" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+      <text x="690" y="444" fill="#a78bfa" font-size="8" text-anchor="middle">mTLS</text>
+
+      <rect x="708" y="428" width="150" height="44" rx="6"
+        fill="rgba(167,139,250,0.15)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="783" y="446" fill="#a78bfa" font-size="9" font-weight="600" text-anchor="middle">Mesh Gateway</text>
+      <text x="783" y="460" fill="#94a3b8" font-size="8" text-anchor="middle">Istio / Cloud Serv.Mesh</text>
+
+      <line x1="858" y1="450" x2="886" y2="450" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+      <text x="872" y="444" fill="#34d399" font-size="8" text-anchor="middle">Route</text>
+
+      <rect x="890" y="428" width="150" height="44" rx="6"
+        fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="965" y="446" fill="white" font-size="9" font-weight="600" text-anchor="middle">2.0 Runtime</text>
+      <text x="965" y="460" fill="#94a3b8" font-size="8" text-anchor="middle">cluster-03 Pods</text>
+
+      <!-- ================================================================
+           SECTION 4: Rollback Matrix (Bottom Right)
+           ================================================================ -->
+
+      <text x="1080" y="416" class="section-label">Rollback Points</text>
+
+      <rect x="1080" y="428" width="200" height="168" rx="8"
+        fill="rgba(136,19,55,0.1)" stroke="#fb7185" stroke-width="1" stroke-dasharray="4,4"/>
+
+      <text x="1092" y="444" fill="#fb7185" font-size="8" font-weight="600">Failure Scenario</text>
+      <text x="1180" y="444" fill="#fb7185" font-size="8" font-weight="600">Rollback Action</text>
+
+      <line x1="1080" y1="450" x2="1280" y2="450" stroke="#fb7185" stroke-width="0.5" stroke-dasharray="2,2"/>
+
+      <text x="1092" y="464" fill="#94a3b8" font-size="7">P0: Onboarding fail</text>
+      <text x="1180" y="464" fill="#94a3b8" font-size="7">Pipeline → 1.0</text>
+
+      <text x="1092" y="480" fill="#94a3b8" font-size="7">P1: PSC/ILB error</text>
+      <text x="1180" y="480" fill="#94a3b8" font-size="7">Keep 1.0 endpoint</text>
+
+      <text x="1092" y="496" fill="#94a3b8" font-size="7">P2: Mesh GW/policy</text>
+      <text x="1180" y="496" fill="#94a3b8" font-size="7">Roll GW/VirtualSvc</text>
+
+      <text x="1092" y="512" fill="#94a3b8" font-size="7">P3: Tenant migrate err</text>
+      <text x="1180" y="512" fill="#94a3b8" font-size="7">Revert entry layer</text>
+
+      <text x="1092" y="528" fill="#94a3b8" font-size="7">P4: CIDR conflict</text>
+      <text x="1180" y="528" fill="#94a3b8" font-size="7">Stop cluster-03+</text>
+
+      <text x="1092" y="544" fill="#94a3b8" font-size="7">P5: MIG refresh err</text>
+      <text x="1180" y="544" fill="#94a3b8" font-size="7">Disable 2.0 target</text>
+
+      <line x1="1080" y1="552" x2="1280" y2="552" stroke="#fb7185" stroke-width="0.5" stroke-dasharray="2,2"/>
+
+      <text x="1092" y="566" fill="#34d399" font-size="7">✓ Every step has</text>
+      <text x="1092" y="578" fill="#34d399" font-size="7">  explicit rollback</text>
+      <text x="1092" y="590" fill="#34d399" font-size="7">✓ 1.0 unaffected</text>
+
+      <!-- ================================================================
+           SECTION 5: Key Design Decisions (Bottom)
+           ================================================================ -->
+
+      <text x="20" y="610" class="section-label">Key Design Decisions</text>
+
+      <rect x="20" y="622" width="1260" height="72" rx="8"
+        fill="rgba(30,41,59,0.3)" stroke="#1e293b" stroke-width="1"/>
+
+      <!-- Decision items in 4 columns -->
+      <text x="36" y="640" fill="#fbbf24" font-size="8" font-weight="600">VPC Model</text>
+      <text x="36" y="652" fill="#94a3b8" font-size="7">Same VPC coexistence</text>
+      <text x="36" y="663" fill="#64748b" font-size="7">Minimize changes</text>
+      <text x="36" y="674" fill="#64748b" font-size="7">to existing infra</text>
+
+      <text x="196" y="640" fill="#22d3ee" font-size="8" font-weight="600">Start Cluster</text>
+      <text x="196" y="652" fill="#94a3b8" font-size="7">cluster-03 (not 01/02)</text>
+      <text x="196" y="663" fill="#64748b" font-size="7">Avoid 1.0 CP range</text>
+      <text x="196" y="674" fill="#64748b" font-size="7">192.168.224.0/28</text>
+
+      <text x="376" y="640" fill="#34d399" font-size="8" font-weight="600">Ingress Cutover</text>
+      <text x="376" y="652" fill="#94a3b8" font-size="7">PSC endpoint layer</text>
+      <text x="376" y="663" fill="#64748b" font-size="7">Per-tenant switch</text>
+      <text x="376" y="674" fill="#64748b" font-size="7">No mesh weight split</text>
+
+      <text x="556" y="640" fill="#a78bfa" font-size="8" font-weight="600">Mesh Choice</text>
+      <text x="556" y="652" fill="#94a3b8" font-size="7">Cloud Service Mesh</text>
+      <text x="556" y="663" fill="#64748b" font-size="7">GCP native Istio API</text>
+      <text x="556" y="674" fill="#64748b" font-size="7">Future: Gloo Mesh</text>
+
+      <text x="736" y="640" fill="#fb7185" font-size="8" font-weight="600">IP Isolation</text>
+      <text x="736" y="652" fill="#94a3b8" font-size="7">GCE / GKE node /</text>
+      <text x="736" y="663" fill="#94a3b8" font-size="7">Pod / Svc / CP all</text>
+      <text x="736" y="674" fill="#64748b" font-size="7">separate secondary</text>
+
+      <text x="926" y="640" fill="#22d3ee" font-size="8" font-weight="600">Test Env</text>
+      <text x="926" y="652" fill="#94a3b8" font-size="7">Rebuild cluster-03</text>
+      <text x="926" y="663" fill="#64748b" font-size="7">CIDR cannot be</text>
+      <text x="926" y="674" fill="#64748b" font-size="7">changed in-place</text>
+
+      <text x="1106" y="640" fill="#fbbf24" font-size="8" font-weight="600">MIG Refresh</text>
+      <text x="1106" y="652" fill="#94a3b8" font-size="7">Explicit target config</text>
+      <text x="1106" y="663" fill="#64748b" font-size="7">dry-run default</text>
+      <text x="1106" y="674" fill="#64748b" font-size="7">Per platform version</text>
+
+      <!-- ================================================================
+           SECTION 6: Legend
+           ================================================================ -->
+
+      <text x="20" y="726" class="section-label">Legend</text>
+
+      <rect x="20" y="736" width="14" height="10" rx="2" fill="rgba(251,191,36,0.1)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="40" y="744" fill="#94a3b8" font-size="8">VPC / PSC NAT Boundary</text>
+
+      <rect x="180" y="736" width="14" height="10" rx="2" fill="rgba(34,211,238,0.1)" stroke="#22d3ee" stroke-width="1"/>
+      <text x="200" y="744" fill="#94a3b8" font-size="8">2.0 Components</text>
+
+      <rect x="320" y="736" width="14" height="10" rx="2" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/>
+      <text x="340" y="744" fill="#94a3b8" font-size="8">Runtime / Backend</text>
+
+      <rect x="460" y="736" width="14" height="10" rx="2" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1"/>
+      <text x="480" y="744" fill="#94a3b8" font-size="8">Service / Mesh</text>
+
+      <rect x="600" y="736" width="14" height="10" rx="2" fill="rgba(136,19,55,0.3)" stroke="#fb7185" stroke-width="1"/>
+      <text x="620" y="744" fill="#94a3b8" font-size="8">Control Plane / Rollback</text>
+
+      <line x1="740" y1="741" x2="760" y2="741" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+      <text x="768" y="744" fill="#94a3b8" font-size="8">Data Flow</text>
+
+      <line x1="860" y="741" x2="880" y2="741" stroke="#fb7185" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="888" y="744" fill="#94a3b8" font-size="8">Rollback Path</text>
+
+      <rect x="1000" y="736" width="14" height="10" rx="2" fill="rgba(100,116,139,0.2)" stroke="#64748b" stroke-width="1"/>
+      <text x="1020" y="744" fill="#94a3b8" font-size="8">Neutral / Transition</text>
+
+      <!-- ================================================================
+           Footer
+           ================================================================ -->
+      <text x="20" y="770" fill="#475569" font-size="8">Doc: migrate-design-v3.md · 1.0→2.0 Migration · Same VPC · Phase 0-5 · Rollback at Every Step</text>
+
+    </svg>
+  </div>
+
+  <!-- Info Cards -->
+  <div class="cards">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot amber"></div>
+        <h3>Phase Summary</h3>
+      </div>
+      <ul>
+        <li>• Phase 0: IPAM Approval + Design Freeze</li>
+        <li>• Phase 1: Subnet + Secondary Ranges</li>
+        <li>• Phase 2: Create cluster-03</li>
+        <li>• Phase 3: PSC + ILB + Mesh Gateway</li>
+        <li>• Phase 4: CI/CD + Onboarding Pipeline</li>
+        <li>• Phase 5: Parallel Run + Tenant Migration</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot cyan"></div>
+        <h3>2.0 CIDR Allocations</h3>
+      </div>
+      <ul>
+        <li>• Node: 192.168.96.0/20 (cluster-03)</li>
+        <li>• Pod: 100.72.0.0/14 (per cluster /18)</li>
+        <li>• Service: 100.76.0.0/14 (per cluster /18)</li>
+        <li>• Control Plane: 192.168.224.64/28</li>
+        <li>• PSC NAT: 192.168.240.0/20</li>
+        <li>• 1.0 CIDRs remain untouched</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot rose"></div>
+        <h3>Rollback Strategy</h3>
+      </div>
+      <ul>
+        <li>• Every phase has explicit rollback</li>
+        <li>• 1.0 continues unaffected throughout</li>
+        <li>• New tenants can pause 2.0 onboarding</li>
+        <li>• PSC/ILB failure → revert entry layer</li>
+        <li>• CIDR conflict → stop cluster-03+</li>
+        <li>• MIG refresh: dry-run + per-version target</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="footer">
+    migrate-design-v3.md · 1.0 → 2.0 Architecture Migration · Same VPC Coexistence
+  </p>
+</div>
+</body>
+</html>

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GKE DNS 三种模式 — Pod DNS 查询路径</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', monospace; background: #020617; min-height: 100vh; padding: 2rem; color: white; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #22d3ee; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container { background: rgba(15, 23, 42, 0.5); border-radius: 1rem; border: 1px solid #1e293b; padding: 1.5rem; overflow-x: auto; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 2rem; }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>GKE DNS 三种模式</h1>
+      </div>
+      <p class="subtitle">Pod /etc/resolv.conf nameserver 决定 DNS 查询路径</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1000 720">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+          </marker>
+          <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+          </marker>
+          <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" />
+          </marker>
+          <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
+          </marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- Title -->
+        <text x="500" y="30" fill="white" font-size="14" font-weight="700" text-anchor="middle">Pod 发起 DNS 查询</text>
+
+        <!-- Pod box -->
+        <rect x="400" y="50" width="200" height="70" rx="8" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="500" y="75" fill="white" font-size="12" font-weight="600" text-anchor="middle">Java App in GKE Pod</text>
+        <text x="500" y="93" fill="#94a3b8" font-size="9" text-anchor="middle">/etc/resolv.conf</text>
+        <text x="500" y="107" fill="#94a3b8" font-size="9" text-anchor="middle">options ndots:5</text>
+
+        <!-- Arrow down to decision -->
+        <line x1="500" y1="120" x2="500" y2="148" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- Decision diamond -->
+        <polygon points="500,150 560,180 500,210 440,180" fill="rgba(251, 191, 36, 0.1)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="500" y="182" fill="#fbbf24" font-size="10" font-weight="600" text-anchor="middle">nameserver?</text>
+
+        <!-- Three paths -->
+        <!-- Path 1: NodeLocal DNSCache -->
+        <line x1="440" y1="180" x2="160" y2="180" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+        <rect x="40" y="155" width="160" height="50" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="120" y="180" fill="white" font-size="11" font-weight="600" text-anchor="middle">169.254.20.10</text>
+        <text x="120" y="196" fill="#94a3b8" font-size="9" text-anchor="middle">NodeLocal DNSCache</text>
+
+        <!-- Path 2: Cloud DNS for GKE -->
+        <line x1="500" y1="210" x2="500" y2="238" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+        <rect x="390" y="240" width="220" height="50" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="500" y="265" fill="white" font-size="11" font-weight="600" text-anchor="middle">169.254.169.254</text>
+        <text x="500" y="281" fill="#94a3b8" font-size="9" text-anchor="middle">Cloud DNS for GKE</text>
+
+        <!-- Path 3: kube-dns -->
+        <line x1="560" y1="180" x2="800" y2="180" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrow-violet)"/>
+        <rect x="800" y="155" width="170" height="50" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="885" y="180" fill="white" font-size="11" font-weight="600" text-anchor="middle">10.x.y.10</text>
+        <text x="885" y="196" fill="#94a3b8" font-size="9" text-anchor="middle">kube-dns Service</text>
+
+        <!-- Downstream from NodeLocal -->
+        <line x1="120" y1="205" x2="120" y2="330" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+        <rect x="20" y="332" width="200" height="50" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="120" y="357" fill="white" font-size="11" font-weight="600" text-anchor="middle">缓存命中?</text>
+        <text x="120" y="373" fill="#94a3b8" font-size="9" text-anchor="middle">NodeLocal 缓存查询</text>
+
+        <!-- Yes/No from cache -->
+        <line x1="120" y1="382" x2="120" y2="420" stroke="#34d399" stroke-width="1" marker-end="url(#arrow-emerald)"/>
+        <text x="130" y="405" fill="#34d399" font-size="8">Yes → 返回</text>
+        <line x1="120" y1="382" x2="60" y2="430" stroke="#fbbf24" stroke-width="1" marker-end="url(#arrow-amber)"/>
+        <text x="50" y="410" fill="#fbbf24" font-size="8">No</text>
+
+        <!-- Downstream from Cloud DNS for GKE -->
+        <line x1="500" y1="290" x2="500" y2="430" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+
+        <!-- Downstream from kube-dns -->
+        <line x1="885" y1="205" x2="885" y2="330" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrow-violet)"/>
+        <rect x="800" y="332" width="170" height="50" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="885" y="357" fill="white" font-size="11" font-weight="600" text-anchor="middle">kube-dns Pod</text>
+        <text x="885" y="373" fill="#94a3b8" font-size="9" text-anchor="middle">CoreDNS / kubedns</text>
+        <line x1="885" y1="382" x2="885" y2="420" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+
+        <!-- Domain type decision -->
+        <rect x="320" y="422" width="360" height="50" rx="6" fill="rgba(251, 191, 36, 0.1)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="500" y="445" fill="#fbbf24" font-size="10" font-weight="600" text-anchor="middle">查询类型?</text>
+        <line x1="120" y1="430" x2="320" y2="447" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+        <line x1="500" y1="430" x2="500" y2="420" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+        <line x1="885" y1="430" x2="680" y2="447" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrow-violet)"/>
+
+        <!-- Three domain types -->
+        <!-- cluster.local -->
+        <rect x="80" y="480" width="180" height="50" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="170" y="505" fill="white" font-size="11" font-weight="600" text-anchor="middle">cluster.local</text>
+        <text x="170" y="521" fill="#94a3b8" font-size="9" text-anchor="middle">K8s Service 发现</text>
+        <line x1="180" y1="530" x2="180" y2="560" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+
+        <!-- External/Enterprise -->
+        <rect x="320" y="480" width="200" height="50" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="420" y="505" fill="white" font-size="11" font-weight="600" text-anchor="middle">aibang. / 外部域名</text>
+        <text x="420" y="521" fill="#94a3b8" font-size="9" text-anchor="middle">企业 DNS / 公网</text>
+        <line x1="420" y1="530" x2="420" y2="560" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrow-amber)"/>
+
+        <!-- Public -->
+        <rect x="580" y="480" width="200" height="50" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="680" y="505" fill="white" font-size="11" font-weight="600" text-anchor="middle">公网域名</text>
+        <text x="680" y="521" fill="#94a3b8" font-size="9" text-anchor="middle">Public DNS Recursion</text>
+        <line x1="680" y1="530" x2="680" y2="560" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- Legend -->
+        <text x="840" y="480" fill="white" font-size="10" font-weight="600">图例</text>
+        <rect x="840" y="492" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="862" y="500" fill="#94a3b8" font-size="8">NodeLocal</text>
+        <rect x="840" y="508" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="862" y="516" fill="#94a3b8" font-size="8">Cloud DNS / kube-dns</text>
+        <rect x="840" y="524" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="862" y="532" fill="#94a3b8" font-size="8">企业域名</text>
+
+        <!-- Arrow to final result -->
+        <line x1="500" y1="560" x2="500" y2="588" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- Final result -->
+        <rect x="380" y="590" width="240" height="40" rx="6" fill="rgba(34, 211, 238, 0.1)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="500" y="615" fill="#22d3ee" font-size="11" font-weight="600" text-anchor="middle">DNS 解析结果 → 应用连接</text>
+
+        <!-- Annotation -->
+        <text x="40" y="680" fill="#475569" font-size="8">注：Autopilot 默认 NodeLocal DNSCache；Standard 可选 Cloud DNS for GKE 或 kube-dns</text>
+        <text x="40" y="695" fill="#475569" font-size="8">GKE 1.36+ kube-dns 底层改为 CoreDNS；NodeLocal DNSCache 从 1.34.1-gke.3720000 起 Standard 默认启用</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><div class="card-dot cyan"></div><h3>169.254.20.10 — NodeLocal DNSCache</h3></div>
+        <ul>
+          <li>• Autopilot 默认启用</li>
+          <li>• Standard 1.34.1+ 默认启用</li>
+          <li>• 同节点缓存，降低延迟</li>
+          <li>• 避免 conntrack UDP 竞态</li>
+          <li>• 未命中则转发上游</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot emerald"></div><h3>169.254.169.254 — Cloud DNS for GKE</h3></div>
+        <ul>
+          <li>• Standard Cloud DNS provider</li>
+          <li>• Pod 直连 GCP 元数据 server</li>
+          <li>• Cloud DNS 私有 zone / Peering</li>
+          <li>• 服务记录自动同步</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot violet"></div><h3>10.x.y.10 — kube-dns Service</h3></div>
+        <ul>
+          <li>• Standard 默认 DNS provider</li>
+          <li>• ClusterIP 为 kube-dns</li>
+          <li>• CoreDNS / kubedns Pod 支撑</li>
+          <li>• 可配合 NodeLocal 使用</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">GKE DNS 三种模式 · 来源: gcp-dns-explorer-gpt5-5.md</p>
+  </div>
+</body>
+</html>

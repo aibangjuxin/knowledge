@@ -1,0 +1,185 @@
+# GitLab CI/CD Pipeline with Branch Validation
+# 在.gitlab-ci.yml中使用此配置
+
+variables:
+  DOCKER_REGISTRY: "europe-west2-docker.pkg.dev"
+  PROJECT_ID: "myproject"
+  REPOSITORY: "containers"
+  SERVICE_NAME: "my-agent-4"
+  REGION: "europe-west2"
+
+stages:
+  - build
+  - validate
+  - deploy
+
+# 构建镜像
+build_image:
+  stage: build
+  image: gcr.io/google.com/cloudsdktool/cloud-sdk:latest
+  services:
+    - docker:dind
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - echo $GCP_SERVICE_KEY | base64 -d > gcp-key.json
+    - gcloud auth activate-service-account --key-file gcp-key.json
+    - gcloud config set project $PROJECT_ID
+    - gcloud auth configure-docker $DOCKER_REGISTRY
+  script:
+    # 根据分支生成不同的镜像标签
+    - |
+      if [ "$CI_COMMIT_REF_NAME" = "master" ]; then
+        IMAGE_TAG="master-${CI_COMMIT_SHORT_SHA}"
+      else
+        IMAGE_TAG="${CI_COMMIT_REF_NAME}-${CI_COMMIT_SHORT_SHA}"
+      fi
+    - IMAGE_URL="${DOCKER_REGISTRY}/${PROJECT_ID}/${REPOSITORY}/${SERVICE_NAME}:${IMAGE_TAG}"
+    - echo "Building image: $IMAGE_URL"
+    - docker build -t $IMAGE_URL .
+    - docker push $IMAGE_URL
+    - echo "IMAGE_URL=$IMAGE_URL" >> build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+  only:
+    - master
+    - develop
+    - /^feature\/.*$/
+    - /^hotfix\/.*$/
+
+# 分支校验阶段
+validate_branch:
+  stage: validate
+  image: alpine:latest
+  script:
+    - |
+      echo "=== 镜像分支校验 ==="
+      echo "环境: $DEPLOY_ENV"
+      echo "分支: $CI_COMMIT_REF_NAME"
+      echo "镜像: $IMAGE_URL"
+      
+      # 检查是否为生产环境
+      if [ "$DEPLOY_ENV" = "prd" ] || [ "$DEPLOY_ENV" = "production" ]; then
+        echo "检测到生产环境部署，执行严格校验..."
+        
+        # 检查分支是否为master
+        if [ "$CI_COMMIT_REF_NAME" != "master" ]; then
+          echo "❌ 错误: 生产环境只能从master分支部署!"
+          echo "当前分支: $CI_COMMIT_REF_NAME"
+          echo "要求分支: master"
+          exit 1
+        fi
+        
+        # 检查镜像标签是否以master开头
+        IMAGE_TAG=$(echo $IMAGE_URL | sed 's/.*://')
+        if [[ ! "$IMAGE_TAG" == master* ]]; then
+          echo "❌ 错误: 生产环境镜像标签必须以master开头!"
+          echo "当前标签: $IMAGE_TAG"
+          exit 1
+        fi
+        
+        echo "✅ 分支校验通过"
+      else
+        echo "非生产环境，跳过分支校验"
+      fi
+  dependencies:
+    - build_image
+  only:
+    variables:
+      - $DEPLOY_ENV
+
+# 部署到开发环境
+deploy_dev:
+  stage: deploy
+  image: gcr.io/google.com/cloudsdktool/cloud-sdk:latest
+  variables:
+    DEPLOY_ENV: "dev"
+  before_script:
+    - echo $GCP_SERVICE_KEY | base64 -d > gcp-key.json
+    - gcloud auth activate-service-account --key-file gcp-key.json
+    - gcloud config set project $PROJECT_ID
+  script:
+    - |
+      gcloud run jobs deploy $SERVICE_NAME \
+        --image=$IMAGE_URL \
+        --region=$REGION \
+        --set-env-vars=env=dev,region=uk \
+        --cpu=0.5 \
+        --memory=256Mi \
+        --service-account=dev-mgmt@${PROJECT_ID}.iam.gserviceaccount.com \
+        --project=$PROJECT_ID
+  dependencies:
+    - build_image
+    - validate_branch
+  only:
+    - develop
+    - /^feature\/.*$/
+  environment:
+    name: development
+
+# 部署到测试环境
+deploy_test:
+  stage: deploy
+  image: gcr.io/google.com/cloudsdktool/cloud-sdk:latest
+  variables:
+    DEPLOY_ENV: "test"
+  before_script:
+    - echo $GCP_SERVICE_KEY | base64 -d > gcp-key.json
+    - gcloud auth activate-service-account --key-file gcp-key.json
+    - gcloud config set project $PROJECT_ID
+  script:
+    - |
+      gcloud run jobs deploy $SERVICE_NAME \
+        --image=$IMAGE_URL \
+        --region=$REGION \
+        --set-env-vars=env=test,region=uk \
+        --cpu=1 \
+        --memory=512Mi \
+        --service-account=test-mgmt@${PROJECT_ID}.iam.gserviceaccount.com \
+        --project=$PROJECT_ID
+  dependencies:
+    - build_image
+    - validate_branch
+  only:
+    - master
+  when: manual
+  environment:
+    name: testing
+
+# 部署到生产环境 (仅master分支)
+deploy_production:
+  stage: deploy
+  image: gcr.io/google.com/cloudsdktool/cloud-sdk:latest
+  variables:
+    DEPLOY_ENV: "prd"
+  before_script:
+    - echo $GCP_SERVICE_KEY | base64 -d > gcp-key.json
+    - gcloud auth activate-service-account --key-file gcp-key.json
+    - gcloud config set project $PROJECT_ID
+  script:
+    - |
+      gcloud run jobs deploy $SERVICE_NAME \
+        --image=$IMAGE_URL \
+        --region=$REGION \
+        --vpc-connector=vpc-conn-europe \
+        --vpc-egress=all-traffic \
+        --max-retries=3 \
+        --set-env-vars=env=prd,region=uk,version=release_17.0.0 \
+        --set-secrets=cloud_run_secret=cloud_run_prod:latest \
+        --task-timeout=10m \
+        --cpu=2 \
+        --memory=1Gi \
+        --labels=environment=production \
+        --key=projects/my-kms-project/locations/europe-west2/keyRings/run/cryptoKeys/HSMrunSharedKey \
+        --project=$PROJECT_ID \
+        --service-account=prod-mgmt@${PROJECT_ID}.iam.gserviceaccount.com
+  dependencies:
+    - build_image
+    - validate_branch
+  only:
+    - master
+  when: manual
+  environment:
+    name: production

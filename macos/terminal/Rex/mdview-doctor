@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+# mdview-doctor — 检查 mdview 在本机跑通所需的全部依赖
+#
+#   mdview-doctor            检查全部
+#   mdview-doctor -v         附带打印版本号
+#
+# 退出码：0 = 全部通过；1 = 有 FAIL（必需项缺失）
+set -uo pipefail
+
+VERBOSE=0
+[ "${1:-}" = "-v" ] || [ "${1:-}" = "--verbose" ] && VERBOSE=1
+
+SUPPORT_DIR="$HOME/Library/Application Support/Rex Markdown"
+MD_ROOT="$HOME/.local/state/rex-markdown-browser"
+PASS=0
+FAIL=0
+WARN=0
+
+ok()   { printf '  ✅ %s\n' "$1"; PASS=$((PASS+1)); }
+bad()  { printf '  ❌ %s\n' "$1"; FAIL=$((FAIL+1)); }
+warn() { printf '  ⚠️  %s\n' "$1"; WARN=$((WARN+1)); }
+info() { printf '     %s\n' "$1"; }
+
+ver() {  # ver <cmd> <args...> → 打印版本（失败则不打印）
+  command -v "$1" >/dev/null 2>&1 || return 0
+  local v
+  v="$("$1" "${@:2}" 2>/dev/null | head -1)"
+  [ -n "$v" ] && info "$v"
+  return 0
+}
+
+echo "mdview-doctor · $(date '+%Y-%m-%d %H:%M:%S')"
+echo "系统：$(sw_vers -productVersion 2>/dev/null) · $(uname -m)"
+echo
+
+# ── 1. bash ─────────────────────────────────────────────────────────
+echo "【1】脚本宿主 bash"
+if [ -n "${BASH_VERSION:-}" ]; then
+  ok "bash ${BASH_VERSION}（脚本解释器 $(command -v bash)）"
+  case "${BASH_VERSION%%.*}" in
+    3) info "3.x 也兼容（脚本未用关联数组/mapfile）" ;;
+  esac
+else
+  bad "当前不是 bash 环境"
+fi
+echo
+
+# ── 2. node（必需）──────────────────────────────────────────────────
+echo "【2】node —— 必需（路径转 file:// URL、读 programs.json）"
+NODE_BIN="$(type -P node 2>/dev/null)"
+if [ -n "$NODE_BIN" ]; then
+  ok "node $("$NODE_BIN" -v 2>/dev/null) → $NODE_BIN"
+  [ "$VERBOSE" = 1 ] && ver node -v
+else
+  bad "没找到 node → mdview 无法生成 file:// URL（装：brew install node）"
+fi
+echo
+
+# ── 3. terminal-browser（必需）──────────────────────────────────────
+echo "【3】terminal-browser —— 必需（真正的 Markdown 渲染器）"
+TB="$(type -P terminal-browser 2>/dev/null)"
+if [ -z "$TB" ] && [ -f "$SUPPORT_DIR/programs.json" ] && [ -n "$NODE_BIN" ]; then
+  TB="$("$NODE_BIN" -e 'try{process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).browser||"")}catch(e){}' \
+        "$SUPPORT_DIR/programs.json")"
+  [ -n "$TB" ] && info "（从 programs.json 找到）"
+fi
+if [ -n "$TB" ] && [ -x "$TB" ]; then
+  ok "terminal-browser → $TB"
+  [ "$VERBOSE" = 1 ] && ver terminal-browser --version
+else
+  bad "没找到 terminal-browser（装：brew install --cask terminal-browser）"
+fi
+echo
+
+# ── 4. rex（分屏模式必需）───────────────────────────────────────────
+echo "【4】rex CLI —— mdview FILE.md 的分屏模式必需"
+REX="$(type -P rex 2>/dev/null)"
+[ -z "$REX" ] && [ -f "$SUPPORT_DIR/programs.json" ] && [ -n "$NODE_BIN" ] && \
+  REX="$("$NODE_BIN" -e 'try{process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).rex||"")}catch(e){}' \
+        "$SUPPORT_DIR/programs.json")"
+if [ -n "$REX" ] && [ -x "$REX" ]; then
+  ok "rex → $REX"
+  [ "$VERBOSE" = 1 ] && ver "$REX" version
+else
+  bad "没找到 rex CLI（装 Rex Beta.app，或把 rex 放进 PATH）"
+fi
+
+# Rex server 是否在跑
+if [ -n "$REX" ] && [ -x "$REX" ]; then
+  if "$REX" server status >/dev/null 2>&1; then
+    ok "Rex server 在跑（$("$REX" server status 2>/dev/null | grep -m1 '^pid:' || echo '')）"
+  else
+    warn "Rex server 没跑 → 分屏会失败。启动 Rex Beta.app，或 'rex server start'"
+  fi
+fi
+echo
+
+# ── 5. 可选工具 ────────────────────────────────────────────────────
+echo "【5】可选工具（缺失只会降级，不会报错）"
+GLOW="$(type -P glow 2>/dev/null)"
+if [ -n "$GLOW" ]; then ok "glow → $GLOW"; else warn "没装 glow → mdview -c 会退回 bat"; fi
+BAT="$(type -P bat 2>/dev/null)"
+if [ -n "$BAT" ]; then ok "bat → $BAT"; else warn "没装 bat → mdview -c 无后备渲染器"; fi
+FZF="$(type -P fzf 2>/dev/null)"
+if [ -n "$FZF" ]; then ok "fzf → $FZF"; else warn "没装 fzf → mdview DIR 会退化成打印文件列表"; fi
+echo
+
+# ── 6. 终端图形能力 ────────────────────────────────────────────────
+echo "【6】终端图形协议（terminal-browser 靠它出画面）"
+case "${TERM_PROGRAM:-}${LC_TERMINAL:-}" in
+  *ghostty*|*kitty*|*WezTerm*|*wezterm*|*cmux*|*Herdr*|*Warp*|*vscode*|*VSCode*)
+    ok "当前终端疑似支持 kitty graphics（${TERM_PROGRAM:-${LC_TERMINAL:-未知}}）" ;;
+  *)
+    if [ -n "${REX_SESSION:-}" ]; then
+      ok "当前在 Rex 里 → Rex 内嵌 Ghostty，天然支持 kitty graphics"
+    else
+      warn "当前终端（${TERM_PROGRAM:-未知}）可能不支持 kitty graphics → terminal-browser 会报 'Unsupported terminal'"
+    fi ;;
+esac
+echo
+
+# ── 7. 隔离环境与渲染帧率 ──────────────────────────────────────────
+echo "【7】隔离 profile（~/.local/state/rex-markdown-browser）"
+if [ -d "$MD_ROOT" ]; then
+  ok "隔离目录已存在：$MD_ROOT"
+else
+  warn "隔离目录不存在（首次 mdview 会自动创建）"
+fi
+if [ -n "$TB" ] && [ -x "$TB" ]; then
+  FPS="$(env HOME="$MD_ROOT/home" TERMINAL_BROWSER_CONFIG_DIR="$MD_ROOT/config" \
+           TERMINAL_BROWSER_APPDATA="$MD_ROOT/profiles" \
+         "$TB" config get render.fps 2>/dev/null | head -1)"
+  if [ "$FPS" = "30" ]; then
+    ok "render.fps = 30（滚动不压垮 Rex）"
+  elif [ -n "$FPS" ]; then
+    warn "render.fps = $FPS → 建议改成 30：terminal-browser config set render.fps 30"
+  else
+    warn "读不到 render.fps（首次使用会自动初始化）"
+  fi
+fi
+echo
+
+# ── 8. mdview 本体 ─────────────────────────────────────────────────
+echo "【8】mdview 脚本与软链"
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -x "$SELF_DIR/mdview" ]; then
+  ok "脚本本体：$SELF_DIR/mdview"
+else
+  bad "脚本本体不可执行：$SELF_DIR/mdview"
+fi
+LINK="$(type -P mdview 2>/dev/null)"
+if [ -n "$LINK" ]; then
+  ok "PATH 里的 mdview → $LINK"
+else
+  warn "PATH 里没有 mdview（软链：ln -sfn '$SELF_DIR/mdview' ~/.local/bin/mdview）"
+fi
+echo
+
+# ── 汇总 ───────────────────────────────────────────────────────────
+echo "──────────────────────────────────────"
+printf '通过 %d · 警告 %d · 失败 %d\n' "$PASS" "$WARN" "$FAIL"
+if [ "$FAIL" -gt 0 ]; then
+  echo "结论：❌ 有必需依赖缺失，mdview 不能完整跑通"
+  exit 1
+fi
+echo "结论：✅ 必需依赖齐了（警告项按需处理）"
+exit 0

@@ -1,0 +1,68 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-app-network-policy
+  namespace: psc-demo
+  labels:
+    app: db-app
+    component: network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: db-app
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # 入站规则
+  ingress:
+  # 允许来自同一命名空间的流量
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: psc-demo
+    ports:
+    - protocol: TCP
+      port: 8080
+  
+  # 允许来自 kube-system 的健康检查
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 8080
+  
+  # 出站规则
+  egress:
+  # 允许 DNS 查询
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  
+  # 允许连接到 Cloud SQL (通过 PSC)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 3306  # MySQL
+    - protocol: TCP
+      port: 5432  # PostgreSQL
+  
+  # 允许 HTTPS 出站 (用于 API 调用)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  
+  # 允许与同一命名空间内的 Pod 通信
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: psc-demo
+    ports:
+    - protocol: TCP
+      port: 8080

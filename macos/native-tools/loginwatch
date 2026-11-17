@@ -1,0 +1,240 @@
+#!/usr/bin/env zsh
+# loginwatch — 登录会话 / 历史 / sudo 审计 (公司合规视角)
+#
+# 设计目标:
+#   - 公司配 MacBook Pro,无 brew / 无 python,只 zsh + last / who / log / dscl
+#   - 显示:
+#       ① 当前活跃会话 (who + 启动时间 + tty)
+#       ② 最近 N 条登录/登出 (last)
+#       ③ 最近 N 次 sudo 审计 (log show ... --predicate 'eventMessage CONTAINS "sudo"')
+#       ④ 失败登录尝试 (lastb — 通常需要 sudo,降级到 last -F 看异常)
+#       ⑤ 机器上所有用户 (本地账户 / dscl)
+#       ⑥ 屏幕锁定 / 唤醒事件 (log show ... com.apple.loginwindow)
+#   - 默认 10s 刷新
+#
+# 用法:
+#   loginwatch                       # 持续观察
+#   loginwatch --once                # 单次
+#   loginwatch --last 50             # 最近 50 条
+#   loginwatch --no-sudo             # 跳过 sudo 审计 (快 ~5s)
+#   loginwatch --user lex            # 只看某用户
+#
+# 注意: log show 首次跑需要 1-3s 解析统一日志,会拖慢 watch 模式 — 用 --no-sudo 跳过
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -i INTERVAL=10
+typeset ONCE=false DO_SUDO=true
+typeset -i LAST_N=30
+typeset USER_FILTER=""
+
+while (( $# > 0 )); do
+  case $1 in
+    --interval|-i)  INTERVAL=$2;    shift 2 ;;
+    --once)         ONCE=true;      shift ;;
+    --no-sudo)      DO_SUDO=false;  shift ;;
+    --last|-n)      LAST_N=$2;      shift 2 ;;
+    --user|-u)      USER_FILTER=$2; shift 2 ;;
+    --version)      echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--interval N] [--once] [--no-sudo] [--last N] [--user NAME]"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+# ---- 当前活跃会话 (who) ---------------------------------------------------
+_current_sessions() {
+  who 2>/dev/null | awk -v u="$USER_FILTER" '
+    {
+      user = $1; tty = $2; rest = ""
+      for (i=3; i<=NF; i++) rest = rest " " $i
+      if (u != "" && user != u) next
+      printf "%s\t%s\t%s\n", user, tty, rest
+    }
+  '
+}
+
+# ---- 最近登录历史 (last) --------------------------------------------------
+_login_history() {
+  # last 输出: "user tty  source  date+time - duration"
+  last -${LAST_N} 2>/dev/null | awk -v u="$USER_FILTER" '
+    {
+      user = $1
+      if (u != "" && user != u) next
+      # 跳过空行和 "wtmp begins"
+      if ($0 ~ /^[[:space:]]*$/) next
+      if ($0 ~ /wtmp begins/) {
+        print "  " $0; next
+      }
+      # 整行打印
+      print
+    }
+  '
+}
+
+# ---- 失败登录 (lastb — 常需 sudo,失败时降级提示) ---------------------------
+_failed_logins() {
+  # lastb 在 macOS 上需要 sudo;运行失败时提示
+  local out
+  if out=$(lastb -${LAST_N} 2>&1); then
+    if [[ $out == *"permission"* ]] || [[ $out == *"Operation not permitted"* ]]; then
+      echo "  ${C_DIM}(lastb 需要 sudo — 跳过失败登录审计)${C_RESET}"
+      return
+    fi
+    echo "$out" | awk -v u="$USER_FILTER" '
+      NR > 1 && $0 !~ /wtmp begins/ && $0 !~ /^btmp/ && $0 !~ /^[[:space:]]*$/ {
+        if (u != "" && $1 != u) next
+        print
+      }
+    ' | head -$LAST_N
+  else
+    echo "  ${C_DIM}(lastb 需要 sudo — 跳过失败登录审计)${C_RESET}"
+  fi
+}
+
+# ---- sudo 审计 (log show) -------------------------------------------------
+# 拉取统一日志里关于 sudo 的事件
+# 注:用 `command log` 避免 zsh 内建 log (math) 拦截 macOS /usr/bin/log
+_sudo_log() {
+  command log show --last 2h --predicate 'eventMessage CONTAINS "sudo"' --info --debug 2>/dev/null \
+    | awk -v u="$USER_FILTER" '
+      # 过滤掉自身的 log 命令调用
+      /args: .log./ || /log run noninteractively/ { next }
+      {
+        ts = $1" "$2
+        msg = ""
+        for (i=3;i<=NF;i++) msg = msg " " $i
+        if (msg ~ "sudo" && msg !~ "log run noninteractively") {
+          if (u != "" && msg !~ u) next
+          printf "%s  %s\n", ts, msg
+        }
+      }
+    ' | head -20 || true   # head 关闭 stdin 会让 awk SIGPIPE,用 || true 吞掉
+}
+
+# ---- 屏幕锁定 / 唤醒事件 (loginwindow) ------------------------------------
+_lock_events() {
+  command log show --last 24h --predicate 'process == "loginwindow" AND (eventMessage CONTAINS "Screen" OR eventMessage CONTAINS "lock" OR eventMessage CONTAINS "wake")' --info 2>/dev/null \
+    | awk '
+      {
+        ts = $1" "$2
+        msg = ""
+        for (i=3;i<=NF;i++) msg = msg " " $i
+        printf "%s  %s\n", ts, msg
+      }
+    ' | head -20 || true
+}
+
+# ---- 本地账户 (dscl) ------------------------------------------------------
+_local_users() {
+  dscl . -list /Users 2>/dev/null | awk '
+    {
+      # 排除系统账户
+      if ($0 ~ /^_/) next       # _mbsetupuser, _applepay 等
+      if ($0 == "nobody") next
+      if ($0 == "root") next
+      if ($0 == "daemon") next
+      if ($0 == "Guest") next
+      print
+    }
+  '
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_render() {
+  printf '\033[?25l\033[2J\033[H'
+
+  echo "${C_BOLD}${C_CYAN}═══ 登录 / 会话 / sudo 审计 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  刷新 ${INTERVAL}s  ·  Ctrl-C 退出${C_RESET}"
+  [[ -n $USER_FILTER ]] && echo "${C_DIM}过滤用户: ${USER_FILTER}${C_RESET}"
+  [[ $DO_SUDO == false ]] && echo "${C_DIM}--no-sudo: 跳过 sudo 审计 (log show 慢)${C_RESET}"
+  echo
+
+  # ① 当前活跃会话
+  echo "${C_BOLD}  当前活跃会话${C_RESET} ${C_DIM}(who)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  local sess
+  sess=$(_current_sessions)
+  if [[ -z $sess ]]; then
+    echo "  ${C_DIM}(无活跃会话 — 罕见,headless)${C_RESET}"
+  else
+    printf "  ${C_DIM}%-12s  %-8s  %s${C_RESET}\n" 'USER' 'TTY' 'LOGIN_TIME'
+    while IFS=$'\t' read -r user tty rest; do
+      printf "  %-12s  %-8s  %s\n" "$user" "$tty" "$rest"
+    done <<<"$sess"
+  fi
+
+  # ② 本地账户
+  echo
+  echo "${C_BOLD}  本地账户 (dscl /Users)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  local users
+  users=$(_local_users)
+  printf "  %s\n" "$users" | tr '\n' ' '
+  echo
+  printf "  ${C_DIM}共 %d 个普通账户${C_RESET}\n" "$(echo "$users" | wc -l | tr -d ' ')"
+
+  # ③ 最近登录历史
+  echo
+  echo "${C_BOLD}  最近登录历史${C_RESET} ${C_DIM}(last -n $LAST_N)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  local hist
+  hist=$(_login_history)
+  if [[ -z $hist ]]; then
+    echo "  ${C_DIM}(空)${C_RESET}"
+  else
+    echo "$hist" | head -$LAST_N | sed 's/^/  /'
+  fi
+
+  # ④ 失败登录
+  echo
+  echo "${C_BOLD}  失败登录尝试${C_RESET} ${C_DIM}(lastb — 需 sudo 时降级提示)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  _failed_logins | sed 's/^/  /'
+
+  # ⑤ sudo 审计 (慢,默认开启;--no-sudo 跳过)
+  if $DO_SUDO; then
+    echo
+    echo "${C_BOLD}  最近 sudo (2h 内)${C_RESET} ${C_DIM}(log show — 首次跑 1-3s)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    local sudo_out
+    sudo_out=$(_sudo_log)
+    if [[ -z $sudo_out ]]; then
+      echo "  ${C_DIM}(无 sudo 事件 — 过去 2 小时未使用 sudo)${C_RESET}"
+    else
+      echo "$sudo_out" | sed 's/^/  /'
+    fi
+  fi
+
+  # ⑥ 屏幕锁定/唤醒
+  echo
+  echo "${C_BOLD}  最近 屏幕锁定/唤醒${C_RESET} ${C_DIM}(log show, loginwindow)${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+  local lock_out
+  lock_out=$(_lock_events)
+  if [[ -z $lock_out ]]; then
+    echo "  ${C_DIM}(无 — 或被屏幕关闭掩盖)${C_RESET}"
+  else
+    echo "$lock_out" | sed 's/^/  /'
+  fi
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: who, last, lastb, log show, dscl${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+if $ONCE; then _render; else while true; do _render; sleep $INTERVAL; done; fi

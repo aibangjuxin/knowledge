@@ -1,0 +1,30 @@
+# ztunnel.yaml — 节点级 mTLS 代理(DaemonSet)
+# 对应 chart: oci://gcr.io/istio-release/charts/ztunnel
+# 详见 02-install-ambient-helm.md §4.1
+
+configValidation: true     # 启动前校验配置,无效配置阻止启动
+enabled: true
+
+hub: europe-west2-docker.pkg.dev/aibang-12345678-ajbx-dev/containers
+tag: 1.30.3-distroless
+
+istioNamespace: istio-system
+namespace: istio-system
+
+env:
+  L7_ENABLED: "true"        # 启用 L7 处理(为未来 waypoint 准备)
+
+proxy:
+  clusterDomain: cluster.local
+
+terminationGracePeriodSeconds: 29
+
+variant: distroless          # 与现有镜像一致
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi

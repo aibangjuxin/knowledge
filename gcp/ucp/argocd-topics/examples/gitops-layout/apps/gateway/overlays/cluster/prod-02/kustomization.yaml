@@ -1,0 +1,20 @@
+# gateway · cluster 层 · prod-02
+#
+# prod-02 在另一个 GCP project → 域名、走的是独立的公网入口，
+# 所以集群层改域名/监听器参数都不影响 prod-01。
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../env/prod
+
+patches:
+  - target:
+      group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: nginx
+    patch: |-
+      - op: replace
+        path: /spec/hostnames/0
+        value: nginx.prod-02.example.com

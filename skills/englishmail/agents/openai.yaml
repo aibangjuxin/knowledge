@@ -1,0 +1,4 @@
+interface:
+  display_name: "Englishmail"
+  short_description: "Polish emails with bilingual output"
+  default_prompt: "Use $englishmail to polish this email and return a Chinese-English comparison plus vocabulary notes."

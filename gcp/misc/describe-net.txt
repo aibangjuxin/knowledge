@@ -1,0 +1,26 @@
+当你运行类似命令 `gcloud compute networks describe network-name --project myproject --region=asia-east2` 时，它会返回网络的详细信息，具体输出内容取决于你的网络配置。以下是一个可能的示例输出：
+
+```plaintext
+autoCreateSubnetworks: false
+creationTimestamp: '2022-04-19T12:34:56.789-07:00'
+description: My custom network
+gatewayIPv4: 192.168.0.1
+id: '1234567890123456789'
+ipCidrRange: 192.168.0.0/16
+kind: compute#network
+name: network-name
+routingConfig:
+  routingMode: REGIONAL
+selfLink: https://www.googleapis.com/compute/v1/projects/myproject/global/networks/network-name
+subnetworks:
+- https://www.googleapis.com/compute/v1/projects/myproject/regions/asia-east2/subnetworks/subnet-1
+- https://www.googleapis.com/compute/v1/projects/myproject/regions/asia-east2/subnetworks/subnet-2
+secondaryIpRanges:
+- ipCidrRange: 192.168.0.2/22
+  rangename: lex1
+- ipCidrRange: 192.168.0.3/22
+  rangename: lex2
+- ipCidrRange: 192.168.0.4/22
+  rangename: lex4
+```
+

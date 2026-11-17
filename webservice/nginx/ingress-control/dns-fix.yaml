@@ -1,0 +1,23 @@
+# 方法1: 使用 ConfigMap 添加 hosts 映射到 ingress controller
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingress-nginx-hosts
+  namespace: ingress-nginx
+data:
+  hosts: |
+    # 替换 IP_ADDRESS 为实际的 IP 地址
+    IP_ADDRESS api-name01.kong.dev.aliyun.intracloud.cn.aibang
+---
+# 方法2: 修改 CoreDNS 配置
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  kong.override: |
+    hosts {
+        IP_ADDRESS api-name01.kong.dev.aliyun.intracloud.cn.aibang
+        fallthrough
+    }

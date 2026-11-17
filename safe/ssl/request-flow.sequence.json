@@ -1,0 +1,342 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "HTTPS Request Flow — 8 Stages with mTLS Branch",
+    "output": "request-flow.html",
+    "viewBox": [
+      820,
+      1100
+    ],
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "dns-tcp",
+        "label": "DNS + TCP handshake",
+        "focus": [
+          "client",
+          "resolver",
+          "authns",
+          "server"
+        ],
+        "note": "Stages 1-3: URL parse, DNS resolution, TCP three-way handshake"
+      },
+      {
+        "id": "tls",
+        "label": "TLS handshake (regular)",
+        "focus": [
+          "client",
+          "server"
+        ],
+        "note": "Stage 4: TLS 1.3 1-RTT — SNI + cert verify + key exchange"
+      },
+      {
+        "id": "http",
+        "label": "HTTP request / response",
+        "focus": [
+          "client",
+          "server"
+        ],
+        "note": "Stages 5-7: encrypted HTTP GET, server processing, 200 response"
+      },
+      {
+        "id": "mtls",
+        "label": "mTLS branch (stage 4)",
+        "focus": [
+          "client",
+          "server"
+        ],
+        "note": "What changes when client also presents a certificate"
+      }
+    ]
+  },
+  "participants": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "Client",
+      "sublabel": "browser / curl"
+    },
+    {
+      "id": "resolver",
+      "type": "security",
+      "label": "DNS Resolver",
+      "sublabel": "8.8.8.8 / 1.1.1.1"
+    },
+    {
+      "id": "authns",
+      "type": "cloud",
+      "label": "Auth NS",
+      "sublabel": "example.com"
+    },
+    {
+      "id": "server",
+      "type": "backend",
+      "label": "Server (443)",
+      "sublabel": "LB + TLS + app"
+    }
+  ],
+  "segments": [
+    {
+      "from": 170,
+      "to": 380,
+      "label": "① URL parse (local) ② DNS  ③ TCP"
+    },
+    {
+      "from": 400,
+      "to": 640,
+      "label": "④ TLS handshake — SNI + cert + key exchange"
+    },
+    {
+      "from": 660,
+      "to": 820,
+      "label": "⑤ HTTP GET  ⑥ server processing  ⑦ HTTP response"
+    },
+    {
+      "from": 840,
+      "to": 980,
+      "label": "⑧ TCP FIN/ACK close + TIME_WAIT"
+    }
+  ],
+  "messages": [
+    {
+      "id": "dns-query",
+      "from": "client",
+      "to": "resolver",
+      "y": 220,
+      "label": "DNS A? example.com (UDP 53)",
+      "variant": "default"
+    },
+    {
+      "id": "dns-recursive",
+      "from": "resolver",
+      "to": "authns",
+      "y": 258,
+      "label": "recursive query → root → .com → example.com NS",
+      "variant": "dashed",
+      "note": "Stage 2: caching chain"
+    },
+    {
+      "id": "dns-response",
+      "from": "authns",
+      "to": "resolver",
+      "y": 298,
+      "label": "A 93.184.216.34 + TTL",
+      "variant": "return"
+    },
+    {
+      "id": "dns-client",
+      "from": "resolver",
+      "to": "client",
+      "y": 332,
+      "label": "client now has IP",
+      "variant": "return",
+      "note": "DNS done — TLS SYN begins"
+    },
+    {
+      "id": "tcp-syn",
+      "from": "client",
+      "to": "server",
+      "y": 378,
+      "label": "SYN seq=x",
+      "variant": "emphasis",
+      "note": "Stage 3: TCP 3-way handshake starts"
+    },
+    {
+      "id": "tcp-synack",
+      "from": "server",
+      "to": "client",
+      "y": 412,
+      "label": "SYN-ACK seq=y ack=x+1",
+      "variant": "return"
+    },
+    {
+      "id": "tcp-ack",
+      "from": "client",
+      "to": "server",
+      "y": 446,
+      "label": "ACK — ESTABLISHED",
+      "variant": "return",
+      "note": "TCP up — TLS begins"
+    },
+    {
+      "id": "tls-clienthello",
+      "from": "client",
+      "to": "server",
+      "y": 490,
+      "label": "ClientHello: SNI=example.com, cipher suites, key share (ECDHE), ALPN=h2",
+      "variant": "emphasis",
+      "note": "Stage 4 — TLS 1.3 1-RTT"
+    },
+    {
+      "id": "tls-serverhello",
+      "from": "server",
+      "to": "client",
+      "y": 528,
+      "label": "ServerHello + Certificate (X.509) + CertificateVerify + Finished",
+      "variant": "return",
+      "note": "server cert SAN must include example.com"
+    },
+    {
+      "id": "tls-client-finished",
+      "from": "client",
+      "to": "server",
+      "y": 568,
+      "label": "Finished — encrypted channel established",
+      "variant": "return",
+      "note": "1 RTT for TLS 1.3; TLS 1.2 needs 2 RTT"
+    },
+    {
+      "id": "http-get",
+      "from": "client",
+      "to": "server",
+      "y": 625,
+      "label": "GET /path HTTP/1.1  Host: example.com",
+      "variant": "emphasis",
+      "note": "Stage 5 — encrypted inside TLS record"
+    },
+    {
+      "id": "http-response",
+      "from": "server",
+      "to": "client",
+      "y": 708,
+      "label": "200 OK  Content-Type: text/html  body=...",
+      "variant": "return",
+      "note": "Stage 7 — encrypted response"
+    },
+    {
+      "id": "tcp-fin-client",
+      "from": "client",
+      "to": "server",
+      "y": 758,
+      "label": "FIN",
+      "variant": "default"
+    },
+    {
+      "id": "tcp-ack-server",
+      "from": "server",
+      "to": "client",
+      "y": 790,
+      "label": "ACK + FIN",
+      "variant": "return"
+    },
+    {
+      "id": "tcp-ack-client",
+      "from": "client",
+      "to": "server",
+      "y": 822,
+      "label": "ACK — TIME_WAIT begins",
+      "variant": "return",
+      "note": "Stage 8 — Linux TIME_WAIT = 60s default"
+    },
+    {
+      "id": "mtls-certreq",
+      "from": "server",
+      "to": "client",
+      "y": 880,
+      "label": "mTLS ONLY: CertificateRequest",
+      "variant": "security",
+      "note": "Only added in mTLS — server demands client cert"
+    },
+    {
+      "id": "mtls-clientcert",
+      "from": "client",
+      "to": "server",
+      "y": 918,
+      "label": "mTLS ONLY: Certificate (client chain) + CertificateVerify (signs handshake hash)",
+      "variant": "security",
+      "note": "Client private key never leaves the client"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "client",
+      "from": 178,
+      "to": 230,
+      "type": "external"
+    },
+    {
+      "participant": "resolver",
+      "from": 220,
+      "to": 360,
+      "type": "security"
+    },
+    {
+      "participant": "authns",
+      "from": 258,
+      "to": 318,
+      "type": "cloud"
+    },
+    {
+      "participant": "server",
+      "from": 378,
+      "to": 820,
+      "type": "backend"
+    },
+    {
+      "participant": "client",
+      "from": 378,
+      "to": 822,
+      "type": "external"
+    },
+    {
+      "participant": "server",
+      "from": 880,
+      "to": 975,
+      "type": "backend"
+    },
+    {
+      "participant": "client",
+      "from": 880,
+      "to": 940,
+      "type": "external"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Plain TLS path (default)",
+      "items": [
+        "Server authenticates to client via X.509 cert (SAN must include example.com)",
+        "Client never presents a certificate — anonymous to the server at TLS layer",
+        "identity / authorization moves to the application layer (cookie / JWT / header)"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "mTLS branch (only if server requests client cert)",
+      "items": [
+        "After ServerHelloDone: server sends CertificateRequest",
+        "Client replies with Certificate chain + CertificateVerify (ECDHE sig over handshake hash)",
+        "Server validates client cert against its TrustConfig (CA bundle)",
+        "If validation fails → bad_certificate / certificate_required alert + TCP close",
+        "Business case: GLB mTLS at safe/ssl/../public-mtls-global-ingress/ ADR-014"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "OSI layer mapping",
+      "items": [
+        "Stage ① URL parse → L7 Application (local)",
+        "Stage ② DNS → L7 protocol over L4 UDP/53",
+        "Stage ③ TCP → L4 Transport (3-way handshake)",
+        "Stage ④ TLS → L5 Session + L6 Presentation (SNI in ClientHello, cert in ServerHello)",
+        "Stages ⑤⑦ HTTP → L7 Application (encrypted inside TLS)",
+        "Stage ⑧ TCP close → L4 (FIN/ACK + TIME_WAIT)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Latency budget (typical)",
+      "items": [
+        "DNS cache hit: <5ms; cold cross-continental: 20-100ms",
+        "TCP handshake: 1 RTT (~10-50ms cross-region)",
+        "TLS 1.3 handshake: 1 RTT (~10-50ms)",
+        "Server processing: 50-500ms (LB + handler + DB)",
+        "Total cold path: ~250ms end-to-end (cross-region)",
+        "Hot path (cache + keep-alive): <50ms after first request"
+      ]
+    }
+  ]
+}

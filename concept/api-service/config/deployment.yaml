@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: collection-api
+  labels:
+    app: collection-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: collection-api
+  template:
+    metadata:
+      labels:
+        app: collection-api
+    spec:
+      containers:
+      - name: collection-api
+        image: collection-api:latest
+        ports:
+        - containerPort: 8443
+        volumeMounts:
+        - name: ssl-certs
+          mountPath: /etc/ssl/certs
+          readOnly: true
+        - name: google-cloud-key
+          mountPath: /var/secrets/google
+        env:
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /var/secrets/google/key.json
+        livenessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /v1/.well-known/health
+            port: 8443
+            httpHeaders:
+            - name: Content-Type
+              value: application/json
+          initialDelaySeconds: 10
+        readinessProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /v1/.well-known/health
+            port: 8443
+            httpHeaders:
+            - name: Content-Type
+              value: application/json
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        startupProbe:
+          httpGet:
+            scheme: HTTPS
+            path: /v1/.well-known/health
+            port: 8443
+            httpHeaders:
+            - name: Content-Type
+              value: application/json
+          failureThreshold: 30
+          periodSeconds: 10
+      volumes:
+      - name: ssl-certs
+        secret:
+          secretName: ssl-cert-secret
+      - name: google-cloud-key
+        secret:
+          secretName: bigquery-key
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: collection-api
+spec:
+  selector:
+    app: collection-api
+  ports:
+  - port: 8443
+    targetPort: 8443
+  type: ClusterIP

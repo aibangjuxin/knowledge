@@ -1,0 +1,173 @@
+# Node.js 应用部署配置（使用独立 ConfigMap）
+
+---
+# Node.js ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: ${namespace}
+  name: mycoat-common-nodejs-conf
+data:
+  server-conf.properties: |
+    # 强制统一端口
+    server.port=8443
+    # 强制开启 SSL
+    server.ssl.enabled=true
+    # Node.js 使用 PEM 格式证书
+    server.ssl.cert-path=/opt/keystore/tls.crt
+    server.ssl.key-path=/opt/keystore/tls.key
+    # 统一 Context Path
+    server.context-path=/${apiName}/v${minorVersion}
+
+---
+# 统一 Secret（包含 Java PKCS12 和 Node.js PEM）
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: ${namespace}
+  name: mycoat-keystore-unified
+type: Opaque
+data:
+  # Java 使用
+  mycoat-sbrt.p12: <base64-encoded-pkcs12>
+  password: <base64-encoded-password>
+  # Node.js 使用
+  tls.crt: <base64-encoded-certificate>
+  tls.key: <base64-encoded-private-key>
+
+---
+# Node.js Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nodejs-app
+  namespace: ${namespace}
+  labels:
+    app: nodejs-app
+    language: nodejs
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nodejs-app
+  template:
+    metadata:
+      labels:
+        app: nodejs-app
+        language: nodejs
+    spec:
+      containers:
+      - name: app
+        image: your-registry/nodejs-app:latest
+        imagePullPolicy: Always
+        env:
+        # API 名称（用于 Context Path）
+        - name: apiName
+          value: "user-service"
+        # API 版本（用于 Context Path）
+        - name: minorVersion
+          value: "1"
+        # Node.js 环境
+        - name: NODE_ENV
+          value: "production"
+        volumeMounts:
+        # 挂载 Node.js ConfigMap
+        - name: config
+          mountPath: /opt/config
+          readOnly: true
+        # 挂载证书（只挂载 PEM 格式）
+        - name: keystore
+          mountPath: /opt/keystore
+          readOnly: true
+        ports:
+        - containerPort: 8443
+          protocol: TCP
+          name: https
+        # 存活检查
+        livenessProbe:
+          httpGet:
+            path: /${apiName}/v${minorVersion}/health
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        # 就绪检查
+        readinessProbe:
+          httpGet:
+            path: /${apiName}/v${minorVersion}/ready
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      # Node.js ConfigMap
+      - name: config
+        configMap:
+          name: mycoat-common-nodejs-conf
+      # 证书 Secret（只挂载 PEM 格式）
+      - name: keystore
+        secret:
+          secretName: mycoat-keystore-unified
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: nodejs-app
+  namespace: ${namespace}
+  labels:
+    app: nodejs-app
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8443
+    targetPort: 8443
+    protocol: TCP
+    name: https
+  selector:
+    app: nodejs-app
+
+---
+# Ingress（可选）
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nodejs-app
+  namespace: ${namespace}
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  rules:
+  - host: api.example.com
+    http:
+      paths:
+      - path: /${apiName}/v${minorVersion}
+        pathType: Prefix
+        backend:
+          service:
+            name: nodejs-app
+            port:
+              number: 8443
+  tls:
+  - hosts:
+    - api.example.com
+    secretName: ingress-tls-secret

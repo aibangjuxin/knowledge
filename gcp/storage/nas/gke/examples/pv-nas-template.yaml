@@ -1,0 +1,31 @@
+# infra-gcp 专用:PV 模板(挂公司 NAS SMB)
+# 创建前确认:① CSI driver smb.csi.k8s.io 已装 ② Secret smb-secret 已建
+# 架构师 lane:本文档只生成模板,不执行 apply
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-nas-app                   # ← infra-gcp 命名,集群内唯一
+  labels:
+    tenant: tnt-001                 # ← BigQuery 归因用
+    storage-type: nas-smb           # ← 标识存储类型
+    managed-by: infra-gcp           # ← 标识管理方
+spec:
+  capacity:
+    storage: 100Gi                  # ← 标称容量,NAS 实际可能更大
+  accessModes:
+  - ReadOnlyMany                    # ← 多 Pod 可读(ro 安全默认)
+  persistentVolumeReclaimPolicy: Retain   # ← 删 PVC 不删 NAS 文件
+  storageClassName: ""               # ← 静态 PV,不用 SC
+  csi:
+    driver: smb.csi.k8s.io           # ← SMB CSI driver
+    # volumeHandle 格式: <name>#<share>#
+    # SMB CSI driver 要求此格式
+    volumeHandle: "nas-app#//nas.address.aibang/hk/gsd/application#"
+    volumeAttributes:
+      # 实际挂载路径(必须与 volumeHandle 中的 share 一致)
+      source: "//nas.address.aibang/hk/gsd/application"
+    nodePublishSecretRef:
+      name: smb-secret               # ← 凭据 Secret 名字
+      namespace: api-ns              # ← Secret 必须在 Pod 所在 ns
+    # 注:SMB CSI driver 不需要 fsType 字段

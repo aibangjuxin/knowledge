@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gateway 2.0 TLS 终止与 Host Header 转写 — V2 架构图</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'JetBrains Mono', 'Inter', monospace;
+      background: #0f172a;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+
+    .container {
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+
+    /* ===== HEADER ===== */
+    .header {
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid #1e293b;
+    }
+    .header .badge {
+      display: inline-block;
+      background: #1e3a5f;
+      color: #38bdf8;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+    .header h1 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #e2e8f0;
+      margin-bottom: 0.3rem;
+    }
+    .header p {
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+    .header .compare-note {
+      margin-top: 0.5rem;
+      font-size: 0.7rem;
+      color: #94a3b8;
+      background: #1e293b;
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      border-left: 3px solid #a78bfa;
+    }
+
+    /* ===== MAIN FLOW (horizontal) ===== */
+    .flow-wrapper {
+      overflow-x: auto;
+      padding-bottom: 1rem;
+    }
+
+    .flow {
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      gap: 0;
+      min-width: max-content;
+    }
+
+    /* ===== COLUMN ===== */
+    .col {
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+      min-width: 220px;
+      max-width: 280px;
+      flex: 1;
+    }
+
+    .col-label {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0.4rem 0.8rem;
+      border-radius: 8px 8px 0 0;
+      text-align: center;
+      margin-bottom: -4px;
+    }
+    .col-label.phase1 { background: #1e3a5f; color: #38bdf8; border-bottom: 2px solid #38bdf8; }
+    .col-label.phase2 { background: #2d2a5e; color: #a5b4fc; border-bottom: 2px solid #a5b4fc; }
+    .col-label.phase3 { background: #1a3d2e; color: #4ade80; border-bottom: 2px solid #4ade80; }
+    .col-label.phase4 { background: #3d2a1a; color: #fb923c; border-bottom: 2px solid #fb923c; }
+    .col-label.phase-f { background: #3d1a1a; color: #f87171; border-bottom: 2px solid #f87171; }
+
+    .col-cards {
+      background: #1e293b;
+      border-radius: 0 0 10px 10px;
+      padding: 0.8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    /* ===== CARDS ===== */
+    .card {
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 0.8rem;
+      border: 1px solid #334155;
+      border-left: 3px solid;
+      font-size: 0.68rem;
+      line-height: 1.6;
+    }
+
+    .card-title {
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+      font-size: 0.72rem;
+    }
+
+    .card-sub {
+      color: #94a3b8;
+      font-size: 0.62rem;
+    }
+
+    .card-sub code {
+      background: #1e293b;
+      color: #38bdf8;
+      padding: 0.05rem 0.3rem;
+      border-radius: 3px;
+      font-size: 0.6rem;
+    }
+
+    .card-sub strong { color: #e2e8f0; }
+
+    /* Card accent colors */
+    .card.client { border-left-color: #38bdf8; }
+    .card.client .card-title { color: #38bdf8; }
+
+    .card.gwl { border-left-color: #38bdf8; }
+    .card.gwl .card-title { color: #60a5fa; }
+
+    .card.route { border-left-color: #818cf8; }
+    .card.route .card-title { color: #a5b4fc; }
+
+    .card.rewrite { border-left-color: #c084fc; background: #1e1b4b; border-color: #4c1d95; }
+    .card.rewrite .card-title { color: #c084fc; }
+
+    .card.backend { border-left-color: #4ade80; }
+    .card.backend .card-title { color: #4ade80; }
+
+    .card.kong { border-left-color: #34d399; }
+    .card.kong .card-title { color: #34d399; }
+
+    .card.forbidden { border-left-color: #f87171; background: #1c1010; border-color: #7f1d1d; }
+    .card.forbidden .card-title { color: #f87171; }
+    .card.forbidden .card-sub { color: #fca5a5; }
+
+    .card.up { border-left-color: #94a3b8; }
+    .card.up .card-title { color: #94a3b8; }
+
+    /* ===== ARROWS ===== */
+    .arrow-cell {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 60px;
+      padding: 0 0.5rem;
+      position: relative;
+    }
+
+    .arrow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.2rem;
+    }
+
+    .arrow-line {
+      width: 40px;
+      height: 2px;
+      border-radius: 1px;
+    }
+
+    .arrow-cell.h .arrow { flex-direction: row; }
+    .arrow-cell.h .arrow-line { width: 40px; height: 2px; }
+    .arrow-cell.h .arrow-tag {
+      font-size: 0.55rem;
+      color: #475569;
+      white-space: nowrap;
+      margin-left: 4px;
+    }
+
+    .arrow-label {
+      font-size: 0.55rem;
+      color: #64748b;
+      text-align: center;
+      max-width: 60px;
+      line-height: 1.3;
+    }
+
+    .a-blue .arrow-line  { background: linear-gradient(to right, #1e3a5f, #38bdf8); }
+    .a-purple .arrow-line { background: linear-gradient(to right, #2d2a5e, #a5b4fc); }
+    .a-green .arrow-line  { background: linear-gradient(to right, #1a3d2e, #4ade80); }
+    .a-orange .arrow-line { background: linear-gradient(to right, #3d2a1a, #fb923c); }
+
+    /* ===== SECTION DIVIDER ===== */
+    .section-divider {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0;
+      font-size: 0.6rem;
+      color: #475569;
+      min-width: 60px;
+    }
+    .section-divider::before,
+    .section-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #1e293b;
+    }
+
+    /* ===== FORBIDDEN GRID ===== */
+    .forbidden-section {
+      margin-top: 1.5rem;
+    }
+
+    .forbidden-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.8rem;
+    }
+
+    .forbidden-header span {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #f87171;
+      letter-spacing: 0.05em;
+    }
+
+    .forbidden-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 0.8rem;
+    }
+
+    .forbidden-item {
+      background: #1c1010;
+      border: 1px dashed #7f1d1d;
+      border-left: 3px solid #f87171;
+      border-radius: 8px;
+      padding: 0.8rem;
+      font-size: 0.65rem;
+    }
+
+    .forbidden-item .fi-title {
+      color: #f87171;
+      font-weight: 700;
+      margin-bottom: 0.3rem;
+      font-size: 0.68rem;
+    }
+
+    .forbidden-item .fi-body {
+      color: #fca5a5;
+      line-height: 1.6;
+    }
+
+    .forbidden-item code {
+      background: #2d1515;
+      color: #fca5a5;
+      padding: 0.05rem 0.25rem;
+      border-radius: 3px;
+      font-size: 0.6rem;
+    }
+
+    .forbidden-item .fi-fix {
+      margin-top: 0.3rem;
+      color: #86efac;
+      font-size: 0.6rem;
+    }
+
+    /* ===== LEGEND ===== */
+    .legend {
+      margin-top: 2rem;
+      padding: 1rem;
+      background: #1e293b;
+      border-radius: 10px;
+      font-size: 0.65rem;
+    }
+
+    .legend-title {
+      font-weight: 700;
+      color: #94a3b8;
+      margin-bottom: 0.6rem;
+      font-size: 0.7rem;
+    }
+
+    .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem 1.5rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: #64748b;
+    }
+
+    .legend-swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      border: 1px solid;
+      flex-shrink: 0;
+    }
+
+    /* ===== COMPARE TABLE ===== */
+    .compare-table {
+      margin-top: 2rem;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      overflow: hidden;
+      font-size: 0.65rem;
+    }
+
+    .compare-table table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .compare-table th {
+      background: #1e293b;
+      color: #94a3b8;
+      padding: 0.6rem 1rem;
+      text-align: left;
+      font-weight: 700;
+      font-size: 0.68rem;
+      letter-spacing: 0.05em;
+    }
+
+    .compare-table td {
+      padding: 0.5rem 1rem;
+      border-top: 1px solid #1e293b;
+      color: #94a3b8;
+      vertical-align: top;
+      line-height: 1.5;
+    }
+
+    .compare-table tr:hover td {
+      background: #0f172a;
+    }
+
+    .compare-table td:first-child {
+      color: #e2e8f0;
+      font-weight: 600;
+    }
+
+    .compare-table .v1-col { border-left: 1px solid #1e293b; }
+    .compare-table .v2-col { border-left: 1px solid #1e293b; color: #c4b5fd; }
+
+    .tag {
+      display: inline-block;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.58rem;
+      font-weight: 700;
+    }
+    .tag-v1 { background: #1e3a5f; color: #38bdf8; }
+    .tag-v2 { background: #2d2a5e; color: #a5b4fc; }
+
+    @media (max-width: 900px) {
+      .flow { flex-direction: column; }
+      .arrow-cell.h { transform: rotate(90deg); }
+      .col { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="badge">V2 · Horizontal Flow · SVG Arrows</div>
+    <h1>Gateway 2.0 TLS 终止与 Host Header 转写 — 架构对比图</h1>
+    <p>GKE Gateway API v1 · HTTPRoute URLRewrite · Kong DP Host 转写</p>
+    <div class="compare-note">对比版本：将垂直堆叠改为水平流程，模拟原图 Mermaid left-to-right 布局</div>
+  </div>
+
+  <!-- MAIN FLOW -->
+  <div class="flow-wrapper">
+    <div class="flow">
+
+      <!-- ===== PHASE 1: TLS ===== -->
+      <div class="col">
+        <div class="col-label phase1">① TLS 握手</div>
+        <div class="col-cards">
+          <div class="card client">
+            <div class="card-title">Client</div>
+            <div class="card-sub">
+              HTTPS 请求<br>
+              TLS SNI: <code>api2.appdev.abjx</code><br>
+              匹配 <code>*.appdev.abjx</code> 证书
+            </div>
+          </div>
+          <div class="card gwl">
+            <div class="card-title">GKE Gateway Listener</div>
+            <div class="card-sub">
+              hostname: <code>*.appdev.abjx</code> · port <code>443</code><br>
+              TLS mode: <strong>Terminate</strong><br>
+              <code>*.appdev.abjx</code> 通配符证书
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ARROW -->
+      <div class="arrow-cell h">
+        <div class="arrow a-blue">
+          <div class="arrow-line"></div>
+          <span class="arrow-tag">TLS 终止 → HTTP</span>
+        </div>
+      </div>
+
+      <!-- ===== PHASE 2: HTTP Routing ===== -->
+      <div class="col">
+        <div class="col-label phase2">② HTTP 路由</div>
+        <div class="col-cards">
+          <div class="card route">
+            <div class="card-title">HTTPRoute: api1-runtime-route</div>
+            <div class="card-sub">
+              hostnames: <code>api1.appdev.abjx</code><br>
+              path: <code>/api1/*</code><br>
+              filter: <strong>无</strong>，Host 保持不变
+            </div>
+          </div>
+          <div class="card route">
+            <div class="card-title">HTTPRoute: api2-kong-route</div>
+            <div class="card-sub">
+              hostnames: <code>api2.appdev.abjx</code><br>
+              path: <code>/api-path/e2e/*</code><br>
+              filter: <strong>URLRewrite.hostname</strong>
+            </div>
+          </div>
+          <div class="card rewrite">
+            <div class="card-title">URLRewrite 效果</div>
+            <div class="card-sub">
+              Client Host: <code>api2.appdev.abjx</code><br>
+              转发 Host: <code>www.intrakong.com</code><br>
+              X-Original-Host: <code>api2.appdev.abjx</code><br>
+              X-Entry-Point: <code>api2</code>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ARROW -->
+      <div class="arrow-cell h">
+        <div class="arrow a-purple">
+          <div class="arrow-line"></div>
+          <span class="arrow-tag">按 Route 分流</span>
+        </div>
+      </div>
+
+      <!-- ===== PHASE 3: Backend ===== -->
+      <div class="col">
+        <div class="col-label phase3">③ 后端服务层</div>
+        <div class="col-cards">
+          <div class="card backend">
+            <div class="card-title">api1-runtime-svc</div>
+            <div class="card-sub">
+              GKE Pod · port <code>8080</code><br>
+              收到 Host: <code>api1.appdev.abjx</code><br>
+              <strong>Host 保持不变</strong>
+            </div>
+          </div>
+          <div class="card kong">
+            <div class="card-title">kong-dp-svc</div>
+            <div class="card-sub">
+              Kong DP Pod · port <code>8000</code><br>
+              收到 Host: <code>www.intrakong.com</code>
+            </div>
+          </div>
+          <div class="card kong">
+            <div class="card-title">Kong Route 匹配</div>
+            <div class="card-sub">
+              hosts: <code>www.intrakong.com</code><br>
+              paths: <code>/api-path/e2e</code><br>
+              strip_path: <code>false</code>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ARROW -->
+      <div class="arrow-cell h">
+        <div class="arrow a-green">
+          <div class="arrow-line"></div>
+          <span class="arrow-tag">Route 命中</span>
+        </div>
+      </div>
+
+      <!-- ===== PHASE 4: Upstream ===== -->
+      <div class="col">
+        <div class="col-label phase4">④ Upstream</div>
+        <div class="col-cards">
+          <div class="card up">
+            <div class="card-title">API1 Upstream Service</div>
+            <div class="card-sub">
+              直接返回业务响应<br>
+              Host 透传<br>
+              <code>api1.appdev.abjx</code>
+            </div>
+          </div>
+          <div class="card up">
+            <div class="card-title">API2 Upstream APIs</div>
+            <div class="card-sub">
+              Kong Route: <code>www.intrakong.com</code><br>
+              路径: <code>/api-path/e2e/v1/resource</code>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===== FORBIDDEN SECTION ===== -->
+  <div class="forbidden-section">
+    <div class="forbidden-header">
+      <span>❌ 禁止用法 · 原文档错误项</span>
+    </div>
+    <div class="forbidden-grid">
+      <div class="forbidden-item">
+        <div class="fi-title">❌ RequestHeaderModifier 修改 Host</div>
+        <div class="fi-body">
+          Host 是 <strong>forbidden header</strong><br>
+          规范明确禁止通过 <code>RequestHeaderModifier</code> 修改
+        </div>
+        <div class="fi-fix">✅ 用 <code>URLRewrite.hostname</code></div>
+      </div>
+      <div class="forbidden-item">
+        <div class="fi-title">❌ %{request.host}% 变量模板</div>
+        <div class="fi-body">
+          GKE Gateway <strong>不支持</strong> Envoy/Nginx 风格<br>
+          支持: <code>{client_region}</code> (Google Cloud LB)
+        </div>
+        <div class="fi-fix">✅ 静态值: <code>X-Original-Host: api2.appdev.abjx</code></div>
+      </div>
+      <div class="forbidden-item">
+        <div class="fi-title">❌ rules.matches.hostname 无效字段</div>
+        <div class="fi-body">
+          hostname <strong>不在</strong> <code>rules.matches</code> 里<br>
+          必须在 <code>spec.hostnames</code> 层
+        </div>
+        <div class="fi-fix">✅ <code>spec.hostnames</code> → <code>rules[].matches[]</code></div>
+      </div>
+      <div class="forbidden-item">
+        <div class="fi-title">❌ RequestHeaderModifier.set 写成 map</div>
+        <div class="fi-body">
+          错误: <code>set: { Host: xxx }</code><br>
+          必须用 <strong>name/value 数组格式</strong>
+        </div>
+        <div class="fi-fix">✅ <code>set: [{ name: X-Upstream, value: xxx }]</code></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== LEGEND ===== -->
+  <div class="legend">
+    <div class="legend-title">图例 · Legend</div>
+    <div class="legend-row">
+      <div class="legend-item">
+        <div class="legend-swatch" style="background:#1e3a5f;border-color:#38bdf8;"></div>
+        ① TLS 握手
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch" style="background:#2d2a5e;border-color:#a5b4fc;"></div>
+        ② HTTP 路由
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch" style="background:#1a3d2e;border-color:#4ade80;"></div>
+        ③ 后端服务层
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch" style="background:#3d2a1a;border-color:#fb923c;"></div>
+        ④ Upstream
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch" style="background:#3d1a1a;border-color:#f87171;border-style:dashed;"></div>
+        ❌ 禁止用法
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== COMPARE TABLE ===== -->
+  <div class="compare-table">
+    <table>
+      <thead>
+        <tr>
+          <th>对比项</th>
+          <th class="v1-col"><span class="tag tag-v1">V1</span> 垂直堆叠版</th>
+          <th class="v2-col"><span class="tag tag-v2">V2</span> 水平流程版（当前）</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>布局方向</td>
+          <td>上→下（垂直堆叠，phase 分行）</td>
+          <td>左→右（水平流程，模拟 Mermaid LR）</td>
+        </tr>
+        <tr>
+          <td>连接展示</td>
+          <td>渐变色阶段过渡条</td>
+          <td>SVG 箭头 + 标签说明</td>
+        </tr>
+        <tr>
+          <td>Phase 分隔</td>
+          <td>整块背景色 + phase-label 顶栏</td>
+          <td>列顶 label + 渐变箭头连接</td>
+        </tr>
+        <tr>
+          <td>禁止区样式</td>
+          <td>红色虚线框大面板</td>
+          <td>红色虚线边框卡片 grid</td>
+        </tr>
+        <tr>
+          <td>URLRewrite 节点</td>
+          <td>紫色高亮背景节点</td>
+          <td>紫色背景 + 左侧紫色边框独立卡片</td>
+        </tr>
+        <tr>
+          <td>卡片网格</td>
+          <td>auto-fit grid 同列多卡</td>
+          <td>列 flex 垂直排列</td>
+        </tr>
+        <tr>
+          <td>图例</td>
+          <td>基础色块 + 文字说明</td>
+          <td>带边框色样例 + 水平 row wrap</td>
+        </tr>
+        <tr>
+          <td>响应式</td>
+          <td>列 collapse 为单列</td>
+          <td>flow 切换为 column 模式</td>
+        </tr>
+        <tr>
+          <td>对比表</td>
+          <td>无</td>
+          <td>新增 9 项对比说明</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+</body>
+</html>

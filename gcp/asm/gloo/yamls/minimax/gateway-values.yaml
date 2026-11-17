@@ -1,0 +1,75 @@
+# Gloo Gateway Helm Values Configuration
+# This file is used to customize the Gloo Gateway installation
+---
+# Gloo Gateway configuration
+glooGateway:
+  enabled: true
+  
+  # Gateway Proxy configuration
+  gatewayProxies:
+    gatewayProxy:
+      # Service configuration - creates GCP LoadBalancer
+      service:
+        type: LoadBalancer
+        # GCP Load Balancer annotations
+        annotations:
+          service.beta.kubernetes.io/gcp-load-balancer-type: "External"
+          service.beta.kubernetes.io/gcp-load-balancer-ip-protocol: "TCP"
+          service.beta.kubernetes.io/gcp-backend-protocol: "HTTP"
+      
+      # Deployment configuration
+      deployment:
+        replicas: 2
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+      
+      # Pod template configuration
+      podTemplate:
+        terminationGracePeriodSeconds: 30
+        # Anti-affinity for high availability
+        affinity:
+          podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: gloo-gateway
+                topologyKey: kubernetes.io/hostname
+
+# Istio configuration (required for mTLS and traffic management)
+istio:
+  enabled: true
+  istiod:
+    enabled: true
+    deployment:
+      replicas: 1
+      resources:
+        requests:
+          cpu: 200m
+          memory: 256Mi
+        limits:
+          cpu: 1000m
+          memory: 1Gi
+
+# Disable unnecessary components for simplicity
+gloo:
+  # Disable the single-node Gloo (not needed when using istiod)
+  enabled: false
+
+glooPortal:
+  # Disable developer portal (not needed for basic API gateway)
+  enabled: false
+
+# Observability configuration
+observability:
+  enabled: false
+
+# OpenTelemetry collector (optional)
+otelCollector:
+  enabled: false

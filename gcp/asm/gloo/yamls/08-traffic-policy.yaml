@@ -1,0 +1,31 @@
+# TrafficPolicy - Controls traffic behavior to specific destinations
+# This is the Gloo Mesh equivalent of Istio DestinationRule
+# Manages connection pooling, load balancing, and circuit breaking
+apiVersion: trafficcontrol.policy.gloo.solo.io/v2
+kind: TrafficPolicy
+metadata:
+  name: api1-backend-policy
+  namespace: team-a-runtime
+spec:
+  applyToDestinations:
+  - selector:
+      name: api1-backend
+      namespace: team-a-runtime
+  policy:
+    # Connection pool settings
+    connectionPool:
+      tcp:
+        maxConnections: 100  # Max TCP connections
+      http:
+        h2UpgradePolicy: UPGRADE  # Upgrade to HTTP/2 if possible
+        http1MaxPendingRequests: 100
+        http2MaxRequests: 1000
+    # Load balancer configuration
+    loadBalancer:
+      roundRobin: {}  # Round-robin distribution
+    # Circuit breaker / outlier detection
+    outlierDetection:
+      consecutive5xxErrors: 5  # Eject after 5 consecutive 5xx errors
+      interval: 30s  # Check interval
+      baseEjectionTime: 30s  # How long to eject
+      maxEjectionPercent: 50  # Max % of endpoints to eject

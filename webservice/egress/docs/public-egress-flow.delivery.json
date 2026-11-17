@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "4c0fff02-52ad-452e-863e-e0b09fdec6a5",
+  "status": "current",
+  "command": "deliver",
+  "type": "sequence",
+  "input": "/Users/lex/git/knowledge/webservice/egress/docs/.archify/sequence-public-egress-flow-20261002-123643/candidate.json",
+  "output": "/Users/lex/git/knowledge/webservice/egress/docs/public-egress-flow.html",
+  "specification": {
+    "sha256": "e080d113d5784724a391214e2a0ee63089e01e4c105adfefb3ff40c5a3324c85",
+    "bytes": 5726
+  },
+  "artifact": {
+    "sha256": "e0a12934448cdfcee3fa5213dbd7895a74e62c50dda3fe88217c87f80bef0e24",
+    "bytes": 759705
+  }
+}

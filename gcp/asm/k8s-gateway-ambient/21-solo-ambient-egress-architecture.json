@@ -1,0 +1,312 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Ambient 模式下 GKE Pod 双轨出网 (Internal NHF + Public L7 Waypoint) 架构全景",
+    "locale": "zh-CN",
+    "animation": "trace",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "overview",
+        "label": "双轨出网架构全景",
+        "focus": [
+          "pod_teama",
+          "ztunnel",
+          "service_entry",
+          "egress_waypoint",
+          "public_saas",
+          "pod_teamb",
+          "gke_node",
+          "nhf_ilb",
+          "nhf_mig",
+          "onprem_drn"
+        ],
+        "note": "展示 GKE Ambient Mesh 下 Internal (NHF) 与 Public (L7 Waypoint) 两条并行的出网流量全貌。"
+      },
+      {
+        "id": "public-egress",
+        "label": "公共出网 L7 白名单链路",
+        "focus": [
+          "pod_teama",
+          "ztunnel",
+          "service_entry",
+          "authz_policy",
+          "egress_waypoint",
+          "public_saas"
+        ],
+        "note": "跟踪 team-a 业务 Pod 通过 ztunnel DNS 拦截、ServiceEntry 绑定与 Waypoint 租户白名单出公网的过程。"
+      },
+      {
+        "id": "internal-egress",
+        "label": "企业内网 NHF 出网链路",
+        "focus": [
+          "pod_teamb",
+          "ztunnel",
+          "gke_node",
+          "nhf_ilb",
+          "nhf_mig",
+          "onprem_drn"
+        ],
+        "note": "展示 Pod 访问 on-prem 时，ztunnel 解包后由 GCP VPC 路由 LPM 自动送入 NHF ILB 的零改动链路。"
+      },
+      {
+        "id": "control-plane",
+        "label": "控制面与租户安全鉴权",
+        "focus": [
+          "istiod",
+          "service_entry",
+          "authz_policy",
+          "egress_waypoint"
+        ],
+        "note": "呈现 Istiod 分配虚拟 IP 与 AuthorizationPolicy 在 Waypoint 实施租户隔离的核心治理控制流。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "istiod",
+      "type": "cloud",
+      "label": "Istio 控制面 istiod",
+      "sublabel": "IP Autoallocate: 240.240.x.x",
+      "tag": "xDS / 证书分发",
+      "brand": "google-cloud",
+      "pos": [280, 50],
+      "size": [146, 62]
+    },
+    {
+      "id": "authz_policy",
+      "type": "security",
+      "label": "租户授权策略",
+      "sublabel": "AuthorizationPolicy",
+      "tag": "ALLOW: team-a 独占",
+      "pos": [750, 50],
+      "size": [150, 62]
+    },
+    {
+      "id": "pod_teama",
+      "type": "backend",
+      "label": "业务 Pod (team-a)",
+      "sublabel": "team-a-runtime (已授权)",
+      "tag": "白名单租户",
+      "brand": "kubernetes",
+      "pos": [60, 180],
+      "size": [140, 62]
+    },
+    {
+      "id": "ztunnel",
+      "type": "security",
+      "label": "节点 L4 代理 ztunnel",
+      "sublabel": "DNS Proxy: 15053",
+      "tag": "DaemonSet 劫持",
+      "pos": [280, 180],
+      "size": [146, 62]
+    },
+    {
+      "id": "service_entry",
+      "type": "cloud",
+      "label": "ServiceEntry 外部服务",
+      "sublabel": "api.saas1.com (240.240.0.2)",
+      "tag": "use-waypoint 绑定",
+      "pos": [510, 180],
+      "size": [150, 62]
+    },
+    {
+      "id": "egress_waypoint",
+      "type": "security",
+      "label": "Egress Waypoint",
+      "sublabel": "Envoy Pod (istio-egress)",
+      "tag": "TLS Origination / L7",
+      "pos": [750, 180],
+      "size": [150, 62]
+    },
+    {
+      "id": "public_saas",
+      "type": "external",
+      "label": "公网 SaaS 目的地",
+      "sublabel": "api.saas1.com:443",
+      "tag": "外部公网 HTTPS",
+      "pos": [990, 180],
+      "size": [140, 62]
+    },
+    {
+      "id": "pod_teamb",
+      "type": "backend",
+      "label": "业务 Pod (team-b)",
+      "sublabel": "team-b-runtime (通用)",
+      "tag": "未获公网授权",
+      "brand": "kubernetes",
+      "pos": [60, 310],
+      "size": [140, 62]
+    },
+    {
+      "id": "gke_node",
+      "type": "cloud",
+      "label": "GKE 节点路由 (LPM)",
+      "sublabel": "命中 128.0.0.0/2 & 10/8",
+      "tag": "最长前缀匹配",
+      "brand": "google-cloud",
+      "pos": [280, 310],
+      "size": [146, 62]
+    },
+    {
+      "id": "nhf_ilb",
+      "type": "cloud",
+      "label": "NHF ILB 转发规则",
+      "sublabel": "VIP: 192.168.0.55 (nhfukp)",
+      "tag": "Next-Hop ILB",
+      "brand": "google-cloud",
+      "pos": [510, 310],
+      "size": [150, 62]
+    },
+    {
+      "id": "nhf_mig",
+      "type": "security",
+      "label": "NHF 双网卡 SNAT 实例",
+      "sublabel": "ens5 ➔ iptables ➔ ens4",
+      "tag": "Shared VPC: 10.72.x.x",
+      "pos": [750, 310],
+      "size": [150, 62]
+    },
+    {
+      "id": "onprem_drn",
+      "type": "external",
+      "label": "公司内网 DRN / SCC",
+      "sublabel": "128.171.x.x (目标服务)",
+      "tag": "办公网统一审计",
+      "pos": [990, 310],
+      "size": [140, 62]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "GKE 业务租户 (team-a / team-b)",
+      "wraps": ["pod_teama", "pod_teamb"]
+    },
+    {
+      "kind": "region",
+      "label": "Istio 核心基础设施",
+      "wraps": ["istiod", "ztunnel", "gke_node"]
+    },
+    {
+      "kind": "security-group",
+      "label": "集中式出网管理 (istio-egress)",
+      "wraps": ["service_entry", "authz_policy", "egress_waypoint"]
+    },
+    {
+      "kind": "region",
+      "label": "GCP 内部出网 (NHF MIG)",
+      "wraps": ["nhf_ilb", "nhf_mig"]
+    },
+    {
+      "kind": "region",
+      "label": "外部目标服务",
+      "wraps": ["public_saas", "onprem_drn"]
+    }
+  ],
+  "connections": [
+    {
+      "from": "istiod",
+      "to": "ztunnel",
+      "label": "下发虚拟 IP 与 xDS",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [353, 146]
+    },
+    {
+      "from": "pod_teama",
+      "to": "ztunnel",
+      "label": "公网出网请求",
+      "variant": "emphasis"
+    },
+    {
+      "from": "ztunnel",
+      "to": "service_entry",
+      "label": "DNS 映射虚拟 IP",
+      "variant": "emphasis"
+    },
+    {
+      "from": "service_entry",
+      "to": "egress_waypoint",
+      "label": "HBONE 隧道: 15008",
+      "variant": "emphasis"
+    },
+    {
+      "from": "authz_policy",
+      "to": "egress_waypoint",
+      "label": "租户白名单校验",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [825, 146]
+    },
+    {
+      "from": "egress_waypoint",
+      "to": "public_saas",
+      "label": "HTTPS 443 出网",
+      "variant": "emphasis"
+    },
+    {
+      "from": "pod_teamb",
+      "to": "gke_node",
+      "label": "内部出网请求",
+      "variant": "emphasis"
+    },
+    {
+      "from": "ztunnel",
+      "to": "gke_node",
+      "label": "解包为原生 IP",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [353, 276]
+    },
+    {
+      "from": "gke_node",
+      "to": "nhf_ilb",
+      "label": "LPM 选路",
+      "variant": "emphasis"
+    },
+    {
+      "from": "nhf_ilb",
+      "to": "nhf_mig",
+      "label": "分发健康实例",
+      "variant": "emphasis"
+    },
+    {
+      "from": "nhf_mig",
+      "to": "onprem_drn",
+      "label": "SNAT 出网",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "双轨出网架构决策 (Internal vs Public)",
+      "items": [
+        "Internal 出网 (走 NHF)：流量与 Istio Ambient 完全解耦，GCP 路由表按 LPM 将 128/2 和 10/8 丢给 NHF ILB，零改造",
+        "Public 出网 (走 Waypoint)：替代旧 Pod→Nginx→Squid，由 ServiceEntry + Egress Waypoint 实现集中治理与 TLS Origination",
+        "ztunnel 角色：节点级出站拦截，非 Mesh 流量还原为原生 IP，外部注册服务自动路由到 Egress Waypoint"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Namespace-level 公共出网白名单机制",
+      "items": [
+        "ServiceEntry 注册外部域名并打上 istio.io/use-waypoint 标签，Istiod 自动分配 240.240.x.x 稳定虚拟 IP",
+        "AuthorizationPolicy 绑定 ServiceEntry，通过 namespaces 字段精确控制允许访问的租户（如仅放行 team-a-runtime）",
+        "未授权命名空间（如 team-b-runtime）发起的出站请求在 Waypoint 处被 RBAC 严格拒绝，实现租户级公网隔离"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Ambient 默认安全风险与纵深防御",
+      "items": [
+        "Ambient 默认风险：ztunnel 默认捕获所有出网流量并放行 (passthrough)，且不读取 outboundTrafficPolicy: REGISTRY_ONLY",
+        "第一道防线：NetworkPolicy 默认阻断 Pod 直连公网，仅放行 kube-dns、ztunnel (15008/15006) 及内部网段",
+        "第二与三道防线：Waypoint 级 Default-Deny 授权策略 + ztunnel L4 STRICT mTLS 兜底，杜绝绕过出口网关"
+      ]
+    }
+  ]
+}

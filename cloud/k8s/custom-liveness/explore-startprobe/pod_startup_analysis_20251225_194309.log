@@ -1,0 +1,7 @@
+[2025-12-25T11:43:09.984186000] SECTION: 📋 Step 1/7: Get Pod Basic Information
+[2025-12-25T11:43:10.017786000] ERROR: Failed to get pod information:\nE1225 19:43:10.011268   39138 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.31.88:6443/api?timeout=32s\": dial tcp 192.168.31.88:6443: connect: no route to host"
+E1225 19:43:10.011433   39138 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.31.88:6443/api?timeout=32s\": dial tcp 192.168.31.88:6443: connect: no route to host"
+E1225 19:43:10.012587   39138 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.31.88:6443/api?timeout=32s\": dial tcp 192.168.31.88:6443: connect: no route to host"
+E1225 19:43:10.012695   39138 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.31.88:6443/api?timeout=32s\": dial tcp 192.168.31.88:6443: connect: no route to host"
+E1225 19:43:10.013849   39138 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"https://192.168.31.88:6443/api?timeout=32s\": dial tcp 192.168.31.88:6443: connect: no route to host"
+Unable to connect to the server: dial tcp 192.168.31.88:6443: connect: no route to host

@@ -1,0 +1,53 @@
+# Prerequisite:
+# - Mesh outboundTrafficPolicy should be REGISTRY_ONLY.
+# - Replace 10.10.20.15 with the real core proxy IP.
+
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata:
+  name: saas-egress
+  namespace: istio-system
+spec:
+  hosts:
+  - api.saas1.com
+  - api.saas3.com
+  ports:
+  - number: 443
+    name: tls
+    protocol: TLS
+  resolution: DNS
+  location: MESH_EXTERNAL
+---
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata:
+  name: saas2-egress
+  namespace: istio-system
+spec:
+  hosts:
+  - api.saas2.com
+  ports:
+  - number: 80
+    name: http
+    protocol: HTTP
+    targetPort: 443
+  resolution: DNS
+  location: MESH_EXTERNAL
+---
+apiVersion: networking.istio.io/v1
+kind: ServiceEntry
+metadata:
+  name: core-proxy-aliases
+  namespace: istio-system
+spec:
+  hosts:
+  - proxy-saas1.mesh.local
+  - proxy-saas2.mesh.local
+  - proxy-saas3.mesh.local
+  ports:
+  - number: 3128
+    name: tcp-proxy
+    protocol: TCP
+  resolution: STATIC
+  endpoints:
+  - address: 10.10.20.15

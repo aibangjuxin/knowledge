@@ -1,0 +1,3935 @@
+
+
+
+
+
+
+
+
+
+<!doctype html>
+<html 
+      lang="en"
+      dir="ltr">
+  <head>
+    <meta name="google-signin-client-id" content="721724668570-nbkv1cfusk7kk4eni4pjvepaus73b13t.apps.googleusercontent.com"><meta name="google-signin-scope"
+          content="profile email https://www.googleapis.com/auth/developerprofiles https://www.googleapis.com/auth/developerprofiles.award https://www.googleapis.com/auth/devprofiles.full_control.firstparty"><meta property="og:site_name" content="Google Cloud Documentation">
+    <meta property="og:type" content="website"><meta name="theme-color" content="#1a73e8"><meta charset="utf-8">
+    <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+
+    <link rel="manifest" href="/_pwa/clouddocs/manifest.json"
+          crossorigin="use-credentials">
+    <link rel="preconnect" href="//www.gstatic.com" crossorigin>
+    <link rel="preconnect" href="//fonts.googleapis.com" crossorigin>
+    <link rel="preconnect" href="//www.google-analytics.com" crossorigin><link rel="stylesheet" href="//fonts.googleapis.com/css?family=Google+Sans:400,500|Roboto:400,400italic,500,500italic,700,700italic|Roboto+Mono:400,500,700&display=swap">
+      <link rel="stylesheet"
+            href="//fonts.googleapis.com/css2?family=Material+Icons&family=Material+Symbols+Outlined&display=block"><link rel="stylesheet" href="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/css/app.css">
+      
+        <link rel="stylesheet" href="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/css/dark-theme.css" disabled>
+      <link rel="shortcut icon" href="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/favicons/onecloud/favicon.ico">
+    <link rel="apple-touch-icon" href="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/favicons/onecloud/super_cloud.png"><link rel="canonical" href="https://docs.cloud.google.com/vpc-service-controls/docs/overview"><link rel="search" type="application/opensearchdescription+xml"
+            title="Google Cloud Documentation" href="https://docs.cloud.google.com/s/opensearch.xml">
+      <link rel="alternate" hreflang="en"
+          href="https://docs.cloud.google.com/vpc-service-controls/docs/overview" /><link rel="alternate" hreflang="x-default" href="https://docs.cloud.google.com/vpc-service-controls/docs/overview" /><link rel="alternate" hreflang="zh-Hans"
+          href="https://docs.cloud.google.com/vpc-service-controls/docs/overview?hl=zh-cn" /><link rel="alternate" hreflang="zh-Hant"
+          href="https://docs.cloud.google.com/vpc-service-controls/docs/overview?hl=zh-tw" /><link rel="alternate" hreflang="fr"
+          href="https://docs.cloud.google.com/vpc-service-controls/docs/overview?hl=fr" /><link rel="alternate" hreflang="de"
+          href="https://docs.cloud.google.com/vpc-service-controls/docs/overview?hl=de" /><link rel="alternate" hreflang="he"
+          href="https://docs.cloud.google.com/vpc-service-controls/docs/overview?hl=he" /><link rel="alternate" hreflang="id"
+          href="https://docs.cloud.google.com/vpc-service-controls/docs/overview?hl=id" /><link rel="alternate" hreflang="it"
+          href="https://docs.cloud.google.com/vpc-service-controls/docs/overview?hl=it" /><link rel="alternate" hreflang="ja"
+          href="https://docs.cloud.google.com/vpc-service-controls/docs/overview?hl=ja" /><link rel="alternate" hreflang="ko"
+          href="https://docs.cloud.google.com/vpc-service-controls/docs/overview?hl=ko" /><link rel="alternate" hreflang="pt-BR"
+          href="https://docs.cloud.google.com/vpc-service-controls/docs/overview?hl=pt-br" /><link rel="alternate" hreflang="pt"
+          href="https://docs.cloud.google.com/vpc-service-controls/docs/overview?hl=pt" /><link rel="alternate" hreflang="es"
+          href="https://docs.cloud.google.com/vpc-service-controls/docs/overview?hl=es" /><link rel="alternate" hreflang="es-419"
+          href="https://docs.cloud.google.com/vpc-service-controls/docs/overview?hl=es-419" /><link rel="alternate" hreflang="en"
+          href="https://berlin.devsitetest.how/vpc-service-controls/docs/overview" /><link rel="alternate" hreflang="x-default" href="https://berlin.devsitetest.how/vpc-service-controls/docs/overview" /><link rel="alternate" hreflang="zh-Hans"
+          href="https://berlin.devsitetest.how/vpc-service-controls/docs/overview?hl=zh-cn" /><link rel="alternate" hreflang="zh-Hant"
+          href="https://berlin.devsitetest.how/vpc-service-controls/docs/overview?hl=zh-tw" /><link rel="alternate" hreflang="fr"
+          href="https://berlin.devsitetest.how/vpc-service-controls/docs/overview?hl=fr" /><link rel="alternate" hreflang="de"
+          href="https://berlin.devsitetest.how/vpc-service-controls/docs/overview?hl=de" /><link rel="alternate" hreflang="he"
+          href="https://berlin.devsitetest.how/vpc-service-controls/docs/overview?hl=he" /><link rel="alternate" hreflang="id"
+          href="https://berlin.devsitetest.how/vpc-service-controls/docs/overview?hl=id" /><link rel="alternate" hreflang="it"
+          href="https://berlin.devsitetest.how/vpc-service-controls/docs/overview?hl=it" /><link rel="alternate" hreflang="ja"
+          href="https://berlin.devsitetest.how/vpc-service-controls/docs/overview?hl=ja" /><link rel="alternate" hreflang="ko"
+          href="https://berlin.devsitetest.how/vpc-service-controls/docs/overview?hl=ko" /><link rel="alternate" hreflang="pt-BR"
+          href="https://berlin.devsitetest.how/vpc-service-controls/docs/overview?hl=pt-br" /><link rel="alternate" hreflang="pt"
+          href="https://berlin.devsitetest.how/vpc-service-controls/docs/overview?hl=pt" /><link rel="alternate" hreflang="es"
+          href="https://berlin.devsitetest.how/vpc-service-controls/docs/overview?hl=es" /><link rel="alternate" hreflang="es-419"
+          href="https://berlin.devsitetest.how/vpc-service-controls/docs/overview?hl=es-419" /><title>Overview of VPC Service Controls &nbsp;|&nbsp; Google Cloud Documentation</title>
+
+<meta property="og:title" content="Overview of VPC Service Controls &nbsp;|&nbsp; Google Cloud Documentation"><meta property="og:url" content="https://docs.cloud.google.com/vpc-service-controls/docs/overview"><meta property="og:image" content="https://docs.cloud.google.com/_static/cloud/images/social-icon-google-cloud-1200-630.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630"><meta property="og:locale" content="en"><meta name="twitter:card" content="summary_large_image"><script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    
+    "headline": "Overview of VPC Service Controls"
+  }
+</script><script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [{
+      "@type": "ListItem",
+      "position": 1,
+      "name": "VPC Service Controls",
+      "item": "https://docs.cloud.google.com/vpc-service-controls/docs"
+    },{
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Overview of VPC Service Controls",
+      "item": "https://docs.cloud.google.com/vpc-service-controls/docs/overview"
+    }]
+  }
+  </script>
+  
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    
+    
+    
+    
+    
+    
+
+
+  
+
+    </head>
+  <body class="color-scheme--light"
+        template="page"
+        theme="clouddocs-theme"
+        type="article"
+        
+        appearance
+        
+        layout="docs"
+        
+        
+        free-trial
+        
+        
+        display-toc
+        pending>
+  
+    <devsite-progress type="indeterminate" id="app-progress"></devsite-progress>
+  
+  
+    <a href="#main-content" class="skip-link button">
+      
+      Skip to main content
+    </a>
+    <section class="devsite-wrapper">
+      <devsite-cookie-notification-bar></devsite-cookie-notification-bar>
+        <cloudx-track userCountry="CN"></cloudx-track>
+
+<devsite-header role="banner" keep-tabs-visible>
+  
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="devsite-header--inner" data-nosnippet>
+  <div class="devsite-top-logo-row-wrapper-wrapper">
+    <div class="devsite-top-logo-row-wrapper">
+      <div class="devsite-top-logo-row">
+        <button type="button" id="devsite-hamburger-menu"
+          class="devsite-header-icon-button button-flat material-icons gc-analytics-event"
+          data-category="Site-Wide Custom Events"
+          data-label="Navigation menu button"
+          visually-hidden
+          aria-label="Open menu">
+        </button>
+        
+<div class="devsite-product-name-wrapper">
+
+  <a href="/" class="devsite-site-logo-link gc-analytics-event"
+   data-category="Site-Wide Custom Events" data-label="Site logo" track-type="globalNav"
+   track-name="googleCloudDocumentation" track-metadata-position="nav"
+   track-metadata-eventDetail="nav">
+  
+  <picture>
+    
+    <source srcset="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/lockup_dark_theme.svg"
+            media="(prefers-color-scheme: dark)"
+            class="devsite-dark-theme">
+    
+    <img src="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/lockup_full_color.svg" class="devsite-site-logo" alt="Google Cloud Documentation">
+  </picture>
+  
+</a>
+
+
+
+</div>
+        <div class="devsite-top-logo-row-middle">
+          <div class="devsite-header-upper-tabs">
+            
+              
+              
+  <devsite-tabs class="upper-tabs">
+
+    <nav class="devsite-tabs-wrapper" aria-label="Upper tabs">
+      
+        
+          <tab class="devsite-dropdown
+    
+    devsite-active
+    devsite-clickable
+    ">
+  
+    <a href="https://docs.cloud.google.com/docs"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://docs.cloud.google.com/docs"
+    
+       track-type="nav"
+       track-metadata-position="nav - docs-home"
+       track-metadata-module="primary nav"
+       aria-label="Technology areas, selected" 
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Technology areas"
+         
+           track-name="docs-home"
+         
+           track-link-column-type="single-column"
+         
+       >
+    Technology areas
+  
+    </a>
+    
+      <button
+         aria-haspopup="menu"
+         aria-expanded="false"
+         aria-label="Dropdown menu for Technology areas"
+         track-type="nav"
+         track-metadata-eventdetail="https://docs.cloud.google.com/docs"
+         track-metadata-position="nav - docs-home"
+         track-metadata-module="primary nav"
+         
+          
+            data-category="Site-Wide Custom Events"
+          
+            data-label="Tab: Technology areas"
+          
+            track-name="docs-home"
+          
+            track-link-column-type="single-column"
+          
+        
+         class="devsite-tabs-dropdown-toggle devsite-icon devsite-icon-arrow-drop-down"></button>
+    
+  
+  <div class="devsite-tabs-dropdown" role="menu" aria-label="submenu" hidden>
+    <div class="devsite-tabs-dropdown-content">
+      
+        <button class="devsite-tabs-close-button material-icons button-flat gc-analytics-event"
+                data-category="Site-Wide Custom Events"
+                data-label="Close dropdown menu"
+                aria-label="Close dropdown menu"
+                track-type="nav"
+                track-name="close"
+                track-metadata-eventdetail="#"
+                track-metadata-position="nav - docs-home"
+                track-metadata-module="tertiary nav">close</button>
+      
+      
+        <div class="devsite-tabs-dropdown-column
+                    ">
+          
+            <ul class="devsite-tabs-dropdown-section
+                       ">
+              
+              
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/ai-ml"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/ai-ml"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      AI and ML
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/application-development"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/application-development"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Application development
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/application-hosting"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/application-hosting"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Application hosting
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/compute-area"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/compute-area"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Compute
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/data"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/data"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Data analytics and pipelines
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/databases"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/databases"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Databases
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/dhm-cloud"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/dhm-cloud"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Distributed, hybrid, and multicloud
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/industry"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/industry"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Industry solutions
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/migration"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/migration"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Migration
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/networking"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/networking"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Networking
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/observability"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/observability"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Observability and monitoring
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/security"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/security"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Security
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/storage"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/storage"
+                     track-metadata-position="nav - docs-home"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Storage
+                    </div>
+                    
+                  </a>
+                </li>
+              
+            </ul>
+          
+        </div>
+      
+    </div>
+  </div>
+</tab>
+        
+      
+        
+          <tab class="devsite-dropdown
+    
+    
+    devsite-clickable
+    ">
+  
+    <a href="https://docs.cloud.google.com/docs/cross-product-overviews"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://docs.cloud.google.com/docs/cross-product-overviews"
+    
+       track-type="nav"
+       track-metadata-position="nav - crossproduct"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Cross-product tools"
+         
+           track-name="crossproduct"
+         
+           track-link-column-type="single-column"
+         
+       >
+    Cross-product tools
+  
+    </a>
+    
+      <button
+         aria-haspopup="menu"
+         aria-expanded="false"
+         aria-label="Dropdown menu for Cross-product tools"
+         track-type="nav"
+         track-metadata-eventdetail="https://docs.cloud.google.com/docs/cross-product-overviews"
+         track-metadata-position="nav - crossproduct"
+         track-metadata-module="primary nav"
+         
+          
+            data-category="Site-Wide Custom Events"
+          
+            data-label="Tab: Cross-product tools"
+          
+            track-name="crossproduct"
+          
+            track-link-column-type="single-column"
+          
+        
+         class="devsite-tabs-dropdown-toggle devsite-icon devsite-icon-arrow-drop-down"></button>
+    
+  
+  <div class="devsite-tabs-dropdown" role="menu" aria-label="submenu" hidden>
+    <div class="devsite-tabs-dropdown-content">
+      
+        <button class="devsite-tabs-close-button material-icons button-flat gc-analytics-event"
+                data-category="Site-Wide Custom Events"
+                data-label="Close dropdown menu"
+                aria-label="Close dropdown menu"
+                track-type="nav"
+                track-name="close"
+                track-metadata-eventdetail="#"
+                track-metadata-position="nav - crossproduct"
+                track-metadata-module="tertiary nav">close</button>
+      
+      
+        <div class="devsite-tabs-dropdown-column
+                    ">
+          
+            <ul class="devsite-tabs-dropdown-section
+                       ">
+              
+              
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/access-resources"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/access-resources"
+                     track-metadata-position="nav - crossproduct"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Access and resources management
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/costs-usage"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/costs-usage"
+                     track-metadata-position="nav - crossproduct"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Costs and usage management
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/iac"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/iac"
+                     track-metadata-position="nav - crossproduct"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Infrastructure as code
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://docs.cloud.google.com/docs/devtools"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://docs.cloud.google.com/docs/devtools"
+                     track-metadata-position="nav - crossproduct"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      SDK, languages, frameworks, and tools
+                    </div>
+                    
+                  </a>
+                </li>
+              
+            </ul>
+          
+        </div>
+      
+    </div>
+  </div>
+</tab>
+        
+      
+    </nav>
+
+  </devsite-tabs>
+
+            
+           </div>
+          
+<devsite-search
+    enable-signin
+    enable-search
+    enable-suggestions
+      
+    
+    enable-search-summaries
+    project-name="VPC Service Controls"
+    tenant-name="Google Cloud Documentation"
+    project-scope="/vpc-service-controls/docs"
+    url-scoped="https://docs.cloud.google.com/s/results/vpc-service-controls/docs"
+    
+    
+    
+    >
+  <form class="devsite-search-form" action="https://docs.cloud.google.com/s/results" method="GET">
+    <div class="devsite-search-container">
+      <button type="button"
+              search-open
+              class="devsite-search-button devsite-header-icon-button button-flat material-icons"
+              
+              aria-label="Open search"></button>
+      <div class="devsite-searchbox">
+        <input
+          aria-activedescendant=""
+          aria-autocomplete="list"
+          
+          aria-label="Search"
+          aria-expanded="false"
+          aria-haspopup="listbox"
+          autocomplete="off"
+          class="devsite-search-field devsite-search-query"
+          name="q"
+          
+          placeholder="Search"
+          role="combobox"
+          type="text"
+          value=""
+          >
+          <div class="devsite-search-image material-icons" aria-hidden="true">
+            
+              <svg class="devsite-search-ai-image" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <g clip-path="url(#clip0_6641_386)">
+                    <path d="M19.6 21L13.3 14.7C12.8 15.1 12.225 15.4167 11.575 15.65C10.925 15.8833 10.2333 16 9.5 16C7.68333 16 6.14167 15.375 4.875 14.125C3.625 12.8583 3 11.3167 3 9.5C3 7.68333 3.625 6.15 4.875 4.9C6.14167 3.63333 7.68333 3 9.5 3C10.0167 3 10.5167 3.05833 11 3.175C11.4833 3.275 11.9417 3.43333 12.375 3.65L10.825 5.2C10.6083 5.13333 10.3917 5.08333 10.175 5.05C9.95833 5.01667 9.73333 5 9.5 5C8.25 5 7.18333 5.44167 6.3 6.325C5.43333 7.19167 5 8.25 5 9.5C5 10.75 5.43333 11.8167 6.3 12.7C7.18333 13.5667 8.25 14 9.5 14C10.6667 14 11.6667 13.625 12.5 12.875C13.35 12.1083 13.8417 11.15 13.975 10H15.975C15.925 10.6333 15.7833 11.2333 15.55 11.8C15.3333 12.3667 15.05 12.8667 14.7 13.3L21 19.6L19.6 21ZM17.5 12C17.5 10.4667 16.9667 9.16667 15.9 8.1C14.8333 7.03333 13.5333 6.5 12 6.5C13.5333 6.5 14.8333 5.96667 15.9 4.9C16.9667 3.83333 17.5 2.53333 17.5 0.999999C17.5 2.53333 18.0333 3.83333 19.1 4.9C20.1667 5.96667 21.4667 6.5 23 6.5C21.4667 6.5 20.1667 7.03333 19.1 8.1C18.0333 9.16667 17.5 10.4667 17.5 12Z" fill="#5F6368"/>
+                  </g>
+                <defs>
+                <clipPath id="clip0_6641_386">
+                <rect width="24" height="24" fill="white"/>
+                </clipPath>
+                </defs>
+              </svg>
+            
+          </div>
+          <div class="devsite-search-shortcut-icon-container" aria-hidden="true">
+            <kbd class="devsite-search-shortcut-icon">/</kbd>
+          </div>
+      </div>
+    </div>
+  </form>
+  <button type="button"
+          search-close
+          class="devsite-search-button devsite-header-icon-button button-flat material-icons"
+          
+          aria-label="Close search"></button>
+</devsite-search>
+
+        </div>
+
+        
+
+  
+
+  
+    <a class="devsite-header-link devsite-top-button button gc-analytics-event button-with-icon"
+    href="//console.cloud.google.com/"
+    data-category="Site-Wide Custom Events"
+    data-label="Site header link: Console"
+    
+      
+        track-name="console"
+      
+        referrerpolicy="no-referrer-when-downgrade"
+      
+        track-metadata-eventDetail="nav"
+      
+        track-type="globalNav"
+      
+        track-metadata-position="nav"
+      
+    >
+  Console
+</a>
+  
+
+  
+
+  <devsite-appearance-selector></devsite-appearance-selector>
+
+  
+<devsite-language-selector>
+  <ul role="presentation">
+    
+    
+    <li role="presentation">
+      <a role="menuitem" lang="en"
+        >English</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="de"
+        >Deutsch</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es"
+        >Español</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es_419"
+        >Español – América Latina</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="fr"
+        >Français</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="id"
+        >Indonesia</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="it"
+        >Italiano</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pt"
+        >Português</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pt_br"
+        >Português – Brasil</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="he"
+        >עברית</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_cn"
+        >中文 – 简体</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_tw"
+        >中文 – 繁體</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ja"
+        >日本語</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ko"
+        >한국어</a>
+    </li>
+    
+  </ul>
+</devsite-language-selector>
+
+
+
+
+        
+          <devsite-user 
+                        
+                        
+                          enable-profiles
+                        
+                        
+                          fp-auth
+                        
+                        id="devsite-user">
+            
+              
+              <span class="button devsite-top-button" aria-hidden="true" visually-hidden>Sign in</span>
+            
+          </devsite-user>
+        
+        
+        
+      </div>
+    </div>
+  </div>
+
+
+
+  <div class="devsite-collapsible-section
+    ">
+    <div class="devsite-header-background">
+      
+        
+          <div class="devsite-product-id-row"
+           >
+            <div class="devsite-product-description-row">
+              
+                
+                <div class="devsite-product-id">
+                  
+                    
+  
+  <a href="https://docs.cloud.google.com/vpc-service-controls/docs">
+    
+  <div class="devsite-product-logo-container"
+       
+       
+       
+    size="medium"
+  >
+  
+    <picture>
+      
+      <source class="devsite-dark-theme"
+              media="(prefers-color-scheme: dark)"
+              srcset=" /_static/clouddocs/images/icons/categories/security-and-identity-white.svg"
+              sizes="64px">
+      
+      <img class="devsite-product-logo"
+           alt=""
+           src="https://docs.cloud.google.com/_static/clouddocs/images/icons/categories/security-and-identity-color.svg"
+           srcset=" /_static/clouddocs/images/icons/categories/security-and-identity-color.svg"
+           sizes="64px"
+           loading="lazy"
+           >
+    </picture>
+  
+  </div>
+  
+  </a>
+  
+
+                  
+                  
+                  
+                    <ul class="devsite-breadcrumb-list"
+  >
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+    
+    
+      
+        
+  <a href="https://docs.cloud.google.com/vpc-service-controls/docs"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Lower Header"
+      
+        data-value="1"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="1"
+      
+        track-metadata-eventdetail="VPC Service Controls"
+      
+    >
+    
+          VPC Service Controls
+        
+  </a>
+  
+      
+    
+  </li>
+  
+</ul>
+                </div>
+                
+              
+              
+            </div>
+            
+              <div class="devsite-product-button-row">
+  
+
+  
+  <a href="//console.cloud.google.com/freetrial"
+  
+    class="cloud-free-trial-button button button-primary
+      "
+    
+    
+      
+        track-type="freeTrial"
+      
+        track-metadata-position="nav"
+      
+        track-metadata-eventDetail="nav"
+      
+        referrerpolicy="no-referrer-when-downgrade"
+      
+        track-name="gcpCta"
+      
+    
+    >Start free</a>
+
+</div>
+            
+          </div>
+          
+        
+      
+      
+        <div class="devsite-doc-set-nav-row">
+          
+          
+            
+            
+  <devsite-tabs class="lower-tabs">
+
+    <nav class="devsite-tabs-wrapper" aria-label="Lower tabs">
+      
+        
+          <tab  >
+            
+    <a href="https://docs.cloud.google.com/vpc-service-controls/docs"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://docs.cloud.google.com/vpc-service-controls/docs"
+    
+       track-type="nav"
+       track-metadata-position="nav - overview"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Overview"
+         
+           track-name="overview"
+         
+       >
+    Overview
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+        
+          <tab  class="devsite-active">
+            
+    <a href="https://docs.cloud.google.com/vpc-service-controls/docs/overview"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://docs.cloud.google.com/vpc-service-controls/docs/overview"
+    
+       track-type="nav"
+       track-metadata-position="nav - guides"
+       track-metadata-module="primary nav"
+       aria-label="Guides, selected" 
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Guides"
+         
+           track-name="guides"
+         
+       >
+    Guides
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+        
+          <tab  >
+            
+    <a href="https://docs.cloud.google.com/vpc-service-controls/docs/apis"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://docs.cloud.google.com/vpc-service-controls/docs/apis"
+    
+       track-type="nav"
+       track-metadata-position="nav - reference"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Reference"
+         
+           track-name="reference"
+         
+       >
+    Reference
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+        
+          <tab  >
+            
+    <a href="https://docs.cloud.google.com/vpc-service-controls/docs/resources"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://docs.cloud.google.com/vpc-service-controls/docs/resources"
+    
+       track-type="nav"
+       track-metadata-position="nav - resources"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Resources"
+         
+           track-name="resources"
+         
+       >
+    Resources
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+    </nav>
+
+  </devsite-tabs>
+
+          
+          
+        </div>
+      
+    </div>
+  </div>
+
+</div>
+
+
+
+  
+
+  
+</devsite-header>
+        <devsite-book-nav scrollbars >
+          
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="devsite-book-nav-filter"
+     >
+  <span class="filter-list-icon material-icons" aria-hidden="true"></span>
+  <input type="text"
+         placeholder="Filter"
+         
+         aria-label="Type to filter"
+         role="searchbox">
+  
+  <span class="filter-clear-button hidden"
+        data-title="Clear filter"
+        aria-label="Clear filter"
+        role="button"
+        tabindex="0"></span>
+</div>
+
+<nav class="devsite-book-nav devsite-nav nocontent" data-nosnippet
+     aria-label="Side menu">
+  <div class="devsite-mobile-header">
+    <button type="button"
+            id="devsite-close-nav"
+            class="devsite-header-icon-button button-flat material-icons gc-analytics-event"
+            data-category="Site-Wide Custom Events"
+            data-label="Close navigation"
+            aria-label="Close navigation">
+    </button>
+    <div class="devsite-product-name-wrapper">
+
+  <a href="/" class="devsite-site-logo-link gc-analytics-event"
+   data-category="Site-Wide Custom Events" data-label="Site logo" track-type="globalNav"
+   track-name="googleCloudDocumentation" track-metadata-position="nav"
+   track-metadata-eventDetail="nav">
+  
+  <picture>
+    
+    <source srcset="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/lockup_dark_theme.svg"
+            media="(prefers-color-scheme: dark)"
+            class="devsite-dark-theme">
+    
+    <img src="https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/lockup_full_color.svg" class="devsite-site-logo" alt="Google Cloud Documentation">
+  </picture>
+  
+</a>
+
+
+</div>
+  </div>
+
+  <div class="devsite-book-nav-wrapper">
+    <div class="devsite-mobile-nav-top">
+      
+        <ul class="devsite-nav-list">
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/docs"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              devsite-nav-active"
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Technology areas"
+      
+        track-name="docs-home"
+      
+        track-link-column-type="single-column"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Technology areas"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Technology areas
+   </span>
+    
+  
+  </a>
+  
+
+  
+    <ul class="devsite-nav-responsive-tabs devsite-nav-has-menu
+               ">
+      
+<li class="devsite-nav-item">
+
+  
+  <span
+    
+       class="devsite-nav-title"
+       tooltip
+    
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Technology areas"
+      
+        track-name="docs-home"
+      
+        track-link-column-type="single-column"
+      
+    >
+  
+    <span class="devsite-nav-text" tooltip menu="Technology areas">
+      More
+   </span>
+    
+    <span class="devsite-nav-icon material-icons" data-icon="forward"
+          menu="Technology areas">
+    </span>
+    
+  
+  </span>
+  
+
+</li>
+
+    </ul>
+  
+              
+                <ul class="devsite-nav-responsive-tabs">
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/vpc-service-controls/docs"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Overview"
+      
+        track-name="overview"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Overview"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Overview
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/vpc-service-controls/docs/overview"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              devsite-nav-active"
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Guides"
+      
+        track-name="guides"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Guides"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip menu="_book">
+      Guides
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/vpc-service-controls/docs/apis"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Reference"
+      
+        track-name="reference"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Reference"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Reference
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/vpc-service-controls/docs/resources"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Resources"
+      
+        track-name="resources"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Resources"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Resources
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                </ul>
+              
+            </li>
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/docs/cross-product-overviews"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Cross-product tools"
+      
+        track-name="crossproduct"
+      
+        track-link-column-type="single-column"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Cross-product tools"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Cross-product tools
+   </span>
+    
+  
+  </a>
+  
+
+  
+    <ul class="devsite-nav-responsive-tabs devsite-nav-has-menu
+               ">
+      
+<li class="devsite-nav-item">
+
+  
+  <span
+    
+       class="devsite-nav-title"
+       tooltip
+    
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Cross-product tools"
+      
+        track-name="crossproduct"
+      
+        track-link-column-type="single-column"
+      
+    >
+  
+    <span class="devsite-nav-text" tooltip menu="Cross-product tools">
+      More
+   </span>
+    
+    <span class="devsite-nav-icon material-icons" data-icon="forward"
+          menu="Cross-product tools">
+    </span>
+    
+  
+  </span>
+  
+
+</li>
+
+    </ul>
+  
+              
+            </li>
+          
+          
+    
+    
+<li class="devsite-nav-item">
+
+  
+  <a href="//console.cloud.google.com/"
+    
+       class="devsite-nav-title gc-analytics-event button-with-icon"
+    
+
+    
+      
+        track-name="console"
+      
+        referrerpolicy="no-referrer-when-downgrade"
+      
+        track-metadata-eventDetail="nav"
+      
+        track-type="globalNav"
+      
+        track-metadata-position="nav"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Console"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Console
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+  
+          
+        </ul>
+      
+    </div>
+    
+      <div class="devsite-mobile-nav-bottom">
+        
+          
+          <ul class="devsite-nav-list" menu="_book">
+            <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Discover</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/overview"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Product overview</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/supported-products"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Supported products</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/restricted-vip-services"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Services supported by the restricted VIP</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Get started</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/access-control"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Access control with IAM</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/enable"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Best practices for enabling VPC Service Controls</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/set-up-service-perimeter"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Set up a perimeter using Google Cloud console</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/add-projects-perimeter-terraform"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Add projects to a perimeter using Terraform</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/set-up-service-perimeter-verify-access"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Set up a VPC Service Controls perimeter for a Virtual Private Cloud network</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Create and test service perimeters</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/service-perimeters"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Service perimeter overview</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/architect-perimeters"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Design and architect perimeters</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/create-service-perimeters"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Create a perimeter</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Test the effect of perimeters</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/dry-run-mode"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Dry run mode for perimeters</span></a></li><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/manage-dry-run-configurations"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Enforce and update dry run configurations</span></a></li></ul></div></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Control access using service perimeters</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/vpc-accessible-services"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>VPC accessible services overview</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/access-level-design"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Design access levels</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Use ingress and egress rules</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/ingress-egress-rules"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Ingress and egress rules overview</span></a></li><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/supported-identities"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Supported identities for ingress and egress rules</span></a></li><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/configuring-ingress-egress-policies"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure ingress and egress rules</span></a></li><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/configure-identity-groups"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure identity groups and third-party identities</span></a></li><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/identity-groups-examples"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Example of using identity groups and third-party identities</span></a></li><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/configure-iam-roles"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Configure IAM roles</span></a></li><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/secure-data-exchange"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Secure data exchange with ingress and egress rules</span></a></li><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/context-aware-access"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Context-aware access with ingress rules</span></a></li></ul></div></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/use-access-levels"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Allow access to protected resources from outside a perimeter</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/enable-internal-ip-access"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Allow access to protected resources from an internal IP address</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Configure and manage scoped access policies</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/scoped-policies-overview"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Scoped policy overview</span></a></li><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/manage-policies"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Create a scoped policy</span></a></li></ul></div></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Manage access for VPC networks</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/vpc-perimeters-management"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>VPC networks management in service perimeters</span></a></li><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/vpc-networks-rules"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Rules for including VPC networks in service perimeters</span></a></li><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/migrate-vpc-perimeters"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Example migration of VPC networks into separate perimeters</span></a></li></ul></div></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-expandable"><div class="devsite-expandable-nav">
+      <a class="devsite-nav-toggle" aria-hidden="true"></a><div class="devsite-nav-title devsite-nav-title-no-path" tabindex="0" role="button">
+        <span class="devsite-nav-text" tooltip>Manage service perimeters</span>
+      </div><ul class="devsite-nav-section"><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/manage-service-perimeters"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Manage perimeters</span></a></li><li class="devsite-nav-item"><a href="/vpc-service-controls/docs/bulk-operations"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Make bulk changes to perimeters</span></a></li></ul></div></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/protect-compute-engine-troubleshoot-denial"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Tutorial: Protect Compute Engine using a perimeter</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Control access</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/custom-constraints"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Create custom constraints</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Enable communication across service perimeters</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/share-across-perimeters"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Perimeter bridge overview</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/create-perimeter-bridges"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Create a perimeter bridge</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Configure private connectivity</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/private-connectivity"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Private Google Access with VPC Service Controls</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/set-up-private-connectivity"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Set up private connectivity to Google APIs and services</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Monitor</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/audit-logging"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Audit logging</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/violation-dashboard"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Set up and view violation dashboard</span></a></li>
+
+  <li class="devsite-nav-item
+           devsite-nav-heading"><div class="devsite-nav-title devsite-nav-title-no-path">
+        <span class="devsite-nav-text" tooltip>Troubleshoot</span>
+      </div></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/retrieve-troubleshoot-errors"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Retrieve errors from audit logs</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/violation-analyzer"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Diagnose denials and view comprehensive reports</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/troubleshooter"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Diagnose denials and view classic reports</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/troubleshooting"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Troubleshoot common issues</span></a></li>
+
+  <li class="devsite-nav-item"><a href="/vpc-service-controls/docs/troubleshoot-services-within-perimeter"
+        class="devsite-nav-title"
+      ><span class="devsite-nav-text" tooltip>Troubleshoot issues with other services</span></a></li>
+          </ul>
+        
+        
+          
+    
+      
+      <ul class="devsite-nav-list" menu="Technology areas"
+          aria-label="Side menu" hidden>
+        
+          
+            
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/ai-ml"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: AI and ML"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      AI and ML
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/application-development"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Application development"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Application development
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/application-hosting"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Application hosting"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Application hosting
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/compute-area"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Compute"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Compute
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/data"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Data analytics and pipelines"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Data analytics and pipelines
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/databases"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Databases"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Databases
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/dhm-cloud"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Distributed, hybrid, and multicloud"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Distributed, hybrid, and multicloud
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/industry"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Industry solutions"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Industry solutions
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/migration"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Migration"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Migration
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/networking"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Networking"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Networking
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/observability"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Observability and monitoring"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Observability and monitoring
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/security"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Security"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Security
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/storage"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Storage"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Storage
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+          
+        
+      </ul>
+    
+  
+    
+      
+      <ul class="devsite-nav-list" menu="Cross-product tools"
+          aria-label="Side menu" hidden>
+        
+          
+            
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/access-resources"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Access and resources management"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Access and resources management
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/costs-usage"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Costs and usage management"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Costs and usage management
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/iac"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Infrastructure as code"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Infrastructure as code
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/devtools"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: SDK, languages, frameworks, and tools"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      SDK, languages, frameworks, and tools
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+          
+        
+      </ul>
+    
+  
+        
+        
+          
+    
+  
+    
+  
+    
+  
+    
+  
+        
+      </div>
+    
+  </div>
+</nav>
+          
+        </devsite-book-nav>
+      
+      <section id="gc-wrapper">
+        <main role="main" id="main-content" class="devsite-main-content"
+            
+              has-book-nav
+              has-sidebar
+            >
+          <div class="devsite-sidebar">
+            <div class="devsite-sidebar-content">
+                
+                <devsite-toc class="devsite-nav"
+                            role="navigation"
+                            aria-label="On this page"
+                            depth="2"
+                            scrollbars
+                            data-nosnippet
+                  ></devsite-toc>
+                <devsite-recommendations-sidebar class="nocontent devsite-nav" data-nosnippet>
+                </devsite-recommendations-sidebar>
+            </div>
+          </div>
+          <devsite-content>
+            
+              
+
+
+
+
+
+
+
+
+
+
+<article class="devsite-article">
+  
+  
+  
+  
+  
+
+  <div class="devsite-article-meta nocontent" role="navigation" data-nosnippet>
+    
+    
+    <ul class="devsite-breadcrumb-list"
+  
+    aria-label="Breadcrumb">
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+    
+    
+      
+        
+  <a href="https://docs.cloud.google.com/"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="1"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="1"
+      
+        track-metadata-eventdetail="Google Cloud Documentation"
+      
+    >
+    
+          Home
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://docs.cloud.google.com/docs"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="2"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="2"
+      
+        track-metadata-eventdetail="Documentation"
+      
+    >
+    
+          Documentation
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://docs.cloud.google.com/docs/networking"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="3"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="3"
+      
+        track-metadata-eventdetail="Networking"
+      
+    >
+    
+          Networking
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://docs.cloud.google.com/vpc-service-controls/docs"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="4"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="4"
+      
+        track-metadata-eventdetail="VPC Service Controls"
+      
+    >
+    
+          VPC Service Controls
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://docs.cloud.google.com/vpc-service-controls/docs/overview"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="5"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="5"
+      
+        track-metadata-eventdetail=""
+      
+    >
+    
+          Guides
+        
+  </a>
+  
+      
+    
+  </li>
+  
+</ul>
+    
+      
+    <devsite-thumb-rating position="header">
+    </devsite-thumb-rating>
+  
+    
+  </div>
+  
+    <devsite-feedback
+  position="header"
+  project-name="VPC Service Controls"
+  product-id="5058704"
+  bucket="documentation"
+  context=""
+  version="t-devsite-webserver-20260630-r00-rc00.478639290528629295"
+  data-label="Send Feedback Button"
+  track-type="feedback"
+  track-name="sendFeedbackLink"
+  track-metadata-position="header"
+  class="nocontent"
+  data-nosnippet
+  
+  
+  
+    
+      project-icon="https://docs.cloud.google.com/_static/clouddocs/images/icons/categories/security-and-identity-color.svg"
+    
+  
+  
+  
+  >
+
+  <button>
+  
+    
+    Send feedback
+  
+  </button>
+</devsite-feedback>
+  
+    <h1 class="devsite-page-title" tabindex="-1">
+      Overview of VPC Service Controls<devsite-actions hidden data-nosnippet><devsite-feature-tooltip
+      ack-key="AckCollectionsBookmarkTooltipDismiss"
+      analytics-category="Site-Wide Custom Events"
+      analytics-action-show="Callout Profile displayed"
+      analytics-action-close="Callout Profile dismissed"
+      analytics-label="Create Collection Callout"
+      class="devsite-page-bookmark-tooltip nocontent"
+      data-nosnippet
+      dismiss-button="true"
+      id="devsite-collections-dropdown"
+      
+      dismiss-button-text="Dismiss"
+
+      
+      close-button-text="Got it">
+
+    
+    
+      <devsite-bookmark></devsite-bookmark>
+    
+
+    <span slot="popout-heading">
+      
+      Stay organized with collections
+    </span>
+    <span slot="popout-contents">
+      
+      Save and categorize content based on your preferences.
+    </span>
+  </devsite-feature-tooltip>
+    <devsite-llm-tools></devsite-llm-tools></devsite-actions>
+  
+      
+    </h1>
+  
+
+  <devsite-toc class="devsite-nav"
+    depth="2"
+    devsite-toc-embedded
+    >
+  </devsite-toc>
+  
+    
+  <div class="devsite-article-body clearfix
+  ">
+
+  
+    
+    
+    
+    
+
+<p>This topic provides an overview of VPC Service Controls and describes its advantages
+and capabilities.</p>
+
+<h2 id="who-use-vpc-service-controls" data-text="Who should use VPC Service Controls" tabindex="-1">Who should use VPC Service Controls</h2>
+
+<p>Your organization might own intellectual property in the form of highly
+sensitive data, or your organization might handle sensitive data that is subject
+to additional data protection regulations, such as PCI DSS. Unintended loss or
+disclosure of sensitive data can lead to significant negative business
+implications.</p>
+
+<p>If you are migrating from on-premises to the cloud, one of your goals might be
+to replicate your on-premises network based security architecture as you move
+your data to Google Cloud. To protect your highly sensitive data, you might want
+to ensure that your resources can only be accessed from trusted networks. Some
+organizations might allow public access to resources as long as the request
+originates from a trusted network, which can be identified based on the IP
+address of the request.</p>
+
+<p>To mitigate data exfiltration risks, your organization might also want to ensure
+secure data exchange across organizational boundaries with fine-grained
+controls. As an administrator, you might want to ensure the following:</p>
+
+<ul>
+<li>Clients with privileged access don&#39;t also have access to partner resources.</li>
+<li>Clients with access to sensitive data can only read public data sets but not
+write to them.</li>
+</ul>
+
+<h2 id="how-vpc-service-controls-works" data-text="How VPC Service Controls reduces data exfiltration risks" tabindex="-1">How VPC Service Controls reduces data exfiltration risks</h2>
+
+<p>VPC Service Controls helps protect against accidental or targeted action
+by external entities or insider entities, which helps to minimize unwarranted
+data exfiltration risks from Google Cloud services such as Cloud Storage
+and BigQuery. You can use VPC Service Controls to create perimeters
+that protect the resources and data of services that you explicitly specify.</p>
+
+<p>VPC Service Controls secures your Google Cloud services by defining the
+following controls:</p>
+
+<ul>
+<li><p>Clients within a perimeter that have private access to resources do not
+have access to unauthorized (potentially public) resources outside the
+perimeter.</p></li>
+<li><p>Data cannot be copied to unauthorized resources outside the perimeter using
+service operations such as <a href="/sdk/gcloud/reference/storage/cp"><code translate="no" dir="ltr">gcloud storage cp</code></a>
+or <a href="/bigquery/docs/reference/bq-cli-reference#bq_mk"><code translate="no" dir="ltr">bq mk</code></a>.</p></li>
+<li><p>Data exchange between clients and resources separated by perimeters
+is secured by using <a href="/vpc-service-controls/docs/ingress-egress-rules">ingress and egress rules</a>.</p></li>
+<li><p>Context-aware access to resources is based on client attributes, such as
+identity type (service account or user), identity, device data, and network
+origin (IP address or VPC network). The following are examples of
+context-aware access:</p>
+
+<ul>
+<li><p>Clients outside the perimeter that are on Google Cloud or
+on-premises are within authorized VPC resources and use
+Private Google Access to access resources within a perimeter.</p></li>
+<li><p>Internet access to resources within a perimeter is restricted to a range
+of IPv4 and IPv6 addresses.</p></li>
+</ul>
+
+<p>For more information, see
+<a href="/vpc-service-controls/docs/context-aware-access">Context-aware access using ingress rules</a>.</p></li>
+</ul>
+
+<p>VPC Service Controls provides an extra layer of security defense for
+Google Cloud services that is independent of Identity and Access Management
+(IAM). While IAM enables granular <em>identity-based
+access control</em>, VPC Service Controls enables broader <em>context-based perimeter
+security</em>, including controlling data egress across the perimeter. We recommend
+using both VPC Service Controls and IAM for defense in depth.</p>
+
+<p>VPC Service Controls lets you monitor resource access patterns across your
+service perimeters using Cloud Audit Logs. For more information, see
+<a href="/vpc-service-controls/docs/audit-logging">VPC Service Controls audit logging</a>.</p>
+
+<h2 id="benefits" data-text="Security benefits of VPC Service Controls" tabindex="-1">Security benefits of VPC Service Controls</h2>
+
+<p>VPC Service Controls helps mitigate the following security risks without sacrificing
+the performance advantages of direct private access to Google Cloud
+resources:</p>
+
+<ul>
+<li><p><strong>Access from unauthorized networks using stolen credentials</strong>: By
+allowing private access only from authorized VPC networks,
+VPC Service Controls helps protect against the risk of data exfiltration
+presented by clients using stolen OAuth or service account credentials.</p></li>
+<li><p><strong>Data exfiltration by malicious insiders or compromised code:</strong>
+VPC Service Controls complements network egress controls by preventing clients
+within those networks from accessing the resources of Google-managed
+services outside the perimeter.</p>
+
+<p>VPC Service Controls also prevents reading data from or copying data to a
+resource outside the perimeter. VPC Service Controls prevents
+service operations such as a <code translate="no" dir="ltr">gcloud storage cp</code> command copying to a public
+Cloud Storage bucket or a <code translate="no" dir="ltr">bq mk</code> command copying to a permanent
+external BigQuery table.</p>
+
+<p>Google Cloud also provides a restricted virtual IP that is integrated
+with VPC Service Controls.
+
+The restricted VIP also allows requests to be
+made to <a href="/vpc-service-controls/docs/supported-products">services supported by VPC Service Controls</a>
+without exposing those requests to the internet.
+</p></li>
+<li><p><strong>Public exposure of private data caused by misconfigured IAM
+policies</strong>: VPC Service Controls provides an extra layer of security by
+denying access from unauthorized networks, even if the data is exposed by
+misconfigured IAM policies.</p></li>
+<li><p><strong>Monitoring access to services</strong>: Use VPC Service Controls in <a href="/vpc-service-controls/docs/dry-run-mode">dry run
+mode</a> to monitor requests to
+protected services without preventing access and to understand traffic
+requests to your projects. You can also create honeypot perimeters to
+identify unexpected or malicious attempts to probe accessible services.</p></li>
+</ul>
+
+<p>You can use an organization access policy and configure VPC Service Controls for
+your entire Google Cloud organization, or use <a href="/access-context-manager/docs/scoped-policies">scoped
+policies</a> and configure
+VPC Service Controls for a folder or project in the organization. You retain the
+flexibility to process, transform, and copy data within the perimeter.</p>
+
+<p>VPC Service Controls configurations are managed at the organization level by
+default, but scoped access policies for folders or projects can be used to
+delegate administration of service perimeters further down the resource
+hierarchy.</p>
+
+<h3 id="metadata" data-text="VPC Service Controls and metadata" tabindex="-1">VPC Service Controls and metadata</h3>
+
+<p>VPC Service Controls is not designed to enforce comprehensive controls on
+metadata movement.</p>
+
+<p>In this context, <em>data</em> is defined as content stored in
+a Google Cloud resource. For example, the contents of a
+Cloud Storage object. <em>Metadata</em> is defined as the attributes of the
+resource or its parent. For example, Cloud Storage bucket names.</p>
+
+<p>The primary goal of VPC Service Controls is to control the movement of data,
+rather than metadata, across a service perimeter through supported services.
+VPC Service Controls also manages access to metadata, but there might be scenarios
+in which metadata can be copied and accessed without VPC Service Controls policy checks.</p>
+
+<p>We recommend that you rely on IAM, including the use of
+<a href="/iam/docs/understanding-custom-roles">custom roles</a>,
+to ensure appropriate control over access to metadata.</p>
+
+<h2 id="capabilities" data-text="Capabilities" tabindex="-1">Capabilities</h2>
+
+<p>VPC Service Controls lets you define security policies that prevent access
+to Google-managed services outside of a trusted perimeter, block access to data
+from untrusted locations, and mitigate data exfiltration risks.</p>
+
+<p>You can use VPC Service Controls for the following use cases:</p>
+
+<ul>
+<li><p><a href="#isolate">Isolate Google Cloud resources and VPC networks</a>
+into service perimeters</p></li>
+<li><p><a href="#hybrid_access">Extend perimeters to on-premises networks</a> using authorized
+VPN or Cloud Interconnect landing zone VPC networks.</p></li>
+<li><p><a href="#internet">Control access to Google Cloud resources</a> from the internet</p></li>
+<li><p><a href="/vpc-service-controls/docs/secure-data-exchange">Protect data exchange across perimeters and organizations</a>
+by using ingress and egress rules</p></li>
+<li><p><a href="/vpc-service-controls/docs/context-aware-access">Allow context-aware access to resources</a> based on
+client attributes by using ingress rules</p></li>
+</ul>
+
+<h3 id="isolate" data-text="Isolate Google Cloud resources into service perimeters" tabindex="-1">Isolate Google Cloud resources into service perimeters</h3>
+
+<p>A <strong>service perimeter</strong> creates a security boundary around Google Cloud
+resources. A service perimeter allows free communication within the perimeter
+but, by default, blocks communication to Google Cloud services across the
+perimeter.</p>
+
+<p>The perimeter works specifically with Google Cloud managed services. The
+perimeter doesn&#39;t block access to any third-party APIs or services on the
+internet.</p>
+
+<p>You can configure a perimeter to control the following types of communications:</p>
+
+<ul>
+<li>From public internet to customer resources within managed services</li>
+<li>From virtual machines (VMs) to a Google Cloud service (API)</li>
+<li>Between Google Cloud services</li>
+</ul>
+
+<p>VPC Service Controls doesn&#39;t require you to have a Virtual Private Cloud
+(VPC) network. To use
+VPC Service Controls without having any resources on a VPC
+network, you can allow traffic from external IP ranges or certain
+<a href="/iam/docs">IAM</a> principals. For more information, see
+<a href="/vpc-service-controls/docs/use-access-levels#create_and_manage_access_levels">Create and manage access levels</a>.</p>
+
+<p>Here are some examples of VPC Service Controls creating a security boundary:</p>
+
+<ul>
+<li><p>A VM within a <a href="/vpc/docs/vpc">VPC network</a>
+that is part of a service perimeter can read from or write to a Cloud Storage
+bucket in the same perimeter. However, VPC Service Controls doesn&#39;t allow
+VMs within VPC networks that are outside the perimeter to
+access Cloud Storage buckets that are inside the perimeter. You must
+specify an ingress policy to allow VMs within VPC networks that are outside the
+perimeter to access Cloud Storage buckets that are inside the perimeter.</p></li>
+<li><p>A host project that contains multiple VPC networks has a different perimeter
+policy for each VPC network in the host project.</p></li>
+<li><p>A copy operation between two Cloud Storage buckets succeeds if both
+buckets are in the same service perimeter, but if one of the
+buckets is outside the perimeter, the copy operation fails.</p></li>
+<li><p>VPC Service Controls doesn&#39;t allow a VM within a VPC network that is inside a
+service perimeter to access Cloud Storage buckets that
+are outside the perimeter.</p></li>
+</ul>
+
+<p>The following diagram shows a service perimeter that allows communication between a
+VPC project and Cloud Storage bucket inside the perimeter but blocks
+all communication across the perimeter:</p>
+
+<figure aria-hidden="true">
+  <img src="/static/vpc-service-controls/images/service_perimeter.png"
+    alt="">
+</figure>
+
+<h3 id="hybrid_access" data-text="Extend perimeters to an authorized VPN or Cloud Interconnect" tabindex="-1">Extend perimeters to an authorized VPN or Cloud Interconnect</h3>
+
+<p>You can configure private communication to Google Cloud resources from
+VPC networks that span hybrid environments with
+Private Google Access <a href="/vpc-service-controls/docs/private-connectivity">on-premises extensions</a>. To privately access
+Google Cloud resources within a perimeter, the VPC network
+that contains the landing zone from on-premises must be a part of the perimeter
+for resources in the on-premises network.</p>
+
+<p>VMs with private IP addresses in a VPC network secured by a
+service perimeter cannot access managed resources outside the service perimeter.
+If necessary, you can continue to enable inspected and audited access to all
+Google APIs (for example, Gmail) over the internet.</p>
+
+<p>The following diagram shows a service perimeter that extends to hybrid environments
+with Private Google Access:</p>
+
+<figure aria-hidden="true">
+  <img src="/static/vpc-service-controls/images/service_perimeter_private.png"
+    alt="">
+</figure>
+
+<h3 id="internet" data-text="Control access to Google Cloud resources from the internet" tabindex="-1">Control access to Google Cloud resources from the internet</h3>
+
+<p>Access from the internet to managed resources within a service perimeter is
+denied by default. Optionally, you can enable access based on the context of the
+request. To do so, you can create ingress rules or access levels to permit
+access based on various attributes, such as the source IP address, identity, or
+source Google Cloud project. If requests made from the internet don&#39;t meet
+the criteria defined in the ingress rule or access level, the requests are
+denied.</p>
+
+<p>To use the Google Cloud console to access resources within a perimeter,
+you must configure an access level that allows access from one or more IPv4
+and IPv6 ranges, or to specific user accounts.</p>
+
+<p>The following diagram shows a service perimeter that allows access from the internet
+to protected resources based on the configured access levels, such as IP address or device policy:</p>
+
+<figure aria-hidden="true">
+  <img src="/static/vpc-service-controls/images/service_perimeter_internet.png"
+    alt="">
+</figure>
+
+<h2 id="other-controls" data-text="Other controls to mitigate data exfiltration risks" tabindex="-1">Other controls to mitigate data exfiltration risks</h2>
+
+<ul>
+  <li><b>Domain restricted sharing</b>: You can consider setting up an
+  organizational policy to limit resource sharing to identities that belong to a
+  particular organization resource. For more information, see
+  <a href="/resource-manager/docs/organization-policy/restricting-domains">Restricting
+  identities by domain</a>.</li>
+
+  <li><b>Uniform bucket-level access</b>: To uniformly control access to your
+  Cloud Storage buckets, consider setting up bucket-level
+  IAM permissions. Using uniform bucket-level access lets you use
+  other Google Cloud security features such as domain restricted sharing,
+  <a href="/iam/docs/workforce-identity-federation">Workforce Identity Federation</a>,
+  and <a href="/iam/docs/conditions-overview">IAM conditions</a>.</li>
+
+  
+    <li><b>Multi-factor authentication</b>: We recommend using
+    <a href="/identity/solutions/enforce-mfa">multi-factor authentication to
+    access your Google Cloud resources</a>.</li>
+  
+
+  
+  <li><b>Post-deployment scans</b>: You can consider using the following
+  post-deployment scanning tools to scan for open Cloud Storage buckets:
+    <ol>
+      <li><a href="/security-command-center/docs/security-command-center-overview">Security Command Center</a></li>
+      <li><a href="/asset-inventory/docs/overview">Cloud Asset Inventory</a> to search asset metadata history and analyse
+      IAM policy to understand who has access to what.</li>
+      <li>Third-party tools like Palo Alto PrismaCloud</li>
+    </ol>
+  </li>
+  
+
+  
+    <li><b>De-identification of sensitive data</b>: You can consider using
+    <a href="/sensitive-data-protection/docs/sensitive-data-protection-overview">Sensitive Data Protection</a> to discover, classify, and de-identify
+    sensitive data inside and outside Google Cloud. De-identification of
+    sensitive data can be done by redaction, tokenization, or encryption.</li>
+  
+
+  <li><b>Automation using infrastructure-as-code tools</b>: We recommend that
+  you deploy Cloud Storage buckets using an automation tool to control access
+  to the buckets. Pass the infrastructure-as-code through human or automated
+  reviews before deployment.</li>
+</ul>
+
+<h2 id="services" data-text="Unsupported Services" tabindex="-1">Unsupported Services</h2>
+
+
+
+
+<p>
+  For more information on products and services that are supported by
+  VPC Service Controls, refer to the
+  <a href="/vpc-service-controls/docs/supported-products">Supported products</a> page.
+</p>
+
+<aside class="warning">
+  <p>
+    <b>Warning:</b> While it may be possible to enable unsupported services to access the
+    data of supported products and services, we recommend that you do not. Unexpected
+    issues might occur when attempting to access a supported service using
+    an unsupported service, especially within the same project.
+  </p>
+  <p>
+    Unsupported services may not function at all when enabled in a project
+    protected by VPC Service Controls, especially when low-level storage
+    services like Cloud Storage or Pub/Sub are
+    restricted. We recommend deploying unsupported services in projects
+    outside perimeters. To allow these services to access data in resources
+    within a perimeter,
+    <a href="/vpc-service-controls/docs/use-access-levels">create an access level</a> that includes the service account
+    for that service and
+    <a href="/vpc-service-controls/docs/manage-service-perimeters#add-access-level">apply it to perimeters as needed</a>.
+  </p>
+</aside>
+<p>
+  Attempting to restrict an unsupported service using the <code translate="no" dir="ltr">gcloud</code> command-line tool or
+  the Access Context Manager API will result in an error.
+</p>
+<p>
+  Cross-project access to data of supported services will be blocked by VPC Service Controls.
+  Additionally, the restricted VIP can be used to block the ability of workloads
+  to call unsupported services.
+</p>
+
+
+<h2 id="limitations" data-text="Known limitations" tabindex="-1">Known limitations</h2>
+
+<p>There are some known limitations with certain Google Cloud services,
+products, and interfaces when you use VPC Service Controls. For example,
+VPC Service Controls doesn&#39;t support all Google Cloud services.
+Therefore, don&#39;t enable unsupported Google Cloud services in the
+perimeter. For more information, see the <a href="/vpc-service-controls/docs/supported-products#supported_products" track-type="solution" track-name="internalLink" track-metadata-position="body">VPC Service Controls supported products list</a>.
+If you need to use a service that VPC Service Controls doesn&#39;t support,
+enable the service in a project that is outside the perimeter.</p>
+
+<p>We recommend that you review known limitations before you include
+Google Cloud services in the perimeter. For more information, see the
+<a href="/vpc-service-controls/docs/supported-products#service-limitations" track-type="solution" track-name="internalLink" track-metadata-position="body">VPC Service Controls service limitations</a>.</p>
+
+<h2 id="glossary" data-text="Glossary" tabindex="-1">Glossary</h2>
+
+<p>In this topic, you have learned about several new concepts introduced by
+VPC Service Controls:</p>
+
+<dl>
+<dt>VPC Service Controls</dt>
+<dd>Technology that enables you to define a service perimeter
+around resources of Google-managed services to control communication to and
+between those services.</dd>
+<dt>service perimeter</dt>
+<dd>A service perimeter around Google-managed resources. Allows free
+communication within the perimeter but, by default, blocks all communication
+across the perimeter.</dd>
+<dt>ingress rule</dt>
+<dd>A rule that allows an API client that is outside the perimeter to access
+resources within a perimeter. For more information, see <a href="/vpc-service-controls/docs/ingress-egress-rules">Ingress and egress rules</a>.</dd>
+<dt>egress rule</dt>
+<dd>A rule that allows an API client or resource that is inside the perimeter to
+access Google Cloud resources outside the perimeter. The perimeter
+does not block access to any third-party API or services on the internet.</dd>
+<dt></dt>
+<dt>service perimeter bridge</dt>
+<dd><p>A perimeter bridge allows projects in different service perimeters to
+communicate. Perimeter bridges are bidirectional, allowing projects from
+each service perimeter equal access within the scope of the bridge.</p>
+<aside class="note"><strong>Note:</strong><span> Instead of using a perimeter bridge, we recommend using ingress and
+  egress rules that provide more granular controls.
+</span></aside></dd>
+<dt>Access Context Manager</dt>
+<dd><p>A context-aware request classification service that can map a request to
+an access level based on specified attributes of the client, such as the
+source IP address. For more information, see <a href="/access-context-manager/docs/overview">Overview of Access Context Manager</a>.</p></dd>
+<dt>access level</dt>
+<dd><p>A classification of requests over the internet based on several attributes,
+such as source IP range, client device, geolocation, and others. Just like
+an ingress rule, you can use an access level to configure a service
+perimeter to grant access from the internet based on the access level
+associated with a request. You can <a href="/access-context-manager/docs/create-basic-access-level">create an access level using Access Context Manager</a>.</p></dd>
+<dt>access policy</dt>
+<dd><p>A Google Cloud resource object that defines service perimeters. You
+can create access policies that are scoped to specific folders or projects
+alongside an access policy that can apply to the entire organization. An
+organization can have only one organization-level access policy.</p></dd>
+<dt>scoped policy</dt>
+<dd><p>A scoped policy is an access policy that is scoped to specific folders or
+projects alongside an access policy that applies to the entire organization.
+For more information, see <a href="/access-context-manager/docs/scoped-policies">Overview of scoped policies</a>.</p></dd>
+<dt>restricted VIP</dt>
+<dd><p>The restricted VIP provides a private network route for products and APIs
+supported by VPC Service Controls in order to make data and resources used by
+those products inaccessible from the internet. <code translate="no" dir="ltr">restricted.googleapis.com</code>
+resolves to <code translate="no" dir="ltr">199.36.153.4/30</code>.
+This IP address range is not announced to the internet.</p></dd>
+</dl>
+
+<h2 id="whats_next" data-text="What's next" tabindex="-1">What's next</h2>
+
+
+
+<ul>
+<li>Learn about <a href="/vpc-service-controls/docs/service-perimeters">service perimeter configuration</a>.</li>
+<li>Understand how to manage <a href="/vpc-service-controls/docs/vpc-perimeters-management">VPC networks in service perimeters</a></li>
+<li>Review the <a href="/vpc-service-controls/docs/supported-products#service-limitations">known service limitations</a>.</li>
+</ul>
+
+
+  
+  
+
+  
+    <devsite-hats-survey class="nocontent" data-nosnippet
+      hats-id="Nd7nTix2o0eU5NUYprb0ThtUc5jf"
+      listnr-id="83405"></devsite-hats-survey>
+  
+
+  
+</div>
+
+  
+    
+    
+      
+    <devsite-thumb-rating position="footer">
+    </devsite-thumb-rating>
+  
+       
+         <devsite-feedback
+  position="footer"
+  project-name="VPC Service Controls"
+  product-id="5058704"
+  bucket="documentation"
+  context=""
+  version="t-devsite-webserver-20260630-r00-rc00.478639290528629295"
+  data-label="Send Feedback Button"
+  track-type="feedback"
+  track-name="sendFeedbackLink"
+  track-metadata-position="footer"
+  class="nocontent"
+  data-nosnippet
+  
+  
+  
+    
+      project-icon="https://docs.cloud.google.com/_static/clouddocs/images/icons/categories/security-and-identity-color.svg"
+    
+  
+  
+  
+  >
+
+  <button>
+  
+    
+    Send feedback
+  
+  </button>
+</devsite-feedback>
+       
+    
+    
+  
+
+  <div class="devsite-floating-action-buttons"></div></article>
+
+
+<devsite-content-footer class="nocontent" data-nosnippet>
+  <p>Except as otherwise noted, the content of this page is licensed under the <a href="https://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution 4.0 License</a>, and code samples are licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache 2.0 License</a>. For details, see the <a href="https://developers.google.com/site-policies">Google Developers Site Policies</a>. Java is a registered trademark of Oracle and/or its affiliates.</p>
+  <p>Last updated 2026-07-07 UTC.</p>
+</devsite-content-footer>
+
+
+<devsite-notification
+>
+</devsite-notification>
+
+
+  
+<div class="devsite-content-data">
+  
+    
+    
+    <template class="devsite-thumb-rating-feedback">
+      <devsite-feedback
+  position="thumb-rating"
+  project-name="VPC Service Controls"
+  product-id="5058704"
+  bucket="documentation"
+  context=""
+  version="t-devsite-webserver-20260630-r00-rc00.478639290528629295"
+  data-label="Send Feedback Button"
+  track-type="feedback"
+  track-name="sendFeedbackLink"
+  track-metadata-position="thumb-rating"
+  class="nocontent"
+  data-nosnippet
+  
+  
+  
+    
+      project-icon="https://docs.cloud.google.com/_static/clouddocs/images/icons/categories/security-and-identity-color.svg"
+    
+  
+  
+  
+  >
+
+  <button>
+  
+    Need to tell us more?
+  
+  </button>
+</devsite-feedback>
+    </template>
+  
+  
+    <template class="devsite-content-data-template">
+      [[["Easy to understand","easyToUnderstand","thumb-up"],["Solved my problem","solvedMyProblem","thumb-up"],["Other","otherUp","thumb-up"]],[["Hard to understand","hardToUnderstand","thumb-down"],["Incorrect information or sample code","incorrectInformationOrSampleCode","thumb-down"],["Missing the information/samples I need","missingTheInformationSamplesINeed","thumb-down"],["Other","otherDown","thumb-down"]],["Last updated 2026-07-07 UTC."],[],[]]
+    </template>
+  
+</div>
+            
+          </devsite-content>
+        </main>
+        <devsite-footer-promos class="devsite-footer">
+          
+            
+          
+        </devsite-footer-promos>
+        <devsite-footer-linkboxes class="devsite-footer">
+          
+            
+<nav class="devsite-footer-linkboxes nocontent"
+     aria-label="Footer links"
+     data-nosnippet>
+  
+  <ul class="devsite-footer-linkboxes-list">
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Products and pricing</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/products/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 1)"
+            track-name="see all products"track-metadata-module="footer"track-metadata-eventDetail="cloud.google.com/products/"track-type="footer link"track-metadata-child_headline="products and pricing"track-metadata-position="footer">
+            
+          
+            See all products
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/pricing/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 2)"
+            track-metadata-module="footer"track-metadata-eventDetail="cloud.google.com/pricing/"track-type="footer link"track-metadata-child_headline="products and pricing"track-metadata-position="footer"track-name="google cloud pricing">
+            
+          
+            Google Cloud pricing
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/marketplace/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 3)"
+            track-name="google cloud marketplace"track-metadata-module="footer"track-metadata-eventDetail="cloud.google.com/marketplace/"track-metadata-child_headline="resources"track-type="footer link"track-metadata-position="footer">
+            
+          
+            Google Cloud Marketplace
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/contact/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 4)"
+            track-name="contact sales"track-metadata-position="footer"track-metadata-child_headline="engage"track-type="footer link"track-metadata-eventDetail="cloud.google.com/contact/"track-metadata-module="footer">
+            
+              
+              
+            
+          
+            Contact sales
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Support</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//discuss.google.dev/c/google-cloud/14/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 1)"
+            track-metadata-position="footer"rel="noopener"track-type="footer link"track-metadata-child_headline="engage"track-metadata-eventDetail="www.googlecloudcommunity.com"track-metadata-module="footer"track-name="google cloud community"target="_blank">
+            
+          
+            Community forums
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/support-hub/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 2)"
+            track-name="support"track-metadata-child_headline="resources"track-type="footer link"track-metadata-position="footer"track-metadata-module="footer"track-metadata-eventDetail="cloud.google.com/support-hub/">
+            
+          
+            Support
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//docs.cloud.google.com/release-notes"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 3)"
+            track-name="release notes"track-metadata-eventDetail="cloud.google.com/release-notes/"track-metadata-module="footer"track-metadata-position="footer"track-type="footer link"track-metadata-child_headline="resources">
+            
+          
+            Release Notes
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//status.cloud.google.com"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 4)"
+            track-type="footer link"track-metadata-child_headline="resources"track-metadata-position="footer"track-metadata-module="footer"track-metadata-eventDetail="status.cloud.google.com"track-name="system status"target="_blank">
+            
+              
+              
+            
+          
+            System status
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Resources</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//github.com/googlecloudPlatform/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 1)"
+            track-metadata-eventDetail="github.com/googlecloudPlatform/"track-metadata-module="footer"track-metadata-position="footer"track-type="footer link"track-metadata-child_headline="resources"track-name="github">
+            
+          
+            GitHub
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/docs/get-started/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 2)"
+            track-name="google cloud quickstarts"track-metadata-position="footer"track-type="footer link"track-metadata-child_headline="resources"track-metadata-eventDetail="cloud.google.com/docs/get-started/"track-metadata-module="footer">
+            
+          
+            Getting Started with Google Cloud
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/docs/samples"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 3)"
+            track-metadata-eventDetail="cloud.google.com/docs/samples"track-metadata-module="footer"track-metadata-position="footer"track-type="footer link"track-metadata-child_headline="resources"track-name="code samples">
+            
+          
+            Code samples
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/architecture/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 4)"
+            track-name="cloud architecture center"track-metadata-eventDetail="cloud.google.com/architecture/"track-metadata-module="footer"track-metadata-position="footer"track-type="footer link"track-metadata-child_headline="resources">
+            
+          
+            Cloud Architecture Center
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/learn/training/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 5)"
+            track-name="training"track-metadata-position="footer"track-metadata-child_headline="resources"track-type="footer link"track-metadata-eventDetail="cloud.google.com/learn/training/"track-metadata-module="footer">
+            
+              
+              
+            
+          
+            Training and Certification
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Engage</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/blog/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 1)"
+            track-name="blog"track-metadata-eventDetail="cloud.google.com/blog/"track-metadata-module="footer"track-metadata-position="footer"track-type="footer link"track-metadata-child_headline="engage">
+            
+          
+            Blog
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//cloud.google.com/events/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 2)"
+            track-metadata-eventDetail="cloud.google.com/events/"track-metadata-module="footer"track-metadata-position="footer"track-metadata-child_headline="engage"track-type="footer link"track-name="events">
+            
+          
+            Events
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//x.com/googlecloud"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 3)"
+            track-metadata-position="footer"rel="noopener"track-type="footer link"track-metadata-child_headline="engage"track-metadata-eventDetail="x.com/googlecloud"track-metadata-module="footer"track-name="follow on x"target="_blank">
+            
+          
+            X (Twitter)
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//www.youtube.com/googlecloud"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 4)"
+            track-type="footer link"track-metadata-child_headline="engage"rel="noopener"track-metadata-position="footer"track-metadata-module="footer"track-metadata-eventDetail="www.youtube.com/googlecloud"track-name="google cloud on youtube"target="_blank">
+            
+          
+            Google Cloud on YouTube
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="//www.youtube.com/googlecloudplatform"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 5)"
+            track-name="google cloud tech on youtube"target="_blank"track-metadata-eventDetail="www.youtube.com/googlecloudplatform"track-metadata-module="footer"rel="noopener"track-metadata-position="footer"track-type="footer link"track-metadata-child_headline="engage">
+            
+              
+              
+            
+          
+            Google Cloud Tech on YouTube
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+  </ul>
+  
+</nav>
+          
+        </devsite-footer-linkboxes>
+        <devsite-footer-utility class="devsite-footer">
+          
+            
+
+<div class="devsite-footer-utility nocontent" data-nosnippet>
+  
+
+  
+  <nav class="devsite-footer-utility-links" aria-label="Utility links">
+    
+    <ul class="devsite-footer-utility-list">
+      
+      <li class="devsite-footer-utility-item
+                 ">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="//about.google/"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer About Google link"
+         
+           target="_blank"
+         
+           track-name="about google"
+         
+           track-metadata-position="footer"
+         
+           track-type="footer link"
+         
+           track-metadata-eventDetail="//about.google/"
+         
+           track-metadata-module="utility footer"
+         >
+          About Google
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 devsite-footer-privacy-link">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="//policies.google.com/privacy"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Privacy link"
+         
+           track-metadata-eventDetail="//policies.google.com/privacy"
+         
+           track-metadata-module="utility footer"
+         
+           track-metadata-position="footer"
+         
+           track-type="footer link"
+         
+           track-name="privacy"
+         
+           target="_blank"
+         >
+          Privacy
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 ">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="//policies.google.com/terms?hl=en"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Site terms link"
+         
+           track-name="site terms"
+         
+           target="_blank"
+         
+           track-type="footer link"
+         
+           track-metadata-position="footer"
+         
+           track-metadata-module="utility footer"
+         
+           track-metadata-eventDetail="//www.google.com/intl/en/policies/terms/regional.html"
+         >
+          Site terms
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 ">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="//cloud.google.com/product-terms"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Google Cloud terms link"
+         
+           track-metadata-position="footer"
+         
+           track-type="footer link"
+         
+           track-metadata-eventDetail="//cloud.google.com/product-terms"
+         
+           track-metadata-module="utility footer"
+         
+           track-name="google cloud terms"
+         >
+          Google Cloud terms
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 glue-cookie-notification-bar-control">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="#"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Manage cookies link"
+         
+           track-name="Manage cookies"
+         
+           aria-hidden="true"
+         
+           track-metadata-eventDetail="#"
+         
+           track-metadata-module="utility footer"
+         
+           track-metadata-position="footer"
+         
+           track-type="footer link"
+         >
+          Manage cookies
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 devsite-footer-carbon-button">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="//cloud.google.com/sustainability"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Our third decade of climate action: join us link"
+         
+           track-metadata-eventDetail="/sustainability/"
+         
+           track-metadata-module="utility footer"
+         
+           track-metadata-position="footer"
+         
+           track-type="footer link"
+         
+           track-name="Our third decade of climate action: join us"
+         >
+          Our third decade of climate action: join us
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 devsite-footer-utility-button">
+        
+        <span class="devsite-footer-utility-description">Sign up for the Google Cloud newsletter</span>
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="//cloud.google.com/newsletter/"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Subscribe link"
+         
+           track-name="subscribe"
+         
+           track-metadata-position="footer"
+         
+           track-type="footer link"
+         
+           track-metadata-eventDetail="/newsletter/"
+         
+           track-metadata-module="utility footer"
+         >
+          Subscribe
+        </a>
+        
+      </li>
+      
+    </ul>
+    
+    
+<devsite-language-selector>
+  <ul role="presentation">
+    
+    
+    <li role="presentation">
+      <a role="menuitem" lang="en"
+        >English</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="de"
+        >Deutsch</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es"
+        >Español</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es_419"
+        >Español – América Latina</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="fr"
+        >Français</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="id"
+        >Indonesia</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="it"
+        >Italiano</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pt"
+        >Português</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pt_br"
+        >Português – Brasil</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="he"
+        >עברית</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_cn"
+        >中文 – 简体</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_tw"
+        >中文 – 繁體</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ja"
+        >日本語</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ko"
+        >한국어</a>
+    </li>
+    
+  </ul>
+</devsite-language-selector>
+
+  </nav>
+</div>
+          
+        </devsite-footer-utility>
+        <devsite-panel>
+          
+        </devsite-panel>
+        
+      </section>
+      </section>
+    <devsite-sitemask></devsite-sitemask>
+    <devsite-snackbar></devsite-snackbar>
+    <devsite-tooltip ></devsite-tooltip>
+    <devsite-heading-link></devsite-heading-link>
+    <devsite-analytics>
+      
+        <script type="application/json" analytics>[]</script>
+<script type="application/json" tag-management>{&#34;at&#34;: &#34;True&#34;, &#34;ga4&#34;: [], &#34;ga4p&#34;: [], &#34;gtm&#34;: [{&#34;id&#34;: &#34;GTM-5CVQBG&#34;, &#34;purpose&#34;: 1}], &#34;parameters&#34;: {&#34;internalUser&#34;: &#34;False&#34;, &#34;language&#34;: {&#34;machineTranslated&#34;: &#34;False&#34;, &#34;requested&#34;: &#34;en&#34;, &#34;served&#34;: &#34;en&#34;}, &#34;pageType&#34;: &#34;article&#34;, &#34;projectName&#34;: &#34;VPC Service Controls&#34;, &#34;signedIn&#34;: &#34;False&#34;, &#34;tenant&#34;: &#34;clouddocs&#34;, &#34;recommendations&#34;: {&#34;sourcePage&#34;: &#34;&#34;, &#34;sourceType&#34;: 0, &#34;sourceRank&#34;: 0, &#34;sourceIdenticalDescriptions&#34;: 0, &#34;sourceTitleWords&#34;: 0, &#34;sourceDescriptionWords&#34;: 0, &#34;experiment&#34;: &#34;&#34;}, &#34;experiment&#34;: {&#34;ids&#34;: &#34;&#34;}}}</script>
+      
+    </devsite-analytics>
+    
+      <devsite-badger></devsite-badger>
+    
+    
+    <cloudx-user></cloudx-user>
+
+
+
+  <cloudx-free-trial-eligible-store freeTrialEligible="true"></cloudx-free-trial-eligible-store>
+
+    
+<script nonce="b7Fof2i2X0qmR97CQzTvk3k6gOK0Rl">
+  
+  (function(d,e,v,s,i,t,E){d['GoogleDevelopersObject']=i;
+    t=e.createElement(v);t.async=1;t.src=s;E=e.getElementsByTagName(v)[0];
+    E.parentNode.insertBefore(t,E);})(window, document, 'script',
+    'https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/js/app_loader.js', '[39,"en",null,"/js/devsite_app_module.js","https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd","https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs","https://clouddocs-dot-devsite-v2-prod.appspot.com",null,null,["/_pwa/clouddocs/manifest.json","https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/images/video-placeholder.svg","https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/favicons/onecloud/favicon.ico","https://www.gstatic.com/devrel-devsite/prod/v3be1e30159846e100d05529400567b663b9f8b605137438a2f417848d68359dd/clouddocs/images/lockup_full_color.svg","https://fonts.googleapis.com/css?family=Google+Sans:400,500|Roboto:400,400italic,500,500italic,700,700italic|Roboto+Mono:400,500,700&display=swap"],1,null,[1,6,8,12,14,17,21,25,50,52,63,70,75,76,80,87,91,92,93,97,98,100,101,102,103,104,105,107,108,109,110,112,113,117,118,120,122,124,125,126,127,129,130,131,132,133,134,135,136,138,140,141,147,148,149,151,152,156,157,158,159,161,163,164,168,169,170,179,180,182,183,186,191,193,196],"AIzaSyAP-jjEJBzmIyKR4F-3XITp8yM9T1gEEI8","AIzaSyB6xiKGDR5O3Ak2okS4rLkauxGUG7XP0hg","docs.cloud.google.com","AIzaSyAQk0fBONSGUqCNznf6Krs82Ap1-NV6J4o","AIzaSyCCxcqdrZ_7QMeLCRY20bh_SXdAYqy70KY",null,null,null,["Search__enable_suggestions_from_borg","DevPro__remove_eu_tax_intake_form","MiscFeatureFlags__enable_firebase_utm","MiscFeatureFlags__enable_view_transitions","Search__enable_dynamic_content_confidential_banner","Profiles__enable_completequiz_endpoint","Cloud__cache_serialized_dynamic_content","MiscFeatureFlags__developers_footer_image","MiscFeatureFlags__enable_appearance_cookies","TpcFeatures__enable_unmirrored_page_left_nav","MiscFeatureFlags__enable_explicit_template_dependencies","Cloud__enable_llm_concierge_chat","Profiles__enable_user_type","MiscFeatureFlags__enable_project_variables","DevPro__enable_devsite_captcha","Profiles__enable_public_developer_profiles","MiscFeatureFlags__remove_cross_domain_tracking_params","Analytics__enable_devpro_interaction_logging","DevPro__enable_g1_integration","Profiles__enable_stripe_subscription_management","Concierge__enable_pushui","DevPro__enable_google_payments_buyflow","Cloud__enable_legacy_calculator_redirect","CloudShell__cloud_shell_button","MiscFeatureFlags__enable_framebox_badge_methods","Profiles__enable_page_saving","Cloud__enable_cloud_dlp_service","Profiles__enable_profile_collections","Concierge__enable_devsite_llm_tools","Search__enable_ai_search_summaries_for_all","BookNav__enable_tenant_cache_key","Concierge__enable_remove_info_panel_tags","Profiles__enable_recognition_badges","MiscFeatureFlags__enable_dark_theme","Profiles__enable_targeted_hero","Cloud__enable_free_trial_server_call","TpcFeatures__proxy_prod_host","DevPro__enable_nvidia_credits_card","DevPro__enable_embed_profile_creation","Profiles__require_profile_eligibility_for_signin","Cloud__enable_cloud_shell","Profiles__enable_complete_playlist_endpoint","OnSwitch__enable","Profiles__enable_join_program_group_endpoint","Cloud__fast_free_trial","Profiles__enable_completecodelab_endpoint","Cloud__enable_cloud_shell_fte_user_flow","SignIn__enable_l1_signup_flow","Profiles__enable_callout_notifications","DevPro__enable_firebase_workspaces_card","Search__enable_page_map","AIStudioInteractionsToggle__interactions_are_default","DevPro__enable_cloud_innovators_plus","CloudShell__cloud_code_overflow_menu","EngEduTelemetry__enable_engedu_telemetry","DevPro__enable_vertex_credit_card","Profiles__enable_dashboard_curated_recommendations","DevPro__enable_developer_subscriptions","Profiles__enable_playlist_community_acl","DevPro__enable_free_benefits","MiscFeatureFlags__fix_lower_breadcrumbs","MiscFeatureFlags__gdp_dashboard_reskin_enabled","Profiles__enable_developer_profiles_callout","Profiles__enable_developer_profile_pages_as_content","DevPro__enable_code_assist","MiscFeatureFlags__enable_variable_operator_index_yaml","DevPro__enable_credits_banner","MiscFeatureFlags__enable_variable_operator","Concierge__enable_actions_menu","DevPro__enable_devpro_offers","DevPro__enable_google_one_card","DevPro__enable_g1_ineligible_redirect","Profiles__enable_auto_apply_credits","Profiles__enable_purchase_prompts","Experiments__reqs_query_experiments","Cloud__enable_cloudx_experiment_ids","Profiles__enable_awarding_url","DevPro__enable_enterprise","Search__enable_ai_eligibility_checks","Profiles__enable_developer_profile_benefits_ui_redesign","Analytics__enable_clearcut_logging","MiscFeatureFlags__developers_footer_dark_image"],null,null,"AIzaSyBLEMok-5suZ67qRPzx0qUtbnLmyT_kCVE","https://developerscontentserving-pa.clients6.google.com","AIzaSyCM4QpTRSqP5qI4Dvjt4OAScIN8sOUlO-k","https://developerscontentsearch-pa.clients6.google.com",1,4,1,"https://developerprofiles-pa.clients6.google.com",[39,"clouddocs","Google Cloud Documentation","docs.cloud.google.com",null,"clouddocs-dot-devsite-v2-prod.appspot.com",null,null,[1,1,null,null,null,null,null,null,null,null,null,[1],null,null,null,null,null,1,[1],[null,null,null,[1,20],"/terms/recommendations"],[1],null,[1],[1,null,1],null,[1]],null,[54,null,null,null,null,null,"/images/lockup_full_color.svg","/images/favicons/onecloud/apple-icon.png",null,null,null,1,1,1,1,null,[],null,null,[[],[],[],[],[],[],[],[]],null,1,null,null,null,"/images/lockup_dark_theme.svg",[]],[],null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,[6,1,14,15,22,23,29,37],null,[[null,null,null,null,null,null,[1,[["docType","Choose a content type",[["ApiReference",null,null,null,null,null,null,null,null,"API reference"],["Sample",null,null,null,null,null,null,null,null,"Code sample"],["ReferenceArchitecture",null,null,null,null,null,null,null,null,"Reference architecture"],["Tutorial",null,null,null,null,null,null,null,null,"Tutorial"]]],["category","Choose a topic",[["AiAndMachineLearning",null,null,null,null,null,null,null,null,"Artificial intelligence and machine learning (AI/ML)"],["ApplicationDevelopment",null,null,null,null,null,null,null,null,"Application development"],["BigDataAndAnalytics",null,null,null,null,null,null,null,null,"Big data and analytics"],["Compute",null,null,null,null,null,null,null,null,"Compute"],["Containers",null,null,null,null,null,null,null,null,"Containers"],["Databases",null,null,null,null,null,null,null,null,"Databases"],["HybridCloud",null,null,null,null,null,null,null,null,"Hybrid and multicloud"],["LoggingAndMonitoring",null,null,null,null,null,null,null,null,"Logging and monitoring"],["Migrations",null,null,null,null,null,null,null,null,"Migrations"],["Networking",null,null,null,null,null,null,null,null,"Networking"],["SecurityAndCompliance",null,null,null,null,null,null,null,null,"Security and compliance"],["Serverless",null,null,null,null,null,null,null,null,"Serverless"],["Storage",null,null,null,null,null,null,null,null,"Storage"]]]]]],[1],null,1],[[null,null,null,null,null,["GTM-5CVQBG"],null,null,null,null,null,[["GTM-5CVQBG",2]],1],null,null,null,null,null,1],"mwETRvWii0eU5NUYprb0Y9z5GVbc",4],null,"pk_live_5170syrHvgGVmSx9sBrnWtA5luvk9BwnVcvIi7HizpwauFG96WedXsuXh790rtij9AmGllqPtMLfhe2RSwD6Pn38V00uBCydV4m",1,null,"https://developerscontentinsights-pa.clients6.google.com","AIzaSyCg-ZUslalsEbXMfIo9ZP8qufZgo3LSBDU","AIzaSyDxT0vkxnY_KeINtA4LSePJO-4MAZPMRsE","https://developers.clients6.google.com",null,null,"AIzaSyBQom12tzI-rybN7Sf-KfeL4nwm-Rf7PmI\n",null,null,"https://developers.googleapis.com"]')
+  
+</script>
+
+    <devsite-a11y-announce></devsite-a11y-announce>
+  </body>
+</html>

@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-config
+  namespace: psc-demo
+  labels:
+    app: db-app
+    component: config
+data:
+  # 数据库连接配置
+  DB_HOST: "PSC_ENDPOINT_IP"  # 将被替换为实际的 PSC 端点 IP
+  DB_PORT: "3306"
+  DB_NAME: "appdb"
+  DB_USER: "appuser"
+  
+  # 连接池配置
+  DB_MAX_CONNECTIONS: "10"
+  DB_MAX_IDLE_CONNECTIONS: "5"
+  DB_CONNECTION_MAX_LIFETIME: "300s"
+  DB_CONNECTION_TIMEOUT: "30s"
+  
+  # 应用配置
+  APP_PORT: "8080"
+  LOG_LEVEL: "info"
+  ENVIRONMENT: "production"
+  
+  # 健康检查配置
+  HEALTH_CHECK_INTERVAL: "30s"
+  READINESS_PROBE_TIMEOUT: "5s"

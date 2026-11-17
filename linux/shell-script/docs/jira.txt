@@ -1,0 +1,71 @@
+#!/bin/bash
+
+# Jira API settings
+JIRA_BASE_URL="https://your-jira-instance.com"
+JIRA_USERNAME="your-jira-username"
+JIRA_PASSWORD="your-jira-password"
+
+# JQL query to retrieve issues
+JQL="project = MYPROJECT AND updated > -1d ORDER BY updated DESC"
+
+# Output file
+OUTPUT_FILE="output.csv"
+
+# Authenticate with Jira
+AUTH=$(echo -n "${JIRA_USERNAME}:${JIRA_PASSWORD}" | base64)
+
+# Make the API request to Jira
+ISSUES=$(curl -sSL -H "Authorization: Basic ${AUTH}" "${JIRA_BASE_URL}/rest/api/latest/search?jql=${JQL}&fields=*")
+
+# Parse the JSON response and extract the issues array
+ISSUES_ARRAY=$(echo "${ISSUES}" | jq -r '.issues[]')
+
+# Write issues to CSV file
+echo "Issue Key,Summary,Description,Status,Assignee" > "${OUTPUT_FILE}"
+for ISSUE in ${ISSUES_ARRAY}; do
+    ISSUE_KEY=$(echo "${ISSUE}" | jq -r '.key')
+    SUMMARY=$(echo "${ISSUE}" | jq -r '.fields.summary')
+    DESCRIPTION=$(echo "${ISSUE}" | jq -r '.fields.description // empty')
+    STATUS=$(echo "${ISSUE}" | jq -r '.fields.status.name')
+    ASSIGNEE=$(echo "${ISSUE}" | jq -r '.fields.assignee.name // empty')
+    echo "${ISSUE_KEY},${SUMMARY},${DESCRIPTION},${STATUS},${ASSIGNEE}" >> "${OUTPUT_FILE}"
+done
+
+
+import requests
+import csv
+
+# Jira API settings
+JIRA_BASE_URL = "https://your-jira-instance.com"
+JIRA_USERNAME = "your-jira-username"
+JIRA_PASSWORD = "your-jira-password"
+
+# JQL query to retrieve issues
+JQL = "project = MYPROJECT AND updated > -1d ORDER BY updated DESC"
+
+# Output file
+OUTPUT_FILE = "output.csv"
+
+# Authenticate with Jira
+auth = (JIRA_USERNAME, JIRA_PASSWORD)
+
+# Make the API request to Jira
+url = f"{JIRA_BASE_URL}/rest/api/latest/search"
+params = {"jql": JQL, "fields": "*all"}
+response = requests.get(url, auth=auth, params=params)
+
+# Parse the JSON response and extract the issues array
+issues = response.json()["issues"]
+
+# Write issues to CSV file
+with open(OUTPUT_FILE, "w", newline="") as csvfile:
+    writer = csv.writer(csvfile)
+    writer.writerow(["Issue Key", "Summary", "Description", "Status", "Assignee"])
+    for issue in issues:
+        issue_key = issue["key"]
+        summary = issue["fields"]["summary"]
+        description = issue["fields"].get("description", "")
+        status = issue["fields"]["status"]["name"]
+        assignee = issue["fields"].get("assignee", {}).get("name", "")
+        writer.writerow([issue_key, summary, description, status, assignee])
+

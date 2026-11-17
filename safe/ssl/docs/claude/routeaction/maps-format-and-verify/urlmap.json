@@ -1,0 +1,49 @@
+{
+  "name": "abjx-env-uk-lex-poc-urlmap",
+  "description": "Regional URL map with a default backend and a host-specific rewrite for the springboot app entrypoint.",
+  "defaultService": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/abjx-abjx-lex-default-bs",
+  "hostRules": [
+    {
+      "hosts": [
+        "springboot-app.aibang-id.uk.aibang"
+      ],
+      "pathMatcher": "springboot-rewrite-matcher"
+    },
+    {
+      "hosts": [
+        "env-shortname.gcp.google.aibang"
+      ],
+      "pathMatcher": "short-host-matcher"
+    }
+  ],
+  "pathMatchers": [
+    {
+      "name": "springboot-rewrite-matcher",
+      "defaultService": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/lex-terminal-po-backend-service",
+      "defaultRouteAction": {
+        "urlRewrite": {
+          "hostRewrite": "env-shortname.gcp.google.aibang",
+          "pathPrefixRewrite": "/springboot-app"
+        }
+      }
+    },
+    {
+      "name": "short-host-matcher",
+      "defaultService": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/abjx-abjx-lex-default-bs"
+    }
+  ],
+  "tests": [
+    {
+      "description": "springboot host should route to the terminal backend service",
+      "host": "springboot-app.aibang-id.uk.aibang",
+      "path": "/actuator/health",
+      "service": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/lex-terminal-po-backend-service"
+    },
+    {
+      "description": "short host should use the default backend service",
+      "host": "env-shortname.gcp.google.aibang",
+      "path": "/",
+      "service": "https://www.googleapis.com/compute/v1/projects/projectid/regions/europe-west2/backendServices/abjx-abjx-lex-default-bs"
+    }
+  ]
+}

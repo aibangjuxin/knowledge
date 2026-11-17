@@ -1,0 +1,124 @@
+<svg width="1000" height="850" viewBox="0 0 1000 850" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Background Gradients -->
+    <linearGradient id="mgmtGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2d3436;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e2124;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f9f9fb;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#eff1f5;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Shadow Effects -->
+    <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3" />
+      <feOffset dx="2" dy="4" result="offsetblur" />
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.15" />
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Marker for Arrows -->
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#636e72" />
+    </marker>
+    <marker id="arrowheadBold" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2d3436" />
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="850" fill="url(#bgGradient)" />
+
+  <!-- Title Section -->
+  <text x="50" y="50" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="800" fill="#2d3436">Gloo Mesh Enterprise Architecture Overview</text>
+  <text x="50" y="80" font-family="Inter, sans-serif" font-size="14" fill="#636e72">Maitreya Premium Visual Style | High-Fidelity Infrastructure Map</text>
+
+  <!-- === Zone 1: Management Cluster === -->
+  <rect x="50" y="110" width="900" height="180" rx="20" fill="#2d3436" filter="url(#dropShadow)" />
+  <text x="70" y="145" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#ffffff">🧠 Management Cluster (Zone 1)</text>
+  
+  <!-- Management Components -->
+  <rect x="70" y="165" width="200" height="90" rx="12" fill="#3d4446" stroke="#535c5f" stroke-width="1" />
+  <text x="170" y="205" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#ffffff" text-anchor="middle">⚙️ mgmt-server</text>
+  <text x="170" y="225" font-family="Inter, sans-serif" font-size="11" fill="#b2bec3" text-anchor="middle">(CRD Translation)</text>
+
+  <rect x="290" y="165" width="200" height="90" rx="12" fill="#3d4446" stroke="#535c5f" stroke-width="1" />
+  <text x="390" y="205" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#ffffff" text-anchor="middle">📊 Gloo Mesh UI</text>
+  <text x="390" y="225" font-family="Inter, sans-serif" font-size="11" fill="#b2bec3" text-anchor="middle">(Global Dashboard)</text>
+
+  <rect x="510" y="165" width="200" height="90" rx="12" fill="#3d4446" stroke="#535c5f" stroke-width="1" />
+  <text x="610" y="205" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#ffffff" text-anchor="middle">📜 RootTrustPolicy</text>
+  <text x="610" y="225" font-family="Inter, sans-serif" font-size="11" fill="#b2bec3" text-anchor="middle">(Unified CA)</text>
+
+  <rect x="730" y="165" width="200" height="90" rx="12" fill="#3d4446" stroke="#535c5f" stroke-width="1" />
+  <text x="830" y="205" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#ffffff" text-anchor="middle">📡 Telemetry</text>
+  <text x="830" y="225" font-family="Inter, sans-serif" font-size="11" fill="#b2bec3" text-anchor="middle">(OpenTelemetry)</text>
+
+  <!-- === Relay Communication === -->
+  <path d="M 500 290 L 500 340" stroke="#636e72" stroke-width="3" stroke-dasharray="8,4" marker-end="url(#arrowhead)" />
+  <text x="510" y="320" font-family="Inter, sans-serif" font-size="12" font-weight="700" fill="#2d3436">gRPC Relay (Bi-directional)</text>
+
+  <!-- === Zone: Workload Cluster === -->
+  <rect x="50" y="350" width="900" height="400" rx="20" fill="#ffffff" stroke="#dfe4ea" stroke-width="2" filter="url(#dropShadow)" />
+  <text x="70" y="385" font-family="Inter, sans-serif" font-size="16" font-weight="700" fill="#2d3436">⚡ Workload Cluster</text>
+
+  <!-- Mesh Infrastructure (Zone 3) -->
+  <rect x="70" y="410" width="410" height="100" rx="15" fill="#f1f2f6" stroke="#00b894" stroke-width="2" />
+  <text x="85" y="435" font-family="Inter, sans-serif" font-size="14" font-weight="700" fill="#009a7d">🟢 Mesh Infrastructure (Zone 3)</text>
+  
+  <rect x="85" y="445" width="185" height="50" rx="8" fill="#00b894" filter="url(#dropShadow)" />
+  <text x="177" y="475" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#ffffff" text-anchor="middle">📡 gloo-mesh-agent</text>
+
+  <rect x="280" y="445" width="185" height="50" rx="8" fill="#00b894" filter="url(#dropShadow)" />
+  <text x="372" y="475" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#ffffff" text-anchor="middle">🎛️ istiod (local)</text>
+
+  <!-- Entry Points (Zone 2) -->
+  <rect x="510" y="410" width="410" height="100" rx="15" fill="#f1f2f6" stroke="#6c5ce7" stroke-width="2" />
+  <text x="525" y="435" font-family="Inter, sans-serif" font-size="14" font-weight="700" fill="#5341d6">🟣 Gateways (Zone 2)</text>
+  
+  <rect x="525" y="445" width="380" height="50" rx="8" fill="#6c5ce7" filter="url(#dropShadow)" />
+  <text x="715" y="475" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#ffffff" text-anchor="middle">🚪 Gloo Gateway (Envoy-based)</text>
+
+  <!-- Workload Domains (Zone 4) -->
+  <rect x="70" y="530" width="850" height="190" rx="15" fill="#fff9eb" stroke="#fdcb6e" stroke-width="2" />
+  <text x="85" y="555" font-family="Inter, sans-serif" font-size="14" font-weight="700" fill="#d4a84e">🟡 Workload Domains (Zone 4)</text>
+
+  <rect x="85" y="575" width="260" height="120" rx="10" fill="#fdcb6e" filter="url(#dropShadow)" />
+  <text x="215" y="620" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="#333" text-anchor="middle">🟢 team-a-runtime</text>
+  <text x="215" y="640" font-family="Inter, sans-serif" font-size="11" fill="#4b4b4b" text-anchor="middle">(Pod + Sidecar)</text>
+
+  <rect x="365" y="575" width="260" height="120" rx="10" fill="#fdcb6e" filter="url(#dropShadow)" />
+  <text x="495" y="620" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="#333" text-anchor="middle">🔵 team-b-runtime</text>
+  <text x="495" y="640" font-family="Inter, sans-serif" font-size="11" fill="#4b4b4b" text-anchor="middle">(Pod + Sidecar)</text>
+
+  <rect x="645" y="575" width="260" height="120" rx="10" fill="#fdcb6e" filter="url(#dropShadow)" />
+  <text x="775" y="620" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="#333" text-anchor="middle">🟠 team-c-runtime</text>
+  <text x="775" y="640" font-family="Inter, sans-serif" font-size="11" fill="#4b4b4b" text-anchor="middle">(Pod + Sidecar)</text>
+
+  <!-- Connections -->
+  <!-- Agent to Istiod -->
+  <path d="M 270 470 L 280 470" stroke="#009a7d" stroke-width="2" marker-end="url(#arrowhead)" />
+  
+  <!-- Istiod to Gateway -->
+  <path d="M 465 470 L 525 470" stroke="#636e72" stroke-width="2" stroke-dasharray="4,2" marker-end="url(#arrowhead)" />
+  <text x="475" y="460" font-family="Inter, sans-serif" font-size="10" fill="#2d3436">xDS</text>
+
+  <!-- Istiod to Workloads -->
+  <path d="M 372 495 L 372 575" stroke="#636e72" stroke-width="2" stroke-dasharray="4,2" marker-end="url(#arrowhead)" />
+  <text x="375" y="540" font-family="Inter, sans-serif" font-size="10" fill="#2d3436">xDS + SDS</text>
+
+  <!-- Gateway to Workloads (Traffic) -->
+  <path d="M 715 495 L 715 575" stroke="#2d3436" stroke-width="4" marker-end="url(#arrowheadBold)" />
+  <text x="720" y="540" font-family="Inter, sans-serif" font-size="12" font-weight="800" fill="#2d3436">mTLS Traffic</text>
+
+  <!-- === Note Section === -->
+  <rect x="50" y="770" width="900" height="60" rx="10" fill="#ffffff" stroke="#e17055" stroke-width="3" />
+  <text x="70" y="805" font-family="Inter, sans-serif" font-size="14" font-weight="800" fill="#e17055">Maitreya 架构见解：'浓缩铀'级别核心 —— 统一信任根分发 | Relay 隔离架构 | 0 感知 mTLS 注入</text>
+
+</svg>

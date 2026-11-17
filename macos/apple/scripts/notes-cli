@@ -1,0 +1,347 @@
+#!/opt/homebrew/bin/node
+
+const { exec } = require("child_process");
+const { promisify } = require("util");
+const fs = require("fs").promises;
+const path = require("path");
+const execAsync = promisify(exec);
+
+class NotesManager {
+  constructor() {
+    this.configPath = path.join(process.env.HOME, ".notes-cli-config.json");
+  }
+
+  async executeAppleScript(script) {
+    try {
+      // 清理脚本：移除多余的空白和换行
+      const cleanScript = script.replace(/\s+/g, " ").trim();
+      const { stdout, stderr } = await execAsync(
+        `osascript -e '${cleanScript}'`
+      );
+      if (stderr) console.error("AppleScript error:", stderr);
+      return stdout.trim();
+    } catch (error) {
+      console.error("Error executing AppleScript:", error.message);
+      return null;
+    }
+  }
+
+  async searchNotes(query) {
+    const script = `tell application "Notes" to return name of every note whose name contains "${query}" or body contains "${query}"`;
+
+    const result = await this.executeAppleScript(script);
+    if (result) {
+      console.log("🔍 Search Results:");
+      const notes = result.split(", ").filter((note) => note.trim());
+      notes.forEach((note, index) => {
+        console.log(`${index + 1}. ${note.trim()}`);
+      });
+      console.log(`\nFound ${notes.length} note(s) containing "${query}"`);
+    }
+    return result;
+  }
+
+  async createNote(title, body = "") {
+    // 转义特殊字符
+    const escapedTitle = title.replace(/"/g, '\\"');
+    const escapedBody = body
+      .replace(/\\/g, "\\\\") // 转义反斜杠
+      .replace(/"/g, '\\"') // 转义双引号
+      .replace(/\n/g, "\\n") // 转义换行符
+      .replace(/\r/g, "\\r") // 转义回车符
+      .replace(/\t/g, "\\t"); // 转义制表符
+
+    const script = `tell application "Notes" to make new note with properties {name:"${escapedTitle}", body:"${escapedBody}"}`;
+
+    const result = await this.executeAppleScript(script);
+    if (result !== null) {
+      console.log(`✅ Note created: "${title}"`);
+    } else {
+      console.log(`❌ Failed to create note: "${title}"`);
+    }
+    return result;
+  }
+
+  async createNoteFromFile(title, filePath) {
+    try {
+      const content = await fs.readFile(filePath, "utf8");
+      console.log(`📄 Reading file: ${filePath}`);
+      console.log(`📊 Content length: ${content.length} characters`);
+
+      // 对于大文件或包含复杂内容的文件，使用分步方法
+      if (
+        content.length > 1000 ||
+        content.includes('"') ||
+        content.includes("\\")
+      ) {
+        console.log(`⚠️  Large or complex file detected, using safe method...`);
+        return await this.createNoteFromFileSafe(title, filePath, content);
+      }
+
+      return await this.createNote(title, content);
+    } catch (error) {
+      console.error(`❌ Error reading file ${filePath}:`, error.message);
+      return null;
+    }
+  }
+
+  async createNoteFromFileSafe(title, filePath, content) {
+    try {
+      // 方法1: 先创建空笔记，再更新内容
+      const escapedTitle = title.replace(/"/g, '\\"');
+
+      // 创建空笔记
+      const createScript = `tell application "Notes" to make new note with properties {name:"${escapedTitle}", body:"Loading content from ${filePath}..."}`;
+      let result = await this.executeAppleScript(createScript);
+
+      if (result === null) {
+        console.log(`❌ Failed to create initial note`);
+        return null;
+      }
+
+      console.log(`✅ Created initial note: "${title}"`);
+
+      // 分块更新内容（每次最多500字符）
+      const chunkSize = 500;
+      let updatedContent = `File: ${filePath}\nContent:\n\n`;
+
+      for (let i = 0; i < content.length; i += chunkSize) {
+        const chunk = content.slice(i, i + chunkSize);
+        updatedContent += chunk;
+
+        // 转义内容用于 AppleScript
+        const escapedContent = updatedContent
+          .replace(/\\/g, "\\\\")
+          .replace(/"/g, '\\"')
+          .replace(/\n/g, "\\n")
+          .replace(/\r/g, "\\r")
+          .replace(/\t/g, "\\t");
+
+        const updateScript = `tell application "Notes" to set body of first note whose name is "${escapedTitle}" to "${escapedContent}"`;
+
+        try {
+          await this.executeAppleScript(updateScript);
+          console.log(
+            `📝 Updated content... (${Math.min(
+              i + chunkSize,
+              content.length
+            )}/${content.length} chars)`
+          );
+        } catch (error) {
+          console.log(`⚠️  Chunk update failed, trying alternative method...`);
+          break;
+        }
+      }
+
+      console.log(`✅ Note created from file: "${title}"`);
+      console.log(`📄 File: ${filePath}`);
+      return result;
+    } catch (error) {
+      console.error(`❌ Error in safe file creation:`, error.message);
+
+      // 备用方法：创建简化版本
+      console.log(`🔄 Trying simplified version...`);
+      const summary = `File: ${filePath}\nSize: ${
+        content.length
+      } characters\n\nFirst 500 characters:\n${content.slice(0, 500)}${
+        content.length > 500 ? "\n\n... (content truncated)" : ""
+      }`;
+      return await this.createNote(title, summary);
+    }
+  }
+
+  async exportNote(noteTitle, outputPath) {
+    const content = await this.getNoteContent(noteTitle);
+    if (content && !content.startsWith("Note not found")) {
+      try {
+        await fs.writeFile(outputPath, content);
+        console.log(`✅ Note exported to: ${outputPath}`);
+      } catch (error) {
+        console.error(`❌ Error writing file:`, error.message);
+      }
+    }
+  }
+
+  async editNote(noteTitle, newBody) {
+    const escapedTitle = noteTitle.replace(/"/g, '\\"');
+    const escapedBody = newBody.replace(/"/g, '\\"').replace(/\n/g, "\\n");
+    const script = `tell application "Notes" to set body of first note whose name is "${escapedTitle}" to "${escapedBody}"`;
+
+    const result = await this.executeAppleScript(script);
+    if (result !== null) {
+      console.log(`✅ Note updated: "${noteTitle}"`);
+    } else {
+      console.log(`❌ Failed to update note: "${noteTitle}"`);
+    }
+    return result;
+  }
+
+  async listNotes(limit = 20) {
+    const script = `tell application "Notes" to return name of every note`;
+
+    const result = await this.executeAppleScript(script);
+    if (result) {
+      console.log(`📝 Notes List (showing up to ${limit}):`);
+      const notes = result.split(", ").slice(0, limit);
+      notes.forEach((note, index) => {
+        console.log(`${index + 1}. ${note.trim()}`);
+      });
+      const totalNotes = result.split(", ").length;
+      if (totalNotes > limit) {
+        console.log(
+          `\n... and ${totalNotes - limit} more notes (total: ${totalNotes})`
+        );
+      } else {
+        console.log(`\n📊 Total: ${totalNotes} notes`);
+      }
+    }
+    return result;
+  }
+
+  async getNoteContent(noteTitle) {
+    const script = `tell application "Notes" to return body of first note whose name is "${noteTitle}"`;
+
+    const result = await this.executeAppleScript(script);
+    if (result && !result.startsWith("❌")) {
+      console.log(`📄 Content of "${noteTitle}":`);
+      console.log("─".repeat(50));
+      console.log(result);
+      console.log("─".repeat(50));
+    } else {
+      console.log(result);
+    }
+    return result;
+  }
+
+  async deleteNote(noteTitle) {
+    const script = `tell application "Notes" to delete first note whose name is "${noteTitle}"`;
+
+    const result = await this.executeAppleScript(script);
+    if (result !== null) {
+      console.log(`🗑️ Note deleted: "${noteTitle}"`);
+    } else {
+      console.log(`❌ Failed to delete note: "${noteTitle}"`);
+    }
+    return result;
+  }
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const command = args[0];
+  const notesManager = new NotesManager();
+
+  switch (command) {
+    case "search":
+    case "s":
+      if (args[1]) {
+        await notesManager.searchNotes(args[1]);
+      } else {
+        console.log("Usage: notes-cli search <query>");
+      }
+      break;
+
+    case "create":
+    case "c":
+      if (args[1]) {
+        const title = args[1];
+        const body = args.slice(2).join(" ");
+        await notesManager.createNote(title, body);
+      } else {
+        console.log("Usage: notes-cli create <title> [body]");
+      }
+      break;
+
+    case "create-from-file":
+    case "cf":
+      if (args[1] && args[2]) {
+        await notesManager.createNoteFromFile(args[1], args[2]);
+      } else {
+        console.log("Usage: notes-cli create-from-file <title> <file-path>");
+      }
+      break;
+
+    case "export":
+    case "e":
+      if (args[1] && args[2]) {
+        await notesManager.exportNote(args[1], args[2]);
+      } else {
+        console.log("Usage: notes-cli export <note-title> <output-path>");
+      }
+      break;
+
+    case "edit":
+      if (args[1] && args[2]) {
+        const title = args[1];
+        const newBody = args.slice(2).join(" ");
+        await notesManager.editNote(title, newBody);
+      } else {
+        console.log("Usage: notes-cli edit <title> <new-body>");
+      }
+      break;
+
+    case "list":
+    case "l":
+      const limit = args[1] ? parseInt(args[1]) : 20;
+      await notesManager.listNotes(limit);
+      break;
+
+    case "get":
+    case "g":
+      if (args[1]) {
+        await notesManager.getNoteContent(args[1]);
+      } else {
+        console.log("Usage: notes-cli get <title>");
+      }
+      break;
+
+    case "delete":
+    case "d":
+      if (args[1]) {
+        // 确认删除
+        console.log(`⚠️  Are you sure you want to delete "${args[1]}"? (y/N)`);
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+        process.stdin.on("data", async (key) => {
+          if (key.toString().toLowerCase() === "y") {
+            await notesManager.deleteNote(args[1]);
+          } else {
+            console.log("❌ Deletion cancelled");
+          }
+          process.exit();
+        });
+      } else {
+        console.log("Usage: notes-cli delete <title>");
+      }
+      break;
+
+    default:
+      console.log(`
+🍎 Apple Notes CLI Tool (Enhanced)
+
+Usage:
+  notes-cli search|s <query>           - Search notes by title or content
+  notes-cli create|c <title> [body]    - Create a new note
+  notes-cli create-from-file|cf <title> <file> - Create note from file
+  notes-cli export|e <title> <file>    - Export note to file
+  notes-cli edit <title> <new-body>    - Edit existing note
+  notes-cli list|l [limit]             - List notes (default: 20)
+  notes-cli get|g <title>              - Get content of specific note
+  notes-cli delete|d <title>           - Delete a note (with confirmation)
+
+Examples:
+  notes-cli search "GCP"
+  notes-cli create "Meeting Notes" "Discussed VPC architecture"
+  notes-cli create-from-file "Code Snippet" ./script.js
+  notes-cli export "Meeting Notes" ./meeting.txt
+  notes-cli list 10
+  notes-cli get "Meeting Notes"
+      `);
+  }
+}
+
+if (require.main === module) {
+  main().catch(console.error);
+}
+
+module.exports = NotesManager;

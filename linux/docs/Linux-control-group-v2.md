@@ -1,0 +1,12 @@
+- 使用 cgroup 冻结功能暂停和恢复 Linux 进程  
+-  冻结功能可安全地暂停进程而无需终止它。应用场景包括：  
+  - 在系统负载高峰期暂停一个耗资源的任务  
+  - 暂停服务以重新配置其运行环境  
+  - 进行安全审计和调试  
+- Pause and Resume Linux Processes with cgroup Freezer 
+- Freezing lets you safely pause a process w/o terminating it. Useful for:
+- Suspending a heavy job during peak load
+- Pausing a service to reconfigure its env
+- Security audit and debugging
+- ![v2](./v2.png)
+- 

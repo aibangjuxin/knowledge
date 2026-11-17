@@ -1,0 +1,29 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+.terraform.lock.hcl.local  # 共享 lock 文件可以 commit(本文件 ignore 个人 override)
+
+# tfvars - 包含 secret 的 .tfvars 不提交
+# 提交非敏感的 *.tfvars.example 和显式列出的 common.tfvars
+*.tfvars
+!*.tfvars.example
+!common.tfvars
+
+# tfsec / checkov 临时报告
+tfsec-report.sarif
+checkov-report.sarif
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Plan output
+*.tfplan
+tfplan

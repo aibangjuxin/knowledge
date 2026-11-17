@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: team-a-runtime
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-from-istio-ingressgateway-int
+  namespace: team-a-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app: team-a-service
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: istio-ingressgateway-int
+      podSelector:
+        matchLabels:
+          app: istio-ingressgateway-int
+    ports:
+    - protocol: TCP
+      port: 8443

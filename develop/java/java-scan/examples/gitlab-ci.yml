@@ -1,0 +1,66 @@
+# GitLab CI/CD 集成示例
+
+stages:
+  - build
+  - security-scan
+  - deploy
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  SCANNER_IMAGE: "your-registry/auth-scanner:latest"
+
+cache:
+  paths:
+    - .m2/repository/
+
+# 构建应用
+build:
+  stage: build
+  image: maven:3.8-openjdk-11
+  script:
+    - mvn clean package -DskipTests
+  artifacts:
+    paths:
+      - target/*.jar
+    expire_in: 1 hour
+
+# 认证扫描
+auth-scan:
+  stage: security-scan
+  image: $SCANNER_IMAGE
+  dependencies:
+    - build
+  script:
+    - |
+      # 查找构建的 JAR 文件
+      JAR_FILE=$(find target -name "*.jar" -not -name "*-sources.jar" | head -1)
+      if [ -z "$JAR_FILE" ]; then
+        echo "未找到 JAR 文件"
+        exit 1
+      fi
+      
+      # 执行认证扫描
+      /app/pipeline-integration.sh "$JAR_FILE" src/main/resources reports true
+  artifacts:
+    reports:
+      # GitLab 可以解析 JSON 格式的安全报告
+      security: reports/auth-scan-report-*.json
+    paths:
+      - reports/
+    expire_in: 1 week
+    when: always
+  allow_failure: false  # 扫描失败时阻止部署
+
+# 部署到测试环境
+deploy-test:
+  stage: deploy
+  dependencies:
+    - build
+    - auth-scan
+  script:
+    - echo "部署到测试环境..."
+    # 部署逻辑
+  environment:
+    name: test
+  only:
+    - develop

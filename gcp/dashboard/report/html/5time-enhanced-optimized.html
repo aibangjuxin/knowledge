@@ -1,0 +1,2149 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>团队时区时钟 - 增强版</title>
+    <link rel="icon" href="https://vectorcraftr.com/library/blink/Young%20woman%20with%20headphones.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+        --secondary-gradient: linear-gradient(135deg, #ff9a9e 0%, #fecfef 50%, #fecfef 100%);
+        --accent-gradient: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+        --card-bg: rgba(255, 255, 255, 0.95);
+        --card-border: rgba(255, 255, 255, 0.2);
+        --text-dark: #1a202c;
+        --text-light: rgba(255, 255, 255, 0.95);
+        --text-muted: #718096;
+        --working-hours: linear-gradient(135deg, #48bb78, #38a169);
+        --off-hours: linear-gradient(135deg, #f56565, #e53e3e);
+        --current-timezone: linear-gradient(135deg, #ed8936, #dd6b20);
+        --primary-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        --secondary-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        --hover-shadow: 0 25px 80px rgba(0, 0, 0, 0.15);
+        --border-color: rgba(255, 255, 255, 0.3);
+        --transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        --glass-bg: rgba(255, 255, 255, 0.1);
+        --glass-border: rgba(255, 255, 255, 0.2);
+      }
+
+      .dark-mode {
+        --primary-gradient: linear-gradient(135deg, #1a202c 0%, #2d3748 50%, #4a5568 100%);
+        --secondary-gradient: linear-gradient(135deg, #2d3748 0%, #4a5568 50%, #718096 100%);
+        --accent-gradient: linear-gradient(135deg, #2b6cb0 0%, #3182ce 100%);
+        --card-bg: rgba(26, 32, 44, 0.95);
+        --card-border: rgba(255, 255, 255, 0.1);
+        --text-dark: #f7fafc;
+        --text-light: #f7fafc;
+        --text-muted: #a0aec0;
+        --primary-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        --secondary-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        --hover-shadow: 0 25px 80px rgba(0, 0, 0, 0.4);
+        --border-color: rgba(255, 255, 255, 0.1);
+        --glass-bg: rgba(26, 32, 44, 0.2);
+        --glass-border: rgba(255, 255, 255, 0.1);
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--primary-gradient);
+        background-size: 400% 400%;
+        animation: gradientShift 20s ease infinite;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+        position: relative;
+        overflow-x: hidden;
+        color: var(--text-dark);
+        transition: all 0.5s ease;
+        line-height: 1.6;
+      }
+      
+      @keyframes gradientShift {
+        0% { background-position: 0% 50%; }
+        25% { background-position: 100% 50%; }
+        50% { background-position: 100% 100%; }
+        75% { background-position: 0% 100%; }
+        100% { background-position: 0% 50%; }
+      }
+      
+      .background-pattern {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0.05;
+        background-image: 
+          radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.3) 2px, transparent 2px),
+          radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.3) 2px, transparent 2px),
+          radial-gradient(circle at 40% 60%, rgba(255, 255, 255, 0.2) 1px, transparent 1px);
+        background-size: 60px 60px, 80px 80px, 40px 40px;
+        z-index: -1;
+        animation: patternMove 30s linear infinite;
+      }
+      
+      @keyframes patternMove {
+        0% { transform: translate(0, 0); }
+        100% { transform: translate(20px, 20px); }
+      }
+      
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
+        color: var(--text-light);
+        position: relative;
+        width: 100%;
+        max-width: 1400px;
+        padding: 20px;
+        background: var(--glass-bg);
+        backdrop-filter: blur(20px);
+        border-radius: 20px;
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--secondary-shadow);
+      }
+      
+      .header h1 {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        text-shadow: 2px 2px 20px rgba(0, 0, 0, 0.3);
+        font-weight: 800;
+        letter-spacing: -2px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        background: linear-gradient(135deg, #fff, #f0f0f0);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      
+      .header h1 i {
+        animation: bounce 3s infinite;
+        filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.5));
+      }
+      
+      @keyframes bounce {
+        0%, 100% { transform: translateY(0) rotate(0deg); }
+        25% { transform: translateY(-15px) rotate(-5deg); }
+        75% { transform: translateY(-5px) rotate(5deg); }
+      }
+      
+      .header p {
+        font-size: 1.3rem;
+        opacity: 0.9;
+        font-weight: 400;
+        margin-top: 10px;
+      }
+      
+      .header::after {
+        content: '';
+        position: absolute;
+        bottom: -15px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100px;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+        border-radius: 2px;
+        box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+      }
+      
+      .search-container {
+        width: 100%;
+        max-width: 1400px;
+        margin-bottom: 25px;
+        position: relative;
+      }
+      
+      .search-box {
+        width: 100%;
+        padding: 18px 25px;
+        border-radius: 50px;
+        border: none;
+        background: var(--glass-bg);
+        backdrop-filter: blur(20px);
+        color: var(--text-light);
+        font-size: 1.1rem;
+        font-weight: 500;
+        box-shadow: var(--secondary-shadow);
+        border: 2px solid var(--glass-border);
+        transition: all 0.3s ease;
+        font-family: inherit;
+      }
+      
+      .search-box::placeholder {
+        color: rgba(255, 255, 255, 0.7);
+        font-weight: 400;
+      }
+      
+      .search-box:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.2);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), 0 0 0 4px rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.4);
+        transform: translateY(-2px);
+      }
+      
+      .search-container i {
+        position: absolute;
+        right: 25px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 1.2rem;
+      }
+      
+      .main-content {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 30px;
+        width: 100%;
+        max-width: 1400px;
+        margin-bottom: 30px;
+      }
+      
+      .left-column {
+        flex: 1;
+        min-width: 350px;
+      }
+      
+      .right-column {
+        flex: 2;
+        min-width: 350px;
+      }
+      
+      .clock-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 25px;
+        width: 100%;
+      }
+      
+      .clock-card {
+        background: var(--card-bg);
+        border-radius: 20px;
+        padding: 25px;
+        box-shadow: var(--primary-shadow), var(--secondary-shadow);
+        backdrop-filter: blur(30px);
+        border: 2px solid var(--card-border);
+        transition: var(--transition);
+        position: relative;
+        overflow: hidden;
+        cursor: pointer;
+      }
+      
+      .clock-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+        transition: left 0.8s ease;
+      }
+      
+      .clock-card:hover {
+        transform: translateY(-10px) scale(1.02);
+        box-shadow: var(--hover-shadow), 0 8px 40px rgba(0, 0, 0, 0.15);
+        border-color: rgba(255, 255, 255, 0.4);
+      }
+      
+      .clock-card:hover::before {
+        left: 100%;
+      }
+      
+      .card-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 20px;
+        position: relative;
+        z-index: 1;
+      }
+      
+      .country-flag {
+        font-size: 3rem;
+        margin-right: 20px;
+        filter: drop-shadow(3px 3px 6px rgba(0, 0, 0, 0.2));
+        animation: flagWave 4s ease-in-out infinite;
+      }
+      
+      @keyframes flagWave {
+        0%, 100% { transform: rotate(0deg) scale(1); }
+        25% { transform: rotate(-2deg) scale(1.05); }
+        75% { transform: rotate(2deg) scale(1.05); }
+      }
+      
+      .country-info {
+        flex: 1;
+      }
+      
+      .country-name {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: var(--text-dark);
+        margin-bottom: 8px;
+        letter-spacing: -0.5px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      
+      .delete-btn {
+        opacity: 0;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        color: #e53e3e;
+        font-size: 1rem;
+        padding: 5px;
+        border-radius: 50%;
+        background: rgba(229, 62, 62, 0.1);
+      }
+      
+      .clock-card:hover .delete-btn {
+        opacity: 1;
+      }
+      
+      .delete-btn:hover {
+        background: rgba(229, 62, 62, 0.2);
+        transform: scale(1.1);
+      }
+      
+      .timezone-info {
+        font-size: 0.95rem;
+        color: var(--text-muted);
+        font-weight: 500;
+        background: rgba(113, 128, 150, 0.1);
+        padding: 6px 12px;
+        border-radius: 12px;
+        display: inline-block;
+        border: 1px solid rgba(113, 128, 150, 0.2);
+      }
+      
+      .time-section {
+        text-align: center;
+        margin: 20px 0;
+        position: relative;
+        z-index: 1;
+        padding: 15px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 15px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      
+      .time-display {
+        font-size: 2.8rem;
+        font-weight: 800;
+        color: var(--text-dark);
+        margin-bottom: 8px;
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+        letter-spacing: -2px;
+        text-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        background: linear-gradient(135deg, var(--text-dark), var(--text-muted));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      
+      .date-display {
+        font-size: 1rem;
+        color: var(--text-muted);
+        margin-bottom: 15px;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+      }
+      
+      .status-section {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: relative;
+        z-index: 1;
+        gap: 15px;
+      }
+      
+      .status-indicator {
+        padding: 10px 20px;
+        border-radius: 30px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+        transition: all 0.3s ease;
+        border: 2px solid transparent;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .status-indicator::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+        transition: left 0.5s ease;
+      }
+      
+      .status-indicator:hover::before {
+        left: 100%;
+      }
+      
+      .working-hours {
+        background: var(--working-hours);
+        color: white;
+        box-shadow: 0 4px 20px rgba(72, 187, 120, 0.4);
+      }
+      
+      .off-hours {
+        background: var(--off-hours);
+        color: white;
+        box-shadow: 0 4px 20px rgba(245, 101, 101, 0.4);
+      }
+      
+      .current-timezone {
+        background: var(--current-timezone);
+        color: white;
+        animation: pulse 3s infinite;
+        box-shadow: 0 4px 20px rgba(237, 137, 54, 0.4);
+      }
+      
+      @keyframes pulse {
+        0%, 100% { transform: scale(1); box-shadow: 0 4px 20px rgba(237, 137, 54, 0.4); }
+        50% { transform: scale(1.05); box-shadow: 0 6px 30px rgba(237, 137, 54, 0.6); }
+      }
+      
+      .time-diff {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        font-weight: 600;
+        background: rgba(113, 128, 150, 0.1);
+        padding: 8px 15px;
+        border-radius: 20px;
+        border: 1px solid rgba(113, 128, 150, 0.2);
+        white-space: nowrap;
+      }
+      
+      .stats-bar {
+        background: var(--card-bg);
+        backdrop-filter: blur(30px);
+        border-radius: 20px;
+        padding: 20px;
+        margin-bottom: 25px;
+        box-shadow: var(--primary-shadow);
+        display: flex;
+        justify-content: space-around;
+        flex-wrap: wrap;
+        gap: 20px;
+        width: 100%;
+        border: 2px solid var(--card-border);
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .stats-bar::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: var(--secondary-gradient);
+        border-radius: 20px 20px 0 0;
+      }
+      
+      .stat-item {
+        text-align: center;
+        flex: 1;
+        min-width: 140px;
+        padding: 10px;
+        border-radius: 15px;
+        background: rgba(255, 255, 255, 0.05);
+        transition: all 0.3s ease;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      
+      .stat-item:hover {
+        transform: translateY(-5px);
+        background: rgba(255, 255, 255, 0.1);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      }
+      
+      .stat-number {
+        font-size: 2.2rem;
+        font-weight: 800;
+        color: var(--text-dark);
+        display: block;
+        margin-bottom: 5px;
+        background: linear-gradient(135deg, var(--text-dark), var(--text-muted));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      
+      .stat-label {
+        font-size: 0.95rem;
+        color: var(--text-muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      
+      .footer {
+        text-align: center;
+        color: var(--text-light);
+        font-size: 1.1rem;
+        font-weight: 400;
+        width: 100%;
+        max-width: 1400px;
+        padding: 20px;
+        background: var(--glass-bg);
+        backdrop-filter: blur(20px);
+        border-radius: 15px;
+        border: 1px solid var(--glass-border);
+        margin-top: 20px;
+      }
+      
+      .controls {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        z-index: 1000;
+      }
+      
+      .control-btn {
+        background: var(--card-bg);
+        border: 2px solid var(--card-border);
+        border-radius: 50%;
+        width: 65px;
+        height: 65px;
+        cursor: pointer;
+        font-size: 1.5rem;
+        box-shadow: var(--primary-shadow);
+        transition: var(--transition);
+        backdrop-filter: blur(30px);
+        color: var(--text-dark);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .control-btn::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: var(--secondary-gradient);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        border-radius: 50%;
+      }
+      
+      .control-btn:hover {
+        transform: scale(1.15) translateY(-3px);
+        box-shadow: var(--hover-shadow);
+        border-color: rgba(255, 255, 255, 0.4);
+      }
+      
+      .control-btn:hover::before {
+        opacity: 0.1;
+      }
+      
+      .control-btn:active {
+        transform: scale(1.05);
+      }
+      
+      .control-btn i {
+        position: relative;
+        z-index: 1;
+      }
+      
+      .theme-toggle {
+        position: fixed;
+        top: 30px;
+        right: 30px;
+        background: var(--glass-bg);
+        border: 2px solid var(--glass-border);
+        border-radius: 30px;
+        padding: 12px 20px;
+        color: var(--text-light);
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 600;
+        backdrop-filter: blur(20px);
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        box-shadow: var(--secondary-shadow);
+      }
+      
+      .theme-toggle:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: translateY(-3px);
+        box-shadow: var(--primary-shadow);
+        border-color: rgba(255, 255, 255, 0.4);
+      }
+      
+      /* 日历样式优化 */
+      .calendar-container {
+        width: 100%;
+        margin-bottom: 25px;
+      }
+      
+      .calendar-card {
+        background: var(--card-bg);
+        border-radius: 20px;
+        padding: 25px;
+        box-shadow: var(--primary-shadow), var(--secondary-shadow);
+        backdrop-filter: blur(30px);
+        border: 2px solid var(--card-border);
+        transition: var(--transition);
+        position: relative;
+        overflow: hidden;
+        min-width: 350px;
+      }
+      
+      .calendar-card:hover {
+        transform: translateY(-8px);
+        box-shadow: var(--hover-shadow), 0 8px 40px rgba(0, 0, 0, 0.15);
+        border-color: rgba(255, 255, 255, 0.4);
+      }
+      
+      .calendar-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid rgba(113, 128, 150, 0.1);
+        position: relative;
+      }
+      
+      .calendar-header::after {
+        content: '';
+        position: absolute;
+        bottom: -2px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 60px;
+        height: 2px;
+        background: var(--secondary-gradient);
+        border-radius: 1px;
+      }
+      
+      .calendar-title {
+        text-align: center;
+        flex: 1;
+      }
+      
+      .calendar-title h3 {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: var(--text-dark);
+        margin-bottom: 5px;
+        letter-spacing: -0.5px;
+      }
+      
+      .calendar-title p {
+        font-size: 1.1rem;
+        color: var(--text-muted);
+        font-weight: 500;
+      }
+      
+      .nav-btn {
+        background: var(--secondary-gradient);
+        border: none;
+        border-radius: 50%;
+        width: 45px;
+        height: 45px;
+        color: white;
+        font-size: 1.3rem;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .nav-btn::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.2);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        border-radius: 50%;
+      }
+      
+      .nav-btn:hover {
+        transform: scale(1.15);
+        box-shadow: 0 8px 30px rgba(102, 126, 234, 0.4);
+      }
+      
+      .nav-btn:hover::before {
+        opacity: 1;
+      }
+      
+      .nav-btn:active {
+        transform: scale(1.05);
+      }
+      
+      .calendar-grid {
+        margin-bottom: 20px;
+      }
+      
+      .weekdays {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 8px;
+        margin-bottom: 15px;
+      }
+      
+      .weekday {
+        text-align: center;
+        font-weight: 700;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+        padding: 12px 5px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        background: rgba(113, 128, 150, 0.05);
+        border-radius: 10px;
+        border: 1px solid rgba(113, 128, 150, 0.1);
+      }
+      
+      .days-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 8px;
+      }
+      
+      .day {
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        position: relative;
+        font-size: 0.95rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      
+      .day:hover {
+        background: rgba(102, 126, 234, 0.2);
+        transform: scale(1.1);
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        border-color: rgba(102, 126, 234, 0.4);
+      }
+      
+      .day.other-month {
+        color: #a0aec0;
+        opacity: 0.4;
+        background: rgba(255, 255, 255, 0.02);
+      }
+      
+      .day.today {
+        background: var(--secondary-gradient);
+        color: white;
+        font-weight: 800;
+        box-shadow: 0 6px 25px rgba(102, 126, 234, 0.4);
+        animation: todayPulse 3s infinite;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+      }
+      
+      .day.today:hover {
+        background: var(--accent-gradient);
+        transform: scale(1.15);
+        box-shadow: 0 8px 35px rgba(102, 126, 234, 0.6);
+      }
+      
+      @keyframes todayPulse {
+        0%, 100% { 
+          box-shadow: 0 6px 25px rgba(102, 126, 234, 0.4);
+        }
+        50% { 
+          box-shadow: 0 10px 40px rgba(102, 126, 234, 0.6);
+        }
+      }
+      
+      .day.selected {
+        background: var(--working-hours);
+        color: white;
+        font-weight: 700;
+        box-shadow: 0 6px 25px rgba(72, 187, 120, 0.4);
+        border: 2px solid rgba(255, 255, 255, 0.3);
+      }
+      
+      .calendar-footer {
+        text-align: center;
+        padding-top: 15px;
+        border-top: 2px solid rgba(113, 128, 150, 0.1);
+        position: relative;
+      }
+      
+      .calendar-footer::before {
+        content: '';
+        position: absolute;
+        top: -2px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 60px;
+        height: 2px;
+        background: var(--secondary-gradient);
+        border-radius: 1px;
+      }
+      
+      .today-info {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 15px;
+      }
+      
+      .today-label {
+        font-size: 1rem;
+        color: var(--text-muted);
+        font-weight: 600;
+      }
+      
+      .today-date {
+        font-size: 1.1rem;
+        color: var(--text-dark);
+        font-weight: 700;
+        background: rgba(102, 126, 234, 0.1);
+        padding: 8px 16px;
+        border-radius: 20px;
+        border: 1px solid rgba(102, 126, 234, 0.2);
+      }
+      
+      /* 侧边栏组件优化 */
+      .sidebar {
+        background: var(--card-bg);
+        border-radius: 20px;
+        padding: 25px;
+        box-shadow: var(--primary-shadow), var(--secondary-shadow);
+        backdrop-filter: blur(30px);
+        border: 2px solid var(--card-border);
+        transition: var(--transition);
+        margin-bottom: 25px;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .sidebar::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: var(--accent-gradient);
+        border-radius: 20px 20px 0 0;
+      }
+      
+      .sidebar:hover {
+        transform: translateY(-8px);
+        box-shadow: var(--hover-shadow), 0 8px 40px rgba(0, 0, 0, 0.15);
+        border-color: rgba(255, 255, 255, 0.4);
+      }
+      
+      .sidebar-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--text-dark);
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid rgba(113, 128, 150, 0.1);
+      }
+      
+      .sidebar-title i {
+        font-size: 1.2rem;
+        color: var(--text-muted);
+      }
+      
+      .weather-info {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      
+      .weather-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 15px;
+        border-radius: 15px;
+        background: rgba(113, 128, 150, 0.05);
+        transition: all 0.3s ease;
+        border: 1px solid rgba(113, 128, 150, 0.1);
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .weather-item::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+        transition: left 0.5s ease;
+      }
+      
+      .weather-item:hover {
+        background: rgba(113, 128, 150, 0.1);
+        transform: translateX(8px);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        border-color: rgba(113, 128, 150, 0.2);
+      }
+      
+      .weather-item:hover::before {
+        left: 100%;
+      }
+      
+      .weather-location {
+        font-weight: 700;
+        color: var(--text-dark);
+        font-size: 1.1rem;
+      }
+      
+      .weather-temp {
+        font-weight: 800;
+        font-size: 1.4rem;
+        color: var(--text-dark);
+        background: linear-gradient(135deg, var(--text-dark), var(--text-muted));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      
+      .weather-desc {
+        font-size: 0.95rem;
+        color: var(--text-muted);
+        font-weight: 500;
+      }
+      
+      .converter-section, .meeting-scheduler {
+        margin-top: 25px;
+      }
+      
+      .converter-title {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: var(--text-dark);
+        margin-bottom: 15px;
+      }
+      
+      .converter-form, .scheduler-form {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+      
+      .converter-input, .form-input, .form-select {
+        padding: 15px;
+        border-radius: 15px;
+        border: 2px solid var(--card-border);
+        background: rgba(255, 255, 255, 0.5);
+        color: var(--text-dark);
+        font-size: 1rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        font-family: inherit;
+      }
+      
+      .dark-mode .converter-input, 
+      .dark-mode .form-input, 
+      .dark-mode .form-select {
+        background: rgba(26, 32, 44, 0.5);
+      }
+      
+      .converter-input:focus, 
+      .form-input:focus, 
+      .form-select:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.2);
+        transform: translateY(-2px);
+        background: rgba(255, 255, 255, 0.8);
+      }
+      
+      .converter-result {
+        padding: 18px;
+        border-radius: 15px;
+        background: rgba(113, 128, 150, 0.1);
+        font-weight: 700;
+        text-align: center;
+        color: var(--text-dark);
+        border: 2px solid rgba(113, 128, 150, 0.2);
+        font-size: 1.1rem;
+      }
+      
+      .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      
+      .form-label {
+        font-weight: 700;
+        color: var(--text-dark);
+        font-size: 1rem;
+        letter-spacing: 0.5px;
+      }
+      
+      .submit-btn {
+        padding: 15px;
+        border-radius: 15px;
+        border: none;
+        background: var(--secondary-gradient);
+        color: white;
+        font-weight: 700;
+        font-size: 1.1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 6px 25px rgba(102, 126, 234, 0.3);
+        position: relative;
+        overflow: hidden;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      
+      .submit-btn::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+        transition: left 0.5s ease;
+      }
+      
+      .submit-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 35px rgba(102, 126, 234, 0.4);
+        background: var(--accent-gradient);
+      }
+      
+      .submit-btn:hover::before {
+        left: 100%;
+      }
+      
+      .submit-btn:active {
+        transform: translateY(-1px);
+      }
+      
+      /* 加载动画优化 */
+      .loading {
+        display: inline-block;
+        width: 24px;
+        height: 24px;
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: white;
+        animation: spin 1s ease-in-out infinite;
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      
+      /* 响应式优化 */
+      @media (max-width: 1200px) {
+        .header h1 {
+          font-size: 2.5rem;
+        }
+        
+        .clock-container {
+          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        }
+      }
+      
+      @media (max-width: 992px) {
+        .main-content {
+          flex-direction: column;
+        }
+        
+        .left-column, .right-column {
+          width: 100%;
+          min-width: auto;
+        }
+        
+        .header {
+          padding: 15px;
+        }
+        
+        .header h1 {
+          font-size: 2.2rem;
+          gap: 15px;
+        }
+      }
+      
+      @media (max-width: 768px) {
+        body {
+          padding: 15px;
+        }
+        
+        .header h1 {
+          font-size: 2rem;
+          flex-direction: column;
+          gap: 10px;
+        }
+        
+        .clock-container {
+          grid-template-columns: 1fr;
+          gap: 20px;
+        }
+        
+        .time-display {
+          font-size: 2.4rem;
+        }
+        
+        .clock-card, .calendar-card, .sidebar {
+          padding: 20px;
+        }
+        
+        .stats-bar {
+          padding: 15px;
+        }
+        
+        .controls {
+          bottom: 20px;
+          right: 20px;
+        }
+        
+        .control-btn {
+          width: 55px;
+          height: 55px;
+          font-size: 1.3rem;
+        }
+        
+        .theme-toggle {
+          top: 20px;
+          right: 20px;
+          padding: 10px 16px;
+          font-size: 0.9rem;
+        }
+        
+        .calendar-card {
+          min-width: auto;
+        }
+        
+        .calendar-title h3 {
+          font-size: 1.5rem;
+        }
+        
+        .nav-btn {
+          width: 40px;
+          height: 40px;
+          font-size: 1.1rem;
+        }
+        
+        .day {
+          font-size: 0.85rem;
+        }
+        
+        .search-box {
+          padding: 15px 20px;
+          font-size: 1rem;
+        }
+        
+        .country-flag {
+          font-size: 2.5rem;
+          margin-right: 15px;
+        }
+        
+        .country-name {
+          font-size: 1.4rem;
+        }
+        
+        .status-section {
+          flex-direction: column;
+          gap: 10px;
+        }
+        
+        .status-indicator, .time-diff {
+          width: 100%;
+          text-align: center;
+        }
+      }
+      
+      @media (max-width: 480px) {
+        .header h1 {
+          font-size: 1.8rem;
+        }
+        
+        .time-display {
+          font-size: 2rem;
+        }
+        
+        .stats-bar {
+          flex-direction: column;
+          gap: 15px;
+        }
+        
+        .stat-item {
+          min-width: auto;
+        }
+        
+        .main-content {
+          gap: 20px;
+        }
+      }
+      
+      /* 新增动画效果 */
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      .clock-card, .calendar-card, .sidebar, .stats-bar {
+        animation: fadeInUp 0.6s ease-out;
+      }
+      
+      .clock-card:nth-child(1) { animation-delay: 0.1s; }
+      .clock-card:nth-child(2) { animation-delay: 0.2s; }
+      .clock-card:nth-child(3) { animation-delay: 0.3s; }
+      .clock-card:nth-child(4) { animation-delay: 0.4s; }
+      .clock-card:nth-child(5) { animation-delay: 0.5s; }
+      .clock-card:nth-child(6) { animation-delay: 0.6s; }
+      
+      /* 滚动条美化 */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      
+      ::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+      }
+      
+      ::-webkit-scrollbar-thumb {
+        background: var(--secondary-gradient);
+        border-radius: 4px;
+      }
+      
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--accent-gradient);
+      }
+      
+      /* 选择文本样式 */
+      ::selection {
+        background: rgba(102, 126, 234, 0.3);
+        color: var(--text-dark);
+      }
+      
+      ::-moz-selection {
+        background: rgba(102, 126, 234, 0.3);
+        color: var(--text-dark);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="background-pattern"></div>
+    
+    <button class="theme-toggle" onclick="toggleTheme()" title="切换主题" aria-label="切换主题">
+      <i class="fas fa-moon"></i>
+      <span>深色模式</span>
+    </button>
+    
+    <div class="header">
+      <h1><i class="fas fa-globe-americas"></i> 🌍 团队时区时钟</h1>
+      <p>实时显示全球团队所在地区时间 - 让协作更高效</p>
+    </div>
+    
+    <div class="search-container">
+      <input 
+        type="text" 
+        class="search-box" 
+        id="searchBox" 
+        placeholder="🔍 搜索时区或国家..." 
+        onkeyup="filterClocks()"
+        aria-label="搜索时区或国家"
+      >
+      <i class="fas fa-search"></i>
+    </div>
+
+    <div class="stats-bar" id="statsBar">
+      <!-- 统计信息由 JS 动态生成 -->
+    </div>
+
+    <div class="main-content">
+      <div class="left-column">
+        <!-- 日历组件 -->
+        <div class="calendar-container">
+          <div class="calendar-card">
+            <div class="calendar-header">
+              <button class="nav-btn" onclick="previousMonth()" aria-label="上个月">
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              <div class="calendar-title">
+                <h3 id="calendarMonth"></h3>
+                <p id="calendarYear"></p>
+              </div>
+              <button class="nav-btn" onclick="nextMonth()" aria-label="下个月">
+                <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+            <div class="calendar-grid">
+              <div class="weekdays">
+                <div class="weekday">日</div>
+                <div class="weekday">一</div>
+                <div class="weekday">二</div>
+                <div class="weekday">三</div>
+                <div class="weekday">四</div>
+                <div class="weekday">五</div>
+                <div class="weekday">六</div>
+              </div>
+              <div class="days-grid" id="daysGrid">
+                <!-- 日期由 JS 动态生成 -->
+              </div>
+            </div>
+            <div class="calendar-footer">
+              <div class="today-info">
+                <span class="today-label">📅 今天</span>
+                <span class="today-date" id="todayDate"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 侧边栏组件 -->
+        <div class="sidebar">
+          <div class="sidebar-title">
+            <i class="fas fa-cloud-sun"></i>
+            <span>天气信息</span>
+          </div>
+          <div class="weather-info" id="weatherInfo">
+            <!-- 天气信息由 JS 动态生成 -->
+          </div>
+        </div>
+        
+        <div class="sidebar">
+          <div class="sidebar-title">
+            <i class="fas fa-exchange-alt"></i>
+            <span>时区转换器</span>
+          </div>
+          <div class="converter-section">
+            <div class="converter-form">
+              <input 
+                type="datetime-local" 
+                class="converter-input" 
+                id="converterTime"
+                aria-label="选择时间"
+              >
+              <select class="converter-input" id="converterFrom" aria-label="从时区">
+                <!-- 选项由 JS 动态生成 -->
+              </select>
+              <select class="converter-input" id="converterTo" aria-label="到时区">
+                <!-- 选项由 JS 动态生成 -->
+              </select>
+              <button class="submit-btn" onclick="convertTime()">
+                <i class="fas fa-sync-alt"></i> 转换时间
+              </button>
+              <div class="converter-result" id="converterResult">
+                ⏰ 请选择时间和时区进行转换
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="sidebar meeting-scheduler">
+          <div class="sidebar-title">
+            <i class="fas fa-calendar-plus"></i>
+            <span>会议计划器</span>
+          </div>
+          <div class="scheduler-form">
+            <div class="form-group">
+              <label class="form-label">📅 会议时间</label>
+              <input 
+                type="datetime-local" 
+                class="form-input" 
+                id="meetingTime"
+                aria-label="会议时间"
+              >
+            </div>
+            <div class="form-group">
+              <label class="form-label">🌍 参与时区</label>
+              <select multiple class="form-select" id="meetingTimezones" aria-label="选择参与时区">
+                <!-- 选项由 JS 动态生成 -->
+              </select>
+            </div>
+            <button class="submit-btn" onclick="scheduleMeeting()">
+              <i class="fas fa-calendar-check"></i> 计划会议
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="right-column">
+        <div class="clock-container" id="clockContainer">
+          <!-- 时钟卡片由 JS 动态生成 -->
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>⏰ 页面每秒自动更新 | 🌐 实时同步全球时间 | 💼 让团队协作更高效</p>
+    </div>
+
+    <div class="controls">
+      <button class="control-btn" onclick="toggleFullscreen()" title="全屏模式" aria-label="全屏模式">
+        <i class="fas fa-expand"></i>
+      </button>
+      <button class="control-btn" onclick="updateAllClocks()" title="手动刷新" aria-label="手动刷新">
+        <i class="fas fa-sync-alt"></i>
+      </button>
+      <button class="control-btn" onclick="addCustomTimezone()" title="添加时区" aria-label="添加时区">
+        <i class="fas fa-plus"></i>
+      </button>
+    </div>
+    <script>
+      // 时区数据
+      const timezones = [
+        {
+          name: "中国",
+          flag: "🇨🇳",
+          timezone: "Asia/Shanghai",
+          workingHours: [9, 18],
+        },
+        {
+          name: "印度",
+          flag: "🇮🇳",
+          timezone: "Asia/Kolkata",
+          workingHours: [9, 18],
+        },
+        {
+          name: "英国",
+          flag: "🇬🇧",
+          timezone: "Europe/London",
+          workingHours: [9, 17],
+        },
+        {
+          name: "UTC",
+          flag: "🌐",
+          timezone: "UTC",
+          workingHours: [9, 18],
+        },
+        {
+          name: "美国西海岸",
+          flag: "🇺🇸",
+          timezone: "America/Los_Angeles",
+          workingHours: [9, 18],
+        },
+        {
+          name: "当前位置",
+          flag: "📍",
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          workingHours: [9, 18],
+          isCurrent: true,
+        },
+      ];
+
+      // 日历相关变量
+      let currentCalendarDate = new Date();
+      let selectedDate = null;
+
+      // 月份名称
+      const monthNames = [
+        "一月", "二月", "三月", "四月", "五月", "六月",
+        "七月", "八月", "九月", "十月", "十一月", "十二月"
+      ];
+
+      // 天气数据模拟
+      const weatherData = [
+        { location: "北京", temp: "25°C", desc: "☀️ 晴朗" },
+        { location: "上海", temp: "28°C", desc: "☁️ 多云" },
+        { location: "纽约", temp: "22°C", desc: "🌧️ 小雨" },
+        { location: "伦敦", temp: "18°C", desc: "⛅ 阴天" },
+        { location: "东京", temp: "30°C", desc: "🔥 炎热" }
+      ];
+
+      function getWorkingStatus(hour, workingHours, isCurrent = false) {
+        if (isCurrent) return "current-timezone";
+        return hour >= workingHours[0] && hour < workingHours[1]
+          ? "working-hours"
+          : "off-hours";
+      }
+
+      function getStatusText(hour, workingHours, isCurrent = false) {
+        if (isCurrent) return "📍 当前时区";
+        return hour >= workingHours[0] && hour < workingHours[1]
+          ? "💼 工作时间"
+          : "🌙 非工作时间";
+      }
+
+      function formatTime(date) {
+        return date.toLocaleTimeString("zh-CN", {
+          hour12: false,
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+      }
+
+      function formatDate(date) {
+        return date.toLocaleDateString("zh-CN", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          weekday: "long",
+        });
+      }
+
+      function createClockCard(timezone) {
+        const now = new Date();
+        const localTime = new Date(
+          now.toLocaleString("en-US", { timeZone: timezone.timezone }),
+        );
+        const hour = localTime.getHours();
+        
+        // 计算与当前时区的时差
+        const currentTime = new Date();
+        const timeDiff = Math.round((localTime.getTime() - currentTime.getTime()) / (1000 * 60 * 60));
+        const timeDiffText = timeDiff === 0 ? '🏠 本地时间' : 
+          timeDiff > 0 ? `⏰ +${timeDiff}小时` : `⏰ ${timeDiff}小时`;
+
+        const statusClass = getWorkingStatus(
+          hour,
+          timezone.workingHours,
+          timezone.isCurrent,
+        );
+        const statusText = getStatusText(
+          hour,
+          timezone.workingHours,
+          timezone.isCurrent,
+        );
+
+        return `
+        <div class="clock-card" data-timezone-name="${timezone.name.toLowerCase()}">
+          <div class="card-header">
+            <div class="country-flag">${timezone.flag}</div>
+            <div class="country-info">
+              <div class="country-name">
+                ${timezone.name}
+                ${!timezone.isCurrent ? `<i class="fas fa-trash-alt delete-btn" onclick="removeTimezone('${timezone.timezone}')" title="删除时区"></i>` : ''}
+              </div>
+              <div class="timezone-info">🌐 ${timezone.timezone}</div>
+            </div>
+          </div>
+          
+          <div class="time-section">
+            <div class="time-display" data-timezone="${timezone.timezone}">
+              ${formatTime(localTime)}
+            </div>
+            <div class="date-display" data-timezone="${timezone.timezone}">
+              📅 ${formatDate(localTime)}
+            </div>
+          </div>
+          
+          <div class="status-section">
+            <div class="status-indicator ${statusClass}">
+              ${statusText}
+            </div>
+            <div class="time-diff">
+              ${timeDiffText}
+            </div>
+          </div>
+        </div>
+      `;
+      }
+      
+      function createStatsBar() {
+        const now = new Date();
+        let workingCount = 0;
+        let offCount = 0;
+        
+        timezones.forEach(timezone => {
+          if (timezone.isCurrent) return;
+          const localTime = new Date(
+            now.toLocaleString("en-US", { timeZone: timezone.timezone })
+          );
+          const hour = localTime.getHours();
+          
+          if (hour >= timezone.workingHours[0] && hour < timezone.workingHours[1]) {
+            workingCount++;
+          } else {
+            offCount++;
+          }
+        });
+        
+        return `
+          <div class="stat-item">
+            <span class="stat-number">${timezones.length}</span>
+            <span class="stat-label">🌍 时区总数</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">${workingCount}</span>
+            <span class="stat-label">💼 工作时间</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">${offCount}</span>
+            <span class="stat-label">🌙 非工作时间</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">${formatTime(now)}</span>
+            <span class="stat-label">🏠 本地时间</span>
+          </div>
+        `;
+      }
+
+      function updateAllClocks() {
+        const container = document.getElementById("clockContainer");
+        const statsContainer = document.getElementById("statsBar");
+        
+        container.innerHTML = timezones.map(createClockCard).join("");
+        statsContainer.innerHTML = createStatsBar();
+        
+        // 更新时区转换器选项
+        updateTimezoneOptions();
+      }
+
+      function updateTimes() {
+        timezones.forEach((timezone) => {
+          const now = new Date();
+          const localTime = new Date(
+            now.toLocaleString("en-US", { timeZone: timezone.timezone }),
+          );
+          const hour = localTime.getHours();
+
+          const timeElements = document.querySelectorAll(
+            `[data-timezone="${timezone.timezone}"]`,
+          );
+          timeElements.forEach((element) => {
+            if (element.classList.contains("time-display")) {
+              element.textContent = formatTime(localTime);
+            } else if (element.classList.contains("date-display")) {
+              element.textContent = "📅 " + formatDate(localTime);
+            }
+          });
+
+          const card = timeElements[0]?.closest(".clock-card");
+          if (card) {
+            const statusElement = card.querySelector(".status-indicator");
+            const statusClass = getWorkingStatus(
+              hour,
+              timezone.workingHours,
+              timezone.isCurrent,
+            );
+            const statusText = getStatusText(
+              hour,
+              timezone.workingHours,
+              timezone.isCurrent,
+            );
+
+            statusElement.className = `status-indicator ${statusClass}`;
+            statusElement.textContent = statusText;
+          }
+        });
+        
+        // 更新统计信息
+        const statsContainer = document.getElementById("statsBar");
+        statsContainer.innerHTML = createStatsBar();
+      }
+      
+      function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(err => {
+            console.log(`Error attempting to enable fullscreen: ${err.message}`);
+          });
+        } else {
+          document.exitFullscreen();
+        }
+      }
+      
+      function toggleTheme() {
+        const body = document.body;
+        const themeBtn = document.querySelector('.theme-toggle');
+        const icon = themeBtn.querySelector('i');
+        const text = themeBtn.querySelector('span');
+        
+        body.classList.toggle('dark-mode');
+        
+        if (body.classList.contains('dark-mode')) {
+          icon.className = 'fas fa-sun';
+          text.textContent = '浅色模式';
+        } else {
+          icon.className = 'fas fa-moon';
+          text.textContent = '深色模式';
+        }
+        
+        // 保存主题设置到本地存储
+        localStorage.setItem('theme', body.classList.contains('dark-mode') ? 'dark' : 'light');
+      }
+      
+      // 日历功能
+      function generateCalendar(date) {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const today = new Date();
+        
+        // 更新标题
+        document.getElementById('calendarMonth').textContent = monthNames[month];
+        document.getElementById('calendarYear').textContent = year + '年';
+        
+        // 获取当月第一天和最后一天
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const firstDayWeek = firstDay.getDay();
+        const daysInMonth = lastDay.getDate();
+        
+        // 获取上个月的最后几天
+        const prevMonth = new Date(year, month, 0);
+        const daysInPrevMonth = prevMonth.getDate();
+        
+        const daysGrid = document.getElementById('daysGrid');
+        daysGrid.innerHTML = '';
+        
+        // 添加上个月的日期
+        for (let i = firstDayWeek - 1; i >= 0; i--) {
+          const dayElement = createDayElement(daysInPrevMonth - i, true);
+          daysGrid.appendChild(dayElement);
+        }
+        
+        // 添加当月的日期
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dayElement = createDayElement(day, false);
+          const currentDate = new Date(year, month, day);
+          
+          // 标记今天
+          if (currentDate.toDateString() === today.toDateString()) {
+            dayElement.classList.add('today');
+          }
+          
+          // 标记选中的日期
+          if (selectedDate && currentDate.toDateString() === selectedDate.toDateString()) {
+            dayElement.classList.add('selected');
+          }
+          
+          daysGrid.appendChild(dayElement);
+        }
+        
+        // 添加下个月的日期以填满网格
+        const totalCells = daysGrid.children.length;
+        const remainingCells = 42 - totalCells; // 6行 × 7列
+        for (let day = 1; day <= remainingCells; day++) {
+          const dayElement = createDayElement(day, true);
+          daysGrid.appendChild(dayElement);
+        }
+        
+        // 更新今天信息
+        updateTodayInfo();
+      }
+      
+      function createDayElement(day, isOtherMonth) {
+        const dayElement = document.createElement('div');
+        dayElement.className = 'day';
+        dayElement.textContent = day;
+        dayElement.setAttribute('role', 'button');
+        dayElement.setAttribute('tabindex', '0');
+        
+        if (isOtherMonth) {
+          dayElement.classList.add('other-month');
+        }
+        
+        dayElement.addEventListener('click', function() {
+          if (!isOtherMonth) {
+            // 移除之前的选中状态
+            document.querySelectorAll('.day.selected').forEach(el => {
+              el.classList.remove('selected');
+            });
+            
+            // 添加选中状态
+            dayElement.classList.add('selected');
+            selectedDate = new Date(currentCalendarDate.getFullYear(), currentCalendarDate.getMonth(), day);
+            updateTodayInfo();
+          }
+        });
+        
+        // 添加键盘支持
+        dayElement.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            dayElement.click();
+          }
+        });
+        
+        return dayElement;
+      }
+      
+      function updateTodayInfo() {
+        const today = new Date();
+        const displayDate = selectedDate || today;
+        const todayDateElement = document.getElementById('todayDate');
+        
+        const options = { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric', 
+          weekday: 'long' 
+        };
+        
+        todayDateElement.textContent = displayDate.toLocaleDateString('zh-CN', options);
+      }
+      
+      function previousMonth() {
+        currentCalendarDate.setMonth(currentCalendarDate.getMonth() - 1);
+        generateCalendar(currentCalendarDate);
+      }
+      
+      function nextMonth() {
+        currentCalendarDate.setMonth(currentCalendarDate.getMonth() + 1);
+        generateCalendar(currentCalendarDate);
+      }
+      
+      // 搜索功能
+      function filterClocks() {
+        const searchTerm = document.getElementById('searchBox').value.toLowerCase();
+        const cards = document.querySelectorAll('.clock-card');
+        
+        cards.forEach(card => {
+          const timezoneName = card.getAttribute('data-timezone-name');
+          if (timezoneName.includes(searchTerm)) {
+            card.style.display = 'block';
+            card.style.animation = 'fadeInUp 0.3s ease-out';
+          } else {
+            card.style.display = 'none';
+          }
+        });
+      }
+      
+      // 添加自定义时区
+      function addCustomTimezone() {
+        const timezone = prompt("🌍 请输入时区标识符 (例如: Asia/Tokyo):");
+        if (timezone) {
+          // 验证时区是否有效
+          try {
+            Intl.DateTimeFormat(undefined, { timeZone: timezone });
+            const name = prompt("📝 请输入时区名称:", timezone.split("/").pop());
+            if (name) {
+              const newTimezone = {
+                name: name,
+                flag: "🌍",
+                timezone: timezone,
+                workingHours: [9, 18]
+              };
+              timezones.push(newTimezone);
+              updateAllClocks();
+              
+              // 显示成功消息
+              showNotification(`✅ 成功添加时区: ${name}`, 'success');
+            }
+          } catch (e) {
+            showNotification("❌ 无效的时区标识符，请重试", 'error');
+          }
+        }
+      }
+      
+      // 删除时区
+      function removeTimezone(timezoneId) {
+        const index = timezones.findIndex(tz => tz.timezone === timezoneId);
+        if (index !== -1 && !timezones[index].isCurrent) {
+          if (confirm(`🗑️ 确定要删除 ${timezones[index].name} 吗?`)) {
+            const removedName = timezones[index].name;
+            timezones.splice(index, 1);
+            updateAllClocks();
+            showNotification(`✅ 已删除时区: ${removedName}`, 'success');
+          }
+        } else {
+          showNotification("❌ 无法删除当前位置时区", 'error');
+        }
+      }
+      
+      // 通知系统
+      function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.textContent = message;
+        notification.style.cssText = `
+          position: fixed;
+          top: 100px;
+          right: 30px;
+          background: ${type === 'success' ? '#48bb78' : type === 'error' ? '#f56565' : '#667eea'};
+          color: white;
+          padding: 15px 20px;
+          border-radius: 10px;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+          z-index: 10000;
+          font-weight: 600;
+          transform: translateX(400px);
+          transition: transform 0.3s ease;
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // 动画显示
+        setTimeout(() => {
+          notification.style.transform = 'translateX(0)';
+        }, 100);
+        
+        // 自动隐藏
+        setTimeout(() => {
+          notification.style.transform = 'translateX(400px)';
+          setTimeout(() => {
+            document.body.removeChild(notification);
+          }, 300);
+        }, 3000);
+      }
+      
+      // 天气信息
+      function renderWeatherInfo() {
+        const weatherContainer = document.getElementById('weatherInfo');
+        weatherContainer.innerHTML = weatherData.map(item => `
+          <div class="weather-item">
+            <div>
+              <div class="weather-location">${item.location}</div>
+              <div class="weather-desc">${item.desc}</div>
+            </div>
+            <div class="weather-temp">${item.temp}</div>
+          </div>
+        `).join('');
+      }
+      
+      // 时区转换器
+      function updateTimezoneOptions() {
+        const fromSelect = document.getElementById('converterFrom');
+        const toSelect = document.getElementById('converterTo');
+        const meetingSelect = document.getElementById('meetingTimezones');
+        
+        // 清空现有选项
+        fromSelect.innerHTML = '';
+        toSelect.innerHTML = '';
+        meetingSelect.innerHTML = '';
+        
+        // 添加选项
+        timezones.forEach(tz => {
+          const option1 = document.createElement('option');
+          option1.value = tz.timezone;
+          option1.textContent = `${tz.flag} ${tz.name} (${tz.timezone})`;
+          
+          const option2 = option1.cloneNode(true);
+          const option3 = option1.cloneNode(true);
+          
+          fromSelect.appendChild(option1);
+          toSelect.appendChild(option2);
+          meetingSelect.appendChild(option3);
+        });
+        
+        // 设置默认值
+        if (timezones.length > 0) {
+          fromSelect.value = timezones[0].timezone;
+          toSelect.value = timezones[timezones.length - 1].timezone;
+        }
+      }
+      
+      function convertTime() {
+        const timeInput = document.getElementById('converterTime').value;
+        const fromTimezone = document.getElementById('converterFrom').value;
+        const toTimezone = document.getElementById('converterTo').value;
+        const resultElement = document.getElementById('converterResult');
+        
+        if (!timeInput) {
+          resultElement.textContent = "⚠️ 请选择时间";
+          return;
+        }
+        
+        try {
+          const date = new Date(timeInput);
+          const formatter = new Intl.DateTimeFormat('zh-CN', {
+            timeZone: toTimezone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          });
+          
+          const convertedTime = formatter.format(date);
+          const fromTz = timezones.find(tz => tz.timezone === fromTimezone);
+          const toTz = timezones.find(tz => tz.timezone === toTimezone);
+          
+          resultElement.innerHTML = `
+            <div style="margin-bottom: 8px;">
+              <strong>🕐 转换结果:</strong>
+            </div>
+            <div style="font-size: 1.2rem; color: var(--text-dark);">
+              ${convertedTime}
+            </div>
+            <div style="font-size: 0.9rem; margin-top: 8px; opacity: 0.8;">
+              ${fromTz ? fromTz.flag + ' ' + fromTz.name : fromTimezone} → ${toTz ? toTz.flag + ' ' + toTz.name : toTimezone}
+            </div>
+          `;
+        } catch (e) {
+          resultElement.textContent = "❌ 转换失败，请检查输入";
+        }
+      }
+      
+      // 会议计划器
+      function scheduleMeeting() {
+        const timeInput = document.getElementById('meetingTime').value;
+        const selectedOptions = Array.from(document.getElementById('meetingTimezones').selectedOptions);
+        
+        if (!timeInput) {
+          showNotification("⚠️ 请选择会议时间", 'error');
+          return;
+        }
+        
+        if (selectedOptions.length === 0) {
+          showNotification("⚠️ 请选择参与时区", 'error');
+          return;
+        }
+        
+        const meetingTime = new Date(timeInput);
+        const selectedTimezones = selectedOptions.map(option => option.value);
+        
+        let message = `📅 会议时间安排:\n\n`;
+        message += `🕐 基准时间: ${meetingTime.toLocaleString('zh-CN')}\n\n`;
+        message += `🌍 各时区时间:\n`;
+        
+        selectedTimezones.forEach(tz => {
+          const tzObj = timezones.find(t => t.timezone === tz) || { name: tz.split("/").pop(), timezone: tz, flag: "🌍" };
+          const formatter = new Intl.DateTimeFormat('zh-CN', {
+            timeZone: tz,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          });
+          
+          message += `${tzObj.flag} ${tzObj.name}: ${formatter.format(meetingTime)}\n`;
+        });
+        
+        alert(message);
+        showNotification("✅ 会议时间已生成", 'success');
+      }
+      
+      // 添加键盘快捷键
+      document.addEventListener('keydown', function(e) {
+        // 忽略在输入框中的快捷键
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
+          return;
+        }
+        
+        if (e.key === 'f' || e.key === 'F') {
+          e.preventDefault();
+          toggleFullscreen();
+        } else if (e.key === 't' || e.key === 'T') {
+          e.preventDefault();
+          toggleTheme();
+        } else if (e.key === 'r' || e.key === 'R') {
+          e.preventDefault();
+          updateAllClocks();
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          previousMonth();
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          nextMonth();
+        } else if (e.key === '+' || e.key === '=') {
+          e.preventDefault();
+          addCustomTimezone();
+        }
+      });
+
+      // 初始化
+      document.addEventListener('DOMContentLoaded', function() {
+        // 恢复主题设置
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme !== 'light') {
+          document.body.classList.add('dark-mode');
+          const themeBtn = document.querySelector('.theme-toggle');
+          const icon = themeBtn.querySelector('i');
+          const text = themeBtn.querySelector('span');
+          icon.className = 'fas fa-sun';
+          text.textContent = '浅色模式';
+        }
+        
+        updateAllClocks();
+        generateCalendar(currentCalendarDate);
+        renderWeatherInfo();
+        updateTimezoneOptions();
+        
+        // 设置当前时间的默认值
+        const now = new Date();
+        const formattedNow = now.toISOString().slice(0, 16);
+        document.getElementById('converterTime').value = formattedNow;
+        document.getElementById('meetingTime').value = formattedNow;
+        
+        // 显示欢迎消息
+        setTimeout(() => {
+          showNotification("🎉 欢迎使用团队时区时钟！", 'success');
+        }, 1000);
+      });
+      
+      // 启动定时器
+      setInterval(updateTimes, 1000);
+      setInterval(updateAllClocks, 60000);
+      setInterval(() => {
+        // 每分钟检查是否需要更新日历（跨天时）
+        const now = new Date();
+        if (now.getHours() === 0 && now.getMinutes() === 0) {
+          generateCalendar(currentCalendarDate);
+        }
+      }, 60000);
+      
+      // 页面可见性变化时更新
+      document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+          updateAllClocks();
+        }
+      });
+      
+      // 窗口获得焦点时更新
+      window.addEventListener('focus', function() {
+        updateAllClocks();
+      });
+    </script>
+  </body>
+</html>

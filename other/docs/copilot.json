@@ -1,0 +1,286 @@
+{
+  "data": {
+    "active": 1002,
+    "usingContext": true,
+    "history": [
+      {
+        "uuid": 1002,
+        "title": "Groovy 写一个获取GitHub pull request 然后approve 然后merge",
+        "isEdit": false
+      }
+    ],
+    "chat": [
+      {
+        "uuid": 1002,
+        "data": [
+          {
+            "dateTime": "2023/3/30 07:14:36",
+            "text": "Groovy 写一个获取GitHub pull request 然后approve 然后merge",
+            "inversion": true,
+            "error": false,
+            "conversationOptions": null,
+            "requestOptions": {
+              "prompt": "Groovy 写一个获取GitHub pull request 然后approve 然后merge",
+              "options": null
+            }
+          },
+          {
+            "dateTime": "2023/3/30 07:14:48",
+            "text": "以下是使用 Groovy 语言编写的获取 GitHub pull request、approve 和 merge 的示例代码：\n\n```groovy\n@Grab('org.kohsuke.github:github-api:1.122')\n\nimport org.kohsuke.github.*\n\ndef github = new GitHubBuilder().withOAuthToken(\"personal_access_token\").build()\n\ndef repoName = \"owner/repo\"\ndef prNumber = 123\n\ndef repository = github.getRepository(repoName)\ndef pullRequest = repository.getPullRequest(prNumber)\n\npullRequest.review()\n        .approve(\"LGTM\")\n        .submit()\n\npullRequest.merge(\"Merged via API\", MergeStrategy.SQUASH)\n```\n\n请注意，该代码中的 `personal_access_token` 需要替换为您自己的 GitHub 个人访问令牌。此外，还需要替换 `owner/repo` 和 `123` 分别为您要操作的存储库和拉取请求的编号。",
+            "inversion": false,
+            "error": false,
+            "loading": false,
+            "conversationOptions": {
+              "parentMessageId": "chatcmpl-6zZHwn0KRP8FNZ7J5J6cupae7Hmoe"
+            },
+            "requestOptions": {
+              "prompt": "Groovy 写一个获取GitHub pull request 然后approve 然后merge",
+              "options": {}
+            }
+          },
+          {
+            "dateTime": "2023/3/30 07:18:29",
+            "text": "假如获取的是一个GitHub url 使用个人账户密码链接GitHub ",
+            "inversion": true,
+            "error": false,
+            "conversationOptions": null,
+            "requestOptions": {
+              "prompt": "假如获取的是一个GitHub url 使用个人账户密码链接GitHub ",
+              "options": null
+            }
+          },
+          {
+            "dateTime": "2023/3/30 07:18:43",
+            "text": "如果您想使用个人账户密码链接 GitHub，可以使用以下 Groovy 代码：\n\n```groovy\n@Grab('org.eclipse.jgit:org.eclipse.jgit:5.13.0.202109080827-r')\n\nimport org.eclipse.jgit.api.Git\nimport org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider\n\ndef url = \"https://github.com/example/repo.git\"\ndef username = \"your_username\"\ndef password = \"your_password\"\n\nGit.cloneRepository()\n        .setURI(url)\n        .setCredentialsProvider(new UsernamePasswordCredentialsProvider(username, password))\n        .call()\n```\n\n上述代码使用 JGit 库来克隆 GitHub 存储库。您需要将 `url` 替换为要克隆的存储库的 URL，`username` 和 `password` 分别替换为您的 GitHub 用户名和密码。\n\n请注意，为了安全起见，建议避免在代码中硬编码密码，而是从环境变量、配置文件或其他安全方式中获取密码。",
+            "inversion": false,
+            "error": false,
+            "loading": false,
+            "conversationOptions": {
+              "parentMessageId": "chatcmpl-6zZLipH4NtL5olwZStnTb30pinZrn"
+            },
+            "requestOptions": {
+              "prompt": "假如获取的是一个GitHub url 使用个人账户密码链接GitHub ",
+              "options": {
+                "parentMessageId": "chatcmpl-6zZHwn0KRP8FNZ7J5J6cupae7Hmoe"
+              }
+            }
+          },
+          {
+            "dateTime": "2023/3/30 07:21:59",
+            "text": "写一个groovy 使用个人账户密码链接 GitHub 获取pull request 链接然后 使用 curl -d approve 请求并merge 请求",
+            "inversion": true,
+            "error": false,
+            "conversationOptions": null,
+            "requestOptions": {
+              "prompt": "写一个groovy 使用个人账户密码链接 GitHub 获取pull request 链接然后 使用 curl -d approve 请求并merge 请求",
+              "options": null
+            }
+          },
+          {
+            "dateTime": "2023/3/30 07:22:25",
+            "text": "以下是使用 Groovy 语言编写的获取 GitHub pull request 链接、使用 curl 审批并合并请求的示例代码：\n\n```groovy\n@Grab('org.eclipse.jgit:org.eclipse.jgit:5.13.0.202109080827-r')\n\nimport org.eclipse.jgit.api.Git\nimport org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider\n\ndef username = \"your_username\"\ndef password = \"your_password\"\ndef repoOwner = \"owner\"\ndef repoName = \"repo\"\ndef prNumber = \"123\"\n\n// Clone repository to local directory\ndef git = Git.cloneRepository()\n        .setURI(\"https://$username:$password@github.com/$repoOwner/$repoName.git\")\n        .setCredentialsProvider(new UsernamePasswordCredentialsProvider(username, password))\n        .call()\n\n// Get pull request URL\ndef pullRequestUrl = \"https://api.github.com/repos/$repoOwner/$repoName/pulls/$prNumber\"\n\n// Approve and merge pull request using curl command\ndef curlCommand = \"curl -d '{\\\"event\\\":\\\"APPROVE\\\"}' -H 'Authorization: token $password' -X POST $pullRequestUrl/reviews\\n\" +\n                  \"curl -d '{\\\"commit_title\\\":\\\"Merged via API\\\",\\\"merge_method\\\":\\\"squash\\\"}' -H 'Authorization: token $password' -X PUT $pullRequestUrl/merge\"\nRuntime.getRuntime().exec(curlCommand)\n\n// Clean up the cloned repository\ngit.close()\n```\n\n在此代码中，您需要将 `username` 和 `password` 分别替换为您的 GitHub 用户名和密码，`repoOwner` 和 `repoName` 分别替换为要操作的存储库的所有者和名称，`prNumber` 替换为要审批和合并的拉取请求的编号。\n\n代码中使用 JGit 库来克隆 GitHub 存储库，并使用 curl 命令发送审批和合并请求。请注意，为了安全起见，建议避免在代码中硬编码密码，而是从环境变量、配置文件或其他安全方式中获取密码。",
+            "inversion": false,
+            "error": false,
+            "loading": false,
+            "conversationOptions": {
+              "parentMessageId": "chatcmpl-6zZP5jJVGZRqM17DR89zrcrmCgve5"
+            },
+            "requestOptions": {
+              "prompt": "写一个groovy 使用个人账户密码链接 GitHub 获取pull request 链接然后 使用 curl -d approve 请求并merge 请求",
+              "options": {
+                "parentMessageId": "chatcmpl-6zZLipH4NtL5olwZStnTb30pinZrn"
+              }
+            }
+          },
+          {
+            "dateTime": "2023/3/30 07:37:28",
+            "text": "Pipeline 获取用户输入的GitHub url写一个groovy 通过账户密码 使用 curl 方式approve 这个URL并且merge",
+            "inversion": true,
+            "error": false,
+            "conversationOptions": null,
+            "requestOptions": {
+              "prompt": "Pipeline 获取用户输入的GitHub url写一个groovy 通过账户密码 使用 curl 方式approve 这个URL并且merge",
+              "options": null
+            }
+          },
+          {
+            "dateTime": "2023/3/30 07:37:58",
+            "text": "以下是使用 Jenkins Pipeline 和 Groovy 语言编写的获取用户输入 GitHub URL、通过账户密码使用 curl 方式审批并合并的示例代码：\n\n```groovy\npipeline {\n    agent any\n\n    parameters {\n        string(name: 'githubUrl', defaultValue: '', description: 'GitHub repository URL')\n    }\n\n    stages {\n        stage('Approve and Merge Pull Request') {\n            when {\n                expression { params.githubUrl != '' }\n            }\n            steps {\n                script {\n                    def urlParts = params.githubUrl[8..-1].split('/')\n                    def username = env.GITHUB_USERNAME\n                    def password = env.GITHUB_PASSWORD\n                    def repoOwner = urlParts[0]\n                    def repoName = urlParts[1]\n                    def prNumber = urlParts[3]\n\n                    // Approve and merge pull request using curl command\n                    def pullRequestUrl = \"https://api.github.com/repos/$repoOwner/$repoName/pulls/$prNumber\"\n                    def approveCommand = \"curl -d '{\\\"event\\\":\\\"APPROVE\\\"}' -H 'Authorization: token $password' -X POST $pullRequestUrl/reviews\"\n                    def mergeCommand = \"curl -d '{\\\"commit_title\\\":\\\"Merged via API\\\",\\\"merge_method\\\":\\\"squash\\\"}' -H 'Authorization: token $password' -X PUT $pullRequestUrl/merge\"\n                    sh \"$approveCommand && $mergeCommand\"\n                }\n            }\n        }\n    }\n}\n```\n\n此 Pipeline 定义了一个 `githubUrl` 参数，用于从用户那里获取 GitHub 存储库的 URL。在 `script` 块中，首先将 URL 分解为用户名、密码、存储库所有者、存储库名称和拉取请求编号，并使用这些值构建 GitHub API 的 URL。然后，它使用 curl 命令发送审批和合并请求。\n\n请注意，此示例代码中使用了 Jenkins 的 `env` 对象来获取用户名和密码。这要求您将 GitHub 用户名和密码存储在 Jenkins 中，并且需要将其保护，以避免意外泄露。如果您使用其他 CI/CD 工具或部署方式，请相应地更改代码以获取用户名和密码。另外，请注意，在生产环境中执行此操作时，应该使用安全的方式来存储和传递凭据信息，例如使用 Jenkins Pipeline Credential 插件。",
+            "inversion": false,
+            "error": false,
+            "loading": false,
+            "conversationOptions": {
+              "parentMessageId": "chatcmpl-6zZe4qQ3d55TPen2mIfCvA7uCjU5m"
+            },
+            "requestOptions": {
+              "prompt": "Pipeline 获取用户输入的GitHub url写一个groovy 通过账户密码 使用 curl 方式approve 这个URL并且merge",
+              "options": {
+                "parentMessageId": "chatcmpl-6zZP5jJVGZRqM17DR89zrcrmCgve5"
+              }
+            }
+          },
+          {
+            "dateTime": "2023/3/30 21:52:28",
+            "text": "params.githubUrl[8..-1] 怎么理解",
+            "inversion": true,
+            "error": false,
+            "conversationOptions": null,
+            "requestOptions": {
+              "prompt": "params.githubUrl[8..-1] 怎么理解",
+              "options": null
+            }
+          },
+          {
+            "dateTime": "2023/3/30 21:52:41",
+            "text": "这是一个针对字符串类型的操作，它可以从一个字符串中获取从第 9 个字符到最后一个字符的子串。具体地说，\"[8..-1]\" 表示获取从下标为 8 的字符开始到最后一个字符的子串。而在很多编程语言中，字符串下标是从 0 开始的，因此这个操作实际上是获取了这个字符串中除了前面 8 个字符以外的所有字符。",
+            "inversion": false,
+            "error": false,
+            "loading": false,
+            "conversationOptions": {
+              "parentMessageId": "chatcmpl-6zmzVyybCe4V33cl2nIEX57OhwnlV"
+            },
+            "requestOptions": {
+              "prompt": "params.githubUrl[8..-1] 怎么理解",
+              "options": {
+                "parentMessageId": "chatcmpl-6zZe4qQ3d55TPen2mIfCvA7uCjU5m"
+              }
+            }
+          },
+          {
+            "dateTime": "2023/3/30 21:57:07",
+            "text": " GitHub 用户名和密码存储在 Jenkins 中groovy 中如何隐藏密码",
+            "inversion": true,
+            "error": false,
+            "conversationOptions": null,
+            "requestOptions": {
+              "prompt": " GitHub 用户名和密码存储在 Jenkins 中groovy 中如何隐藏密码",
+              "options": null
+            }
+          },
+          {
+            "dateTime": "2023/3/30 21:59:51",
+            "text": "您可以使用 Jenkins Credentials Plugin 将用户名和密码存储为凭据，并使用以下 Groovy 代码来隐藏密码：\n\n```\ndef creds = jenkins.model.Jenkins.instance.getCredentials(\"your-credential-id\")\ndef password = creds?.password?.getPlainText()\n```\n\n其中，\"your-credential-id\" 是您在 Jenkins 中创建的凭据的 ID。请注意，此方法仅适用于凭据类型为“用户名和密码”的凭据。",
+            "inversion": false,
+            "error": false,
+            "loading": false,
+            "conversationOptions": {
+              "parentMessageId": "chatcmpl-6zn6OEAX7e6TRs0TYuLv5Ftc1preM"
+            },
+            "requestOptions": {
+              "prompt": " GitHub 用户名和密码存储在 Jenkins 中groovy 中如何隐藏密码"
+            }
+          },
+          {
+            "dateTime": "2023/3/30 22:10:49",
+            "text": "2023年挣钱的好方式是什么？",
+            "inversion": true,
+            "error": false,
+            "conversationOptions": null,
+            "requestOptions": {
+              "prompt": "2023年挣钱的好方式是什么？",
+              "options": null
+            }
+          },
+          {
+            "dateTime": "2023/3/30 22:11:21",
+            "text": "我作为一个 AI 模型，不能对未来的经济环境和市场趋势做出准确的预测。然而，有一些普遍适用的建议可以帮助您在任何时候赚钱：\n\n1. 学习新技能。保持好奇心并不断学习可以让您掌握新技能和知识，从而增加就业机会和提高薪资。\n\n2. 创业。如果您有创意和企业家精神，考虑创建自己的企业。这需要大量的努力、投资和风险，但成功后可以获得很高的回报。\n\n3. 投资。通过投资股票、基金、房地产等资产，可以使您的资产增值。然而，请注意投资始终存在风险，因此请在决策前了解风险和收益。\n\n4. 开始副业。如果您有时间和兴趣，考虑开展副业或兼职工作。这可以增加您的收入来源，并丰富您的工作经历和技能。\n\n5. 增强自己的网络。建立广泛的人际关系和社交网络可以为您提供更多的就业机会和商业机会。\n\n最重要的是，找到自己真",
+            "inversion": false,
+            "error": false,
+            "loading": false,
+            "conversationOptions": {
+              "parentMessageId": "chatcmpl-6znHF7wn97YzgU47hDwcrWIFYR4ts"
+            },
+            "requestOptions": {
+              "prompt": "2023年挣钱的好方式是什么？",
+              "options": {
+                "parentMessageId": "chatcmpl-6zn6OEAX7e6TRs0TYuLv5Ftc1preM"
+              }
+            }
+          },
+          {
+            "dateTime": "2023/3/30 22:11:53",
+            "text": "2023年婚纱摄影行业的发展趋势",
+            "inversion": true,
+            "error": false,
+            "conversationOptions": null,
+            "requestOptions": {
+              "prompt": "2023年婚纱摄影行业的发展趋势",
+              "options": null
+            }
+          },
+          {
+            "dateTime": "2023/3/30 22:12:12",
+            "text": "由于我是一个人工智能，没有未来预测的能力。然而，根据过去几年的趋势，婚纱摄影行业正朝着更加个性化和创新的方向发展。例如，定制化和主题化摄影套餐已经成为了越来越受欢迎的选择，而且对于拥有独特风格和技巧的摄影师的需求也在增加。此外，在线社交媒体平台也正在成为与客户交流、宣传和销售的重要渠道。总之，随着技术和消费者需求的不断变化，这个行业的未来发展仍然充满挑战和机遇。",
+            "inversion": false,
+            "error": false,
+            "loading": false,
+            "conversationOptions": {
+              "parentMessageId": "chatcmpl-6znIIhV5e0SVChJyI2SrZKV48JCxq"
+            },
+            "requestOptions": {
+              "prompt": "2023年婚纱摄影行业的发展趋势",
+              "options": {
+                "parentMessageId": "chatcmpl-6znHF7wn97YzgU47hDwcrWIFYR4ts"
+              }
+            }
+          },
+          {
+            "dateTime": "2023/3/30 22:13:05",
+            "text": "我想写好groovy语言，应该从哪些地方入手？",
+            "inversion": true,
+            "error": false,
+            "conversationOptions": null,
+            "requestOptions": {
+              "prompt": "我想写好groovy语言，应该从哪些地方入手？",
+              "options": null
+            }
+          },
+          {
+            "dateTime": "2023/3/30 22:13:33",
+            "text": "如果您想学习 Groovy 语言，可以按照以下步骤开始：\n\n1. 了解基础语法：Groovy 语言基本上是一种类似于 Java 的编程语言，因此，如果您已经掌握了 Java，那您对 Groovy 已经有了一个很好的起点。您可以通过阅读 Groovy 官方文档来深入了解 Groovy 语言的基础语法和规则。\n\n2. 编写简单的程序：学习语言最好的方法是通过实践。您可以使用 Groovy 环境并编写一些简单的程序来巩固您的知识。\n\n3. 学习 Groovy 的扩展特性：Groovy 有比 Java 更多的扩展特性，例如闭包和元编程等。这些特性可以帮助您以更快、更简洁的方式编写代码。您可以通过阅读 Groovy 官方文档或其他教程来了解这些特性。\n\n4. 探索 Groovy 生态系统：Groovy 有许多与其配套的库",
+            "inversion": false,
+            "error": false,
+            "loading": false,
+            "conversationOptions": {
+              "parentMessageId": "chatcmpl-6znJR3BB4QbQdlOsZF2ConjA2ySVJ"
+            },
+            "requestOptions": {
+              "prompt": "我想写好groovy语言，应该从哪些地方入手？",
+              "options": {
+                "parentMessageId": "chatcmpl-6znIIhV5e0SVChJyI2SrZKV48JCxq"
+              }
+            }
+          },
+          {
+            "dateTime": "2023/3/30 22:17:58",
+            "text": "Groovy 如何定义个命令并执行命令然后判断命令的返回值",
+            "inversion": true,
+            "error": false,
+            "conversationOptions": null,
+            "requestOptions": {
+              "prompt": "Groovy 如何定义个命令并执行命令然后判断命令的返回值",
+              "options": null
+            }
+          },
+          {
+            "dateTime": "2023/3/30 22:18:16",
+            "text": "在 Groovy 中定义一个命令可以使用标准的字符串变量（如 `def command = \"ls\"`），然后使用 `execute()` 函数来执行该命令，并使用 `waitForOrKill()` 函数等待命令完成并返回其退出值。\n\n以下是一个示例代码，其中定义了一个名为 `command` 的命令并执行它，然后检查其退出值：\n\n```groovy\ndef command = \"ls\"\ndef process = command.execute()\nint exitValue = process.waitForOrKill(1000)\n\nif (exitValue == 0) {\n    println \"Command succeeded\"\n} else {\n    println \"Command failed with exit code: ${exitValue}\"\n}\n```\n\n在这个示例中，如果命令成功结束，则会打印“Command succeeded”，否则会以退出值的形式打印“Command failed with exit code: <exitValue>”。",
+            "inversion": false,
+            "error": false,
+            "loading": false,
+            "conversationOptions": {
+              "parentMessageId": "chatcmpl-6znOALq7MP2l5w94WkKtNIEfVYygo"
+            },
+            "requestOptions": {
+              "prompt": "Groovy 如何定义个命令并执行命令然后判断命令的返回值",
+              "options": {
+                "parentMessageId": "chatcmpl-6znJR3BB4QbQdlOsZF2ConjA2ySVJ"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "expire": null
+}

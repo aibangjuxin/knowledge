@@ -1,0 +1,145 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squid-proxy-with-health-check
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: squid-proxy
+  template:
+    metadata:
+      labels:
+        app: squid-proxy
+    spec:
+      containers:
+      # 主Squid容器
+      - name: squid
+        image: squid:latest
+        ports:
+        - containerPort: 3128
+        volumeMounts:
+        - name: squid-config
+          mountPath: /etc/squid/squid.conf
+          subPath: squid.conf
+        
+      # 健康检查sidecar容器
+      - name: health-checker
+        image: python:3.9-slim
+        ports:
+        - containerPort: 8080
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          pip install flask requests &&
+          python /app/health-check.py
+        volumeMounts:
+        - name: health-check-script
+          mountPath: /app
+        env:
+        - name: SQUID_PROXY_URL
+          value: "http://localhost:3128"
+        
+        # 自定义存活探针 - 检测外部连接
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+          
+        # 自定义就绪探针
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          
+        # 启动探针
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          failureThreshold: 10
+          
+      volumes:
+      - name: squid-config
+        configMap:
+          name: squid-config
+      - name: health-check-script
+        configMap:
+          name: health-check-script
+          
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: health-check-script
+data:
+  health-check.py: |
+    #!/usr/bin/env python3
+    import requests
+    import time
+    import os
+    from flask import Flask, jsonify
+    import logging
+
+    app = Flask(__name__)
+    logging.basicConfig(level=logging.INFO)
+
+    EXTERNAL_URLS = ["https://www.baidu.com"]
+    REQUEST_TIMEOUT = 5
+    SQUID_PROXY = os.getenv('SQUID_PROXY_URL', 'http://localhost:3128')
+
+    def test_external_connectivity():
+        proxies = {
+            'http': SQUID_PROXY,
+            'https': SQUID_PROXY
+        }
+        
+        for url in EXTERNAL_URLS:
+            try:
+                response = requests.get(url, timeout=REQUEST_TIMEOUT, proxies=proxies)
+                if response.status_code == 200:
+                    logging.info(f"Successfully connected to {url} via proxy")
+                    return True
+            except Exception as e:
+                logging.error(f"Failed to connect to {url}: {str(e)}")
+                continue
+        return False
+
+    @app.route('/health')
+    def health_check():
+        if test_external_connectivity():
+            return jsonify({"status": "healthy", "timestamp": time.time()}), 200
+        else:
+            return jsonify({"status": "unhealthy", "timestamp": time.time()}), 503
+
+    @app.route('/ready')
+    def readiness_check():
+        return health_check()
+
+    if __name__ == '__main__':
+        app.run(host='0.0.0.0', port=8080)
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: squid-config
+data:
+  squid.conf: |
+    http_port 3128
+    acl all src 0.0.0.0/0
+    http_access allow all
+    cache_dir ufs /var/spool/squid 100 16 256
+    access_log /var/log/squid/access.log
+    cache_log /var/log/squid/cache.log

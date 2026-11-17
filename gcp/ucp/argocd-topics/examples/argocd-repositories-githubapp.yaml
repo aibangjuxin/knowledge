@@ -1,0 +1,134 @@
+# Argo CD · Repository Secret（声明式管理）
+#
+# 用途：用 Git 管理 Argo CD 的仓库凭据，支持 GitHub App 类型。
+# 应用：kubectl apply -f argocd-repositories-githubapp.yaml
+#
+# 核心要点（详见 ../07-repository-githubapp.md）：
+#   ① label `argocd.argoproj.io/secret-type: repository` 必须有，否则 Argo CD 不认
+#   ② **目标分支不在这里** —— 分支是 Application.spec.source.targetRevision 的事
+#   ③ 凭据用 Sealed Secrets / SOPS / External Secrets 管理，不要把明文提交进 Git
+#
+# ⚠️ 本文件所有凭据一律 [REDACTED]。真实部署时用外部密钥管理方案注入。
+
+# ===========================================================================
+# 示例 1：GitHub App 类型的 Repository
+#
+# 为什么用 GitHub App 而不是 PAT：
+#   · 细粒度权限（只读 contents / 只读 packages）
+#   · 短期 token，自动轮换
+#   · 安装范围可控（限定 org / repo）
+#   · 不需要为每个仓库单独发一个 PAT
+#
+# 需要的三个值（都在 GitHub App 设置页）：
+#   githubAppID              → App 的 ID（数字）
+#   githubAppInstallationID  → Installation 的 ID（数字）
+#   githubAppPrivateKey      → App 的私钥（PEM 格式）
+#   ↑ 上游文档说明 installation ID 可省略，Argo CD 会按组织自动探测
+# ===========================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: platform-githubapp
+  namespace: argocd
+  labels:
+    # ⭐ 这个 label 是 Argo CD 识别 Repository Secret 的唯一依据
+    argocd.argoproj.io/secret-type: repository
+  annotations:
+    # 关联的 AppProject。留空表示全局可用（会失去这一层约束）
+    argocd.argoproj.io/project: platform
+type: Opaque
+stringData:
+  url: https://github.com/example/platform.git
+
+  # ---- GitHub App 凭据 ----
+  # Secret 里所有值都是字符串，数字要加引号
+  githubAppID: "[REDACTED_APP_ID]"
+  githubAppInstallationID: "[REDACTED_INSTALLATION_ID]"
+  githubAppPrivateKey: |
+    -----BEGIN RSA PRIVATE KEY-----
+    [REDACTED PRIVATE KEY]
+    -----END RSA PRIVATE KEY-----
+
+  # ---- 归属项目 ----
+  project: platform
+
+  # ---- Git LFS（如需要）----
+  enableLfs: "true"
+
+---
+# ===========================================================================
+# 示例 2：GitHub PAT 类型的 Repository（简单场景）
+#
+# ⚠️ PAT 的权限范围建议：
+#   私有仓库只读 → fine-grained PAT，Contents: Read-only
+#   公共仓库     → 不需要 PAT，留空即可
+# ===========================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: platform-pat
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+type: Opaque
+stringData:
+  url: https://github.com/example/platform.git
+  username: "argocd-bot"
+  password: "[REDACTED_TOKEN]"
+  project: platform
+
+---
+# ===========================================================================
+# 示例 3：凭据模板（repo-creds）
+#
+# 一个账号管多个仓库：只填**前缀 URL**，不是完整仓库 URL。
+# 这样该前缀下的所有仓库都能用这套凭据。
+#
+# ⚠️ 代价：权限范围变大。适用于「一个 org 下的全部仓库」这种粗粒度场景。
+# ===========================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-org-creds
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repo-creds
+type: Opaque
+stringData:
+  # 注意这里是前缀，不是完整仓库地址
+  url: https://github.com/example
+  username: "argocd-bot"
+  password: "[REDACTED_TOKEN]"
+
+---
+# ===========================================================================
+# 示例 4：目标集群凭据（cluster Secret）
+#
+# GKE 上的推荐做法是 Workload Identity：让 Argo CD 通过 metadata server
+# 取短期凭据，避免长期 token。
+#
+# ⚠️ 具体的 GKE Workload Identity 配置请核对官方文档：
+#    https://cloud.google.com/kubernetes-engine/docs/concepts/workload-identity
+#    本轮无法访问该页面，实施前请自行核对。
+#
+# 下面是传统的 bearerToken 写法（不推荐长期使用）：
+# ===========================================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gke-cluster
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: cluster
+type: Opaque
+stringData:
+  name: gke-prod
+  server: https://[REDACTED_CLUSTER_ENDPOINT]
+  config: |
+    {
+      "bearerToken": "[REDACTED_BEARER_TOKEN]",
+      "tlsClientConfig": {
+        "insecure": false,
+        "caData": "[REDACTED_BASE64_CA]"
+      }
+    }

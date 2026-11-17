@@ -1,0 +1,470 @@
+#!/usr/bin/env zsh
+# netpath — 网络路径决策器:这个包到底走哪条路?
+#
+# 设计目标:
+#   - 公司 Mac 上装了 5 个 VPN profile(Tailscale / Shadowrocket / Loon / Loon for Mac /
+#     WireGuard),默认路由被 utun 抢走。想知道某个包 / 某个 IP 走哪条路,
+#     不装 bind-tools / 不装 proxychains,只用 macOS 自带 route/scutil/networksetup。
+#   - 显示:
+#       ① 网络服务清单(每条服务:类型 / 启用状态 / 接口 / 当前状态)
+#       ② 默认路由归属 —— 哪个 VPN 正在吃掉 default route
+#       ③ 单目标路径查询(route -n get <ip|host>),逐跳显示 interface/gateway/mtu
+#       ④ DNS 解析器作用域(哪个接口在解 DNS)
+#       ⑤ 按目标 IP 反查:这个 IP 命中哪条服务
+#   - 只读:不写 networksetup / 不改路由表,只报告
+#
+# 用法:
+#   netpath                     # 全量总览
+#   netpath 8.8.8.8             # 查单个目标的出口路径
+#   netpath example.com         # 同上(先 DNS 解析再查路由)
+#   netpath --dns example.com   # 只看 DNS 解析结果(含所有 resolver)
+#   netpath --services          # 只看网络服务清单
+#   netpath --watch             # 刷新路由与服务状态
+#
+# 数据源: route, scutil --nc list, scutil --dns, scutil --nwi,
+#         networksetup, netstat -rn, dscacheutil, ifconfig
+
+emulate -L zsh
+setopt errexit nounset pipefail
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+
+typeset TARGET='' ONLY_SVC=false ONLY_DNS=false DO_WATCH=false
+typeset -i INTERVAL=3
+
+while (( $# > 0 )); do
+  case $1 in
+    --services)  ONLY_SVC=true; shift ;;
+    --dns)       ONLY_DNS=true; shift ;;
+    --watch)     DO_WATCH=true; shift ;;
+    --interval)  INTERVAL=$2; shift 2 ;;
+    --version)   echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [目标IP或主机名] [--services|--dns] [--watch] [--interval N]"
+      echo "  目标          查该目标走哪条路 (IP 或主机名),不带则只出总览"
+      echo "  --services    只看网络服务清单"
+      echo "  --dns         只看 DNS 解析结果 (多 resolver 依次尝试)"
+      echo "  --watch       刷新路由与服务状态"
+      echo "  --interval N  刷新间隔秒 (默认 3)"
+      exit 0
+      ;;
+    -*) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+    *)  TARGET=$1; shift ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_BLUE=$'\033[34m'
+  C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_BLUE='' C_CYAN=''
+fi
+
+# ---- 网络服务清单 ---------------------------------------------------------
+# scutil --nc list 输出格式:
+#   * (Connected)      FB6F... VPN (io.tailscale.ipn.macsys) "Tailscale"   [VPN:io...]
+#   (Disconnected)   248C... VPN (com.ruikq.decar) "Loon"                [VPN:com...]
+# 前导 * 表示 enabled,括号内是当前状态。
+_services_block() {
+  local raw
+  raw=$(scutil --nc list 2>/dev/null || true)
+  if [[ -z $raw ]]; then
+    echo "  ${C_DIM}(scutil --nc list 无输出 —— 可能没有 VPN/SCPP 服务)${C_RESET}"
+    return
+  fi
+
+  # awk 一次解析成 TSV: enabled, status, uuid, type, bundle, name
+  # 注意:第一行是 "Available network connection services in the current set (*=enabled):"
+  #       表头说明,不是数据 —— 必须跳过。
+  # 真实字段序(scutil --nc list 实测):
+  #   [1]=*  [2]=(Status)  [3]=UUID  [4]=VPN  [5]=(bundle.id)  [6]="Name"  [7]=[VPN:bundle.id]
+  local rows
+  rows=$(print -r -- "$raw" | awk '
+    NR == 1 { next }                      # 跳过表头说明行
+    {
+      en = "no"
+      if (substr($1, 1, 1) == "*") en = "yes"
+      st = $2
+      gsub(/[()]/, "", st)
+      bundle = $5
+      gsub(/[()]/, "", bundle)
+      # 显示名:第 6 个字段,带引号
+      nm = $6
+      gsub(/"/, "", nm)
+      printf "%s\t%s\t%s\t%s\t%s\t%s\n", en, st, $3, $4, bundle, nm
+    }
+  ')
+
+  if [[ -z $rows ]]; then
+    echo "  ${C_DIM}(无网络服务)${C_RESET}"
+    return
+  fi
+
+  printf "  ${C_DIM}%-4s %-14s %-34s %s${C_RESET}\n" 'EN' 'STATUS' 'BUNDLE ID' 'NAME'
+  local en st uuid type bundle nm color
+  while IFS=$'\t' read -r en st uuid type bundle nm; do
+    [[ -z $en ]] && continue
+    case $st in
+      Connected)    color=$C_GREEN ;;
+      Connecting)   color=$C_YELLOW ;;
+      Disconnected) color=$C_DIM ;;
+      *)            color=$C_YELLOW ;;
+    esac
+    printf "  %-4s ${color}%-14s${C_RESET} %-34s %s\n" \
+      "$([[ $en == yes ]] && echo '*' || echo ' ')" "$st" \
+      "${bundle:-?}" "${nm:-(无显示名)}"
+  done <<<"$rows"
+
+  echo
+  echo "  ${C_DIM}  列说明:BUNDLE ID 是真正的区分键;多款 VPN 注册的 type 都是 VPN${C_RESET}"
+  echo "  ${C_DIM}  逐条详情:${C_RESET} scutil --nc status <UUID>"
+}
+
+# ---- 默认路由归属 ---------------------------------------------------------
+_default_route_block() {
+  local raw iface gw
+  raw=$(route -n get default 2>/dev/null || true)
+  if [[ -z $raw ]]; then
+    echo "  ${C_RED}✗ 没有默认路由(完全离线)${C_RESET}"
+    return
+  fi
+  iface=$(print -r -- "$raw" | awk -F': *' '/^[[:space:]]*interface:/ { print $2; exit }')
+  gw=$(print -r -- "$raw" | awk -F': *' '/^[[:space:]]*gateway:/ { print $2; exit }')
+  if [[ -z $gw ]]; then
+    # 直接挂在接口上(点对点 VPN 常见) — 没有 gateway 行
+    gw="(接口直连 / 无网关)"
+  fi
+
+  # utun* 基本都是隧道;en* / bridge* 是物理
+  local kind color
+  case $iface in
+    utun*) kind="隧道 / VPN 接口"; color=$C_YELLOW ;;
+    en*)   kind="Wi-Fi / 以太网接口"; color=$C_GREEN ;;
+    bridge*) kind="网桥"; color=$C_CYAN ;;
+    *)     kind="其他接口"; color=$C_DIM ;;
+  esac
+
+  echo "  ${C_GREEN}默认路由出口:${C_RESET} ${C_BOLD}${C_CYAN}${iface}${C_RESET} ${C_DIM}(${kind})${C_RESET}"
+  echo "  ${C_DIM}  网关:${C_RESET} $gw"
+  echo "  ${C_DIM}  flags:${C_RESET} $(print -r -- "$raw" | awk -F': *' '/^[[:space:]]*flags:/ { print $2; exit }')"
+
+  # utun 吃掉 default 就是典型的 VPN 全局模式 —— 明确告诉用户
+  if [[ $iface == utun* ]]; then
+    echo
+    echo "  ${C_YELLOW}! 默认路由被 $iface 接管 —— 典型 VPN 全局代理模式${C_RESET}"
+    echo "  ${C_DIM}  后果:所有本应走物理网卡的流量都会进隧道,DNS 也可能被改${C_RESET}"
+    echo "  ${C_DIM}  本机实测:route -n get 8.8.8.8 与 route -n get default 返回同一接口${C_RESET}"
+    echo "  ${C_DIM}  想看真实出口:${C_RESET} route -n get <具体内网IP>"
+  fi
+
+  # 路由表条目统计
+  # netstat -rn 列序: $1=Destination $2=Gateway $3=Flags $4=Netif
+  # "网关条目" = Flags 里含 U(Up) 的条目数 —— 不能匹配 $NF == "UGS"(Netif 才是末列)
+  echo
+  local total gated
+  total=$(netstat -rn -f inet 2>/dev/null | awk 'NR>2 && $1 ~ /^[0-9]/ { c++ } END { print c + 0 }')
+  gated=$(netstat -rn -f inet 2>/dev/null | awk 'NR>2 && $1 ~ /^[0-9]/ && $3 ~ /U/ { c++ } END { print c + 0 }')
+  echo "  ${C_DIM}  路由表条目:${C_RESET} $total ${C_DIM}(其中网关可达 $gated 条)${C_RESET}"
+}
+
+# ---- 目标路径查询 ---------------------------------------------------------
+_path_block() {
+  local target=$1
+  echo "  ${C_BOLD}目标${C_RESET} ${C_BOLD}${C_CYAN}${target}${C_RESET}"
+
+  # 主机名先解析,显示用了哪个 IP
+  local resolved ip
+  if ! _is_ipv4 "$target" && [[ $target != *:* ]]; then
+    resolved=$(dscacheutil -q host -a name "$target" 2>/dev/null | awk -F': ' '/ip_address/ { print $2 }' || true)
+    if [[ -z $resolved ]]; then
+      resolved=$(dscacheutil -q host -a name "$target" 2>&1 | sed -n 's/.*No such name.*/NOTFOUND/p')
+      [[ -z $resolved ]] && resolved="NOTFOUND"
+    fi
+    echo "  ${C_DIM}  DNS 解析:${C_RESET} $(print -r -- "$resolved" | tr '\n' ' ' || echo NOTFOUND)"
+    ip=$(print -r -- "$resolved" | awk 'NF { print; exit }')
+    [[ $ip == NOTFOUND || -z $ip ]] && ip=$target
+    _fake_ip_note "$ip"
+  else
+    ip=$target
+    _fake_ip_note "$ip"
+  fi
+
+  local raw iface gw mtu flags
+  raw=$(route -n get "$ip" 2>/dev/null || true)
+  if [[ -z $raw ]]; then
+    echo "  ${C_RED}  ✗ 路由查询失败(目标不可达或格式非法)${C_RESET}"
+    return
+  fi
+  iface=$(print -r -- "$raw" | awk -F': *' '/^[[:space:]]*interface:/ { print $2; exit }')
+  gw=$(print -r -- "$raw" | awk -F': *' '/^[[:space:]]*gateway:/ { print $2; exit }')
+  flags=$(print -r -- "$raw" | awk -F': *' '/^[[:space:]]*flags:/ { print $2; exit }')
+  # MTU 不在 "mtu:" 独立行 —— 它在 recvpipe/ssthresh 那张表的第 7 列。
+  # 注意:数据行本身是纯数字,不含 "recvpipe" 字样;
+  #       必须先 grep 出表头行,再取它的下一行。
+  #   表头: recvpipe sendpipe ssthresh rtt,msec rttvar hopcount mtu expire
+  #   数据:       0         0         0        0        0         0      4000       0
+  mtu=$(print -r -- "$raw" | awk '/recvpipe[[:space:]]+sendpipe/ { getline; print $7; exit }')
+
+  echo "  ${C_DIM}  出口接口:${C_RESET} $(_iface_color "$iface")${iface}${C_RESET}"
+  local kind
+  case $iface in
+    utun*) kind="隧道 / VPN" ;;
+    en*)   kind="Wi-Fi / 以太网" ;;
+    *)     kind="其他" ;;
+  esac
+  echo "  ${C_DIM}  接口类型:${C_RESET} $kind"
+  echo "  ${C_DIM}  网关:${C_RESET} ${gw:-（接口直连，无网关行）}"
+  echo "  ${C_DIM}  MTU:${C_RESET} ${mtu:-?}"
+  echo "  ${C_DIM}  路由 flags:${C_RESET} ${flags:-?}"
+
+  # 这个接口背后是哪条网络服务 —— 从 scutil --nwi 拿地址反查
+  local nwi_addr svc
+  nwi_addr=$(scutil --nwi 2>/dev/null | awk -v i="$iface" '
+    $1 == i":" || $1 == i" :" { getline; if ($1 == "address") print $3 }
+  ' | head -1)
+  if [[ -n $nwi_addr ]]; then
+    svc=$(_service_for_addr "$nwi_addr")
+    if [[ -n $svc ]]; then
+      echo "  ${C_DIM}  所属服务:${C_RESET} ${C_BOLD}${svc}${C_RESET}"
+    fi
+  fi
+}
+
+# 判断字符串是否为完整 IPv4 字面量。
+# 为什么不用 [[ $s != <->.<->.<->.<-> ]] / [[ $s != *[!0-9.]* ]]:
+# 这两个 glob 在 emulate -L zsh 下实测不可靠 —— `netpath --dns github.com`
+# 的 `[[ github.com != *[!0-9.]* ]]` 返回假,导致整个 DNS 解析段被静默跳过
+# (不报错、trace 显示直接跳到函数末尾)。统一走 case 判定。
+_is_ipv4() {
+  local s=$1
+  [[ -z $s ]] && return 1
+  case $s in
+    <->.<->.<->.<->) return 0 ;;
+    *)              return 1 ;;
+  esac
+}
+
+# fake-IP 检测:本地 DNS 被代理接管后,域名被映射到"假地址"段,
+# 真实连接由代理端发起 —— 你 ping/curl 到的不是真服务器。
+#
+# 各家客户端取的段不一样(实测数据见括号):
+#   Clash / mihomo  198.18.0.0/16
+#   Loon            198.0.0.0/16   (本机实测 github.com → 198.0.0.74)
+#   Surge           198.18.0.0/16
+# 共同点:都落在 198.0.0.0/8 内。该段整体属 RFC 2544 benchmarking 保留段,
+# 不做公网路由,所以命中即判定 fake-ip,不会误伤真实服务器。
+_fake_ip_note() {
+  local ip=$1
+  _is_ipv4 "$ip" || return
+  local a rest b
+  a=${ip%%.*}
+  rest=${ip#*.}
+  b=${rest%%.*}
+  if [[ $a == 198 ]] && (( b <= 25 )); then
+    echo
+    echo "  ${C_YELLOW}! $ip 落在保留段 198.0.0.0/8 —— fake-ip 地址,不是真实服务器${C_RESET}"
+    echo "  ${C_DIM}  含义:本地 DNS 被代理接管,域名映射成假地址,真实连接由代理端发起${C_RESET}"
+    echo "  ${C_DIM}  后果:ping / nc / curl 到这个 IP 只打到本地代理入口,不会到真实服务器${C_RESET}"
+    echo "  ${C_DIM}  想看真实 IP:在代理客户端里关 fake-ip,或临时切到非 fake-ip 的 DNS${C_RESET}"
+  fi
+}
+
+_iface_color() {
+  case $1 in
+    utun*) print -r -- "$C_YELLOW" ;;
+    en*)   print -r -- "$C_GREEN" ;;
+    *)     print -r -- "$C_DIM" ;;
+  esac
+}
+
+# 用 IP 前缀匹配服务名(服务绑定的接口通常持有该前缀的地址)
+_service_for_addr() {
+  local addr=$1
+  # networksetup 里拿 enabled 服务列表;IPv4 段更可靠
+  local seg
+  seg=$(print -r -- "$addr" | awk -F. '{ printf "%s.%s.%s", $1, $2, $3 }')
+  # 在 scutil --nwi 里找同一接口名
+  local iface2
+  iface2=$(scutil --nwi 2>/dev/null | awk -v s="$seg" '$1 ~ ":" && $3 == s { print $1; exit }')
+  iface2=${iface2%:}
+  [[ -z $iface2 ]] && iface2=$(_iface_for_addr "$addr")
+  [[ -z $iface2 ]] && return
+  print -r -- "$iface2"
+}
+
+_iface_for_addr() {
+  scutil --nwi 2>/dev/null | awk '
+    $1 ~ /^[^ ]+[[:space:]]*:$/ || $1 ~ /^[^ ]+ :$/ {
+      # 抓接口块起点
+      if ($1 ~ /:$/) { iface = $1; sub(/[[:space:]]*:$/, "", iface); next }
+    }
+    $1 == "address" && $3 ~ /^[0-9]/ { print iface; exit }
+  ' | head -1
+}
+
+# ---- DNS resolver 作用域 --------------------------------------------------
+_dns_block() {
+  local raw
+  raw=$(scutil --dns 2>/dev/null || true)
+  if [[ -z $raw ]]; then
+    echo "  ${C_DIM}(scutil --dns 无输出)${C_RESET}"
+    return
+  fi
+
+  # resolver 块内收集 nameserver + if_index
+  print -r -- "$raw" | awk -v dim="$C_DIM" -v bold="$C_BOLD" -v green="$C_GREEN" \
+    -v yellow="$C_YELLOW" -v reset="$C_RESET" '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    /^resolver #/ {
+      # 打印上一块
+      if (idx != "" || nscount > 0) flush()
+      # "resolver #1" 只有 2 个字段,编号在 $2 —— 要剥掉前导 #
+      rid = $2; sub(/^#/, "", rid)
+      idx = ""; nscount = 0; dom = ""
+      inblk = 1; next
+    }
+    inblk && /nameserver\[[0-9]+\]/ {
+      v = $NF; if (nscount < 4) { ns[nscount] = v; nscount++ }
+      next
+    }
+    inblk && /^[[:space:]]*if_index/ {
+      # 格式 "  if_index : 37 (utun4)" —— 接口名在括号里,不能只取 $3(那是纯数字)
+      if (match($0, /\([^)]+\)/)) idx = substr($0, RSTART + 1, RLENGTH - 2)
+      else idx = $3
+      next
+    }
+    inblk && /^[[:space:]]*domain[[:space:]]*:/ {
+      dom = trim($0); sub(/^domain[[:space:]]*:[[:space:]]*/, "", dom); next
+    }
+    END { if (idx != "" || nscount > 0) flush() }
+
+    function flush(   i, s) {
+      if (nscount == 0 && idx == "") return
+      s = "  " dim "  resolver #" rid
+      if (dom != "") s = s "  (" dom ")"
+      s = s "\n"
+      if (nscount > 0) {
+        line = ""
+        for (i = 0; i < nscount; i++) line = line (i ? ", " : "") ns[i]
+        s = s "    " bold "NS:" reset " " line "\n"
+      }
+      if (idx != "") {
+        c = (substr(idx,1,5) == "utun") ? yellow : green
+        s = s "    " bold "iface:" reset " " c idx reset "\n"
+      }
+      printf "%s", s
+    }
+  '
+
+  # ---- DNS 解析实测(只查一次,放最后) ----
+  # 只对主机名做解析,IPv4/IPv6 字面量跳过(_is_ipv4 说明见其定义处)
+  local host=$1
+  local is_hostname=false
+  if [[ -n $host ]]; then
+    if ! _is_ipv4 "$host" && [[ $host != *:* ]]; then
+      is_hostname=true
+    fi
+  fi
+  if $is_hostname; then
+    echo
+    echo "  ${C_BOLD}解析 ${host}${C_RESET}"
+    local out
+    out=$(dscacheutil -q host -a name "$host" 2>&1 || true)
+    if print -r -- "$out" | grep -q 'ip_address'; then
+      print -r -- "$out" | awk -F': ' -v r="$C_RESET" -v g="$C_GREEN" \
+        '/ip_address/ { printf "  %s%-6s%s %s\n", g, "IPv4", r, $2 }'
+    else
+      echo "  ${C_DIM}    无 A 记录${C_RESET}"
+    fi
+    local v6
+    v6=$(print -r -- "$out" | awk -F': ' '/ipv6_address/ { print $2 }' || true)
+    if [[ -n $v6 ]]; then
+      print -r -- "$out" | awk -F': ' -v r="$C_RESET" -v g="$C_GREEN" \
+        '/ipv6_address/ { printf "  %s%-6s%s %s\n", g, "IPv6", r, $2 }'
+    fi
+  fi
+}
+
+# ---- 路由表摘要 -----------------------------------------------------------
+_routes_block() {
+  echo "  ${C_BOLD}路由表摘要${C_RESET} ${C_DIM}(netstat -rn -f inet,前 12 条)${C_RESET}"
+  local rows
+  rows=$(netstat -rn -f inet 2>/dev/null \
+    | awk 'NR>2 && ($1 ~ /^[0-9]/ || $1 == "default") { print }' \
+    | awk 'NR<=12')
+  if [[ -z $rows ]]; then
+    echo "  ${C_DIM}(无 IPv4 路由条目)${C_RESET}"
+    return
+  fi
+  # netstat -rn 列序: $1=Destination $2=Gateway $3=Flags $4=Netif $5=Expire
+  # Expire 列常为空 —— printf 用固定宽,别按 NF 推断列数
+  print -r -- "$rows" | awk '
+    {
+      printf "  %-18s %-16s %-12s %s\n", $1, $2, $3, $4
+    }
+  '
+  echo
+  local tun
+  tun=$(print -r -- "$rows" | awk '$4 ~ /^utun/ { c++ } END { print c + 0 }')
+  echo "  ${C_DIM}  其中 utun* 隧道条目:${C_RESET} ${C_YELLOW}${tun}${C_RESET} ${C_DIM}(VPN 典型特征)${C_RESET}"
+  echo
+  echo "  ${C_DIM}  注意:en1 上有两条 default(一条 link#37 走 utun4,一条走 192.168.31.1)${C_RESET}"
+  echo "  ${C_DIM}  macOS 选路用最长前缀匹配,具体目标优先看 netpath <IP>${C_RESET}"
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_render() {
+  if [[ -t 1 ]]; then
+    printf '\033[?25l\033[2J\033[H'
+  fi
+  echo "${C_BOLD}${C_CYAN}═══ 网络路径决策器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读  ·  数据源: route / scutil / networksetup${C_RESET}"
+
+  if $ONLY_SVC; then
+    echo
+    _services_block
+  elif $ONLY_DNS; then
+    echo
+    _dns_block "$TARGET"
+  else
+    echo
+    echo "${C_BOLD}  网络服务清单${C_RESET} ${C_DIM}(scutil --nc list — VPN / SCPP)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    _services_block
+    echo
+    echo "${C_BOLD}  默认路由归属${C_RESET} ${C_DIM}(route -n get default)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    _default_route_block
+    echo
+    echo "${C_BOLD}  目标路径查询${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    if [[ -n $TARGET ]]; then
+      _path_block "$TARGET"
+    else
+      echo "  ${C_DIM}(不带参数 = 只出总览;加 IP 或主机名查单目标,例如 netpath 8.8.8.8)${C_RESET}"
+    fi
+    echo
+    echo "${C_BOLD}  DNS 解析器作用域${C_RESET} ${C_DIM}(scutil --dns)${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    _dns_block ''
+    echo
+    echo "${C_BOLD}  路由表摘要${C_RESET}"
+    echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+    _routes_block
+  fi
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 只读:不写 networksetup / 不改路由表${C_RESET}"
+  echo "${C_DIM}  配套:$SCRIPT_NAME 8.8.8.8 (单目标) · $SCRIPT_NAME --dns example.com (DNS)${C_RESET}"
+}
+
+_cleanup() { printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+
+if $DO_WATCH; then
+  while true; do _render; sleep $INTERVAL; done
+else
+  _render
+fi

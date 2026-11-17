@@ -1,0 +1,376 @@
+#!/usr/bin/env zsh
+# installhist — 安装历史与更新策略审计:这台机器上什么时候被装过什么
+#
+# 设计目标:
+#   - 公司合规场景高频问题:"这台机器什么时候装的这个软件?""它是不是公司装的?"
+#     macOS 自己有 InstallHistory 数据库,但只有 system_profiler 能看,输出是一坨缩进
+#   - 免 brew / 免 sudo:只 zsh + system_profiler + defaults + awk
+#   - 显示:
+#       ① 自动更新策略(自动下载 / 自动装 macOS 更新 / 关键更新是否开)
+#       ② 上一次自动安装的系统更新是什么时候(距今多少天)
+#       ③ 安装历史统计:总条目、来源分布(Apple / 3rd Party)、macOS 大版本升级
+#       ④ 最近 N 条安装记录(名称 / 版本 / 来源 / 时间)
+#       ⑤ "同一个软件装了几次"排行 —— 反复重装往往意味着装完被删或装坏
+#       ⑥ 结论:更新策略有没有被关掉
+#   - 只读:不执行 softwareupdate -l(要联网且很慢),需要时看最后一行提示
+#
+# 用法:
+#   installhist                 # 全量
+#   installhist --recent        # 只看最近安装
+#   installhist --policy        # 只看更新策略
+#   installhist --top N         # 排行条数 (默认 8)
+#   installhist --json
+
+emulate -L zsh
+setopt errexit nounset pipefail extended_glob
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+typeset -r _TAB=$'\t'
+typeset -i TOP_N=8
+typeset -i RECENT_N=15
+typeset ONLY=''
+typeset AS_JSON=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --recent)  ONLY='recent'; shift ;;
+    --policy)  ONLY='policy'; shift ;;
+    --top|-n)  TOP_N=$2; shift 2 ;;
+    --recent-n) RECENT_N=$2; shift 2 ;;
+    --json)    AS_JSON=true; shift ;;
+    --version) echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--recent|--policy] [--top N] [--json]"
+      echo ""
+      echo "  --recent   只看最近 $RECENT_N 条安装记录"
+      echo "  --policy   只看自动更新策略"
+      echo "  --top N    同一软件重装排行条数 (默认 $TOP_N)"
+      echo "  --json     TSV 输出"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 && $AS_JSON == false ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+typeset -g -a J_POLICY=()     # key<TAB>value<TAB>note
+typeset -g -a J_ITEMS=()      # when<TAB>name<TAB>version<TAB>source
+typeset -g -a J_REPEAT=()     # count<TAB>name<TAB>last_when
+typeset -g J_TOTAL=0 J_APPLE=0 J_THIRD=0 J_OSUP=0
+typeset -g J_LAST_OS='' J_LAST_OS_DAYS='?'
+
+# ---- ① 更新策略 ------------------------------------------------------------
+# 坑:`defaults read <domain>` 在 key 不存在时把错误打到 **stdout** 并且 exit 1,
+# 所以每个 key 都要 `2>/dev/null || true`,否则错误文本会被当成"值"。
+_defaults_key() {
+  local domain=$1 key=$2
+  defaults read "$domain" "$key" 2>/dev/null || true
+}
+
+_collect_policy() {
+  local domain=/Library/Preferences/com.apple.SoftwareUpdate
+  local v
+  v=$(_defaults_key "$domain" AutomaticDownload)
+  J_POLICY+=("info${_TAB}AutomaticDownload${_TAB}${v:-0}${_TAB}后台自动下载更新(1=开)")
+
+  v=$(_defaults_key "$domain" AutomaticallyInstallMacOSUpdates)
+  J_POLICY+=("info${_TAB}AutomaticallyInstallMacOSUpdates${_TAB}${v:-0}${_TAB}自动安装 macOS 大版本更新(公司机通常应关)")
+
+  v=$(_defaults_key "$domain" CriticalUpdateInstall)
+  J_POLICY+=("info${_TAB}CriticalUpdateInstall${_TAB}${v:-0}${_TAB}自动安装安全关键更新(1=开)")
+
+  v=$(_defaults_key "$domain" ConfigDataInstall)
+  J_POLICY+=("info${_TAB}ConfigDataInstall${_TAB}${v:-0}${_TAB}自动更新 Gatekeeper 名单(1=开)")
+
+  # 商业机(mdm-managed)会有一堆策略键,顺手看看有没有 MDM
+  local managed
+  managed=$(defaults read /Library/Preferences/com.apple.SoftwareUpdate 2>/dev/null | grep -c 'Forced' || true)
+  J_POLICY+=("info${_TAB}MDM 强制键数量${_TAB}${managed}${_TAB}defaults 里有 Forc 开头的键通常表示被 MDM 管控")
+
+  # 上次自动安装的更新:FirstInstallTonightDateDictionary 的 key 里带版本号,
+  # value 是 "2025-11-12 12:26:38 +0000"。取时间最新的那条。
+  local line
+  line=$(defaults read "$domain" FirstInstallTonightDateDictionary 2>/dev/null \
+          | LC_ALL=C awk '
+            /= "/ {
+              ts = $0
+              sub(/.*= "/, "", ts); sub(/".*/, "", ts)
+              if (ts > best) { best = ts; key = prev }
+            }
+            { prev = $0; sub(/".*/, "", prev); gsub(/^[[:space:]]*"/, "", prev) }
+            END { if (best != "") printf "%s\t%s", best, key }
+          ')
+  local when keyname
+  when=${line%%$'\t'*}
+  keyname=${line#*$'\t'}
+  if [[ -n $when ]]; then
+    # "2025-11-12 12:26:38 +0000" -> 去掉时区再算天数
+    local when_local
+    when_local=$(date -j -f '%Y-%m-%d %H:%M:%S' "${when%% +0000}" '+%Y-%m-%d' 2>/dev/null) || when_local=''
+    if [[ -n $when_local ]]; then
+      J_LAST_OS=$when_local
+      J_LAST_OS_DAYS=$(( ( $(date +%s) - $(date -j -f '%Y-%m-%d' "$when_local" +%s 2>/dev/null) ) / 86400 ))
+    fi
+    J_POLICY+=("info${_TAB}上次自动安装更新${_TAB}${when_local:-?}${_TAB}${keyname:-}(距今 ${J_LAST_OS_DAYS} 天)")
+  else
+    J_POLICY+=("warn${_TAB}上次自动安装更新${_TAB}(无记录)${_TAB}FirstInstallTonightDateDictionary 为空")
+  fi
+}
+
+# ---- ② 安装历史 -----------------------------------------------------------
+# system_profiler SPInstallHistoryDataType 的输出是三级缩进:
+#   Installations:
+#   <空行>
+#       macOS 15.2:            ← 4 空格 + 名称 + 冒号
+#   <空行>
+#         Version: 15.2       ← 6 空格 + 键值
+#         Source: Apple
+#         Install Date: 12/14/24, 11:36
+#
+# 坑:
+#   ① 有些条目**没有** Install Date(比如只登记了安装事实的 pkg),不能假设每条都有。
+#   ② 日期是 "12/14/24, 11:36" 这种 MM/DD/YY,必须转成 ISO 才能排序。
+#   ③ 有历史条目会重复名字(macOS 每次小版本都算一条),统计时要按名字聚合。
+_collect_history() {
+  local out
+  out=$(system_profiler SPInstallHistoryDataType 2>/dev/null | LC_ALL=C awk -v topn="$TOP_N" '
+    function flush() {
+      if (name == "") return
+      when = (raw == "" ? "(无日期)" : iso)
+      printf "ITEM\t%s\t%s\t%s\t%s\n", when, name, (ver == "" ? "-" : ver), src
+      if (name ~ /^macOS /) osup++
+      if (src == "Apple") apple++; else third++
+      total++
+      cnt[name]++
+      if (when > lastseen[name]) lastseen[name] = when
+    }
+    # "Install Date: 12/14/24, 11:36"  ->  "2024-12-14 11:36"
+    function toiso(s,   y, mo, d, hh, mm) {
+      split(s, a, /[, ]+/)
+      split(a[1], b, "/")
+      y = b[3] + 0
+      if (y < 100) y += 2000
+      hh = (a[2] == "" ? "00" : a[2]); mm = (a[3] == "" ? "00" : a[3])
+      return sprintf("%04d-%02d-%02d %s:%s", y, b[1]+0, b[2]+0, hh, mm)
+    }
+    {
+      line = $0
+      # 坑:包名里**可能有空格**("macOS 15.2"、爱思助手Mac版),
+      # 所以不能写 /^    [^ ]+:/ —— 那样只匹配得到无空格的包名,
+      # 结果 "macOS 15.2" 这类系统升级条目整段被跳过(macOS 升级数恒为 0)。
+      # 正确判据:第 5 个字符非空格(区分 4 空格 vs 6 空格缩进)+ 行尾是冒号。
+      if (line ~ /^    [^ ]/ && line ~ /:[ ]*$/) {
+        flush()
+        name = line; sub(/^ +/, "", name); sub(/:$/, "", name)
+        ver = ""; src = ""; raw = ""
+        next
+      }
+      if (line ~ /^      Version:/)      { ver = line; sub(/^ +Version: */, "", ver); next }
+      if (line ~ /^      Source:/)       { src = line; sub(/^ +Source: */, "", src); next }
+      if (line ~ /^      Install Date:/) { raw = line; sub(/^ +Install Date: */, "", raw); iso = toiso(raw); next }
+    }
+    END {
+      flush()
+      printf "TOTALS\t%d\t%d\t%d\t%d\n", total+0, apple+0, third+0, osup+0
+      for (n in cnt) printf "REPEAT\t%d\t%s\t%s\n", cnt[n], n, lastseen[n]
+    }
+  ')
+  [[ -z $out ]] && return
+
+  local kind a b c d
+  while IFS=$_TAB read -r kind a b c d; do
+    case $kind in
+      ITEM)
+        J_ITEMS+=("${a}${_TAB}${b}${_TAB}${c}${_TAB}${d}")
+        J_TOTAL=$(( J_TOTAL + 1 ))
+        [[ $d == 'Apple' ]] && J_APPLE=$(( J_APPLE + 1 )) || J_THIRD=$(( J_THIRD + 1 ))
+        [[ $b == macOS* ]] && J_OSUP=$(( J_OSUP + 1 ))
+        ;;
+      TOTALS) J_TOTAL=$a; J_APPLE=$b; J_THIRD=$c; J_OSUP=$d ;;
+      REPEAT) J_REPEAT+=("${a}${_TAB}${b}${_TAB}${c}") ;;
+    esac
+  done <<< "$out"
+
+  # 排行按次数排序(关联数组键序是哈希序,先拼字符串再 sort)
+  local tmp sorted
+  tmp=''
+  local row
+  for row in $J_REPEAT; do tmp+="${row}"$'\n'; done
+  sorted=$(print -r -- "$tmp" | sort -rn)
+  J_REPEAT=()
+  while IFS=$_TAB read -r a b c; do
+    [[ -n $b ]] || continue
+    J_REPEAT+=("${a}${_TAB}${b}${_TAB}${c}")
+  done <<< "$sorted"
+}
+
+# ---- ③ 结论 ---------------------------------------------------------------
+_verdicts() {
+  local bad=0 warn=0
+  local auto_mac auto_dl crit
+
+  auto_dl=$(_defaults_key /Library/Preferences/com.apple.SoftwareUpdate AutomaticDownload)
+  auto_mac=$(_defaults_key /Library/Preferences/com.apple.SoftwareUpdate AutomaticallyInstallMacOSUpdates)
+  crit=$(_defaults_key /Library/Preferences/com.apple.SoftwareUpdate CriticalUpdateInstall)
+
+  if [[ $auto_dl == '1' ]]; then
+    printf "ok\t自动下载更新\t开\t后台会拉更新包\n"
+  else
+    printf "bad\t自动下载更新\t关\t安全补丁要手动装,见最后一行提示\n"
+    (( bad = bad + 1 ))
+  fi
+  if [[ $crit == '1' ]]; then
+    printf "ok\t关键安全更新自动安装\t开\t-\n"
+  elif [[ $auto_dl == '1' ]]; then
+    printf "warn\t关键安全更新不自动装\t关\t下载了但不装,等于没更新\n"
+    (( warn = warn + 1 ))
+  else
+    printf "bad\t关键安全更新不自动装\t关\t-\n"
+    (( bad = bad + 1 ))
+  fi
+  if [[ $auto_mac == '1' ]]; then
+    printf "warn\t会自动装 macOS 大版本\t开\t公司机通常交给 MDM 管,自动升大版本容易半夜重启\n"
+    (( warn = warn + 1 ))
+  else
+    printf "ok\tmacOS 大版本不自动升\t关\t大版本交给人工/MDM\n"
+  fi
+
+  if [[ $J_LAST_OS_DAYS != '?' ]]; then
+    if (( J_LAST_OS_DAYS > 120 )); then
+      printf "warn\t距上次自动安装更新已 %d 天\t%s\t超过半年没更新,建议手工查一次\n" "$J_LAST_OS_DAYS" "$J_LAST_OS"
+      (( warn = warn + 1 ))
+    else
+      printf "ok\t上次自动安装在 %d 天前\t%s\t-\n" "$J_LAST_OS_DAYS" "$J_LAST_OS"
+    fi
+  fi
+
+  printf "info\t历史条目\t共 %d 条(Apple %d / 第三方 %d)\tmacOS 升级 %d 次\n" \
+    "$J_TOTAL" "$J_APPLE" "$J_THIRD" "$J_OSUP"
+  printf "info\t统计\tbad=%d warn=%d\t先修 bad\n" "$bad" "$warn"
+}
+
+# ---- 渲染 ------------------------------------------------------------------
+_kv() { printf "%s\t%s\t%s\t%s\n" "$1" "$2" "$3" "$4"; }
+
+_render_kv() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v red=$C_RED '
+    function pad(s, w) { s = s ""; while (length(s) < w) s = s " "; return s }
+    NF < 2 { next }
+    {
+      if ($1 == "ok")       { col = g;   mark = "✓" }
+      else if ($1 == "warn") { col = y;   mark = "!" }
+      else if ($1 == "bad")  { col = red; mark = "✗" }
+      else                  { col = d;   mark = "·" }
+      printf "  %s%s%s %s%s%s  %s%s  %s  %s\n", col, mark, r, b, pad($2, 26), r, pad($3, 26), d, $4, r
+    }
+  '
+}
+
+_render_recent() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v g=$C_GREEN -v y=$C_YELLOW -v limit="$RECENT_N" '
+    NF < 4 { next }
+    {
+      n++
+      if (n > limit) { over++; next }
+      src = $4
+      col = (src == "Apple" ? g : y)
+      printf "  %-18s %s%-9s%s %-24s %s%s\n", $1, col, src, r, b, $2, r
+    }
+    END { if (over) printf "  %s… 另有 %d 条更早的记录%s\n", d, over, r }
+  '
+}
+
+_render_repeat() {
+  LC_ALL=C awk -F'\t' -v b=$C_BOLD -v d=$C_DIM -v r=$C_RESET -v y=$C_YELLOW -v limit="$TOP_N" '
+    NF < 2 { next }
+    {
+      n++
+      if (n > limit) { over++; next }
+      printf "  %s%-30s%s %2d 次  %s最后 %s%s\n", b, $2, r, $1, d, $3, r
+    }
+    END { if (over) printf "  %s… 另有 %d 个软件装过多次%s\n", d, over, r }
+  '
+}
+
+_section() {
+  echo "${C_BOLD}$1${C_RESET}"
+  echo "  ${C_DIM}───────────────────────────────────────────────────────${C_RESET}"
+}
+
+_render_human() {
+  [[ -t 1 ]] && printf '\033[?25l\033[2J\033[H'
+  echo "${C_BOLD}${C_CYAN}═══ 安装历史 / 更新策略 审计 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读  ·  Ctrl-C 退出${C_RESET}"
+  echo
+
+  if [[ -z $ONLY || $ONLY == 'policy' ]]; then
+    _section "自动更新策略"
+    print -rl -- $J_POLICY | _render_kv
+    echo
+  fi
+
+  if [[ -z $ONLY || $ONLY == 'recent' ]]; then
+    _section "历史统计"
+    {
+      printf "总条目\t%d\n" "$J_TOTAL"
+      printf "来源 Apple\t%d\n" "$J_APPLE"
+      printf "来源 第三方\t%d\n" "$J_THIRD"
+      printf "macOS 升级\t%d\n" "$J_OSUP"
+    } | LC_ALL=C awk -F'\t' -v b=$C_BOLD -v r=$C_RESET '
+      NF < 2 { next }
+      { printf "  %s%-14s%s %6d\n", b, $1, r, $2 }
+    '
+    echo
+    _section "最近 $RECENT_N 条安装"
+    print -rl -- $J_ITEMS | _render_recent
+    echo
+    _section "反复安装排行 (前 $TOP_N)"
+    print -rl -- $J_REPEAT | _render_repeat
+    echo
+  fi
+
+  if [[ $ONLY != 'recent' ]]; then
+    _section "结论"
+    _verdicts | _render_kv
+    echo
+  fi
+
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: system_profiler SPInstallHistoryDataType, defaults, date${C_RESET}"
+  echo "${C_DIM}  手工检查更新(要联网,几十秒到几分钟): softwareupdate -l · 立刻安装: softwareupdate --install --all --verbose${C_RESET}"
+}
+
+_render_json() {
+  local a b c d vout
+  print -r -- "meta${_TAB}${SCRIPT_NAME}${_TAB}${VERSION}${_TAB}$(date '+%Y-%m-%d %H:%M:%S')"
+  print -r -- "total${_TAB}${J_TOTAL}"
+  print -r -- "apple${_TAB}${J_APPLE}"
+  print -r -- "third_party${_TAB}${J_THIRD}"
+  print -r -- "os_upgrades${_TAB}${J_OSUP}"
+  print -r -- "last_auto_update${_TAB}${J_LAST_OS}${_TAB}${J_LAST_OS_DAYS}"
+  local row
+  for row in $J_POLICY; do print -r -- "policy${_TAB}${row}"; done
+  for row in $J_ITEMS;   do print -r -- "item${_TAB}${row}"; done
+  for row in $J_REPEAT;  do print -r -- "repeat${_TAB}${row}"; done
+  vout=$(_verdicts)
+  while IFS=$_TAB read -r a b c d; do print -r -- "verdict${_TAB}${a}${_TAB}${b}${_TAB}${c}${_TAB}${d}"; done <<< "$vout"
+}
+
+_cleanup() { [[ -t 1 ]] && printf '\033[?25h\033[0m'; echo; }
+trap _cleanup EXIT INT TERM
+if $AS_JSON; then
+  trap - EXIT INT TERM
+  _collect_policy; _collect_history
+  _render_json
+  exit 0
+fi
+
+_collect_policy
+_collect_history
+_render_human

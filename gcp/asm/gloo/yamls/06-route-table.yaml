@@ -1,0 +1,39 @@
+# RouteTable - Defines HTTP routing rules
+# This is the Gloo Mesh equivalent of Istio VirtualService
+# Supports delegation for multi-team scenarios
+apiVersion: networking.gloo.solo.io/v2
+kind: RouteTable
+metadata:
+  name: api1-route
+  namespace: team-a-runtime
+spec:
+  hosts:
+  - "*"  # Match all hosts (use specific domains in production)
+  virtualGateways:
+  - name: team-a-gateway
+    namespace: team-a-runtime
+  http:
+  - name: route-to-api1
+    matchers:
+    - uri:
+        prefix: /api1
+    forwardTo:
+      destinations:
+      - ref:
+          name: api1-backend
+          namespace: team-a-runtime
+        port:
+          number: 8080
+    labels:
+      route: api1
+  - name: default-route
+    matchers:
+    - uri:
+        prefix: /
+    forwardTo:
+      destinations:
+      - ref:
+          name: api1-backend
+          namespace: team-a-runtime
+        port:
+          number: 8080

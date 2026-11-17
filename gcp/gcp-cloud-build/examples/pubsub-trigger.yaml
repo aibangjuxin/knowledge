@@ -1,0 +1,60 @@
+# Pub/Sub 触发器：收到消息就构建
+#
+# 典型用途：
+#   - 上游系统（如另一个 GCP 项目）发消息触发构建
+#   - 用 CEL filter 只对特定消息响应
+#
+# 需要的 API：cloudbuild, compute, pubsub
+#
+# 建 topic：
+#   gcloud pubsub topics create build-requests
+#
+# 建 trigger：
+#   gcloud builds triggers create pubsub \
+#     --name=build-from-pubsub \
+#     --region=asia-northeast1 \
+#     --topic=projects/<PROJECT_ID>/topics/build-requests \
+#     --subscription-filter='attributes.type="release"' \
+#     --repo=https://github.com/<OWNER>/<REPO>.git \
+#     --repo-type=GITHUB \
+#     --branch=main \
+#     --build-config=cloudbuild.yaml
+
+steps:
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        echo "=== Pub/Sub 消息内容 ==="
+        cat /workspace/event.json
+        echo
+        echo "=== 构建版本: ${_VERSION} ==="
+        echo "触发时间: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${_VERSION}'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${_VERSION}'
+
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:${_VERSION}'
+
+substitutions:
+  _VERSION: 'latest'
+  _REGION: 'asia-northeast1'
+  _REPO: 'my-app'
+  _SERVICE: 'my-service'
+
+options:
+  machineType: 'E2_STANDARD_2'
+  logging: 'CLOUD_LOGGING_ONLY'
+
+timeout: '900s'

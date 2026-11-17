@@ -1,0 +1,86 @@
+Certificate:
+    Data:
+        Version: 3 (0x2)
+        Serial Number:
+            03:1c:b3:f3:25:70:fb:d3:4b:ab:39:5e:fc:3b:d9:eb
+        Signature Algorithm: ecdsa-with-SHA256
+        Issuer: C=US, O=Amazon, CN=Amazon ECDSA 256 M02
+        Validity
+            Not Before: Jul 22 00:00:00 2024 GMT
+            Not After : Aug 20 23:59:59 2025 GMT
+        Subject: CN=*.api.gov.sg
+        Subject Public Key Info:
+            Public Key Algorithm: id-ecPublicKey
+                Public-Key: (256 bit)
+                pub:
+                    04:2b:08:7d:96:6f:01:c7:d3:88:78:db:8c:af:5a:
+                    5a:11:83:38:f9:63:6e:69:ca:3f:3a:42:03:5a:1c:
+                    da:7f:4c:94:8f:95:49:0e:bf:86:5d:a8:77:51:e0:
+                    31:38:c7:09:e4:22:c2:d8:68:89:f9:db:f7:96:23:
+                    2e:66:f7:0a:92
+                ASN1 OID: prime256v1
+                NIST CURVE: P-256
+        X509v3 extensions:
+            X509v3 Authority Key Identifier: 
+                BB:78:9A:D7:68:33:32:9D:1A:BB:6C:FD:B1:34:4C:01:DE:CB:D0:75
+            X509v3 Subject Key Identifier: 
+                93:75:37:78:E9:8E:D2:EC:19:90:C1:9D:3B:A7:6E:7E:01:2B:0A:3A
+            X509v3 Subject Alternative Name: 
+                DNS:*.api.gov.sg
+            X509v3 Certificate Policies: 
+                Policy: 2.23.140.1.2.1
+            X509v3 Key Usage: critical
+                Digital Signature, Key Agreement
+            X509v3 Extended Key Usage: 
+                TLS Web Server Authentication, TLS Web Client Authentication
+            X509v3 CRL Distribution Points: 
+                Full Name:
+                  URI:http://crl.e2m02.amazontrust.com/e2m02.crl
+            Authority Information Access: 
+                OCSP - URI:http://ocsp.e2m02.amazontrust.com
+                CA Issuers - URI:http://crt.e2m02.amazontrust.com/e2m02.cer
+            X509v3 Basic Constraints: critical
+                CA:FALSE
+            CT Precertificate SCTs: 
+                Signed Certificate Timestamp:
+                    Version   : v1 (0x0)
+                    Log ID    : DD:DC:CA:34:95:D7:E1:16:05:E7:95:32:FA:C7:9F:F8:
+                                3D:1C:50:DF:DB:00:3A:14:12:76:0A:2C:AC:BB:C8:2A
+                    Timestamp : Jul 22 11:47:49.052 2024 GMT
+                    Extensions: none
+                    Signature : ecdsa-with-SHA256
+                                30:46:02:21:00:EE:F1:D7:D1:66:30:49:EB:FF:28:2C:
+                                C6:79:21:A6:35:A3:2A:33:87:8E:0E:8C:11:BE:FB:1E:
+                                87:58:71:81:7C:02:21:00:BC:35:B5:CA:33:25:97:75:
+                                22:CD:A3:9A:AF:40:05:E7:87:67:37:3D:C3:89:96:36:
+                                34:30:E8:2C:F2:DD:F1:71
+                Signed Certificate Timestamp:
+                    Version   : v1 (0x0)
+                    Log ID    : E6:D2:31:63:40:77:8C:C1:10:41:06:D7:71:B9:CE:C1:
+                                D2:40:F6:96:84:86:FB:BA:87:32:1D:FD:1E:37:8E:50
+                    Timestamp : Jul 22 11:47:49.000 2024 GMT
+                    Extensions: none
+                    Signature : ecdsa-with-SHA256
+                                30:44:02:20:3B:57:FB:68:8A:DE:99:4D:99:07:30:47:
+                                3D:1F:2B:0F:DB:BC:C1:3A:31:4B:80:C9:48:8D:73:0D:
+                                63:AD:81:55:02:20:71:A8:5D:FC:72:67:DE:91:29:0A:
+                                0C:EE:D5:33:EE:1F:AD:9F:01:F2:E0:2F:02:10:A7:29:
+                                F0:6E:F7:69:F5:D1
+                Signed Certificate Timestamp:
+                    Version   : v1 (0x0)
+                    Log ID    : CC:FB:0F:6A:85:71:09:65:FE:95:9B:53:CE:E9:B2:7C:
+                                22:E9:85:5C:0D:97:8D:B6:A9:7E:54:C0:FE:4C:0D:B0
+                    Timestamp : Jul 22 11:47:49.173 2024 GMT
+                    Extensions: none
+                    Signature : ecdsa-with-SHA256
+                                30:44:02:20:3A:B4:C7:31:A1:30:FB:4B:A8:4E:AA:8E:
+                                B9:37:7D:C7:25:3C:E5:35:3A:25:9A:BA:B3:38:B4:6D:
+                                A9:49:68:F0:02:20:03:54:03:49:55:78:0C:3A:78:A1:
+                                C7:8C:9F:AA:9D:A2:3A:DA:1E:01:7C:3D:B7:36:A9:AF:
+                                9A:AF:53:7C:5A:A7
+    Signature Algorithm: ecdsa-with-SHA256
+    Signature Value:
+        30:44:02:20:44:e8:62:b8:a5:d2:62:be:70:bf:7e:8a:a9:92:
+        3b:72:75:8d:a7:65:c7:64:3c:00:af:9e:c3:f8:f3:2d:7b:6f:
+        02:20:2d:47:4a:23:54:38:73:81:30:78:4b:03:2d:6a:3a:4b:
+        87:8f:51:f3:3b:4a:10:55:03:29:81:aa:6f:06:e7:a9

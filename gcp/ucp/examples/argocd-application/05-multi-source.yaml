@@ -1,0 +1,27 @@
+# 例 5 · 多源：主仓库 + 另一个仓库的 values
+# ref 声明"这个源可以被引用"，被引用的源不再单独渲染。
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: my-app-multi-source
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/my-org/app.git
+      targetRevision: main
+      path: manifests
+      ref: values
+      name: app
+    - repoURL: https://github.com/my-org/config.git
+      targetRevision: main
+      ref: values
+      name: config
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: my-app
+  syncPolicy:
+    automated:
+      enabled: true
+    syncOptions:
+      - CreateNamespace=true

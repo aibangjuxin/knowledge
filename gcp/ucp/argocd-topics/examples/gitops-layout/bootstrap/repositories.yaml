@@ -1,0 +1,27 @@
+# Argo CD · Repository（Git 凭据）
+#
+# ⚠️ 私钥不要明文入库。生产用 GitHub App（推荐）或 Sealed Secrets / SOPS。
+#    详见 ../../../07-repository-githubapp.md
+#
+# ⚠️ 目标分支**不在这里**。分支属于 Application.spec.source.targetRevision。
+
+apiVersion: argoproj.io/v1alpha1
+kind: Repository
+metadata:
+  name: platform-repo
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform
+spec:
+  url: https://github.com/example/platform.git
+  type: git
+  # ---- GitHub App 方式（三件套）-------------------------------------------
+  githubAppPrivateKeySecret:
+    name: github-app-private-key
+    key: privateKey
+  githubAppId: "123456"
+  githubAppInstallationId: "12345678"
+  # ---- 若用 PAT，改用下面这段（示例值，勿提交）----------------------------
+  # passwordSecret:
+  #   name: repo-pat
+  #   key: token

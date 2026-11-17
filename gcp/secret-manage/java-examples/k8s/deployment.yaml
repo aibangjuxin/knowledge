@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secret-manager-demo
+  namespace: secret-manager-demo
+  labels:
+    app: secret-manager-demo
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: secret-manager-demo
+  template:
+    metadata:
+      labels:
+        app: secret-manager-demo
+        version: v1
+    spec:
+      # CRITICAL: This binds the pod to the KSA with Workload Identity
+      serviceAccountName: secret-manager-demo-ksa
+      
+      containers:
+      - name: secret-manager-demo
+        image: gcr.io/PROJECT_ID/secret-manager-demo:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        
+        env:
+        # GCP Project ID - required for Secret Manager
+        - name: GOOGLE_CLOUD_PROJECT
+          value: "PROJECT_ID"
+        
+        # Spring profile
+        - name: SPRING_PROFILES_ACTIVE
+          value: "gcp,prod"
+        
+        # JVM settings
+        - name: JAVA_OPTS
+          value: "-Xms512m -Xmx1024m -XX:+UseG1GC"
+        
+        # Health check configuration
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Resource limits and requests
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        
+        # Volume mounts for file-based secrets (if needed)
+        volumeMounts:
+        - name: secret-files
+          mountPath: /tmp/secrets
+          readOnly: false
+      
+      # Volumes for file-based secrets
+      volumes:
+      - name: secret-files
+        emptyDir: {}
+      
+      # Security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: secret-manager-demo-service
+  namespace: secret-manager-demo
+  labels:
+    app: secret-manager-demo
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: secret-manager-demo
+
+---
+# Optional: Ingress for external access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: secret-manager-demo-ingress
+  namespace: secret-manager-demo
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "secret-manager-demo-ip"
+spec:
+  rules:
+  - host: secret-manager-demo.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: secret-manager-demo-service
+            port:
+              number: 80

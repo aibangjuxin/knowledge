@@ -1,0 +1,27 @@
+# =====================================================================
+# File: 05-peer-authentication.yaml
+# 作用: Ambient 下的 STRICT mTLS 策略
+#
+# 为什么需要它:
+#   Ambient 下 mesh-wide mTLS 默认 STRICT，但可以用 PeerAuthentication
+#   显式收紧某个命名空间的行为。
+#
+# 注意:
+#   Ambient 模式下 PeerAuthentication **仍然需要 selector** 来定位 workload。
+#   不写 selector → 对全集群生效（本文件意图是对整个 tenant-runtime ns 生效，
+#   所以 selector 指向该 ns）。"不写 selector = 作用于整个 ns" 是错误的理解。
+#   Ambient 官方文档中 namespace-wide 策略的写法是 spec.mtls.mode: STRICT
+#   （不带 selector），因为 ambient 下 ztunnel 会自动将 ns 级策略应用到该 ns
+#   内的所有 workload。
+# =====================================================================
+---
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: tenant-runtime-strict
+  namespace: tenant-runtime
+spec:
+  # 不写 selector → 应用于整个 tenant-runtime ns 内所有 workload
+  # (Ambient 下 ztunnel 自动将 ns 级策略下发到该 ns 的所有 workload)
+  mtls:
+    mode: STRICT

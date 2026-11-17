@@ -1,0 +1,31 @@
+{
+  "name": "org-branch-name-convention",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "repository_name": {
+      "include": ["~ALL"],
+      "exclude": ["sandbox-*"]
+    },
+    "ref_name": {
+      "include": ["~ALL"],
+      "exclude": [
+        "~DEFAULT_BRANCH",
+        "refs/heads/release/**",
+        "refs/heads/hotfix/**"
+      ]
+    }
+  },
+  "bypass_actors": [],
+  "rules": [
+    {
+      "type": "branch_name_pattern",
+      "parameters": {
+        "name": "分支名必须是 feature|fix|hotfix|git-apps|codex/<名字>",
+        "negate": false,
+        "operator": "regex",
+        "pattern": "^(feature|fix|hotfix|git-apps|codex)/[A-Za-z0-9._-]+$"
+      }
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: egress-saas-access
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      istio: egressgateway
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/apps/sa/api1
+    to:
+    - operation:
+        ports: ["443"]
+    when:
+    - key: connection.sni
+      values: ["api.saas1.com"]
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/apps/sa/api2
+    to:
+    - operation:
+        ports: ["443"]
+    when:
+    - key: connection.sni
+      values: ["api.saas1.com", "api.saas3.com"]
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/apps/sa/api2
+    to:
+    - operation:
+        ports: ["80"]
+        hosts: ["api.saas2.com"]
+  - from:
+    - source:
+        principals:
+        - cluster.local/ns/apps/sa/api3
+    to:
+    - operation:
+        ports: ["443"]
+    when:
+    - key: connection.sni
+      values: ["api.saas3.com"]

@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>团队时区时钟</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 20px;
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
+        color: white;
+      }
+
+      .header h1 {
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .header p {
+        font-size: 1.1rem;
+        opacity: 0.9;
+      }
+
+      .clock-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 20px;
+        max-width: 1200px;
+        width: 100%;
+      }
+
+      .clock-card {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 15px;
+        padding: 25px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        transition:
+          transform 0.3s ease,
+          box-shadow 0.3s ease;
+      }
+
+      .clock-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+      }
+
+      .country-flag {
+        font-size: 2rem;
+        margin-bottom: 10px;
+      }
+
+      .country-name {
+        font-size: 1.4rem;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 5px;
+      }
+
+      .timezone-info {
+        font-size: 0.9rem;
+        color: #666;
+        margin-bottom: 15px;
+      }
+
+      .time-display {
+        font-size: 2.2rem;
+        font-weight: bold;
+        color: #2c3e50;
+        margin-bottom: 8px;
+        font-family: "Courier New", monospace;
+      }
+
+      .date-display {
+        font-size: 1rem;
+        color: #555;
+        margin-bottom: 10px;
+      }
+
+      .status-indicator {
+        display: inline-block;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: bold;
+        text-transform: uppercase;
+      }
+
+      .working-hours {
+        background: #27ae60;
+        color: white;
+      }
+
+      .off-hours {
+        background: #e74c3c;
+        color: white;
+      }
+
+      .current-timezone {
+        background: #f39c12;
+        color: white;
+      }
+
+      .footer {
+        margin-top: 30px;
+        text-align: center;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.9rem;
+      }
+
+      @media (max-width: 768px) {
+        .header h1 {
+          font-size: 2rem;
+        }
+
+        .clock-container {
+          grid-template-columns: 1fr;
+        }
+
+        .time-display {
+          font-size: 1.8rem;
+        }
+      }
+
+      .refresh-btn {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: rgba(255, 255, 255, 0.9);
+        border: none;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        cursor: pointer;
+        font-size: 1.2rem;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        transition: all 0.3s ease;
+      }
+
+      .refresh-btn:hover {
+        transform: scale(1.1);
+        background: white;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>🌍 团队时区时钟</h1>
+      <p>实时显示全球团队所在地区时间</p>
+    </div>
+
+    <div class="clock-container" id="clockContainer">
+      <!-- 时钟卡片将通过JavaScript动态生成 -->
+    </div>
+
+    <div class="footer">
+      <p>⏰ 页面每秒自动更新 | 点击右下角按钮手动刷新</p>
+    </div>
+
+    <button class="refresh-btn" onclick="updateAllClocks()" title="手动刷新">
+      🔄
+    </button>
+
+    <script>
+      // 时区配置
+      const timezones = [
+        {
+          name: "中国",
+          flag: "🇨🇳",
+          timezone: "Asia/Shanghai",
+          workingHours: [9, 18],
+        },
+        {
+          name: "印度",
+          flag: "🇮🇳",
+          timezone: "Asia/Kolkata",
+          workingHours: [9, 18],
+        },
+        {
+          name: "英国",
+          flag: "🇬🇧",
+          timezone: "Europe/London",
+          workingHours: [9, 17],
+        },
+        {
+          name: "UTC",
+          flag: "🌐",
+          timezone: "UTC",
+          workingHours: [9, 18],
+        },
+        {
+          name: "当前位置",
+          flag: "📍",
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          workingHours: [9, 18],
+          isCurrent: true,
+        },
+      ];
+
+      function getWorkingStatus(hour, workingHours, isCurrent = false) {
+        if (isCurrent) {
+          return "current-timezone";
+        }
+        return hour >= workingHours[0] && hour < workingHours[1]
+          ? "working-hours"
+          : "off-hours";
+      }
+
+      function getStatusText(hour, workingHours, isCurrent = false) {
+        if (isCurrent) {
+          return "当前时区";
+        }
+        return hour >= workingHours[0] && hour < workingHours[1]
+          ? "工作时间"
+          : "非工作时间";
+      }
+
+      function formatTime(date) {
+        return date.toLocaleTimeString("zh-CN", {
+          hour12: false,
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+      }
+
+      function formatDate(date) {
+        return date.toLocaleDateString("zh-CN", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          weekday: "long",
+        });
+      }
+
+      function createClockCard(timezone) {
+        const now = new Date();
+        const localTime = new Date(
+          now.toLocaleString("en-US", { timeZone: timezone.timezone }),
+        );
+        const hour = localTime.getHours();
+
+        const statusClass = getWorkingStatus(
+          hour,
+          timezone.workingHours,
+          timezone.isCurrent,
+        );
+        const statusText = getStatusText(
+          hour,
+          timezone.workingHours,
+          timezone.isCurrent,
+        );
+
+        return `
+                <div class="clock-card">
+                    <div class="country-flag">${timezone.flag}</div>
+                    <div class="country-name">${timezone.name}</div>
+                    <div class="timezone-info">${timezone.timezone}</div>
+                    <div class="time-display" data-timezone="${timezone.timezone}">
+                        ${formatTime(localTime)}
+                    </div>
+                    <div class="date-display" data-timezone="${timezone.timezone}">
+                        ${formatDate(localTime)}
+                    </div>
+                    <div class="status-indicator ${statusClass}">
+                        ${statusText}
+                    </div>
+                </div>
+            `;
+      }
+
+      function updateAllClocks() {
+        const container = document.getElementById("clockContainer");
+        container.innerHTML = timezones.map(createClockCard).join("");
+      }
+
+      function updateTimes() {
+        timezones.forEach((timezone) => {
+          const now = new Date();
+          const localTime = new Date(
+            now.toLocaleString("en-US", { timeZone: timezone.timezone }),
+          );
+          const hour = localTime.getHours();
+
+          const timeElements = document.querySelectorAll(
+            `[data-timezone="${timezone.timezone}"]`,
+          );
+          timeElements.forEach((element) => {
+            if (element.classList.contains("time-display")) {
+              element.textContent = formatTime(localTime);
+            } else if (element.classList.contains("date-display")) {
+              element.textContent = formatDate(localTime);
+            }
+          });
+
+          const card = timeElements[0]?.closest(".clock-card");
+          if (card) {
+            const statusElement = card.querySelector(".status-indicator");
+            const statusClass = getWorkingStatus(
+              hour,
+              timezone.workingHours,
+              timezone.isCurrent,
+            );
+            const statusText = getStatusText(
+              hour,
+              timezone.workingHours,
+              timezone.isCurrent,
+            );
+
+            statusElement.className = `status-indicator ${statusClass}`;
+            statusElement.textContent = statusText;
+          }
+        });
+      }
+
+      updateAllClocks();
+      setInterval(updateTimes, 1000);
+      setInterval(updateAllClocks, 60000);
+    </script>
+  </body>
+</html>

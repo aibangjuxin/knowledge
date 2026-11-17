@@ -1,0 +1,19 @@
+# 组件启用清单模板 → 复制成 bootstrap/clusters/<cluster>/components/<component>.yaml
+#
+# ⭐ 这个文件的存在 = 该集群启用该组件。
+#    删除它 → 该集群的这个 Application 消失（集群资源因
+#    preserveResourcesOnDeletion=true 而保留，需人工清理）。
+#
+# ⚠️ 字段必须与 ApplicationSet 的 flatten 列表**完全一致**：
+#      component / cluster / server / env / project / namespace
+#    少一个 → missingkey=error → **整个 AppSet** 报错。
+#
+# ⚠️ server / env / project / namespace 必须与同目录 ../cluster.yaml 一致
+#    （validate-clusters.py 会检查；手抄容易漂移）。
+
+component: nginx                # 必须等于文件名（nginx.yaml → nginx）
+cluster: dev-01                 # 必须等于所在目录名
+server: https://dev-01.k8s.example.com
+env: dev
+project: platform-dev
+namespace: platform-dev

@@ -1,0 +1,47 @@
+# Argo CD · 根应用（App of Apps 入口）
+#
+# 作用：整个 GitOps 体系的唯一入口。它只同步 bootstrap/ 目录，
+#       bootstrap/ 里的 AppProject / ApplicationSet 被 apply 后，
+#       再由 ApplicationSet 生成各集群的 Application。
+#
+# 首次安装：这一步需要手动 apply（根应用自己没法把自己 apply 出来）：
+#   kubectl apply -f bootstrap/root-application.yaml
+#
+# 之后：根应用由自己管理（自举），不需要人再管。
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-bootstrap
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform
+    app.kubernetes.io/component: root
+spec:
+  project: platform
+
+  source:
+    repoURL: https://github.com/example/platform.git
+    targetRevision: main
+    path: bootstrap
+    # bootstrap/ 下有 kustomization.yaml，Argo CD 会自动识别为 Kustomize 源。
+    # ⭐ kustomization.yaml 里只列了 appprojects/ applicationsets/ repositories.yaml，
+    #    clusters/ 下的清单文件不是 K8s 资源，因此不会被 apply。
+
+  destination:
+    # 中央 Argo CD 自己所在的集群（控制面）
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=false
+    - ServerSideApply=true
+
+  # ⭐ 根应用被删时，不要连带删掉控制面上的 AppProject / ApplicationSet
+  preserveResourcesOnDeletion: true
+
+  progressDeadlineSeconds: 120

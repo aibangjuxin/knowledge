@@ -1,0 +1,6 @@
+bin/
+*.pem
+*.key
+.env
+cr-check
+coverage.out

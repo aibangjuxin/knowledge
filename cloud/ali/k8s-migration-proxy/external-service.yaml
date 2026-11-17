@@ -1,0 +1,52 @@
+# ExternalName Service for New Cluster - Primary API Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: new-cluster-api-proxy
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+    component: external-service
+    service-type: api
+  annotations:
+    migration.k8s.io/target-cluster: "kong"
+    migration.k8s.io/service-mapping: "bbdm-api -> bbdm-api"
+spec:
+  type: ExternalName
+  externalName: api-name01.kong.dev.aliyun.intracloud.cn.aibang
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 443
+    name: https
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+    name: http
+
+---
+# ExternalName Service for New Cluster - Generic Service Template
+apiVersion: v1
+kind: Service
+metadata:
+  name: new-cluster-generic-proxy
+  namespace: aibang-1111111111-bbdm
+  labels:
+    app: migration-proxy
+    component: external-service
+    service-type: generic
+  annotations:
+    migration.k8s.io/target-cluster: "kong"
+    migration.k8s.io/description: "Generic proxy for additional services"
+spec:
+  type: ExternalName
+  externalName: kong.dev.aliyun.intracloud.cn.aibang
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 443
+    name: https
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+    name: http

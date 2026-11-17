@@ -1,0 +1,13 @@
+# 组件启用清单：dev-02 × gatekeeper
+#
+# 每个集群的 OPA 策略都是独立的一份：
+#   apps/gatekeeper/overlays/cluster/dev-02/
+# dev-02 可以比 dev-01 豁免更多 namespace（比如某个临时实验用的），
+# 而不影响 dev-01。
+
+component: gatekeeper
+cluster: dev-02
+server: https://dev-02.k8s.example.com
+env: dev
+project: platform-dev
+namespace: platform-dev

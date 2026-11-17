@@ -1,0 +1,65 @@
+# Argo CD · 组件 ApplicationSet（redis）
+#
+# 演示点：**prod-01 没有 bootstrap/clusters/prod-01/components/redis.yaml**
+#         → git 生成器只匹配到 dev-01 → 只有 redis-dev-01 一个 Application
+#         → prod 集群不装 redis。
+#
+# 这就是「文件存在即表示启用该组件」：启停靠增删文件，不靠改字段。
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: component-redis
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform
+    app.kubernetes.io/component: redis
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+  - git:
+      repoURL: https://github.com/example/platform.git
+      revision: main
+      files:
+      - path: "bootstrap/clusters/*/components/redis.yaml"
+        flatten:
+        - component
+        - cluster
+        - server
+        - env
+        - project
+        - namespace
+
+  template:
+    metadata:
+      name: '{{.component}}-{{.cluster}}'
+      labels:
+        app.kubernetes.io/part-of: platform
+        app.kubernetes.io/component: '{{.component}}'
+        env: '{{.env}}'
+        cluster: '{{.cluster}}'
+    spec:
+      project: '{{.project}}'
+
+      source:
+        repoURL: https://github.com/example/platform.git
+        targetRevision: main
+        path: 'apps/redis/overlays/{{.env}}'
+
+      destination:
+        server: '{{.server}}'
+        namespace: '{{.namespace}}'
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - PruneLast=true
+        - ServerSideApply=true
+
+      preserveResourcesOnDeletion: true
+      progressDeadlineSeconds: 300

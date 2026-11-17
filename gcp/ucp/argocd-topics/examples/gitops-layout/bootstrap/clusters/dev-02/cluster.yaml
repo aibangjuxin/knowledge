@@ -1,0 +1,21 @@
+# 集群元信息：dev-02
+#
+# ⚠️ 不是 Argo CD 资源，不会被 apply。
+#
+# ⭐ 本集群演示「**一个 GCP project 下多个 cluster**」：
+#    dev-01 与 dev-02 同属 acme-platform-dev，同一 env(dev)、同一个
+#    AppProject(platform-dev)、同一套环境 overlay，
+#    但各有各的 Cluster Secret 和组件清单目录。
+
+cluster: dev-02
+server: https://dev-02.k8s.example.com
+env: dev
+project: platform-dev
+namespace: platform-dev
+
+# ---- 以下字段仅供人/工具参考，不参与 ApplicationSet 展开 ----------------
+gcpProject: acme-platform-dev
+gcpRegion: asia-east1
+vpc: vpc-dev
+argocdClusterSecret: dev-02
+workloadIdentityServiceAccount: sa-argocd@acme-platform-dev.iam.gserviceaccount.com

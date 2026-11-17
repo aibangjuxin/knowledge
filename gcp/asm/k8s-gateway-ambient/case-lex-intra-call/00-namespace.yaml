@@ -1,0 +1,51 @@
+# =============================================================================
+# 00-namespace.yaml
+# =============================================================================
+# 独立 namespace —— 本 PoC 的全部资源都在这里,与 case-lex 完全隔离
+#
+# 为什么不复用 ba000000-lex-int:
+#   1. 老 ns 里有一条 ns 级 DENY-all 的 AuthorizationPolicy
+#      (case-lex/03-mesh-security.yaml) —— DENY 优先级高于 ALLOW,
+#      新加的 Service 会被它一并挡掉,现象会互相干扰
+#   2. 老 ns 的 ALLOW 策略绑的是 waypoint-int 的 SA,新 PoC 的 waypoint SA 不同
+#   3. 回滚成本 —— 本 PoC 一条命令删除整个 ns 即回滚干净,不动老场景
+#
+# 严格定义 (K8s Namespace):
+#   "A Namespace provides a scope for Names. Names are unique within a
+#    Namespace, but not across Namespaces."
+#   — kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+#
+# 严格定义 (Istio ambient 启用):
+#   "istio.io/dataplane-mode: ambient" on a namespace enables ambient mode
+#   for all pods in that namespace.
+#   — Istio Ambient docs / istiod namespace labels
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ba000000-lex-intra-call
+  labels:
+    # ---- 业务元数据(与老 ns 对齐的命名习惯)----
+    businessId: ba000000
+    team: ba000000
+    runtime: "true"
+
+    # ---- Istio ambient 控制 ----
+    # 关键: ns 级 ambient 开关。没有它,ztunnel 不接管本 ns 的 pod
+    # 严格来源: Istio ambient — "Pods in a namespace labeled with
+    #           istio.io/dataplane-mode=ambient are captured by ztunnel"
+    istio.io/dataplane-mode: ambient
+
+    # 关键: 把整个 ns enroll 到本 ns 的 waypoint(名字见 01-waypoint.yaml)
+    # 严格来源:
+    #   "istio.io/use-waypoint: <waypoint-name>" — Istio Waypoint docs
+    #   特例: 值写成保留字 "waypoint" 表示"使用本 ns 的默认 waypoint",
+    #         本 ns 的默认 waypoint = 带 istio.io/waypoint-for: all 标签的 Gateway
+    #         (与 case-lex/00-namespace-ba000000-lex-int.yaml 完全一致的做法)
+    istio.io/use-waypoint: waypoint
+
+    # ---- PSA:用 K8s 1.25+ 的 namespace 级 PSA label(老的 pod-security
+    #          annotation 写法在 1.29 已移除,这里用新写法)----
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/warn: baseline

@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "shared-glb-cn-a · End-to-End mTLS Request Flow",
+    "subtitle": "GLB multi-backend service + K8s Gateway URI-SAN anti-drift",
+    "column_fit": "spread",
+    "viewBox": [960, 700]
+  },
+  "participants": [
+    { "id": "team1", "type": "external", "label": "Team 1 Client", "sublabel": "URI-SAN team-a" },
+    { "id": "glb", "type": "security", "label": "GLB mTLS", "sublabel": "TrustConfig verify" },
+    { "id": "bs1", "type": "backend", "label": "team1-bs", "sublabel": "CA team1 + headers" },
+    { "id": "psc", "type": "cloud", "label": "PSC Tunnel", "sublabel": "single IP" },
+    { "id": "master", "type": "cloud", "label": "Master GW", "sublabel": "ListenerSet a/b" },
+    { "id": "route", "type": "backend", "label": "HTTPRoute", "sublabel": "URI-SAN check" },
+    { "id": "svc1", "type": "backend", "label": "team1-svc", "sublabel": "no auth code" }
+  ],
+  "messages": [
+    { "id": "m1", "from": "team1", "to": "glb", "y": 160, "label": "mTLS handshake" },
+    { "id": "m2", "from": "glb", "to": "team1", "y": 195, "label": "TLS established", "variant": "return" },
+    { "id": "m3", "from": "team1", "to": "glb", "y": 230, "label": "GET /team1apiname/..." },
+    { "id": "m4", "from": "glb", "to": "bs1", "y": 280, "label": "URL Map → team1-bs (CA team1 + 14 headers)" },
+    { "id": "m5", "from": "bs1", "to": "team1", "y": 320, "label": "rate limit ok + CA team1", "variant": "security" },
+    { "id": "m6", "from": "bs1", "to": "psc", "y": 360, "label": "forward via PSC" },
+    { "id": "m7", "from": "psc", "to": "master", "y": 395, "label": "cross-project tunnel" },
+    { "id": "m8", "from": "master", "to": "route", "y": 430, "label": "HTTPRoute rules" },
+    { "id": "m9", "from": "route", "to": "master", "y": 465, "label": "URI-SAN match → team1-svc", "variant": "emphasis" },
+    { "id": "m10", "from": "master", "to": "svc1", "y": 510, "label": "forward (no auth code)" },
+    { "id": "m11", "from": "svc1", "to": "master", "y": 545, "label": "200 OK + JSON", "variant": "return" },
+    { "id": "m12", "from": "master", "to": "team1", "y": 580, "label": "200 OK", "variant": "return" },
+    { "id": "m13", "from": "team1", "to": "glb", "y": 615, "label": "DRIFT: GET /team2apiname/...", "variant": "emphasis" }
+  ]
+}

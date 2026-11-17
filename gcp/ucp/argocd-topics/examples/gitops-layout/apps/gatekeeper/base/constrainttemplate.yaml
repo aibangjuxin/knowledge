@@ -1,0 +1,52 @@
+# Gatekeeper · ConstraintTemplate：约束「模板」（策略逻辑）
+#
+# ⚠️ 版本：
+#    这里用 templates.gatekeeper.sh/v1beta1（Gatekeeper 3.x 通用）。
+#    Gatekeeper ≥ 3.14 同时提供 templates.gatekeeper.sh/v1，
+#    v1 里 rego 要放到 spec.targets[].rego 且必须写 entrypoint，
+#    并可能需要 libs（rego.v1 语法）。
+#    落地时按你实际安装的 Gatekeeper 版本核对 CRD：
+#      kubectl get crd constrainttemplates.templates.gatekeeper.sh -o jsonpath='{.spec.versions[*].name}'
+#
+# ⚠️ 这是**集群级**资源 → AppProject 的 clusterResourceWhitelist
+#    必须放行 constraints.gatekeeper.sh/ConstraintTemplate，
+#    否则同步被拒 "not permitted"。
+
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+  labels:
+    app.kubernetes.io/part-of: platform
+    app.kubernetes.io/component: gatekeeper
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            labels:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+
+        # 集群里已存在的标签
+        provided := {label | input.review.object.metadata.labels[label]}
+
+        # 策略要求的标签
+        required := {label | label := input.parameters.labels[_]}
+
+        # 差集 = 缺失的标签
+        missing := required - provided
+
+        violation[{"msg": msg}] {
+          count(missing) > 0
+          msg := sprintf("you must provide labels: %v", [missing])
+        }

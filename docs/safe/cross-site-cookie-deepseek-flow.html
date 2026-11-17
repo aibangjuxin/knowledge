@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cross-Site Cookie — Same-Domain Multi-Path Routing Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', monospace; background: #020617; min-height: 100vh; padding: 2rem; color: white; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #22d3ee; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container { background: rgba(15, 23, 42, 0.5); border-radius: 1rem; border: 1px solid #1e293b; padding: 1.5rem; overflow-x: auto; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 2rem; }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan    { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet  { background: #a78bfa; }
+    .card-dot.amber   { background: #fbbf24; }
+    .card-dot.rose    { background: #fb7185; }
+    .card-dot.orange  { background: #fb923c; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="header-row">
+      <div class="pulse-dot"></div>
+      <h1>Cross-Site Cookie — Same-Domain Multi-Path Routing</h1>
+    </div>
+    <p class="subtitle">Single Origin (www.abjx.com) → Nginx → Kong DP (GKE) / External GCP Project | First-Party Cookie</p>
+  </div>
+
+  <div class="diagram-container">
+    <svg viewBox="0 0 1100 720">
+
+      <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/></marker>
+        <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/></marker>
+        <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/></marker>
+        <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/></marker>
+        <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/></marker>
+        <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa"/></marker>
+        <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+        </pattern>
+      </defs>
+
+      <rect width="100%" height="100%" fill="url(#grid)"/>
+
+      <!-- ═══════════════════════════════════════════════════
+           STEP 1: Client (Browser)
+           ═══════════════════════════════════════════════════ -->
+      <circle cx="32" cy="155" r="14" fill="rgba(34, 211, 238, 0.2)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="32" y="159" fill="#22d3ee" font-size="9" font-weight="700" text-anchor="middle">1</text>
+      <text x="32" y="178" fill="#22d3ee" font-size="7" text-anchor="middle">Client</text>
+
+      <rect x="22" y="195" width="120" height="80" rx="8" fill="#0f172a"/>
+      <rect x="22" y="195" width="120" height="80" rx="8" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="82" y="220" fill="white" font-size="11" font-weight="600" text-anchor="middle">Browser</text>
+      <text x="82" y="236" fill="#94a3b8" font-size="8" text-anchor="middle">Chrome / Firefox</text>
+      <text x="82" y="250" fill="#fbbf24" font-size="8" text-anchor="middle">www.abjx.com</text>
+      <text x="82" y="264" fill="#34d399" font-size="7" text-anchor="middle">Cookie: First-Party ✅</text>
+
+      <!-- Internet zone -->
+      <rect x="10" y="100" width="1080" height="100" rx="10" fill="rgba(30, 41, 59, 0.15)" stroke="#475569" stroke-width="1" stroke-dasharray="5,4"/>
+      <text x="22" y="116" fill="#475569" font-size="9" font-weight="500">Internet / Public Network</text>
+
+      <!-- Arrow: Client → Nginx -->
+      <line x1="142" y1="235" x2="188" y2="235" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/>
+      <text x="165" y="227" fill="#22d3ee" font-size="8" text-anchor="middle">HTTPS</text>
+      <text x="165" y="252" fill="#fbbf24" font-size="7" text-anchor="middle">www.abjx.com</text>
+      <text x="165" y="264" fill="#94a3b8" font-size="7" text-anchor="middle">GET /apiname1/endpoint</text>
+
+      <!-- ═══════════════════════════════════════════════════
+           STEP 2: Nginx Proxy
+           ═══════════════════════════════════════════════════ -->
+      <circle cx="32" cy="340" r="14" fill="rgba(8, 51, 68, 0.5)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="32" y="344" fill="#22d3ee" font-size="9" font-weight="700" text-anchor="middle">2</text>
+      <text x="32" y="363" fill="#22d3ee" font-size="7" text-anchor="middle">Nginx</text>
+      <text x="32" y="375" fill="#94a3b8" font-size="7" text-anchor="middle">Header RW</text>
+
+      <!-- Nginx box -->
+      <rect x="190" y="150" width="250" height="380" rx="10" fill="rgba(8, 51, 68, 0.25)" stroke="#22d3ee" stroke-width="1.5"/>
+      <text x="315" y="170" fill="#22d3ee" font-size="10" font-weight="600" text-anchor="middle">Nginx Proxy (www.abjx.com)</text>
+
+      <!-- SSL -->
+      <rect x="202" y="182" width="226" height="36" rx="5" fill="rgba(120, 53, 15, 0.2)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="315" y="200" fill="#fbbf24" font-size="8" text-anchor="middle">TLS Termination · *.abjx.com cert</text>
+      <text x="315" y="212" fill="#94a3b8" font-size="7" text-anchor="middle">HTTPS:443</text>
+
+      <!-- Path routing header -->
+      <rect x="202" y="226" width="226" height="22" rx="4" fill="rgba(251, 191, 36, 0.1)" stroke="#fbbf24" stroke-width="1"/>
+      <text x="315" y="241" fill="#fbbf24" font-size="8" font-weight="600" text-anchor="middle">PATH ROUTING TABLE</text>
+
+      <!-- Route: /apiname1 -->
+      <rect x="202" y="256" width="226" height="36" rx="5" fill="rgba(8, 51, 68, 0.5)" stroke="#34d399" stroke-width="1"/>
+      <text x="225" y="272" fill="#34d399" font-size="8" font-weight="600">①</text>
+      <text x="238" y="272" fill="#94a3b8" font-size="8">/apiname1/* → Kong DP (HTTP)</text>
+
+      <!-- Route: /apiname2 -->
+      <rect x="202" y="298" width="226" height="36" rx="5" fill="rgba(8, 51, 68, 0.5)" stroke="#34d399" stroke-width="1"/>
+      <text x="225" y="314" fill="#34d399" font-size="8" font-weight="600">②</text>
+      <text x="238" y="314" fill="#94a3b8" font-size="8">/apiname2/* → Kong DP (HTTP)</text>
+
+      <!-- Route: /ext-crm -->
+      <rect x="202" y="340" width="226" height="36" rx="5" fill="rgba(8, 51, 68, 0.5)" stroke="#fb923c" stroke-width="1"/>
+      <text x="225" y="356" fill="#fb923c" font-size="8" font-weight="600">③</text>
+      <text x="238" y="356" fill="#94a3b8" font-size="8">/ext-crm/* → HTTPS (SNI)</text>
+
+      <!-- Route: /ext-erp -->
+      <rect x="202" y="382" width="226" height="36" rx="5" fill="rgba(8, 51, 68, 0.5)" stroke="#fb923c" stroke-width="1"/>
+      <text x="225" y="398" fill="#fb923c" font-size="8" font-weight="600">④</text>
+      <text x="238" y="398" fill="#94a3b8" font-size="8">/ext-erp/* → HTTPS (SNI)</text>
+
+      <!-- Header rewrite annotation -->
+      <rect x="202" y="426" width="226" height="56" rx="5" fill="rgba(251, 191, 36, 0.1)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="315" y="443" fill="#fbbf24" font-size="8" font-weight="600" text-anchor="middle">⚡ Kong Routes: Header Rewrite</text>
+      <text x="315" y="458" fill="#94a3b8" font-size="7" text-anchor="middle">Host: www.abjx.com → www.aibang.com</text>
+      <text x="315" y="470" fill="#94a3b8" font-size="7" text-anchor="middle">X-Original-Host: $host (保留原始)</text>
+
+      <!-- Arrow: Nginx → Kong -->
+      <line x1="440" y1="272" x2="500" y2="272" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-green)"/>
+      <text x="470" y="264" fill="#34d399" font-size="8">/apiname1/*</text>
+      <text x="470" y="284" fill="#fbbf24" font-size="7">Host→www.aibang.com</text>
+
+      <!-- Arrow: Nginx → ext-crm -->
+      <line x1="440" y1="356" x2="500" y2="356" stroke="#fb923c" stroke-width="2" marker-end="url(#arrow-amber)"/>
+      <text x="470" y="348" fill="#fb923c" font-size="8">/ext-crm/*</text>
+      <text x="470" y="368" fill="#fb923c" font-size="7">HTTPS + SNI</text>
+
+      <!-- ═══════════════════════════════════════════════════
+           GKE Cluster boundary
+           ═══════════════════════════════════════════════════ -->
+      <rect x="10" y="295" width="1080" height="340" rx="12" fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="7,4"/>
+      <text x="22" y="313" fill="#fbbf24" font-size="10" font-weight="600">GKE Cluster — Primary Project</text>
+
+      <!-- ═══════════════════════════════════════════════════
+           STEP 3: Kong DP
+           ═══════════════════════════════════════════════════ -->
+      <circle cx="32" cy="430" r="14" fill="rgba(76, 29, 149, 0.3)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="32" y="434" fill="#a78bfa" font-size="9" font-weight="700" text-anchor="middle">3</text>
+      <text x="32" y="453" fill="#a78bfa" font-size="7" text-anchor="middle">Kong DP</text>
+
+      <!-- Kong DP box -->
+      <rect x="500" y="155" width="220" height="280" rx="10" fill="rgba(76, 29, 149, 0.2)" stroke="#a78bfa" stroke-width="1.5"/>
+      <text x="610" y="175" fill="#a78bfa" font-size="10" font-weight="600" text-anchor="middle">Kong Data Plane</text>
+      <text x="610" y="191" fill="#94a3b8" font-size="8" text-anchor="middle">listens: www.aibang.com :8000</text>
+
+      <!-- Kong Listener -->
+      <rect x="512" y="202" width="196" height="28" rx="4" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+      <text x="610" y="220" fill="#94a3b8" font-size="8" text-anchor="middle">preserve-host: "false"</text>
+
+      <!-- Kong Route Table -->
+      <rect x="512" y="238" width="196" height="100" rx="5" fill="rgba(76, 29, 149, 0.3)" stroke="#a78bfa" stroke-width="1"/>
+      <text x="610" y="254" fill="white" font-size="8" font-weight="600" text-anchor="middle">Route Table</text>
+      <text x="610" y="270" fill="#34d399" font-size="7" text-anchor="middle">/apiname1/* → Runtime-1</text>
+      <text x="610" y="283" fill="#94a3b8" font-size="7" text-anchor="middle">  strip_path: false</text>
+      <text x="610" y="298" fill="#34d399" font-size="7" text-anchor="middle">/apiname2/* → Runtime-2</text>
+      <text x="610" y="311" fill="#94a3b8" font-size="7" text-anchor="middle">  strip_path: false</text>
+      <text x="610" y="326" fill="#fbbf24" font-size="7" text-anchor="middle">X-Original-Host preserved</text>
+
+      <!-- Kong upstream targets -->
+      <rect x="512" y="346" width="196" height="56" rx="5" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+      <text x="610" y="362" fill="#34d399" font-size="8" text-anchor="middle">Upstream Targets</text>
+      <text x="610" y="376" fill="#94a3b8" font-size="7" text-anchor="middle">Runtime-1: runtime1.ns:8080</text>
+      <text x="610" y="389" fill="#94a3b8" font-size="7" text-anchor="middle">Runtime-2: runtime2.ns:8080</text>
+
+      <!-- Arrow: Kong → Runtime-1 -->
+      <line x1="610" y1="402" x2="610" y2="448" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrow-violet)"/>
+      <text x="624" y="428" fill="#a78bfa" font-size="8">/apiname1/*</text>
+
+      <!-- Arrow: Kong → Runtime-2 -->
+      <line x1="610" y1="402" x2="760" y2="450" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="700" y="430" fill="#a78bfa" font-size="8">/apiname2/*</text>
+
+      <!-- ═══════════════════════════════════════════════════
+           STEP 4: GKE Runtimes
+           ═══════════════════════════════════════════════════ -->
+      <circle cx="32" cy="500" r="14" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="32" y="504" fill="#34d399" font-size="9" font-weight="700" text-anchor="middle">4</text>
+      <text x="32" y="523" fill="#34d399" font-size="7" text-anchor="middle">Runtime</text>
+
+      <!-- Runtime-1 -->
+      <rect x="500" y="448" width="200" height="80" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="600" y="472" fill="white" font-size="10" font-weight="600" text-anchor="middle">Runtime-1 (GKE)</text>
+      <text x="600" y="488" fill="#94a3b8" font-size="7" text-anchor="middle">X-Original-Host: www.abjx.com</text>
+      <text x="600" y="500" fill="#94a3b8" font-size="7" text-anchor="middle">X-Original-URI: /apiname1/endpoint</text>
+      <text x="600" y="512" fill="#94a3b8" font-size="7" text-anchor="middle">Host: runtime1.ns (upstream)</text>
+      <text x="600" y="524" fill="#34d399" font-size="7" text-anchor="middle">Set-Cookie: Domain=www.abjx.com</text>
+
+      <!-- Runtime-2 -->
+      <rect x="720" y="448" width="200" height="80" rx="8" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+      <text x="820" y="472" fill="white" font-size="10" font-weight="600" text-anchor="middle">Runtime-2 (GKE)</text>
+      <text x="820" y="488" fill="#94a3b8" font-size="7" text-anchor="middle">X-Original-Host: www.abjx.com</text>
+      <text x="820" y="500" fill="#94a3b8" font-size="7" text-anchor="middle">X-Original-URI: /apiname2/endpoint</text>
+      <text x="820" y="512" fill="#94a3b8" font-size="7" text-anchor="middle">Host: runtime2.ns (upstream)</text>
+      <text x="820" y="524" fill="#34d399" font-size="7" text-anchor="middle">Set-Cookie: Domain=www.abjx.com</text>
+
+      <!-- ═══════════════════════════════════════════════════
+           External GCP Project
+           ═══════════════════════════════════════════════════ -->
+      <rect x="500" y="540" width="420" height="90" rx="10" fill="rgba(251, 191, 36, 0.06)" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="6,4"/>
+      <text x="514" y="558" fill="#fb923c" font-size="9" font-weight="600">External GCP Project — CRM Service</text>
+
+      <rect x="514" y="565" width="200" height="55" rx="6" fill="rgba(251, 146, 60, 0.2)" stroke="#fb923c" stroke-width="1.5"/>
+      <text x="614" y="585" fill="white" font-size="10" font-weight="600" text-anchor="middle">CRM Backend</text>
+      <text x="614" y="601" fill="#94a3b8" font-size="7" text-anchor="middle">crm.internal.other-project</text>
+      <text x="614" y="613" fill="#fb923c" font-size="7" text-anchor="middle">HTTPS · proxy_ssl_server_name on</text>
+
+      <!-- Cookie return annotation -->
+      <rect x="730" y="565" width="178" height="55" rx="6" fill="rgba(52, 211, 153, 0.15)" stroke="#34d399" stroke-width="1"/>
+      <text x="819" y="582" fill="#34d399" font-size="8" text-anchor="middle">Response Cookie</text>
+      <text x="819" y="596" fill="#94a3b8" font-size="7" text-anchor="middle">Domain=www.abjx.com</text>
+      <text x="819" y="608" fill="#94a3b8" font-size="7" text-anchor="middle">SameSite=Lax; Secure</text>
+
+      <!-- Arrow: Nginx → ext-crm -->
+      <line x1="440" y1="356" x2="512" y2="356" stroke="#fb923c" stroke-width="1.5" marker-end="url(#arrow-amber)"/>
+
+      <!-- Arrow: ext-crm response -->
+      <line x1="512" y1="380" x2="512" y2="548" stroke="#34d399" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-green)"/>
+      <line x1="512" y1="548" x2="818" y2="592" stroke="#34d399" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-green)"/>
+      <text x="530" y="470" fill="#34d399" font-size="7">HTTPS Response</text>
+
+      <!-- Cookie flow: Runtime → Client (dashed rose, top path back) -->
+      <path d="M 500 500 L 470 500 Q 460 500 460 490 L 460 155 Q 460 145 450 145 L 200 145 Q 190 145 190 135 L 142 135"
+            fill="none" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="5,4"/>
+      <text x="330" y="140" fill="#fb7185" font-size="7">Set-Cookie: Domain=www.abjx.com → First-Party ✅</text>
+
+      <!-- ═══════════════════════════════════════════════════
+           Cookie explanation box
+           ═══════════════════════════════════════════════════ -->
+      <rect x="22" y="545" width="465" height="95" rx="8" fill="rgba(136, 19, 55, 0.15)" stroke="#fb7185" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="38" y="564" fill="#fb7185" font-size="9" font-weight="600">Why This is First-Party Cookie</text>
+      <text x="38" y="581" fill="#94a3b8" font-size="7">URL origin:     https://www.abjx.com/apiname1/endpoint</text>
+      <text x="38" y="594" fill="#94a3b8" font-size="7">Cookie Domain: www.abjx.com</text>
+      <text x="38" y="610" fill="#34d399" font-size="8">→ Domain matches URL origin → First-Party ✅</text>
+      <text x="38" y="625" fill="#94a3b8" font-size="7">Browser does NOT see Kong DP or External GCP domains</text>
+
+      <!-- ═══════════════════════════════════════════════════
+           LEGEND
+           ═══════════════════════════════════════════════════ -->
+      <rect x="820" y="100" width="260" height="175" rx="8" fill="rgba(15, 23, 42, 0.85)" stroke="#1e293b" stroke-width="1"/>
+      <text x="950" y="120" fill="white" font-size="10" font-weight="600" text-anchor="middle">图例 Legend</text>
+
+      <rect x="832" y="132" width="14" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+      <text x="852" y="140" fill="#94a3b8" font-size="8">Client / Browser</text>
+
+      <rect x="832" y="148" width="14" height="10" rx="2" fill="rgba(8, 51, 68, 0.5)" stroke="#22d3ee" stroke-width="1"/>
+      <text x="852" y="156" fill="#94a3b8" font-size="8">Nginx (single origin)</text>
+
+      <rect x="832" y="164" width="14" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+      <text x="852" y="172" fill="#94a3b8" font-size="8">Kong Data Plane</text>
+
+      <rect x="832" y="180" width="14" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+      <text x="852" y="188" fill="#94a3b8" font-size="8">GKE Runtime (Service)</text>
+
+      <rect x="832" y="196" width="14" height="10" rx="2" fill="rgba(251, 146, 60, 0.2)" stroke="#fb923c" stroke-width="1"/>
+      <text x="852" y="204" fill="#94a3b8" font-size="8">External GCP Service (HTTPS)</text>
+
+      <line x1="832" y1="218" x2="846" y2="218" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+      <text x="852" y="221" fill="#94a3b8" font-size="8">HTTPS (external)</text>
+
+      <line x1="832" y1="232" x2="846" y2="232" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+      <text x="852" y="235" fill="#94a3b8" font-size="8">HTTP (internal GKE)</text>
+
+      <line x1="832" y1="246" x2="846" y2="246" stroke="#fb923c" stroke-width="1.5" marker-end="url(#arrow-amber)"/>
+      <text x="852" y="249" fill="#94a3b8" font-size="8">HTTPS upstream (SNI)</text>
+
+      <line x1="832" y1="260" x2="846" y2="260" stroke="#fb7185" stroke-width="1.5" stroke-dasharray="5,4"/>
+      <text x="852" y="263" fill="#94a3b8" font-size="8">Cookie response</text>
+
+    </svg>
+  </div>
+
+  <!-- Info Cards -->
+  <div class="cards">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot amber"></div>
+        <h3>Cookie Flow</h3>
+      </div>
+      <ul>
+        <li>• Browser → www.abjx.com (single origin)</li>
+        <li>• All Set-Cookie: Domain=www.abjx.com</li>
+        <li>• Cookie Domain matches URL origin</li>
+        <li>• Browser classifies as First-Party ✅</li>
+        <li>• Firefox/Safari: Not blocked ✅</li>
+        <li>• No dependency on domain similarity</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot violet"></div>
+        <h3>Nginx Path Routing</h3>
+      </div>
+      <ul>
+        <li>• /apiname1/* → Kong DP (HTTP)</li>
+        <li>• /apiname2/* → Kong DP (HTTP)</li>
+        <li>• /ext-crm/* → HTTPS + SNI (other GCP)</li>
+        <li>• /ext-erp/* → HTTPS + SNI (other GCP)</li>
+        <li>• Kong routes: Host rewrite + preserve-host:false</li>
+        <li>• X-Original-Host preserved for tracing</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot rose"></div>
+        <h3>Required Cookie Attributes</h3>
+      </div>
+      <ul>
+        <li>• SameSite=Lax — recommended</li>
+        <li>• Secure — always required</li>
+        <li>• HttpOnly — prevents XSS theft</li>
+        <li>• Domain=www.abjx.com — explicit</li>
+        <li>• Path=/ — global share</li>
+        <li>• CSRF Token on POST/PUT/DELETE</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-dot emerald"></div>
+        <h3>Cross-GCP HTTPS</h3>
+      </div>
+      <ul>
+        <li>• proxy_ssl_server_name on (SNI)</li>
+        <li>• proxy_ssl_verify on (CA validation)</li>
+        <li>• proxy_ssl_trusted_certificate (CA bundle)</li>
+        <li>• mTLS if required (client cert)</li>
+        <li>• X-Original-URI preserved for logging</li>
+        <li>• Extended timeouts (10s connect)</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="footer">
+    Cross-Site Cookie DeepSeek — same-domain multi-path routing · safe/cross-site-cookie-deepseek.md · First-Party Cookie Solution
+  </p>
+</div>
+</body>
+</html>

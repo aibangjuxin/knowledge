@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: busybox-test # Deployment名称
+  labels:
+    app: busybox-test # 标签，用于关联Pod和Service
+spec:
+  replicas: 1 # 副本数，测试环境1个即可
+  selector:
+    matchLabels:
+      app: busybox-test # 匹配Pod标签
+  template:
+    metadata:
+      labels:
+        app: busybox-test # Pod标签
+    spec:
+      containers:
+        - name: busybox-container # 容器名称
+          image: busybox:latest # 镜像名称及版本
+          # 测试命令：循环输出日志，每3秒一次
+          command: ["/bin/sh", "-c"]
+          args:
+            [
+              "while true; do echo 'Busybox test pod is running...'; sleep 3; done",
+            ]
+          resources:
+            # 限制资源使用，避免占用过多节点资源
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+          # 健康检查：确保容器正常运行
+          livenessProbe:
+            exec:
+              command: ["echo", "ok"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["echo", "ready"]
+            initialDelaySeconds: 3
+            periodSeconds: 5

@@ -1,0 +1,154 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: ${namespace}
+  name: mycoat-common-sprint-conf
+data:
+  server-conf.properties: |
+    # 强制统一端口
+    server.port=8443
+    # 强制开启 SSL
+    server.ssl.enabled=true
+    server.ssl.key-store=/opt/keystore/mycoat-sbrt.p12
+    server.ssl.key-store-type=PKCS12
+    server.ssl.key-store-password=${KEY_STORE_PWD}
+    # 统一 Context Path (Servlet 栈)
+    server.servlet.context-path=/${apiName}/v${minorVersion}
+    # 统一 Base Path (WebFlux 栈)
+    spring.webflux.base-path=/${apiName}/v${minorVersion}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: golang-app
+  namespace: ${namespace}
+  labels:
+    app: golang-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: golang-app
+  template:
+    metadata:
+      labels:
+        app: golang-app
+    spec:
+      containers:
+      - name: app
+        image: your-registry/golang-app:latest
+        imagePullPolicy: Always
+        env:
+        # 证书密码（从 Secret 读取）
+        - name: KEY_STORE_PWD
+          valueFrom:
+            secretKeyRef:
+              name: keystore-secret
+              key: password
+        # API 名称（用于 Context Path）
+        - name: apiName
+          value: "user-service"
+        # API 版本（用于 Context Path）
+        - name: minorVersion
+          value: "1"
+        # 可选：指定 TLS 证书路径（如果使用 PEM 格式）
+        - name: TLS_CERT_PATH
+          value: "/opt/keystore/tls.crt"
+        - name: TLS_KEY_PATH
+          value: "/opt/keystore/tls.key"
+        volumeMounts:
+        # 挂载配置文件
+        - name: config
+          mountPath: /opt/config
+          readOnly: true
+        # 挂载证书
+        - name: keystore
+          mountPath: /opt/keystore
+          readOnly: true
+        ports:
+        - containerPort: 8443
+          protocol: TCP
+          name: https
+        # 健康检查
+        livenessProbe:
+          httpGet:
+            path: /${apiName}/v${minorVersion}/health
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        # 就绪检查
+        readinessProbe:
+          httpGet:
+            path: /${apiName}/v${minorVersion}/ready
+            port: 8443
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      # ConfigMap 卷（与 Java 应用相同）
+      - name: config
+        configMap:
+          name: mycoat-common-sprint-conf
+      # Secret 卷（证书）
+      - name: keystore
+        secret:
+          secretName: mycoat-keystore
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: golang-app
+  namespace: ${namespace}
+  labels:
+    app: golang-app
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8443
+    targetPort: 8443
+    protocol: TCP
+    name: https
+  selector:
+    app: golang-app
+
+---
+# 可选：Ingress 配置
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: golang-app
+  namespace: ${namespace}
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  rules:
+  - host: api.example.com
+    http:
+      paths:
+      - path: /${apiName}/v${minorVersion}
+        pathType: Prefix
+        backend:
+          service:
+            name: golang-app
+            port:
+              number: 8443
+  tls:
+  - hosts:
+    - api.example.com
+    secretName: ingress-tls-secret

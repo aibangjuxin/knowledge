@@ -1,0 +1,2 @@
+For our environment, we don't want to mix components. It's both Nginx and squid. Your team should also provide corresponding options later for users to choose whether to configure them independently or combine them.
+The appd component isn't essential for us. But if possible, we can install it according to the standard mode, and then maybe obtain some corresponding monitoring information. Also, you don't need to build the image because we already have the image. You just need to push out your components using Terraform.

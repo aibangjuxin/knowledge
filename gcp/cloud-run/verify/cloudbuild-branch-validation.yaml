@@ -1,0 +1,117 @@
+# Google Cloud Build配置文件
+# cloudbuild.yaml
+
+substitutions:
+  _SERVICE_NAME: 'my-agent-4'
+  _REGION: 'europe-west2'
+  _REPOSITORY: 'containers'
+
+steps:
+  # 1. 分支校验步骤
+  - name: 'alpine:latest'
+    id: 'branch-validation'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        echo "=== Cloud Build 分支校验 ==="
+        echo "分支名称: $BRANCH_NAME"
+        echo "环境: $_DEPLOY_ENV"
+        echo "项目: $PROJECT_ID"
+        
+        # 检查是否为生产环境部署
+        if [ "$_DEPLOY_ENV" = "prd" ] || [ "$_DEPLOY_ENV" = "production" ]; then
+          echo "🔒 检测到生产环境部署，执行严格分支校验..."
+          
+          # 校验分支名称
+          if [ "$BRANCH_NAME" != "master" ]; then
+            echo "❌ 错误: 生产环境只能从master分支部署!"
+            echo "当前分支: $BRANCH_NAME"
+            echo "要求分支: master"
+            exit 1
+          fi
+          
+          echo "✅ 分支校验通过: 允许从master分支部署到生产环境"
+        else
+          echo "ℹ️  非生产环境，跳过分支校验"
+        fi
+
+  # 2. 构建镜像
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-image'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}:${BRANCH_NAME}-${SHORT_SHA}'
+      - '.'
+    waitFor: ['branch-validation']
+
+  # 3. 推送镜像
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-image'
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}:${BRANCH_NAME}-${SHORT_SHA}'
+    waitFor: ['build-image']
+
+  # 4. 部署到Cloud Run (根据环境使用不同配置)
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'deploy-cloud-run'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        # 基础命令
+        CMD="gcloud run jobs deploy ${_SERVICE_NAME} \
+          --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE_NAME}:${BRANCH_NAME}-${SHORT_SHA} \
+          --region=${_REGION} \
+          --project=$PROJECT_ID"
+        
+        # 根据环境添加特定配置
+        case "$_DEPLOY_ENV" in
+          "prd"|"production")
+            echo "🚀 部署到生产环境..."
+            CMD="$$CMD \
+              --vpc-connector=vpc-conn-europe \
+              --vpc-egress=all-traffic \
+              --max-retries=3 \
+              --set-env-vars=env=prd,region=uk,version=release_17.0.0 \
+              --set-secrets=cloud_run_secret=cloud_run_prod:latest \
+              --task-timeout=10m \
+              --cpu=2 \
+              --memory=1Gi \
+              --labels=environment=production \
+              --key=projects/my-kms-project/locations/europe-west2/keyRings/run/cryptoKeys/HSMrunSharedKey \
+              --service-account=prod-mgmt@$PROJECT_ID.iam.gserviceaccount.com"
+            ;;
+          "test")
+            echo "🧪 部署到测试环境..."
+            CMD="$$CMD \
+              --set-env-vars=env=test,region=uk \
+              --cpu=1 \
+              --memory=512Mi \
+              --labels=environment=testing \
+              --service-account=test-mgmt@$PROJECT_ID.iam.gserviceaccount.com"
+            ;;
+          *)
+            echo "🔧 部署到开发环境..."
+            CMD="$$CMD \
+              --set-env-vars=env=dev,region=uk \
+              --cpu=0.5 \
+              --memory=256Mi \
+              --labels=environment=development \
+              --service-account=dev-mgmt@$PROJECT_ID.iam.gserviceaccount.com"
+            ;;
+        esac
+        
+        echo "执行部署命令: $$CMD"
+        eval $$CMD
+    waitFor: ['push-image']
+
+# 触发器配置选项
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+
+# 超时设置
+timeout: '1200s'

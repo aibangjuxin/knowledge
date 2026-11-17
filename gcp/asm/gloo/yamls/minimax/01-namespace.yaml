@@ -1,0 +1,16 @@
+# Step 3.1: Namespace Creation YAML
+# This file creates the required namespaces for Gloo Gateway and workloads
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gloo-gateway
+  labels:
+    istio-injection: enabled
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minimax-runtime
+  labels:
+    istio-injection: enabled

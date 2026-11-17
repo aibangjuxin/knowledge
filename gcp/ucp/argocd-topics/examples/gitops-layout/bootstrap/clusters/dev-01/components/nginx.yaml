@@ -1,0 +1,16 @@
+# 组件启用清单：dev-01 × nginx
+#
+# ⭐ 这个文件的存在 = dev-01 集群启用 nginx 组件。
+#    删除它 → 该集群的 nginx Application 消失（集群资源因
+#    preserveResourcesOnDeletion=true 而保留，需人工清理）。
+#
+# 字段必须与 ApplicationSet 的 flatten 列表完全一致
+# （component / cluster / server / env / project / namespace），
+# 缺一个字段，missingkey=error 会让整个 AppSet 报错。
+
+component: nginx
+cluster: dev-01
+server: https://dev-01.k8s.example.com
+env: dev
+project: platform-dev
+namespace: platform-dev

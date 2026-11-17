@@ -1,0 +1,124 @@
+# 外企常见假期回复模板
+
+下面给你几个外企常见、简短直接、礼貌得体的回复模板，你可以根据关系远近和正式程度选择使用。
+
+---
+
+### 模板 1：标准正式型（最通用）
+
+Hi [Name],
+
+Thanks for the notice.
+Enjoy your holiday and wish you a great time with family.
+
+Best regards,
+[Your Name]
+
+---
+
+### 模板 2：稍微友好一点（同级同事常用）
+
+Hi [Name],
+
+Thanks for letting us know.
+Have a wonderful holiday and see you back soon.
+
+Best,
+[Your Name]
+
+---
+
+### 模板 3：如果对方是你合作比较多的同事
+
+Hi [Name],
+
+Got it, thanks for the update.
+Enjoy the break and safe travels if you’re heading home.
+
+Cheers,
+[Your Name]
+
+---
+
+### 模板 4：对上级或比较正式的场景
+
+Dear [Name],
+
+Noted with thanks.
+Wishing you a pleasant holiday.
+
+Kind regards,
+[Your Name]
+
+---
+
+### 简单选用建议：
+- 不确定关系 → 模板 1
+- 平级同事 → 模板 2 或 3
+- 上级 / 很正式 → 模板 4
+
+### 核心原则就三点：
+确认收到 + 祝假期愉快 + 简短签名 即可。外企文化里不需要长篇大论。
+
+---
+
+好，这种属于 **极简确认型回复**，在很多外企里非常常见，尤其是内部同事之间。核心就是：
+确认 + 同意 + 一句祝福（可选）。
+
+下面给你几种更“短平快”的模板。
+
+---
+
+### 模板 1：最极简（只有确认）
+
+OK for me.
+Approved.
+
+Best,
+[Your Name]
+
+---
+
+### 模板 2：极简 + 一点礼貌
+
+Approved.
+Enjoy your holiday.
+
+Regards,
+[Your Name]
+
+---
+
+### 模板 3：确认 + 祝福（常见内部风格）
+
+Noted and approved.
+Have a great holiday.
+
+Best,
+[Your Name]
+
+---
+
+### 模板 4：更口语一点（熟悉同事）
+
+All good from my side.
+Enjoy the break 🙂
+
+Cheers,
+[Your Name]
+
+---
+
+### 模板 5：只用一句话（最短）
+
+Approved. Enjoy!
+
+---
+
+### 使用小技巧：
+- 想显得干练 → 模板 1 / 5
+- 想显得有礼貌 → 模板 2 / 3
+- 熟人团队 → 模板 4
+- 上级/HR 邮件 → 模板 3 最稳
+
+在很多公司里，一句 “Approved.” 就已经完全足够。

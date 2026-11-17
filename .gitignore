@@ -1,0 +1,75 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+
+# Git worktrees (local-only checkouts, never commit)
+.worktrees/
+.claude/worktrees/
+.git/worktrees/
+*.swo
+*~
+.DS_Store
+
+# Credentials & Secrets
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+service-account.json
+
+# Build / Alma snapshots
+.alma-snapshots/
+
+# Obsidian
+.obsidian/
+
+# Agent / AI tool configs
+.agent/
+.claude/
+.gemini/
+.kilo/
+.qwen/
+
+# Maven wrapper
+java-code/.mvn/
+
+# OS
+Thumbs.db
+
+# Safe — certificate data (do not commit real certs/keys)
+safe/certs/
+
+# English vocab cron auto-generated (vocab-hourly / vocab-hourly-llm)
+# Runs every hour 09:21 Asia/Shanghai, dumps 10 words per push
+/English/docs/english-words-*.md
+/.english_word_pool.json
+/.english_word_pool_v2.json
+/English/scripts/vocab_cron.py

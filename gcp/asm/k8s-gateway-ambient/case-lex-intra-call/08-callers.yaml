@@ -1,0 +1,169 @@
+# =============================================================================
+# 08-callers.yaml
+# =============================================================================
+# 调用方 API A(lex-api1) —— 两个实例组,验证"同一 URL 并存两个版本"
+#
+# ★ 关键演示点 ★
+#   lex-api1         → 用 profile-v1 → 请求头 x-api-version: 1.0.0 → 落到 v1
+#   lex-api1-canary  → 用 profile-v2 → 请求头 x-api-version: 2.0.0 → 落到 v2
+#
+#   两个调用方用的是**完全相同的 BASE_URL**,代码也完全相同,
+#   唯一差别是一个 ConfigMap 里的 API_VERSION 值。
+#   → 证明:版本不进 URL、不进代码,只进配置 + 请求头。
+#
+# 为什么用 curlimages/curl 而不是真实业务镜像:
+#   PoC 目的是验证"路由与版本协商"这个机制,不是验证业务代码。
+#   真实业务接入时,把下面这段 shell 换成 HTTP client 的调用即可,
+#   关键是把 BASE_URL 和 API_VERSION 从 ConfigMap 读进 env(见 ../../23-... §8.4)。
+# -----------------------------------------------------------------------------
+
+---
+# -----------------------------------------------------------------------------
+# CM-1: 稳定地址(两个调用方共用)
+# ★ 这个 ConfigMap 的内容就是"调用方唯一需要知道的东西" ——
+#   URL 稳定、无版本号;换版本时这个文件一个字都不用改
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lex-api2-endpoint
+  namespace: ba000000-lex-intra-call
+  labels:
+    app: lex-api1
+    app.kubernetes.io/part-of: ba000000-lex-intra-call
+data:
+  # FQDN —— 证书 SAN 和 DNS 都按这一串来
+  # ⚠️ 跨集群可移植场景改成 "<svc>.<ns>.svc"(不要写死 cluster.local)
+  BASE_URL: "http://lex-api2-service.ba000000-lex-intra-call.svc.cluster.local"
+
+---
+# -----------------------------------------------------------------------------
+# CM-2 / CM-3: 版本 profile —— 只改这里就换版本
+# -----------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lex-api1-profile-v1
+  namespace: ba000000-lex-intra-call
+  labels:
+    app: lex-api1
+    app.kubernetes.io/part-of: ba000000-lex-intra-call
+data:
+  API_VERSION: "1.0.0"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lex-api1-profile-v2
+  namespace: ba000000-lex-intra-call
+  labels:
+    app: lex-api1
+    app.kubernetes.io/part-of: ba000000-lex-intra-call
+data:
+  API_VERSION: "2.0.0"
+
+---
+# -----------------------------------------------------------------------------
+# DEP-1: 调用方 —— 钉 v1
+# -----------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lex-api1
+  namespace: ba000000-lex-intra-call
+  labels:
+    app: lex-api1
+    app.kubernetes.io/name: lex-api1
+    app.kubernetes.io/part-of: ba000000-lex-intra-call
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lex-api1
+      role: caller-v1
+  template:
+    metadata:
+      labels:
+        app: lex-api1
+        role: caller-v1
+    spec:
+      serviceAccountName: lex-api1-ksa
+      automountServiceAccountToken: true
+      containers:
+        - name: caller
+          image: curlimages/curl:8.10.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              while true; do
+                echo "[$(date -u +%s)] GET ${LEX_API2_BASE_URL}/resource  x-api-version=${LEX_API2_API_VERSION}"
+                curl -sS -m 5 -H "x-api-version: ${LEX_API2_API_VERSION}" "${LEX_API2_BASE_URL}/resource" || echo "CALL_FAILED"
+                echo
+                sleep 5
+              done
+          env:
+            - name: LEX_API2_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: lex-api2-endpoint
+                  key: BASE_URL
+            - name: LEX_API2_API_VERSION
+              valueFrom:
+                configMapKeyRef:
+                  name: lex-api1-profile-v1
+                  key: API_VERSION
+
+---
+# -----------------------------------------------------------------------------
+# DEP-2: 调用方 canary —— 钉 v2,URL 与 DEP-1 完全相同
+# -----------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lex-api1-canary
+  namespace: ba000000-lex-intra-call
+  labels:
+    app: lex-api1
+    app.kubernetes.io/name: lex-api1
+    app.kubernetes.io/part-of: ba000000-lex-intra-call
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lex-api1
+      role: caller-v2
+  template:
+    metadata:
+      labels:
+        app: lex-api1
+        role: caller-v2
+    spec:
+      serviceAccountName: lex-api1-ksa
+      automountServiceAccountToken: true
+      containers:
+        - name: caller
+          image: curlimages/curl:8.10.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              while true; do
+                echo "[$(date -u +%s)] GET ${LEX_API2_BASE_URL}/resource  x-api-version=${LEX_API2_API_VERSION}"
+                curl -sS -m 5 -H "x-api-version: ${LEX_API2_API_VERSION}" "${LEX_API2_BASE_URL}/resource" || echo "CALL_FAILED"
+                echo
+                sleep 5
+              done
+          env:
+            - name: LEX_API2_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: lex-api2-endpoint
+                  key: BASE_URL
+            - name: LEX_API2_API_VERSION
+              valueFrom:
+                configMapKeyRef:
+                  name: lex-api1-profile-v2
+                  key: API_VERSION

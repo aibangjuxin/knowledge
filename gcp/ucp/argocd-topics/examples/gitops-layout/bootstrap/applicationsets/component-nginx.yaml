@@ -1,0 +1,108 @@
+# Argo CD · 组件 ApplicationSet（nginx）
+#
+# 机制：**每个组件一个 ApplicationSet**。
+#       生成器读 Git 里的「组件启用清单」，为每个启用了该组件的集群生成一个 Application。
+#
+# 关键点（见 ../../../../05-appset.md）：
+#   ① template.spec.project 显式写成 '{{.project}}' —— 绝不省略，否则落到 default
+#   ② goTemplate + missingkey=error：某个清单文件缺字段就直接报错，而不是静默渲染成空
+#   ③ generator.revision 是「读集群清单用哪个分支」，template.source.targetRevision
+#      是「组件代码用哪个分支」—— 两者可以不同
+#   ④ syncPolicy.automated.prune / selfHeal 在 CRD 里是 **boolean**，
+#      不能用模板按环境切换（写成 '{{.prune}}' 会被 API server 拒掉）。
+#      prod 若要人工审批，需要拆一个 prod 专用 AppSet（见文件末尾示例）
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: component-nginx
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform
+    app.kubernetes.io/component: nginx
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+  # ---- Git 文件生成器：枚举「启用了 nginx 的集群」------------------------
+  # 一个清单文件 = 一个 (集群, 组件) 组合 = 一个 Application
+  - git:
+      repoURL: https://github.com/example/platform.git
+      revision: main
+      files:
+      - path: "bootstrap/clusters/*/components/nginx.yaml"
+        # 把清单文件里的字段摊平成模板参数
+        flatten:
+        - component
+        - cluster
+        - server
+        - env
+        - project
+        - namespace
+
+  template:
+    metadata:
+      # 应用名 = 组件名 + 集群名
+      name: '{{.component}}-{{.cluster}}'
+      labels:
+        app.kubernetes.io/part-of: platform
+        app.kubernetes.io/component: '{{.component}}'
+        env: '{{.env}}'
+        cluster: '{{.cluster}}'
+    spec:
+      # ⭐ 必须显式指定项目 —— 来自清单文件，不写就是 default（最宽松）
+      project: '{{.project}}'
+
+      source:
+        repoURL: https://github.com/example/platform.git
+        # ⭐ 组件代码的分支在这里改（批量改就改这一处）
+        targetRevision: main
+        # 环境差异用 Kustomize overlay 表达，路径由清单里的 env 决定
+        path: 'apps/nginx/overlays/{{.env}}'
+
+      destination:
+        server: '{{.server}}'
+        namespace: '{{.namespace}}'
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - PruneLast=true
+        - ServerSideApply=true
+        - RespectIgnoreDifferences=true
+
+      # ⭐ 删除 Application 时保留集群里的资源 —— 防误删的关键一行
+      preserveResourcesOnDeletion: true
+
+      progressDeadlineSeconds: 300
+
+      revisionHistoryLimit: 5
+---
+# ===========================================================================
+# 可选：prod 专用 ApplicationSet（人工审批 / 不自动 selfHeal）
+#
+# 上面的 AppSet 一个组件只有一个，是因为 Argo CD 的 prune/selfHeal 是 boolean，
+# 无法用 '{{.env}}' 区分。若 prod 与 dev 的同步策略不同，就拆成两个 AppSet：
+#
+#   generators:
+#   - git:
+#       repoURL: https://github.com/example/platform.git
+#       revision: main
+#       files:
+#       - path: "bootstrap/clusters/*/components/nginx.yaml"
+#         flatten: [component, cluster, server, env, project, namespace]
+#       selector: 'env == "prod"'      # ⭐ 只取 prod 的清单
+#
+#   template:
+#     spec:
+#       syncPolicy:
+#         automated:
+#           prune: true
+#           selfHeal: false
+#
+# 代价：组件变多时要维护多份 AppSet。
+# ===========================================================================

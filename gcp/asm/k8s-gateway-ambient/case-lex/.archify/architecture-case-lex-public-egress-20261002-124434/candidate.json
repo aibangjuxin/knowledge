@@ -1,0 +1,349 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "case-lex 双轨 Egress 治理架构",
+    "locale": "zh-CN",
+    "subtitle": "轨道 A 内部 DRN 走 L3 默认不控 · 轨道 B 公网走 L7 域名白名单",
+    "output": ".archify/architecture-case-lex-public-egress-20261002-124434/case-lex-public-egress.html",
+    "animation": "none",
+    "quality_profile": "showcase"
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [
+      30,
+      90
+    ],
+    "cols": 4,
+    "gapX": 96,
+    "gapY": 100,
+    "cellW": 160,
+    "cellH": 74
+  },
+  "components": [
+    {
+      "id": "gcp-route",
+      "type": "cloud",
+      "label": "GCP 路由引擎",
+      "sublabel": "LPM 前缀匹配",
+      "row": 1,
+      "col": 1
+    },
+    {
+      "id": "nhf-ilb",
+      "type": "cloud",
+      "label": "NHF ILB",
+      "sublabel": "VIP 192.168.0.55",
+      "row": 0,
+      "col": 1
+    },
+    {
+      "id": "nhf-mig",
+      "type": "backend",
+      "label": "NHF 双网卡 MIG",
+      "sublabel": "SNAT 10.72.x.x",
+      "row": 0,
+      "col": 2
+    },
+    {
+      "id": "office-egress",
+      "type": "security",
+      "label": "办公网出口",
+      "sublabel": "统一审计出口",
+      "row": 0,
+      "col": 3
+    },
+    {
+      "id": "onprem",
+      "type": "external",
+      "label": "on-prem DRN / SCC",
+      "sublabel": "128.171.x.x",
+      "row": 1,
+      "col": 3
+    },
+    {
+      "id": "netpol",
+      "type": "security",
+      "label": "NetworkPolicy",
+      "sublabel": "NP-1 deny · NP-3 128/2",
+      "row": 1,
+      "col": 0
+    },
+    {
+      "id": "istiod",
+      "type": "cloud",
+      "label": "istiod",
+      "sublabel": "分配 240.240.0.x VIP",
+      "row": 2,
+      "col": 3
+    },
+    {
+      "id": "app-pod",
+      "type": "frontend",
+      "label": "业务 Pod",
+      "sublabel": "app:app · ambient",
+      "row": 2,
+      "col": 0
+    },
+    {
+      "id": "ztunnel",
+      "type": "backend",
+      "label": "节点 ztunnel",
+      "sublabel": "L4 拦截 + mTLS",
+      "row": 2,
+      "col": 1
+    },
+    {
+      "id": "waypoint-int",
+      "type": "security",
+      "label": "waypoint-int",
+      "sublabel": "入向 L7",
+      "row": 2,
+      "col": 2
+    },
+    {
+      "id": "egress-netpol",
+      "type": "security",
+      "label": "egress NetPol",
+      "sublabel": "default-deny",
+      "row": 3,
+      "col": 0
+    },
+    {
+      "id": "egress-waypoint",
+      "type": "security",
+      "label": "Egress Waypoint",
+      "sublabel": "HBONE :15008 · L7",
+      "row": 3,
+      "col": 1
+    },
+    {
+      "id": "public-saas",
+      "type": "external",
+      "label": "公网 SaaS",
+      "sublabel": "微软 / M365",
+      "row": 3,
+      "col": 2
+    },
+    {
+      "id": "serviceentry",
+      "type": "database",
+      "label": "ServiceEntry",
+      "sublabel": "单域名白名单",
+      "row": 4,
+      "col": 0
+    },
+    {
+      "id": "authz",
+      "type": "security",
+      "label": "AuthorizationPolicy",
+      "sublabel": "ns + hosts 判定",
+      "row": 4,
+      "col": 1
+    },
+    {
+      "id": "cloud-dns",
+      "type": "cloud",
+      "label": "Cloud DNS",
+      "sublabel": "别名 → ClusterIP",
+      "row": 5,
+      "col": 0
+    },
+    {
+      "id": "squid-gke",
+      "type": "security",
+      "label": "GKE Squid",
+      "sublabel": "一级 ACL",
+      "row": 5,
+      "col": 1
+    },
+    {
+      "id": "squid-gce",
+      "type": "security",
+      "label": "GCE VM Squid",
+      "sublabel": "二级 ACL + 出口 IP",
+      "row": 5,
+      "col": 2
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "轨道 A — L3 内部 DRN，默认不控",
+      "wraps": [
+        "gcp-route",
+        "nhf-ilb",
+        "nhf-mig",
+        "office-egress",
+        "onprem"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "GKE 租户 ns  ba000000-lex-int",
+      "wraps": [
+        "netpol",
+        "app-pod",
+        "ztunnel",
+        "waypoint-int"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "轨道 B — istio-egress ns",
+      "wraps": [
+        "egress-netpol",
+        "egress-waypoint",
+        "serviceentry",
+        "authz"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "现状 Squid 链路（过渡期保留）",
+      "wraps": [
+        "cloud-dns",
+        "squid-gke",
+        "squid-gce"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "app-pod",
+      "to": "ztunnel",
+      "label": "① 出向 TCP",
+      "variant": "emphasis"
+    },
+    {
+      "from": "ztunnel",
+      "to": "waypoint-int",
+      "label": "② 入向 L7",
+      "variant": "security"
+    },
+    {
+      "from": "ztunnel",
+      "to": "gcp-route",
+      "label": "③ 轨道 A 直通 L3",
+      "variant": "emphasis"
+    },
+    {
+      "from": "gcp-route",
+      "to": "nhf-ilb",
+      "variant": "default"
+    },
+    {
+      "from": "nhf-ilb",
+      "to": "nhf-mig",
+      "variant": "default"
+    },
+    {
+      "from": "nhf-mig",
+      "to": "office-egress",
+      "variant": "default"
+    },
+    {
+      "from": "office-egress",
+      "to": "onprem",
+      "variant": "default"
+    },
+    {
+      "from": "ztunnel",
+      "to": "egress-waypoint",
+      "label": "④ HBONE :15008",
+      "variant": "emphasis"
+    },
+    {
+      "from": "istiod",
+      "to": "ztunnel",
+      "label": "下发 VIP",
+      "variant": "dashed"
+    },
+    {
+      "from": "serviceentry",
+      "to": "egress-waypoint",
+      "label": "use-waypoint",
+      "variant": "dashed"
+    },
+    {
+      "from": "authz",
+      "to": "egress-waypoint",
+      "label": "L7 判定",
+      "variant": "security"
+    },
+    {
+      "from": "egress-netpol",
+      "to": "egress-waypoint",
+      "label": "L4 边界",
+      "variant": "security"
+    },
+    {
+      "from": "egress-waypoint",
+      "to": "public-saas",
+      "label": "⑤ 公网 :443",
+      "variant": "emphasis"
+    },
+    {
+      "from": "app-pod",
+      "to": "cloud-dns",
+      "label": "⑥ 解析别名",
+      "variant": "dashed"
+    },
+    {
+      "from": "cloud-dns",
+      "to": "squid-gke",
+      "variant": "dashed"
+    },
+    {
+      "from": "squid-gke",
+      "to": "squid-gce",
+      "label": "CONNECT",
+      "variant": "security"
+    },
+    {
+      "from": "squid-gce",
+      "to": "public-saas",
+      "label": "二级 ACL",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "轨道 A — L3 可达即不控",
+      "items": [
+        "公司申请的公网段与 on-prem 恰好落在 NP-3 的 128.0.0.0/2 内，这是设计意图而非缺陷",
+        "策略是「能走 L3 出去就默认不控」——出口侧已有办公网统一审计，Istio 层不重复管控",
+        "本方案不改动 NP-3，只要求保证「不该走的走不出去」"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "轨道 B — L7 域名级管控",
+      "items": [
+        "公网 SaaS 网段不在 128/2 内，已被 NP-1 + NP-3 天然 DENY —— deny 基线现在就在执行",
+        "ServiceEntry 的作用是在 deny 基线上逐个开口，把放行粒度从 IP 网段升级到域名",
+        "L3 与 L4 物理上看不到域名，按域名放行只能由 L7 承担，这是能力边界而非设计偏好"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Squid 链路如何演进",
+      "items": [
+        "GKE Squid 依赖源 IP 做 ACL，而 CONNECT 不带 X-Forwarded-For，入 mesh 后语义会被破坏",
+        "推荐：waypoint 替代第一级 GKE Squid 做 L7 白名单，保留 GCE VM Squid 承担第二级 ACL 与固定出口 IP",
+        "若对端无 IP 白名单要求，GCE VM Squid 可完全退役，形成最简链路"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "强制出口的安全基石",
+      "items": [
+        "use-waypoint 只是意图声明：waypoint 不可用时 ztunnel 会 passthrough 直连",
+        "官方 require-waypoint 依赖 workload selector，对 ServiceEntry 目标不适用（外部服务无 workload）",
+        "真正兜底是 NetworkPolicy：只要直连公网被拒，waypoint 就是唯一路径，失败而非静默放行"
+      ]
+    }
+  ]
+}

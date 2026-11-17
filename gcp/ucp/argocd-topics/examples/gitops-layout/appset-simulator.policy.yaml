@@ -1,0 +1,14 @@
+# appset-simulator 的策略文件
+#
+# 模拟器（appset-simulator.py）的规则级别在这里调。
+#
+# 可用规则：
+#   prod-selfheal   prod 命名空间却开了 selfHeal
+
+severities:
+  # 本示例故意用「每个组件一个 ApplicationSet」，dev/prod 共用同步策略。
+  # 真上生产时：prod 要人工审批 → 拆一个 prod 专用 AppSet（selfHeal: false），
+  # 届时把下面的级别改回 warn。
+  prod-selfheal: info
+
+ignores: []

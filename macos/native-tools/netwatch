@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+# netwatch — 观察 macOS 上某个应用的网络活动(进程 -> 连接 -> 域名)
+#
+# 用法:
+#   netwatch <进程名|PID>        实时观察(免 root)
+#   netwatch <进程名|PID> --dns  额外抓 DNS + TLS SNI,打印真实域名(需 sudo)
+#   netwatch --top               按流量排序,看谁在偷偷下载(免 root)
+#
+# 已知坑:
+#   1. pgrep -f 匹配的是命令行文本,纯数字 PID 必须走 ps 分支
+#   2. GUI 应用常把真正干活的逻辑放在子进程里,本脚本会自动列出并展开后代
+#   3. Network Extension 类应用的 socket 由 root 的 nehelper 持有,
+#      普通用户 lsof 看不到,只有 nettop 能归因;需完整 socket 时用 sudo lsof
+
+set -uo pipefail
+
+RED=$'\e[31m'; GRN=$'\e[32m'; YEL=$'\e[33m'; CYA=$'\e[36m'; DIM=$'\e[2m'; RST=$'\e[0m'
+
+show_top() {
+  echo "${CYA}=== 正在传数据的进程 (bytes_in / bytes_out) ===${RST}"
+  nettop -P -L 1 -x 2>/dev/null | awk -F, '
+    NR==1 {next}
+    { inb=$5+0; outb=$6+0; if (inb+outb > 20000) printf "%-34s ↓%-12s ↑%-12s\n", $2, inb, outb }
+  ' | sort -k2 -r | head -25
+  echo
+  echo "${CYA}=== 交互式 nettop (q 退出) ===${RST}"
+  exec nettop -P -x
+}
+
+NAME="${1:-}"
+MODE="${2:-}"
+[[ "$NAME" == "--top" ]] && { show_top; exit 0; }
+
+if [[ -z "$NAME" ]]; then
+  echo "用法: netwatch <进程名|PID> [--dns]"
+  echo "      netwatch --top"
+  exit 1
+fi
+
+# ---------- 1. 解析目标:数字 -> PID;否则 -> 进程名匹配 ----------
+if [[ "$NAME" =~ ^[0-9]+$ ]]; then
+  PID="$NAME"
+  if ! ps -p "$PID" >/dev/null 2>&1; then
+    echo "${YEL}PID $PID 不存在(进程可能已退出)${RST}"
+    exit 1
+  fi
+  TARGET_PID="$PID"
+  TARGET_NAME="$(ps -o comm= -p "$PID" | xargs basename 2>/dev/null)"
+else
+  TARGET_NAME="$NAME"
+  TARGET_PID="$(pgrep -x "$NAME" 2>/dev/null | head -1)"
+  [[ -z "$TARGET_PID" ]] && TARGET_PID="$(pgrep -f "$NAME" 2>/dev/null | head -1)"
+  if [[ -z "$TARGET_PID" ]]; then
+    echo "${YEL}没有匹配到进程 '$NAME'${RST}"
+    echo "${DIM}提示: 如果你手里是数字 PID,直接传 PID 即可(不要用 pgrep 的思路)${RST}"
+    exit 1
+  fi
+fi
+
+# ---------- 2. 展开后代进程(GUI 应用的真正干活进程) ----------
+collect_tree() {
+  local root="$1" all="$1" frontier="$1" pid
+  while [[ -n "$frontier" ]]; do
+    local next=""
+    for pid in $frontier; do
+      local kids
+      kids="$(pgrep -P "$pid" 2>/dev/null)"
+      for k in $kids; do
+        [[ " $all " == *" $k "* ]] && continue
+        all="$all $k"
+        next="$next $k"
+      done
+    done
+    frontier="$next"
+  done
+  echo "$all"
+}
+
+TREE="$(collect_tree "$TARGET_PID")"
+
+echo "${GRN}=== 目标: $TARGET_NAME (PID $TARGET_PID) ===${RST}"
+for p in $TREE; do
+  if [[ "$p" == "$TARGET_PID" ]]; then
+    printf "  ${GRN}%s%s  %-9s %s\n" "●" "$RST" "$p" "$(ps -o command= -p $p | sed 's/.*\///' | cut -c1-60)"
+  else
+    printf "  ${DIM}└  %-9s %s${RST}\n" "$p" "$(ps -o command= -p $p | sed 's/.*\///' | cut -c1-60)"
+  fi
+done
+echo
+
+# ---------- 3. lsof 视图(Network Extension 场景需要 sudo) ----------
+show_lsof() {
+  local ids="$1" sudo_flag="$2"
+  local out
+  out="$(lsof -nP -i -a -p "$(echo "$ids" | tr ' ' ',')" 2>/dev/null)"
+  if [[ -z "$out" ]]; then
+    # 只在免密 sudo 可用时尝试,避免卡在密码提示上
+    out="$(sudo -n lsof -nP -i -a -p "$(echo "$ids" | tr ' ' ',')" 2>/dev/null)"
+    [[ -n "$out" ]] && echo "${DIM}(普通用户看不到,以下是 sudo 结果)${RST}"
+  fi
+  if [[ -n "$out" ]]; then
+    echo "$out"
+  else
+    echo "${YEL}(lsof 未找到套接字 —— 可能由 root 的 nehelper 持有,看下方的 nettop)${RST}"
+  fi
+}
+
+echo "${CYA}=== 网络连接 (lsof) ===${RST}"
+show_lsof "$TREE" 0
+echo
+
+# ---------- 4. DNS + TLS SNI 抓取 ----------
+if [[ "$MODE" == "--dns" ]]; then
+  if ! sudo -n true 2>/dev/null; then
+    echo "${YEL}--dns 需要 sudo,即将请求密码...${RST}"
+    sudo -v || exit 1
+  fi
+  echo "${CYA}=== 补一次 sudo lsof(Network Extension 场景唯一可靠来源) ===${RST}"
+  sudo lsof -nP -i -a -p "$(echo "$TREE" | tr ' ' ',')" 2>/dev/null | head -15
+  echo
+
+  echo "${GRN}=== 抓取 DNS 查询 + TLS SNI (12 秒) ===${RST}"
+  echo "${DIM}现在请你去触发目标应用的操作(打开页面/下载/同步)${RST}"
+  echo
+
+  if command -v tshark >/dev/null 2>&1; then
+    sudo tshark -i any -a duration:12 -q \
+      -Y 'dns.qry.name or tls.handshake.extensions_server_name' \
+      -T fields -e dns.qry.name -e tls.handshake.extensions_server_name \
+      -e ip.src -e ip.dst -e tcp.dstport 2>/dev/null | \
+      awk -F'\t' '
+        { dom=($1!=""?$1:$2); if(dom=="") next;
+          key=dom"\t"$3"\t"$4"\t"$5;
+          if(!(key in seen)){seen[key]=1; printf "%-45s %s -> %s:%s\n", dom, $3, $4, $5} }'
+  else
+    sudo tcpdump -i any -n -s 0 -A 'port 53 or port 443' 2>/dev/null | head -200
+  fi
+
+  echo
+  echo "${YEL}提示: 应用若用 DoH/DoT 加密 DNS,这里可能为空 —— 但 TLS SNI 通常仍能抓到域名。${RST}"
+  echo "${YEL}      走 fake-ip 代理时,以代理工具自己的请求日志为准。${RST}"
+  echo
+fi
+
+# ---------- 5. nettop 实时连接(归因最可靠) ----------
+echo "${CYA}=== 实时连接 (nettop) ===${RST}"
+if [[ "$MODE" == "--dns" ]]; then
+  sudo nettop -m tcp -L 1 -p "$TARGET_PID" 2>/dev/null | head -20
+else
+  nettop -m tcp -L 1 -p "$TARGET_PID" 2>/dev/null | head -20
+fi
+echo
+echo "${DIM}解读: 'tcp4 源IP:端口<->目标IP:端口,接口,状态,收,发,......' 那一行就是连接本身${RST}"
+echo "${DIM}      目标IP 是 fake-ip 的话,域名要靠上面的 --dns 抓 SNI 才能确定${RST}"

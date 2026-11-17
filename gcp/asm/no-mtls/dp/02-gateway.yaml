@@ -1,0 +1,149 @@
+# ============================================================
+# 02-gateway.yaml
+# ServiceAccount + RBAC + Deployment + Service + Istio Gateway CRD
+# ASM managed mode: uses image:auto for automatic sidecar injection
+# ============================================================
+
+# ServiceAccount for istio-ingressgateway-int
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: istio-ingressgateway-int-sa
+  namespace: istio-ingressgateway-int
+---
+# RBAC: role for reading Istio config
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: istio-ingressgateway-int-role
+  namespace: istio-ingressgateway-int
+rules:
+- apiGroups: ["networking.istio.io"]
+  resources: ["gateways"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: istio-ingressgateway-int-rolebinding
+  namespace: istio-ingressgateway-int
+subjects:
+- kind: ServiceAccount
+  name: istio-ingressgateway-int-sa
+  namespace: istio-ingressgateway-int
+roleRef:
+  kind: Role
+  name: istio-ingressgateway-int-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Istio Ingress Gateway Deployment
+# image:auto triggers ASM managed sidecar injection via
+# inject.istio.io/templates: gateway webhook
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: istio-ingressgateway-int
+  namespace: istio-ingressgateway-int
+  labels:
+    app: istio-ingressgateway-int
+    istio: ingressgateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: istio-ingressgateway-int
+      istio: ingressgateway
+  template:
+    metadata:
+      labels:
+        app: istio-ingressgateway-int
+        istio: ingressgateway
+      annotations:
+        inject.istio.io/templates: gateway
+    spec:
+      serviceAccountName: istio-ingressgateway-int-sa
+      containers:
+      - name: istio-proxy
+        image: auto
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http2
+          protocol: TCP
+        - containerPort: 8443
+          name: https
+          protocol: TCP
+        - containerPort: 15090
+          name: http-envoy-prom
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /healthz/ready
+            port: 15021
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        volumeMounts:
+        - name: gateway-cert
+          mountPath: /etc/istio/gateway-cert
+          readOnly: true
+      volumes:
+      - name: gateway-cert
+        secret:
+          secretName: team-a-gateway-tls
+---
+# Istio Ingress Gateway Service (LoadBalancer)
+# Port 443 external -> 8443 internal (Envoy TLS termination)
+apiVersion: v1
+kind: Service
+metadata:
+  name: istio-ingressgateway-int
+  namespace: istio-ingressgateway-int
+  labels:
+    app: istio-ingressgateway-int
+    istio: ingressgateway
+  annotations:
+    cloud.google.com/neg: '{"ingress":true}'
+spec:
+  type: LoadBalancer
+  selector:
+    app: istio-ingressgateway-int
+    istio: ingressgateway
+  ports:
+  - name: http2
+    port: 80
+    targetPort: 8080
+    nodePort: 30913
+  - name: https
+    port: 443
+    targetPort: 8443
+    nodePort: 32325
+---
+# Istio Gateway CRD
+# Terminates HTTPS for *.team-a.appdev.aibang
+# TLS certificate is in Secret: team-a-gateway-tls
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: team-a-gateway
+  namespace: istio-ingressgateway-int
+spec:
+  selector:
+    app: istio-ingressgateway-int
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      privateKey: /etc/istio/gateway-cert/tls.key
+      serverCertificate: /etc/istio/gateway-cert/tls.crt
+    hosts:
+    - "*.team-a.appdev.aibang"

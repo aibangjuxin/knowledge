@@ -1,0 +1,47 @@
+# infra-gcp 专用:KSA + Workload Identity 绑定
+# 关键:annotation 把 KSA 映射到 GCP IAM principal
+# 验证:kubectl get sa <name> -n <ns> -o yaml | grep iam.gke.io
+# 架构师 lane:本文档只生成模板,不执行 apply
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: api-bucket-writer
+  namespace: api-ns
+  labels:
+    tenant: tnt-001
+  # 关键 annotation:把 KSA 绑定到 GCP IAM principal
+  # 格式: iam.gke.io/gcp-service-account = <KSA>@<GKE_PROJECT>.iam.gserviceaccount.com
+  # 注意:这个 KSA principal 不需要真实存在!WIF 会在 GCP IAM 侧动态映射
+  annotations:
+    iam.gke.io/gcp-service-account: api-bucket-writer@master-project.iam.gserviceaccount.com
+# 不需要 imagePullSecrets / secrets(Secret 放 namespace-level,不是 SA-level)
+---
+# 配套 RBAC:SA 在 namespace 内最小权限
+# 注意:这是 K8s RBAC,不是 GCP IAM
+# GCP IAM 授权在 user-bucket-project 的 Bucket IAM policy 配置
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: api-bucket-writer-role
+  namespace: api-ns
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps"]
+  verbs: ["get", "list", "watch"]     # 只读
+# ⚠ 不要给 SA 任何 PV/PVC/NetworkPolicy/Secret 的写权限
+# ⚠ 不要给 SA 任何 user-bucket-project 的 GCP 权限(GCP 权限在 Bucket IAM policy)
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: api-bucket-writer-binding
+  namespace: api-ns
+subjects:
+- kind: ServiceAccount
+  name: api-bucket-writer
+  namespace: api-ns
+roleRef:
+  kind: Role
+  name: api-bucket-writer-role
+  apiGroup: rbac.authorization.k8s.io

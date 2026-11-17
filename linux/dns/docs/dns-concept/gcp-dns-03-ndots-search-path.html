@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ndots 与 Search Path 放大流程 — 流程图</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #1c1917;
+      --color-paper-2: #292524;
+      --color-ink:     #faf7f2;
+      --color-muted:   #a8a29e;
+      --color-soft:    #8e8680;
+      --color-accent:  #d6724a;
+      --color-accent-tint: rgba(214,114,74,0.10);
+      --color-link:    #60a5fa;
+      --font-sans:  'Geist', system-ui, sans-serif;
+      --font-serif: 'Instrument Serif', serif;
+      --font-mono:  'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+    svg { width: 100%; min-width: 900px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Flowchart · DNS Resolver</p>
+    <h1>ndots 与 Search Path 放大流程 — resolver 行为解析</h1>
+
+    <svg viewBox="0 0 1100 780" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="0.9" fill="rgba(250,247,242,0.08)"/>
+        </pattern>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#a8a29e"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#d6724a"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#60a5fa"/></marker>
+      </defs>
+
+      <!-- Background -->
+      <rect width="100%" height="100%" fill="#1c1917"/>
+      <rect width="100%" height="100%" fill="url(#dots)" opacity="0.55"/>
+
+      <!-- ==================== ARROWS ==================== -->
+      <!-- Entry → Decision 1 -->
+      <line x1="100" y1="100" x2="100" y2="148" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Decision 1 branches -->
+      <!-- Has trailing dot -->
+      <line x1="120" y1="176" x2="200" y2="176" stroke="#60a5fa" stroke-width="1" marker-end="url(#arrow-link)"/>
+      <!-- ndots check -->
+      <line x1="100" y1="208" x2="100" y2="248" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Decision 2 branches -->
+      <!-- dots < ndots → search first -->
+      <line x1="120" y1="276" x2="220" y2="276" stroke="#d6724a" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+      <!-- dots >= ndots → query original first -->
+      <line x1="100" y1="308" x2="100" y2="348" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Search path loop (iterates through suffix list) -->
+      <line x1="380" y1="276" x2="380" y2="408" stroke="#a8a29e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+      <!-- Loop back to decision -->
+      <line x1="380" y1="408" x2="280" y2="408" stroke="#a8a29e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+      <line x1="280" y1="408" x2="280" y2="330" stroke="#a8a29e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+
+      <!-- Query original → success -->
+      <line x1="100" y1="388" x2="100" y2="448" stroke="#d6724a" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+
+      <!-- Query original → NXDOMAIN → search -->
+      <line x1="140" y1="388" x2="220" y2="388" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- Search remaining loop -->
+      <line x1="380" y1="460" x2="380" y2="540" stroke="#a8a29e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+      <line x1="380" y1="540" x2="280" y2="540" stroke="#a8a29e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+      <line x1="280" y1="540" x2="280" y2="420" stroke="#a8a29e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+
+      <!-- Final NXDOMAIN -->
+      <line x1="100" y1="488" x2="100" y2="560" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+      <line x1="140" y1="560" x2="220" y2="560" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+
+      <!-- All search exhausted → original -->
+      <line x1="380" y1="580" x2="380" y2="640" stroke="#a8a29e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+
+      <!-- ==================== NODES ==================== -->
+      <!-- Entry -->
+      <rect x="20" y="50" width="160" height="52" rx="6" fill="rgba(214,114,74,0.10)" stroke="#d6724a" stroke-width="1.2"/>
+      <rect x="28" y="56" width="32" height="12" rx="2" fill="transparent" stroke="rgba(214,114,74,0.50)" stroke-width="0.8"/>
+      <text x="44" y="65" fill="#d6724a" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">INPUT</text>
+      <text x="100" y="78" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">应用发起 DNS 查询</text>
+      <text x="100" y="93" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">e.g. api.teamname.appdev.aibang</text>
+
+      <!-- Decision 1: trailing dot -->
+      <rect x="20" y="148" width="160" height="60" rx="6" fill="#292524" stroke="#faf7f2" stroke-width="1"/>
+      <text x="100" y="168" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">查询名带尾部点?</text>
+      <text x="100" y="183" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">e.g. *.aibang.</text>
+      <text x="100" y="200" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">(显式绝对 FQDN)</text>
+
+      <!-- YES branch label -->
+      <rect x="128" y="162" width="32" height="16" rx="2" fill="rgba(96,165,250,0.10)" stroke="rgba(96,165,250,0.40)" stroke-width="0.8"/>
+      <text x="144" y="173" fill="#60a5fa" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">YES</text>
+
+      <!-- Absolute FQDN path (right) -->
+      <rect x="210" y="148" width="180" height="60" rx="6" fill="rgba(96,165,250,0.08)" stroke="rgba(96,165,250,0.40)" stroke-width="0.8"/>
+      <text x="300" y="172" fill="#60a5fa" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">绝对 FQDN 路径</text>
+      <text x="300" y="192" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">跳过 search path，直接查询原始名字</text>
+
+      <!-- Decision 2: count dots vs ndots -->
+      <rect x="20" y="220" width="160" height="60" rx="6" fill="#292524" stroke="#faf7f2" stroke-width="1"/>
+      <text x="100" y="240" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">普通分隔点 &lt; ndots?</text>
+      <text x="100" y="255" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">默认 ndots=5</text>
+      <text x="100" y="272" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">(4 dots &lt; 5 → 是)</text>
+
+      <!-- Left label: YES → search first -->
+      <rect x="28" y="262" width="32" height="16" rx="2" fill="rgba(214,114,74,0.10)" stroke="#d6724a" stroke-width="0.8"/>
+      <text x="44" y="273" fill="#d6724a" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">YES</text>
+
+      <!-- Right label: NO → query original first -->
+      <rect x="28" y="292" width="24" height="16" rx="2" fill="rgba(250,247,242,0.05)" stroke="rgba(250,247,242,0.20)" stroke-width="0.8"/>
+      <text x="40" y="303" fill="#a8a29e" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">NO</text>
+
+      <!-- Search path block (left column) -->
+      <rect x="230" y="220" width="300" height="100" rx="6" fill="#292524" stroke="#d6724a" stroke-width="1.2"/>
+      <rect x="238" y="226" width="40" height="12" rx="2" fill="transparent" stroke="rgba(214,114,74,0.50)" stroke-width="0.8"/>
+      <text x="258" y="235" fill="#d6724a" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">FOCAL</text>
+      <text x="380" y="252" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Search Path 拼接查询</text>
+      <text x="380" y="268" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">依次追加 search suffix 并查询</text>
+      <text x="380" y="286" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">1. api.teamname.appdev.aibang.my-ns.svc.cluster.local</text>
+      <text x="380" y="300" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">2. api.teamname.appdev.aibang.svc.cluster.local</text>
+      <text x="380" y="314" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">3. api.teamname.appdev.aibang.cluster.local</text>
+
+      <!-- Loop arrow label -->
+      <rect x="320" y="404" width="48" height="16" rx="2" fill="#1c1917"/>
+      <text x="344" y="415" fill="#78716c" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">未命中</text>
+
+      <!-- Query original block (right of decision 2) -->
+      <rect x="230" y="350" width="300" height="72" rx="6" fill="rgba(250,247,242,0.05)" stroke="rgba(250,247,242,0.20)" stroke-width="0.8" stroke-dasharray="4,3"/>
+      <text x="380" y="374" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">直接查询原始名字</text>
+      <text x="380" y="390" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">api.teamname.appdev.aibang</text>
+      <text x="380" y="408" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">如果 NXDOMAIN → 再走 search path</text>
+
+      <!-- Result nodes -->
+      <!-- Return result -->
+      <rect x="20" y="448" width="160" height="44" rx="6" fill="rgba(214,114,74,0.10)" stroke="#d6724a" stroke-width="1.2"/>
+      <text x="100" y="475" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">返回解析结果 ✓</text>
+
+      <!-- Search all NXDOMAIN -->
+      <rect x="20" y="560" width="160" height="60" rx="6" fill="#292524" stroke="#faf7f2" stroke-width="1"/>
+      <text x="100" y="580" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Search 全部失败</text>
+      <text x="100" y="596" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">所有 suffix 拼接均 NXDOMAIN</text>
+      <text x="100" y="612" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">→ NXDOMAIN</text>
+
+      <!-- Search exhausted → original -->
+      <rect x="230" y="550" width="300" height="72" rx="6" fill="#292524" stroke="#faf7f2" stroke-width="1"/>
+      <text x="380" y="574" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Search 循环结束后</text>
+      <text x="380" y="590" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">再查询原始名字</text>
+      <text x="380" y="608" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">(dots >= ndots 场景)</text>
+
+      <!-- Final result -->
+      <rect x="20" y="648" width="160" height="52" rx="6" fill="#292524" stroke="#d6724a" stroke-width="1.2"/>
+      <text x="100" y="674" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">最终结果</text>
+      <text x="100" y="692" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">A record / NXDOMAIN / SERVFAIL</text>
+
+      <!-- ==================== CONFIG BOX ==================== -->
+      <rect x="600" y="148" width="300" height="120" rx="6" fill="#292524" stroke="#faf7f2" stroke-width="1"/>
+      <text x="750" y="170" fill="#faf7f2" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">/etc/resolv.conf 示例</text>
+      <text x="750" y="190" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">nameserver 100.68.0.10</text>
+      <text x="750" y="206" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">options ndots:5</text>
+      <text x="750" y="222" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">search my-ns.svc.cluster.local</text>
+      <text x="750" y="238" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">        svc.cluster.local</text>
+      <text x="750" y="254" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">        cluster.local</text>
+      <text x="750" y="270" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">        us-east4-a.c.PROJECT.internal</text>
+
+      <!-- Key insight box -->
+      <rect x="600" y="290" width="300" height="160" rx="6" fill="rgba(214,114,74,0.08)" stroke="#d6724a" stroke-width="1.2"/>
+      <text x="750" y="315" fill="#d6724a" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">推荐做法：使用尾部点</text>
+      <text x="750" y="335" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">api.teamname.appdev.aibang.</text>
+      <text x="750" y="352" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">→ 跳过 search path</text>
+      <text x="750" y="370" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">→ 减少 6 次无效查询</text>
+      <text x="750" y="392" fill="#faf7f2" font-size="10" font-weight="500" font-family="'Geist', sans-serif" text-anchor="middle">DNS 层面 FQDN = 查询名 + "."</text>
+      <text x="750" y="412" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">HTTP Host / TLS SNI 仍不带点</text>
+      <text x="750" y="428" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Java: Dns.SYSTEM.lookup(hostname + ".")</text>
+
+      <!-- Warning box -->
+      <rect x="600" y="468" width="300" height="80" rx="6" fill="#292524" stroke="rgba(250,247,242,0.20)" stroke-width="0.8"/>
+      <text x="750" y="490" fill="#faf7f2" font-size="10" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ndots 越小越优先原始名字</text>
+      <text x="750" y="508" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">ndots=1 → 先查 api.teamname.appdev.aibang</text>
+      <text x="750" y="524" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">ndots=5 → 先追加 search path (当前默认)</text>
+      <text x="750" y="540" fill="#8e8680" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">改全局 ndots 可能破坏 K8s 服务发现</text>
+
+      <!-- ==================== LEGEND ==================== -->
+      <line x1="30" y1="720" x2="1070" y2="720" stroke="rgba(250,247,242,0.10)" stroke-width="0.8"/>
+      <text x="30" y="734" fill="#8e8680" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">LEGEND</text>
+      <!-- FOCAL -->
+      <rect x="80" y="730" width="10" height="10" rx="2" fill="rgba(214,114,74,0.10)" stroke="#d6724a" stroke-width="1"/>
+      <text x="96" y="739" fill="#a8a29e" font-size="8" font-family="'Geist Mono', monospace">Focal (关键路径)</text>
+      <!-- LINK -->
+      <rect x="180" y="730" width="10" height="10" rx="2" fill="rgba(96,165,250,0.08)" stroke="rgba(96,165,250,0.40)" stroke-width="0.8"/>
+      <text x="196" y="739" fill="#a8a29e" font-size="8" font-family="'Geist Mono', monospace">Absoulte FQDN 路径</text>
+      <!-- OPTIONAL -->
+      <rect x="320" y="730" width="10" height="10" rx="2" fill="rgba(250,247,242,0.05)" stroke="rgba(250,247,242,0.20)" stroke-width="0.8" stroke-dasharray="4,3"/>
+      <text x="336" y="739" fill="#a8a29e" font-size="8" font-family="'Geist Mono', monospace">Conditional / NXDOMAIN</text>
+      <!-- Arrow -->
+      <line x1="460" y1="735" x2="480" y2="735" stroke="#a8a29e" stroke-width="1" marker-end="url(#arrow)"/>
+      <text x="490" y="739" fill="#a8a29e" font-size="8" font-family="'Geist Mono', monospace">正常查询</text>
+      <!-- Dashed arrow -->
+      <line x1="560" y1="735" x2="580" y2="735" stroke="#a8a29e" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+      <text x="590" y="739" fill="#a8a29e" font-size="8" font-family="'Geist Mono', monospace">循环 / 回退</text>
+    </svg>
+  </div>
+</body>
+</html>

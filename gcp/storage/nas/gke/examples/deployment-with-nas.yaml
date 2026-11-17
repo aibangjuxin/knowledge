@@ -1,0 +1,65 @@
+# 业务方专用:API Deployment YAML 模板(挂 NAS)
+# 提交给 infra-gcp 评审前,必跑 4 红线自检(见 gke/01-deployment-yaml-template.md §3)
+# 架构师 lane:本文档只生成模板,不执行 apply
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-with-nas                 # ← 业务方命名
+  namespace: api-ns                  # ← 业务方指定 namespace
+  labels:
+    app: api
+    role: nas-consumer               # ← 必须有,NetworkPolicy 用
+    tenant: tnt-001                  # ← 业务方 tenant ID,与 Tenant CRD 对齐
+spec:
+  replicas: 1                        # ← 默认 1,不要随便改
+  selector:
+    matchLabels:
+      app: api
+      role: nas-consumer
+  template:
+    metadata:
+      labels:
+        app: api
+        role: nas-consumer
+        tenant: tnt-001
+    spec:
+      serviceAccountName: api-nas-consumer-sa   # ← 业务方专用 SA(infra-gcp 创建)
+      containers:
+      - name: api
+        image: <业务方镜像:tag>      # ← 业务方填,固定 tag,不能 latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: MOUNT_PATH
+          value: /mnt/nas
+        # ⚠ 红线 2:不要在这里硬编码 NAS 文件路径 / API payload
+        # ⚠ 红线 2:应用代码不能写 logger.info(f"processed {filepath}")
+        volumeMounts:
+        - name: nas-app-folder
+          mountPath: /mnt/nas
+          readOnly: true             # ← ADR-009 §6.3 默认 ro,改 false 需 PM 评估
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      - name: nas-app-folder
+        persistentVolumeClaim:
+          claimName: pvc-nas-app      # ← PVC 名字(infra-gcp 创建)
+      # ⚠ 红线 4:不要 configMapRef / secretRef 引用 NAS 内容

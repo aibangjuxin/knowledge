@@ -1,0 +1,500 @@
+#!/usr/bin/env zsh
+# shareprint — 文件共享 + 打印队列 观察器
+#
+# 设计目标:
+#   - 公司 Mac 常配共享打印机 + 可能开了 Public Folder 共享,
+#     但没人说得清"我到底共享了什么 / 打印机在干什么 / 有没有人在用我的机器"
+#   - 显示:
+#       ① 文件共享点 —— /usr/sbin/sharing -l(SMB / AFP / NFS)
+#          每个共享点的路径、协议、guest access、读写权限
+#          ★ guest access=1 单独标红:这等于把目录暴露给同网段所有人
+#       ② 共享相关的监听端口 —— 确认 SMB(445)/ AFP(548)/ NFS(2049) 有没有真的开着
+#       ③ 打印队列 —— lpstat -o 有没有卡住的打印任务
+#       ④ 打印机状态 —— 默认打印机 / 设备 URI / 是否 idle
+#       ⑤ Bonjour 发现的局域网打印机 / AFP 共享主机
+#       ⑥ 访问痕迹 —— 谁连过我的共享(需要 smbutil,不可用时明确说明)
+#   - 只读:不 addshare / 不 delshare / 不 cancel 打印任务
+#
+# 用法:
+#   shareprint                # 全量
+#   shareprint --shares       # 只看文件共享
+#   shareprint --printers     # 只看打印机
+#   shareprint --queue        # 只看打印队列
+#   shareprint --ports        # 只看共享相关端口
+#   shareprint --json         # 结构化输出
+#
+# 注意: /usr/sbin/sharing 是 macOS 自带的,但需要 root 才能改;
+#       本脚本只读,普通用户可跑。
+
+emulate -L zsh
+setopt errexit nounset pipefail
+
+typeset -r VERSION='1.0.0'
+typeset -r SCRIPT_NAME=${0:t}
+
+typeset ONLY_SHARES=false ONLY_PRINT=false ONLY_QUEUE=false ONLY_PORTS=false
+typeset DO_JSON=false
+
+while (( $# > 0 )); do
+  case $1 in
+    --shares)   ONLY_SHARES=true; shift ;;
+    --printers) ONLY_PRINT=true; shift ;;
+    --queue)    ONLY_QUEUE=true; shift ;;
+    --ports)    ONLY_PORTS=true; shift ;;
+    --json)     DO_JSON=true; shift ;;
+    --version)  echo "$SCRIPT_NAME $VERSION"; exit 0 ;;
+    --help|-h)
+      echo "用法: $SCRIPT_NAME [--shares|--printers|--queue|--ports] [--json]"
+      echo "  --shares    只看文件共享点"
+      echo "  --printers  只看打印机与设备"
+      echo "  --queue     只看打印队列"
+      echo "  --ports     只看共享相关监听端口"
+      echo "  --json      结构化输出"
+      exit 0
+      ;;
+    *) echo "$SCRIPT_NAME: 未知参数 $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'
+else
+  C_RESET='' C_BOLD='' C_DIM='' C_RED='' C_GREEN='' C_YELLOW='' C_CYAN=''
+fi
+
+_ok()   { print -r -- "${C_GREEN}✓${C_RESET} $1" }
+_warn() { print -r -- "${C_YELLOW}!${C_RESET} $1" }
+_bad()  { print -r -- "${C_RED}✗${C_RESET} $1" }
+_info() { print -r -- "${C_DIM}  $1${C_RESET}" }
+_section() {
+  echo
+  echo "${C_BOLD}  $1${C_RESET} ${C_DIM}$2${C_RESET}"
+  echo "  ${C_DIM}─────────────────────────────────────────────${C_RESET}"
+}
+
+# ---- ① 文件共享点 ---------------------------------------------------------
+# /usr/sbin/sharing -l 输出是类 plist 的缩进结构:
+#
+#   name:	Lex's Public Folder
+#   path:	/Users/lex/Public
+#   	smb:
+#   	{
+#       name:	Lex's Public Folder
+#       shared:	1
+#       guest access:	1
+#       read-only:	0
+#       sealed:	0
+#   	}
+#
+# 解析要点:
+#   - 协议名(smb/afp/nfs)行以 ":" 结尾且下一层更深,值在下一行的 "{"
+#   - 布尔值是 0/1 字符串,不是 true/false
+#   - 名字里有 Unicode 右单引号 ' —— 按字节处理会算错长度,所以不截断
+_shares_block() {
+  local raw
+  raw=$(/usr/sbin/sharing -l 2>/dev/null || true)
+  if [[ -z ${raw//[[:space:]]/} ]]; then
+    echo "  ${C_DIM}(没有配置任何文件共享点)${C_RESET}"
+    echo "  ${C_DIM}  这本身是好消息 —— 意味着没人能通过网络访问你的文件${C_RESET}"
+    return
+  fi
+
+  # 一次 awk 解析成 TSV: name, path, proto, shared, guest, readonly
+  #
+  # 真实格式(实测 od,注意是 tab + 空格混合缩进,不是纯空格):
+  #   name:\t\tLex’s Public Folder      ← 顶层,0 缩进
+  #   path:\t\t/Users/lex/Public        ← 顶层,0 缩进
+  #   \tsmb:\t{                          ← 协议行,1 个 TAB,{ 在同一行
+  #       \t\tname:\tLex’s Public Folder ← 块内,4 空格 + 2 TAB
+  #       \t\tshared:\t1
+  #       \t\tguest access:\t1
+  #   \t}                                 ← 块结束,1 个 TAB
+  #
+  # 所以判定不能靠"数空格缩进":协议行是 tab 开头,块内是空格开头。
+  # 用状态机:看到 ^<tab>字母+:\t{ 就进协议块,在块里读键值,
+  # 遇到 ^<tab>} 就出块并输出。
+  local rows
+  rows=$(print -r -- "$raw" | awk '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    function kv(line,   p) {
+      p = index(line, ":")
+      if (p == 0) return
+      k = trim(substr(line, 1, p - 1))
+      v = trim(substr(line, p + 1))
+    }
+    /^[[:space:]]*$/ { next }
+    /List of Share Points/ { next }
+    # 顶层 name / path(无前导 tab)
+    /^[A-Za-z]/ {
+      kv($0)
+      if (k == "name" && name == "") name = v
+      else if (k == "path") path = v
+      next
+    }
+    # 协议行:^<TAB>proto:<TAB>{
+    /^\t[A-Za-z]+:/ {
+      line = trim($0)
+      kv(line)
+      proto = k
+      shared = ""; guest = ""; ro = ""
+      inblk = 1
+      next
+    }
+    # 块结束:^<TAB>}
+    /^\t\}[[:space:]]*$/ {
+      if (inblk) printf "%s\t%s\t%s\t%s\t%s\t%s\n", name, path, proto, shared, guest, ro
+      inblk = 0; proto = ""; shared = ""; guest = ""; ro = ""
+      next
+    }
+    # 块内键值
+    inblk {
+      kv($0)
+      if (k == "shared")           shared = v
+      else if (k == "guest access") guest = v
+      else if (k == "read-only")    ro = v
+      next
+    }
+  ')
+
+  if [[ -z $rows ]]; then
+    echo "  ${C_YELLOW}! /usr/sbin/sharing -l 有输出但解析不出条目 —— 格式可能变了${C_RESET}"
+    _info "原始输出前 5 行:"
+    print -r -- "$raw" | head -5 | while IFS= read -r l; do echo "    $l"; done
+    return
+  fi
+
+  # 变量名不要用 `path` —— zsh 里 `path` 是与 PATH 绑定的数组变量,
+  # `local path=/foo` 会直接把 PATH 覆盖掉,后续所有外部命令都变成
+  # "command not found"。这是 zsh 特有的坑,比 status/log 更隐蔽。
+  # 实测:local path=/foo; print $PATH  →  /foo
+  local nm sh_path proto shared guest ro any_guest
+  while IFS=$'\t' read -r nm sh_path proto shared guest ro; do
+    [[ -z $nm ]] && continue
+    echo "  ${C_BOLD}${nm}${C_RESET}  ${C_DIM}[${proto}]${C_RESET}"
+    _info "路径    $sh_path"
+    if [[ $shared == 1 ]]; then
+      _ok "已启用"
+    else
+      _info "未启用"
+    fi
+    if [[ $guest == 1 ]]; then
+      echo "  ${C_RED}✗ guest access: 开${C_RESET}  ${C_DIM}同网段任何人可读写这个目录,无需密码${C_RESET}"
+    elif [[ $guest == 0 ]]; then
+      _ok "guest access: 关(需要认证)"
+    fi
+    if [[ $ro == 1 ]]; then
+      _ok "只读"
+    elif [[ $ro == 0 ]]; then
+      _warn "可写 —— 对方能修改/删除里面的文件"
+    fi
+    [[ -n $sh_path ]] && _info "取消共享:${C_RESET}sudo /usr/sbin/sharing -a \"$nm\" -d"
+    echo
+  done <<<"$rows"
+
+  # 汇总风险
+  local n_guest
+  n_guest=$(print -r -- "$rows" | awk -F'\t' '$5 == 1 { c++ } END { print c + 0 }')
+  if (( n_guest > 0 )); then
+    echo "  ${C_RED}  ⚠ $n_guest 个共享点开着 guest access${C_RESET}"
+    echo "  ${C_DIM}    在咖啡厅 / 会议室 / 酒店 Wi-Fi 下,这等于把该目录公开${C_RESET}"
+    echo "  ${C_DIM}    收紧:${C_RESET}sudo /usr/sbin/sharing -a \"<名字>\" -g no"
+  else
+    echo "  ${C_GREEN}  ✓ 没有共享点开着 guest access${C_RESET}"
+  fi
+}
+
+# ---- ② 共享相关监听端口 ---------------------------------------------------
+# 有共享点不代表端口开着 —— 还要确认服务真的在 listen。
+# SMB=445, AFP=548, NFS=2049, SMB over NetBIOS=139
+_share_ports_block() {
+  local -a want=(139 445 548 2049)
+  local -a labels=('139 NetBIOS/SMB' '445 SMB(主要)' '548 AFP' '2049 NFS')
+  echo "  ${C_DIM}$(printf '%-18s %-8s %s' 'PORT' 'STATE' 'SERVICE')${C_RESET}"
+  local p lbl line state
+  local i=1
+  for p in $want; do
+    lbl=${labels[$i]}
+    # lsof 走系统所有进程,只看 LISTEN
+    line=$(lsof -nP -iTCP:"$p" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 { print $1; exit }' || true)
+    if [[ -n $line ]]; then
+      state="${C_GREEN}LISTEN${C_RESET}"
+    else
+      state="${C_DIM}closed${C_RESET}"
+    fi
+    printf "  %-18s %b %s\n" "$p" "$state" "$lbl"
+    i=$(( i + 1 ))
+  done
+  echo
+  # 有 guest 共享 + 445 开着 = 真的能被访问
+  local smb_open
+  smb_open=$(lsof -nP -iTCP:445 -sTCP:LISTEN 2>/dev/null | awk 'NR>1 { print $1; exit }' || true)
+  if [[ -n $smb_open ]]; then
+    _info "445 由 ${C_BOLD}$smb_open${C_RESET} 监听 —— 走 SMB 的共享点确实可被访问"
+  fi
+  _info "445 开着不代表危险,但 guest 共享 + 445 开着 = 目录对同网段公开"
+}
+
+# ---- ③ 打印队列 -----------------------------------------------------------
+_queue_block() {
+  local raw
+  raw=$(lpstat -o 2>/dev/null || true)
+  if [[ -z ${raw//[[:space:]]/} ]]; then
+    _ok "打印队列为空"
+    return
+  fi
+  _warn "有 $(print -r -- "$raw" | grep -c . || true) 个待打印任务"
+  echo
+  print -r -- "$raw" | while IFS= read -r line; do
+    [[ -z ${line//[[:space:]]/} ]] && continue
+    # 格式: printer-queue  user  job-id  size  status(date)
+    local pr=$line
+    echo "  ${C_YELLOW}•${C_RESET} $pr"
+  done
+  echo
+  _info "查看全部:${C_RESET} lpstat -W all -o"
+  _info "取消某个任务:${C_RESET} cancel <job-id>"
+}
+
+# ---- ④ 打印机状态 ---------------------------------------------------------
+_printers_block() {
+  local def devs
+  def=$(lpstat -d 2>/dev/null || true)
+  if [[ -z ${def//[[:space:]]/} ]]; then
+    _info "没有设置默认打印机"
+  else
+    _ok "${def#system default destination: }"
+  fi
+
+  devs=$(lpstat -p 2>/dev/null || true)
+  if [[ -z ${devs//[[:space:]]/} ]]; then
+    echo "  ${C_DIM}(没有已注册的打印机)${C_RESET}"
+    return
+  fi
+
+  echo
+  printf "  ${C_DIM}%-40s %s${C_RESET}\n" 'PRINTER' 'STATE'
+  print -r -- "$devs" | while IFS= read -r line; do
+    [[ -z ${line//[[:space:]]/} ]] && continue
+    # "printer HP_LaserJet_M104w__A18A07_ is idle.  enabled since ..."
+    local body=${line#printer }
+    local nm=${body%% is *}
+    local st=${body#* is }
+    st=${st%%.*}
+    local color=$C_GREEN
+    case $st in
+      idle*)   color=$C_GREEN ;;
+      busy*|processing*) color=$C_YELLOW ;;
+      *)       color=$C_DIM ;;
+    esac
+    printf "  %-40s ${color}%s${C_RESET}\n" "$nm" "$st"
+  done
+
+  # 设备 URI —— 能看出是网络打印机还是 USB
+  local dev_uri
+  dev_uri=$(lpstat -v 2>/dev/null | head -1 || true)
+  if [[ -n ${dev_uri//[[:space:]]/} ]]; then
+    echo
+    _info "设备:${C_RESET} ${dev_uri#device for *}"
+    if print -r -- "$dev_uri" | grep -q 'dnssd://'; then
+      _info "类型:${C_RESET} Bonjour / AirPrint 网络打印机(dnssd://)"
+    elif print -r -- "$dev_uri" | grep -qE 'usb://|lpd://'; then
+      _info "类型:${C_RESET} USB 或 LPD 队列"
+    fi
+  fi
+}
+
+# ---- ⑤ Bonjour 发现 --------------------------------------------------------
+_bonjour_block() {
+  # dns-sd 跑一秒就够拿到列表;超时杀掉避免挂住
+  local out
+  out=$(timeout 2 dns-sd -B _ipp._tcp 2>/dev/null || true)
+  if [[ -z ${out//[[:space:]]/} ]]; then
+    echo "  ${C_DIM}(Bonjour 2 秒内没扫到 IPP 打印机 —— 可能是本来就只有 USB 打印机)${C_RESET}"
+    return
+  fi
+  echo "  ${C_DIM}局域网 IPP/AirPrint 设备:${C_RESET}"
+  print -r -- "$out" | awk 'NR>3 && NF { print "    • " $NF }' | sort -u || true
+  echo
+  _info "持续扫描:${C_RESET} dns-sd -B _ipp._tcp"
+}
+
+# ---- ⑥ 访问痕迹 -----------------------------------------------------------
+_access_block() {
+  # smbutil 需要对端配合,不一定可用 —— 不可用就明说,不要假装
+  if ! command -v smbutil >/dev/null 2>&1; then
+    _info "smbutil 不可用,无法查看 SMB 访问痕迹"
+    return
+  fi
+  local raw
+  raw=$(timeout 3 smbutil statshares -a 2>&1 || true)
+  if [[ -z ${raw//[[:space:]]/} ]]; then
+    _info "当前没有活跃的 SMB 客户端连接"
+    return
+  fi
+  _warn "有活跃 SMB 连接:"
+  print -r -- "$raw" | awk '
+    /SMB connections/ { inblk = 1; next }
+    inblk && /^$/ { inblk = 0 }
+    inblk && NF { print "    • " $0 }
+  ' || true
+}
+
+# ---- JSON 输出 -------------------------------------------------------------
+# 复用 _shares_parsed() 的 TSV,不重复实现第二套解析 ——
+# 重复实现的代价是:一处修好另一处还错(实测 JSON 版用了 -F'\t' + 缩进启发,
+# 遇到 UTF-8 右单引号直接 awk: towc: multibyte conversion failure,shares 数组全空)。
+_shares_parsed() {
+  local raw
+  raw=$(/usr/sbin/sharing -l 2>/dev/null || true)
+  [[ -z ${raw//[[:space:]]/} ]] && return 0
+  # LC_ALL=C:让 awk 按字节处理,避免 UTF-8 名字触发 towc 转换错误
+  LC_ALL=C print -r -- "$raw" | LC_ALL=C awk '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    function kv(line,   p) {
+      p = index(line, ":")
+      if (p == 0) return
+      k = trim(substr(line, 1, p - 1))
+      v = trim(substr(line, p + 1))
+    }
+    /^[[:space:]]*$/ { next }
+    /List of Share Points/ { next }
+    /^[A-Za-z]/ {
+      kv($0)
+      if (k == "name" && name == "") name = v
+      else if (k == "path") sh_path = v
+      next
+    }
+    /^\t[A-Za-z]+:/ {
+      kv(trim($0))
+      proto = k
+      shared = ""; guest = ""; ro = ""
+      inblk = 1
+      next
+    }
+    /^\t\}[[:space:]]*$/ {
+      if (inblk) printf "%s\t%s\t%s\t%s\t%s\t%s\n", name, sh_path, proto, shared, guest, ro
+      inblk = 0; proto = ""; shared = ""; guest = ""; ro = ""
+      next
+    }
+    inblk {
+      kv($0)
+      if (k == "shared")           shared = v
+      else if (k == "guest access") guest = v
+      else if (k == "read-only")    ro = v
+      next
+    }
+  '
+}
+
+# JSON 字符串转义:只处理 \" 和 \ 两种,足够覆盖 sharing 输出的名字
+_json_esc() {
+  local s=$1
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  print -r -- "$s"
+}
+
+_json_block() {
+  echo '{'
+  echo '  "shares": ['
+  local first=true
+  local nm sh_path proto shared guest ro
+  local rows
+  rows=$(_shares_parsed)
+  while IFS=$'\t' read -r nm sh_path proto shared guest ro; do
+    [[ -z $nm ]] && continue
+    $first || echo ','
+    first=false
+    printf '    {"name": "%s", "path": "%s", "protocol": "%s", "shared": %s, "guest_access": %s, "read_only": %s}\n' \
+      "$(_json_esc "$nm")" "$(_json_esc "$sh_path")" "$(_json_esc "$proto")" \
+      "${shared:-null}" "${guest:-null}" "${ro:-null}"
+  done <<<"$rows"
+  echo '  ],'
+  echo '  "printers": ['
+  local pfirst=true
+  local out
+  out=$(lpstat -p 2>/dev/null || true)
+  if [[ -n ${out//[[:space:]]/} ]]; then
+    while IFS= read -r line; do
+      [[ -z ${line//[[:space:]]/} ]] && continue
+      [[ $line != printer\ * ]] && continue
+      local body=${line#printer }
+      local pnm=${body%% is *}
+      local pst=${body#* is }
+      pst=${pst%%.*}
+      $pfirst || echo ','
+      pfirst=false
+      printf '    {"name": "%s", "state": "%s"}\n' "$(_json_esc "$pnm")" "$(_json_esc "$pst")"
+    done <<<"$out"
+  fi
+  echo '  ],'
+  local def
+  def=$(lpstat -d 2>/dev/null | sed -n 's/.*destination: //p' || true)
+  printf '  "default_printer": "%s"\n' "${def:-}"
+  echo '}'
+}
+
+_render() {
+  # --json 是给脚本消费的,必须只有纯 JSON,不能有 banner / 清屏 / 颜色
+  if $DO_JSON; then
+    _json_block
+    return
+  fi
+
+  if [[ -t 1 ]]; then
+    printf '\033[?25l\033[2J\033[H'
+  fi
+  echo "${C_BOLD}${C_CYAN}═══ 文件共享 / 打印 观察器 ═══${C_RESET}"
+  echo "${C_DIM}$(date '+%Y-%m-%d %H:%M:%S')  ·  只读:不改共享设置、不动打印任务${C_RESET}"
+
+  if $ONLY_PORTS; then
+    _section "共享相关监听端口" "lsof -nP -iTCP"
+    _share_ports_block
+  elif $ONLY_SHARES; then
+    _section "文件共享点" "/usr/sbin/sharing -l"
+    _shares_block
+  elif $ONLY_PRINT; then
+    _section "打印机" "lpstat -d / -p / -v"
+    _printers_block
+    echo
+    _section "Bonjour 发现" "dns-sd -B _ipp._tcp"
+    _bonjour_block
+  elif $ONLY_QUEUE; then
+    _section "打印队列" "lpstat -o"
+    _queue_block
+  else
+    _section "文件共享点" "/usr/sbin/sharing -l"
+    _shares_block
+    echo
+    _section "共享相关监听端口" "lsof -nP -iTCP"
+    _share_ports_block
+    echo
+    _section "打印机" "lpstat -d / -p / -v"
+    _printers_block
+    echo
+    _section "打印队列" "lpstat -o"
+    _queue_block
+    echo
+    _section "Bonjour 发现" "dns-sd -B _ipp._tcp"
+    _bonjour_block
+    echo
+    _section "SMB 访问痕迹" "smbutil statshares -a"
+    _access_block
+  fi
+
+  echo
+  echo "${C_DIM}  $SCRIPT_NAME $VERSION · 数据源: /usr/sbin/sharing, lpstat, lsof, dns-sd, smbutil${C_RESET}"
+  echo "${C_DIM}  改共享需 sudo:$SCRIPT_NAME 只读,修改请自行 sudo /usr/sbin/sharing -a ...${C_RESET}"
+}
+
+# --json 模式下 trap 不能碰 stdout —— 光标恢复转义会跟在 `}` 后面,
+# 让消费方(json.load / jq)报 "Extra data"。实测:
+#   JSON 解析失败:Expecting value / Extra data: line 10 column 1
+_cleanup() {
+  $DO_JSON && return
+  printf '\033[?25h\033[0m'; echo
+}
+trap _cleanup EXIT INT TERM
+
+_render

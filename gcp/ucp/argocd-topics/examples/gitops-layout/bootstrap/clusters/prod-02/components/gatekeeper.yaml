@@ -1,0 +1,12 @@
+# 组件启用清单：prod-02 × gatekeeper
+#
+# prod-02 的 OPA 策略独立一份：
+#   apps/gatekeeper/overlays/cluster/prod-02/
+# 例：prod-b 这个 project 有些历史 namespace 不受新策略约束 → 在集群层豁免。
+
+component: gatekeeper
+cluster: prod-02
+server: https://prod-02.k8s.example.com
+env: prod
+project: platform-prod
+namespace: platform-prod

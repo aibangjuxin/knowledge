@@ -1,0 +1,15 @@
+# Firestore 查询配置文件示例
+# 格式: collection:document_id:field_path
+# field_path 使用点号分隔，支持嵌套字段
+
+# 示例 1: 查询 capteams collection 中的环境配置
+capteams:team001:env.region.abc
+
+# 示例 2: 查询用户设置
+users:user123:settings.notification.email
+
+# 示例 3: 查询配置信息
+configs:config001:database.connection.host
+
+# 示例 4: 查询嵌套的多层字段
+applications:app001:deployment.gke.cluster.name

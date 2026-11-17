@@ -1,0 +1,105 @@
+# =====================================================================
+# File: 00-istiooperator.yaml
+# 作用: Ambient Mesh 全量安装的控制面声明
+# 版本: Solo Distribution 1.30.2-solo-fips (≈ upstream Istio 1.30.2 + Solo FIPS build)
+# 适用: 全新的 GKE 集群 (Lab 项目),不带任何残留 Istio
+#
+# 等价命令(一次性 quickstart):
+#   kubectl apply --server-side \
+#     -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
+#   istioctl install -f 00-istiooperator.yaml -y
+#
+# ⚠️ Lab 环境常见坑:
+#   - Istio 1.30 强制要求 Kubernetes >= 1.28
+#   - GKE Standard / Autopilot 都已经支持,但需要给 Pod 留出 15008/TCP (HBONE)
+#     和 15021/TCP (envoy stats);NetworkPolicy 默认不放行 → 走默认 deny 时会断链
+#   - Solo 1.30.2-solo-fips 的 hub 默认是 `gcr.io/istio-release`(Solo 重 tag 的镜像)
+# =====================================================================
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: ambient-mesh
+  namespace: istio-system
+spec:
+  # ===== 核心开关 =====
+  # profile=ambient 等价于:zTunnel 节点组件 + CNI agent + istiod (无 sidecar)
+  # 官方权威证据: https://istio.io/latest/docs/ambient/install/istioctl/
+  profile: ambient
+
+  # ===== 版本与镜像(由 Solo 1.30.2-solo-fips 二进制匹配) =====
+  hub: gcr.io/istio-release            # Solo re-tagged images
+  tag: 1.30.2-solo-fips
+
+  # ===== MeshConfig =====
+  meshConfig:
+    # 默认走 STRICT mTLS(Ambient 下所有 mesh 内流量都被 ztunnel 加密)
+    enableAutoMtls: true
+    # Ambient 强制需要
+    defaultConfig:
+      proxyMetadata: {}
+    extensionProviders: []
+    # SPIFFE 信任域(Solo 默认沿用,但显式声明便于排查)
+    trustDomain: cluster.local
+
+  # ===== 仅在 ambient profile 下有用的 component 调优 =====
+  components:
+    # Pilot / istiod — 必须存在
+    pilot:
+      enabled: true
+      k8s:
+        env:
+          # 让 istiod 主动感知 ambient 命名空间
+          - name: ISTIO_META_ENABLE_HBONE
+            value: "true"
+
+    # Istio CNI node agent — ambient 必备(没有它,pod 流量没法被 ztunnel 接管)
+    cni:
+      enabled: true
+      namespace: kube-system      # CNI 必须装在 kube-system
+      # ambient 关键:必须用 ambient cni 包装,而不是 sidecar 包装
+      ambient:
+        enabled: true
+        # 不需要创建 sidecar iptables;ambient cni 只创建初始 redirect
+      # 资源限制(Lab 默认即可)
+      resources:
+        requests:
+          cpu: 100m
+          memory: 100Mi
+        limits:
+          cpu: 200m
+          memory: 200Mi
+
+    # Ingress gateway (AgentGateway) — 不强制;如果你想用 Solo.io 的
+    # 自家 AgentGateway 而不是 Istio 默认的 ingress gateway,这里开关 gateway:
+    #   * istio-ingressgateway 标准模式 → 传统 sidecar 入口 gateway (走 80/443)
+    #   * Solo AgentGateway             → 走 Ambient 的 waypoint 风格,本探索默认走它
+    #
+    # 标准 Istio 的 ingress gateway 在 Ambient 下仍可工作(因为 pod 里没有 sidecar,
+    # gateway 自己仍以 sidecar 模式加载),但建议显式禁用默认 gateway,
+    # 只装 AgentGateway,以保持架构一致性
+    ingressGateways: []
+    egressGateways: []
+
+  # ===== ztunnel 配置 =====
+  # ambient profile 自动创建 ztunnel DaemonSet(每个节点一份),HBONE 端口 15008
+  values:
+    ztunnel:
+      # 显式启用 ambient 抓取(默认就是 true,这里只是注释占位)
+      ambient: "true"
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+
+  # ===== Pilot 资源(Ambient 下没有 sidecar,istiod 压力比传统模式小) =====
+  values.pilot:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi

@@ -1,0 +1,20 @@
+# gateway · cluster 层 · dev-01
+#
+# 集群层管「**本集群的网关差异**」：域名、端口、副本数、灰度、连接超时。
+# 引用关系：cluster/dev-01 → env/dev → base
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../env/dev
+
+patches:
+  - target:
+      group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: nginx
+    patch: |-
+      - op: replace
+        path: /spec/hostnames/0
+        value: nginx.dev-01.example.com

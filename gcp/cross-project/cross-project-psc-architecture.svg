@@ -1,0 +1,218 @@
+<svg height="700" viewbox="0 0 1100 700" width="1100" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <!-- Gradients -->
+    <lineargradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f0f1a"/>
+      <stop offset="100%" stop-color="#1a1a2e"/>
+    </lineargradient>
+    <lineargradient id="zone1Grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3d3d3d"/>
+      <stop offset="100%" stop-color="#2d2d2d"/>
+    </lineargradient>
+    <lineargradient id="zone2Grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#7c6cf7"/>
+      <stop offset="100%" stop-color="#6c5ce7"/>
+    </lineargradient>
+    <lineargradient id="zone3Grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00d9a5"/>
+      <stop offset="100%" stop-color="#00b894"/>
+    </lineargradient>
+    <lineargradient id="zone4Grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f0c040"/>
+      <stop offset="100%" stop-color="#e17055"/>
+    </lineargradient>
+    <lineargradient id="pscTunnelGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6c5ce7" stop-opacity="0.9"/>
+      <stop offset="50%" stop-color="#a29bfe" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#00b894" stop-opacity="0.9"/>
+    </lineargradient>
+    <lineargradient id="hostGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4a5568"/>
+      <stop offset="100%" stop-color="#2d3748"/>
+    </lineargradient>
+
+    <!-- Glow filter -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="2" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+    <filter id="softShadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="1" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect fill="url(#bgGrad)" rx="16" ry="16" width="1100" height="700"/>
+
+  <!-- Title -->
+  <text fill="#e2e8f0" font-family="Inter, Arial" font-size="22" font-weight="700" x="550" y="38">跨项目 PSC NEG 架构全景图</text>
+  <text fill="#718096" font-family="Inter, Arial" font-size="13" x="550" y="58">Cross-Project Private Service Connect — Consumer / Producer Architecture</text>
+
+  <!-- ===================== SHARED VPC HOST PROJECT ===================== -->
+  <rect fill="url(#hostGrad)" filter="url(#shadow)" rx="12" ry="12" stroke="#4a5568" stroke-width="1.5" x="60" y="78" y2="620"/>
+  <rect fill="#2d3748" rx="8" ry="8" stroke="#4a5568" stroke-width="1" x="70" y="90"/>
+  <text fill="#e2e8f0" font-family="Inter, Arial" font-size="12" font-weight="600" x="78" y="104">Host Project</text>
+  <text fill="#718096" font-family="Inter, Arial" font-size="10" x="78" y="118">Shared VPC Network</text>
+
+  <!-- PSC NAT Subnet box -->
+  <rect fill="#1a202c" rx="8" ry="8" stroke="#805ad5" stroke-width="1.5" x="90" y="520" width="180" height="85"/>
+  <rect fill="#805ad5" rx="4" ry="4" x="100" y="530" width="8" height="8"/>
+  <text fill="#e2e8f0" font-family="Inter, Arial" font-size="11" font-weight="600" x="115" y="539">PSC NAT Subnet</text>
+  <text fill="#a0aec0" font-family="Inter, Arial" font-size="10" x="100" y="558">purpose: PRIVATE_SERVICE_CONNECT</text>
+  <text fill="#68d391" font-family="monospace" font-size="10" x="100" y="575">10.200.0.0/29</text>
+  <text fill="#718096" font-family="Inter, Arial" font-size="9" x="100" y="592">SNAT 地址池 · 隔离两侧 IP</text>
+
+  <!-- ===================== A PROJECT (CONSUMER) ===================== -->
+  <rect fill="url(#zone2Grad)" filter="url(#shadow)" rx="12" ry="12" stroke="#7c6cf7" stroke-width="1.5" x="280" y="78"/>
+  <rect fill="#6c5ce7" rx="8" ry="8" x="290" y="90"/>
+  <text fill="#fff" font-family="Inter, Arial" font-size="13" font-weight="700" x="298" y="105">A Project — Consumer</text>
+  <text fill="rgba(255,255,255,0.7)" font-family="Inter, Arial" font-size="10" x="298" y="120">Shared VPC · PSC NEG · GLB</text>
+
+  <!-- GLB -->
+  <g filter="url(#softShadow)">
+    <rect fill="url(#zone2Grad)" rx="10" ry="10" stroke="#9b8dff" stroke-width="1" x="310" y="145" width="150" height="60"/>
+    <text fill="#fff" font-family="Inter, Arial" font-size="11" font-weight="700" x="385" y="166">GLB</text>
+    <text fill="rgba(255,255,255,0.75)" font-family="Inter, Arial" font-size="9" x="385" y="181">Global HTTPS LB</text>
+  </g>
+
+  <!-- Arrow GLB → Cloud Armor -->
+  <line stroke="#9b8dff" stroke-width="2" x1="385" y1="205" x2="385" y2="225"/>
+  <polygon fill="#9b8dff" points="385,230 381,220 389,220"/>
+
+  <!-- Cloud Armor -->
+  <g filter="url(#softShadow)">
+    <rect fill="#e17055" rx="10" ry="10" stroke="#c0392b" stroke-width="1" x="310" y="235" width="150" height="60"/>
+    <text fill="#fff" font-family="Inter, Arial" font-size="11" font-weight="700" x="385" y="256">Cloud Armor</text>
+    <text fill="rgba(255,255,255,0.75)" font-family="Inter, Arial" font-size="9" x="385" y="271">Security Policy · WAF</text>
+  </g>
+
+  <!-- Arrow Cloud Armor → Backend Service A -->
+  <line stroke="#e17055" stroke-width="2" x1="385" y1="295" x2="385" y2="315"/>
+  <polygon fill="#e17055" points="385,320 381,310 389,310"/>
+
+  <!-- Backend Service A -->
+  <g filter="url(#softShadow)">
+    <rect fill="url(#zone2Grad)" rx="10" ry="10" stroke="#9b8dff" stroke-width="1" x="310" y="325" width="150" height="60"/>
+    <text fill="#fff" font-family="Inter, Arial" font-size="11" font-weight="700" x="385" y="346">Backend Service</text>
+    <text fill="rgba(255,255,255,0.75)" font-family="Inter, Arial" font-size="9" x="385" y="361">Regional · HTTPS</text>
+  </g>
+
+  <!-- Arrow Backend Service A → PSC NEG -->
+  <line stroke="#9b8dff" stroke-width="2" x1="385" y1="385" x2="385" y2="405"/>
+  <polygon fill="#9b8dff" points="385,410 381,400 389,400"/>
+
+  <!-- PSC NEG -->
+  <g filter="url(#softShadow)">
+    <rect fill="url(#zone3Grad)" rx="10" ry="10" stroke="#00d9a5" stroke-width="1" x="310" y="415" width="150" height="60"/>
+    <text fill="#fff" font-family="Inter, Arial" font-size="11" font-weight="700" x="385" y="436">PSC NEG</text>
+    <text fill="rgba(255,255,255,0.85)" font-family="monospace" font-size="9" x="385" y="451">PRIVATE_SERVICE_CONNECT</text>
+  </g>
+
+  <!-- ===================== PSC TUNNEL ===================== -->
+  <!-- Tunnel background -->
+  <rect fill="url(#pscTunnelGrad)" filter="url(#glow)" rx="12" ry="12" x="485" y="415" width="130" height="60" opacity="0.85"/>
+  <text fill="#fff" font-family="Inter, Arial" font-size="11" font-weight="700" x="550" y="437">PSC Tunnel</text>
+  <text fill="rgba(255,255,255,0.8)" font-family="Inter, Arial" font-size="9" x="550" y="452">GCP 内部私有通道</text>
+  <text fill="rgba(255,255,255,0.6)" font-family="Inter, Arial" font-size="8" x="550" y="465">无需 VPC Peering</text>
+
+  <!-- Arrow PSC NEG → Tunnel -->
+  <line stroke="#a29bfe" stroke-width="2" stroke-dasharray="6,3" x1="460" y1="445" x2="485" y2="445"/>
+  <!-- Arrow Tunnel → Service Attachment -->
+  <line stroke="#a29bfe" stroke-width="2" stroke-dasharray="6,3" x1="615" y1="445" x2="640" y2="445"/>
+
+  <!-- ===================== B PROJECT (PRODUCER) ===================== -->
+  <rect fill="url(#zone4Grad)" filter="url(#shadow)" rx="12" ry="12" stroke="#e17055" stroke-width="1.5" x="660" y="78"/>
+  <rect fill="#e17055" rx="8" ry="8" x="670" y="90"/>
+  <text fill="#fff" font-family="Inter, Arial" font-size="13" font-weight="700" x="678" y="105">B Project — Producer</text>
+  <text fill="rgba(255,255,255,0.75)" font-family="Inter, Arial" font-size="10" x="678" y="120">Private VPC · Service Attachment</text>
+
+  <!-- Service Attachment -->
+  <g filter="url(#softShadow)">
+    <rect fill="url(#zone3Grad)" rx="10" ry="10" stroke="#00d9a5" stroke-width="1" x="680" y="145" width="160" height="70"/>
+    <text fill="#fff" font-family="Inter, Arial" font-size="11" font-weight="700" x="760" y="170">Service Attachment</text>
+    <text fill="rgba(255,255,255,0.8)" font-family="monospace" font-size="9" x="760" y="186">绑定 PSC NAT subnet</text>
+    <text fill="rgba(255,255,255,0.65)" font-family="Inter, Arial" font-size="8.5" x="760" y="200">ACCEPT_MANUAL / AUTOMATIC</text>
+  </g>
+
+  <!-- Arrow Service Attachment → ILB -->
+  <line stroke="#00b894" stroke-width="2" x1="760" y1="215" x2="760" y2="235"/>
+  <polygon fill="#00b894" points="760,240 756,230 764,230"/>
+
+  <!-- ILB -->
+  <g filter="url(#softShadow)">
+    <rect fill="url(#zone3Grad)" rx="10" ry="10" stroke="#00d9a5" stroke-width="1" x="680" y="245" width="160" height="65"/>
+    <text fill="#fff" font-family="Inter, Arial" font-size="11" font-weight="700" x="760" y="268">Internal Load Balancer</text>
+    <text fill="rgba(255,255,255,0.8)" font-family="Inter, Arial" font-size="9" x="760" y="284">Internal L4/L7 · Tier-2</text>
+  </g>
+
+  <!-- Arrow ILB → Backend -->
+  <line stroke="#00b894" stroke-width="2" x1="760" y1="310" x2="760" y2="330"/>
+  <polygon fill="#00b894" points="760,335 756,325 764,325"/>
+
+  <!-- Backend (GKE/VM/MIG) -->
+  <g filter="url(#softShadow)">
+    <rect fill="url(#zone4Grad)" rx="10" ry="10" stroke="#f0c040" stroke-width="1" x="680" y="340" width="160" height="65"/>
+    <text fill="#2d2d2d" font-family="Inter, Arial" font-size="11" font-weight="700" x="760" y="363">Backend Service</text>
+    <text fill="#4a4a4d" font-family="Inter, Arial" font-size="9" x="760" y="379">GKE / VM / MIG</text>
+  </g>
+
+  <!-- ===================== EXTERNAL CLIENT ===================== -->
+  <g filter="url(#softShadow)">
+    <rect fill="url(#zone1Grad)" rx="12" ry="12" stroke="#4a5568" stroke-width="1.5" x="70" y="180" width="130" height="60"/>
+    <text fill="#e2e8f0" font-family="Inter, Arial" font-size="12" font-weight="700" x="135" y="204">外部 Client</text>
+    <text fill="#718096" font-family="Inter, Arial" font-size="9" x="135" y="220">Internet</text>
+  </g>
+
+  <!-- Arrow Client → GLB -->
+  <path d="M 200 210 Q 255 210 255 175 L 310 175" fill="none" stroke="#9b8dff" stroke-width="2" stroke-dasharray="6,3"/>
+  <polygon fill="#9b8dff" points="310,175 300,171 300,179"/>
+
+  <!-- ===================== DATA FLOW LEGEND ===================== -->
+  <g transform="translate(60, 620)">
+    <rect fill="#1a202c" rx="8" ry="8" stroke="#2d3748" stroke-width="1" width="980" height="62"/>
+    <text fill="#a0aec0" font-family="Inter, Arial" font-size="11" font-weight="600" x="15" y="20">数据流 · Data Flow</text>
+
+    <!-- Flow items -->
+    <line stroke="#9b8dff" stroke-width="2" x1="15" y1="38" x2="55" y2="38"/>
+    <polygon fill="#9b8dff" points="55,38 47,34 47,42"/>
+    <text fill="#718096" font-family="Inter, Arial" font-size="9" x="62" y="42">用户流量</text>
+
+    <line stroke="#a29bfe" stroke-width="2" stroke-dasharray="6,3" x1="130" y1="38" x2="190" y2="38"/>
+    <polygon fill="#a29bfe" points="190,38 182,34 182,42"/>
+    <text fill="#718096" font-family="Inter, Arial" font-size="9" x="197" y="42">PSC 隧道 (GCP 内部)</text>
+
+    <line stroke="#805ad5" stroke-width="1.5" stroke-dasharray="4,4" x1="320" y1="38" x2="380" y2="38"/>
+    <polygon fill="#805ad5" points="380,38 372,34 372,42"/>
+    <text fill="#718096" font-family="Inter, Arial" font-size="9" x="387" y="42">SNAT 转换</text>
+
+    <!-- Capability badges -->
+    <rect fill="#00b894" rx="4" ry="4" x="500" y="28" width="10" height="10"/>
+    <text fill="#718096" font-family="Inter, Arial" font-size="9" x="515" y="38">不暴露 Backend IP</text>
+
+    <rect fill="#6c5ce7" rx="4" ry="4" x="640" y="28" width="10" height="10"/>
+    <text fill="#718096" font-family="Inter, Arial" font-size="9" x="655" y="38">Producer 控制 Consumer</text>
+
+    <rect fill="#e17055" rx="4" ry="4" x="810" y="28" width="10" height="10"/>
+    <text fill="#718096" font-family="Inter, Arial" font-size="9" x="825" y="38">IAM 级别隔离</text>
+  </g>
+
+  <!-- ===================== NAT info callout ===================== -->
+  <g transform="translate(680, 410)">
+    <line stroke="#805ad5" stroke-width="1" stroke-dasharray="3,3" x1="0" y1="0" x2="-60" y2="110"/>
+    <polygon fill="#805ad5" points="-60,110 -65,100 -55,100"/>
+    <rect fill="#1a202c" rx="6" ry="6" stroke="#805ad5" stroke-width="1" x="-180" y="105" width="125" height="42"/>
+    <text fill="#a0aec0" font-family="Inter, Arial" font-size="8.5" x="-172" y="120">Consumer IP → SNAT →</text>
+    <text fill="#a0aec0" font-family="Inter, Arial" font-size="8.5" x="-172" y="134">Producer 侧可见 IP</text>
+  </g>
+
+  <!-- ===================== PSC NAT Subnet → SA relation ===================== -->
+  <line stroke="#805ad5" stroke-width="1.5" stroke-dasharray="4,4" x1="270" y1="545" x2="680" y2="180"/>
+  <polygon fill="#805ad5" points="680,180 671,173 674,184"/>
+
+</svg>
