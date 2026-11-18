@@ -6,6 +6,7 @@
 #   sanitize-check.sh --push            扫描待推送的提交（pre-push 钩子调用，refs 从 stdin 读）
 #   sanitize-check.sh --commit <REV>    扫描某次提交的整棵树
 #   sanitize-check.sh --worktree        扫描工作区
+#   sanitize-check.sh --message <FILE>  扫描 commit message（commit-msg 钩子调用）
 #
 # 标识符清单：本机 .git/sanitize-denylist.txt（不随仓库分发）
 #   每行格式： <代号>  或  <代号><TAB><替换建议>
@@ -60,6 +61,8 @@ for t in "${TOKENS[@]}"; do
 done
 RE_HARD="(?<![A-Za-z0-9+/=])($TOK_RE)"
 RE_SOFT="($TOK_RE)"
+# 路径判定：代号前后不能是字母数字（docs/<代号>-notes 命中，my<代号>-notes 不命中）
+RE_PATH="(?<![A-Za-z0-9])($TOK_RE)"
 
 PATFILE="$(mktemp)"
 trap 'rm -f "$PATFILE"' EXIT
@@ -87,6 +90,35 @@ suggest_for() {
 candidates_for() {
   local rev="$1"
   git grep -l -I -i -F -f "$PATFILE" "$rev" 2>/dev/null | sed "s|^${rev}:||"
+}
+
+# ── 路径清单：与内容扫描同口径 ──────────────────────────────────────────
+# staged   → 索引（git grep --cached 扫的就是整个索引）
+# commit   → 该提交的整棵树
+# worktree → 已跟踪 + 未跟踪（未忽略）
+paths_for() {
+  local mode="$1" rev="${2:-}"
+  case "$mode" in
+    staged)   git ls-files ;;
+    commit)   git ls-tree -r --name-only "$rev" 2>/dev/null ;;
+    worktree) { git ls-files; git ls-files --others --exclude-standard; } ;;
+    *)        return 0 ;;
+  esac
+}
+
+# 代号可能出现在「路径」里而不只是内容里（文件名 / 目录名同样会公开）
+add_path_hits() {
+  local mode="$1" rev="${2:-}" p tok
+  while IFS= read -r p; do
+    [ -z "$p" ] && continue
+    while IFS= read -r tok; do
+      [ -z "$tok" ] && continue
+      HARD_LINES+=("$p"$'\t'"$tok")
+    done < <(printf '%s' "$p" | SCAN_RE_PATH="$RE_PATH" perl -ne '
+      my $re = $ENV{SCAN_RE_PATH};
+      while (/(?:$re)/gi) { print "$1\n"; }
+    ' 2>/dev/null)
+  done < <(paths_for "$mode" "$rev")
 }
 
 # ── 扫描单个文件 ────────────────────────────────────────────────────
@@ -138,7 +170,7 @@ finalize() {
       echo "❌ 操作被拦截：检测到内部标识符。"
       echo ""
       for l in "${HARD_LINES[@]}"; do
-        echo "   文件：${l%%$'\t'*}"
+        echo "   位置：${l%%$'\t'*}"
         echo "   命中标识符：${l#*$'\t'}"
         echo "   建议替换为：$(suggest_for "${l#*$'\t'}")"
         echo ""
@@ -147,6 +179,7 @@ finalize() {
       echo "         （base64 / 证书 / JAR 里的随机字节不算，会单独汇总）"
       echo ""
       echo "   ✅ 处理方式：按上面的建议替换后重新提交。"
+      echo "      可直接跑 scripts/sanitize-replace.sh 自动替换后再提交。"
       echo "   📖 完整规则见 AGENTS.md「内容脱敏约定」。"
       echo ""
       echo "   ℹ️  如确需临时跳过：SKIP_SANITIZE=1 <本次命令>"
@@ -167,18 +200,36 @@ case "$MODE" in
     for f in $(git grep -l -I -i -F -f "$PATFILE" --cached 2>/dev/null); do
       collect "$(scan_file "$f" staged)" "$f"
     done
+    add_path_hits staged
     ;;
 
   --commit)
     for f in $(candidates_for "$REV"); do
       collect "$(scan_file "$f" commit "$REV")" "$f"
     done
+    add_path_hits commit "$REV"
     ;;
 
   --worktree)
     for f in $(git grep -l -I -i -F -f "$PATFILE" 2>/dev/null); do
       collect "$(scan_file "$f" worktree)" "$f"
     done
+    add_path_hits worktree
+    ;;
+
+  --message)
+    MSG_FILE="${2:-}"
+    if [ -z "$MSG_FILE" ] || [ ! -f "$MSG_FILE" ]; then
+      echo "用法: $0 --message <FILE>" >&2
+      exit 0
+    fi
+    while IFS= read -r tok; do
+      [ -z "$tok" ] && continue
+      HARD_LINES+=("commit message"$'\t'"$tok")
+    done < <(SCAN_RE_HARD="$RE_HARD" perl -0777 -ne '
+      my $hard = $ENV{SCAN_RE_HARD};
+      while (/(?:$hard)/gi) { print "$1\n"; }
+    ' "$MSG_FILE" 2>/dev/null)
     ;;
 
   --push)
@@ -199,7 +250,7 @@ case "$MODE" in
     ;;
 
   *)
-    echo "用法: $0 [--staged|--push|--commit REV|--worktree]" >&2
+    echo "用法: $0 [--staged|--push|--commit REV|--worktree|--message FILE]" >&2
     exit 0
     ;;
 esac

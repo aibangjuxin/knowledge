@@ -61,27 +61,6 @@ die() {
   exit 1
 }
 
-trim_leading_ws() {
-  local value=$1
-  value="${value#"${value%%[![:space:]]*}"}"
-  printf '%s' "$value"
-}
-
-esabje_sed_pattern() {
-  printf '%s' "$1" | sed 's/[.[\*^$()+?{}|\/]/\\&/g'
-}
-
-esabje_sed_replacement() {
-  printf '%s' "$1" | sed 's/[\/&]/\\&/g'
-}
-
-is_text_file() {
-  local file=$1
-  local mime
-  mime=$(file -b --mime "$file" 2>/dev/null || true)
-  [[ "$mime" != *"charset=binary"* ]]
-}
-
 add_unique() {
   local candidate=$1
   local item
@@ -122,7 +101,11 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "Current directory is
 REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT"
 
-[[ -f "$REPLACE_FILE" ]] || die "Replace file not found: $REPLACE_FILE"
+# 内部标识符闸门 / 自动替换（依赖本机 .git/sanitize-denylist.txt）
+SANITIZE_CHECK="$REPO_ROOT/scripts/sanitize-check.sh"
+SANITIZE_REPLACE="$REPO_ROOT/scripts/sanitize-replace.sh"
+
+[[ -f "$REPLACE_FILE" ]] || warn "Replace file not found: $REPLACE_FILE (仅用清单规则替换)"
 [[ -n "$(git status --porcelain)" ]] || {
   warn "No changes detected."
   exit 0
@@ -135,30 +118,18 @@ log "${C_BOLD}Repository:${C_RESET} $REPO_ROOT"
 log "${C_BOLD}Branch:${C_RESET} $BRANCH"
 log "${C_BOLD}Replace file:${C_RESET} $REPLACE_FILE"
 
-SED_SCRIPT=$(mktemp "${TMPDIR:-/tmp}/push-replace.XXXXXX.sed")
-cleanup() {
-  rm -f "$SED_SCRIPT"
-}
-trap cleanup EXIT
-
+# ── 用内部标识符清单做定向替换 ────────────────────────────────────────────────
+# 规则来源：.git/sanitize-denylist.txt（唯一事实来源）+ $REPLACE_FILE（本机补充）
+# 替换边界与 sanitize-check.sh 的 HARD 判定一致，避免改坏 base64 / 证书 / JAR
 RULE_COUNT=0
-while IFS= read -r line || [[ -n "$line" ]]; do
-  [[ -z "${line//[[:space:]]/}" ]] && continue
-  [[ "${line#\#}" != "$line" ]] && continue
+if [[ -x "$SANITIZE_REPLACE" ]]; then
+  RULE_COUNT=$(SANITIZE_EXTRA_RULES="$REPLACE_FILE" bash "$SANITIZE_REPLACE" --list-rules 2>/dev/null \
+    | tail -n +2 | grep -c . || echo 0)
+else
+  warn "找不到 $SANITIZE_REPLACE，跳过自动替换（闸门仍会拦截）。"
+fi
 
-  old=${line%%[[:space:]]*}
-  new=${line#"$old"}
-  new=$(trim_leading_ws "$new")
-
-  [[ -n "$old" ]] || continue
-
-  printf 's/%s/%s/g\n' \
-    "$(esabje_sed_pattern "$old")" \
-    "$(esabje_sed_replacement "$new")" >> "$SED_SCRIPT"
-  RULE_COUNT=$((RULE_COUNT + 1))
-done < "$REPLACE_FILE"
-
-[[ $RULE_COUNT -gt 0 ]] || die "Replace file is empty or contains no valid rules."
+[[ $RULE_COUNT -gt 0 ]] || warn "没有可用的替换规则，请检查 .git/sanitize-denylist.txt。"
 
 CHANGED_FILES=()
 if git rev-parse --verify HEAD >/dev/null 2>&1; then
@@ -190,33 +161,18 @@ PROCESSED=0
 UPDATED=0
 SKIPPED=0
 
-for file in "${CHANGED_FILES[@]}"; do
-  if [[ ! -f "$file" ]]; then
-    warn "Skip missing file: $file"
-    SKIPPED=$((SKIPPED + 1))
-    continue
-  fi
-
-  if ! is_text_file "$file"; then
-    warn "Skip binary file: $file"
-    SKIPPED=$((SKIPPED + 1))
-    continue
-  fi
-
-  TMP_FILE=$(mktemp "${TMPDIR:-/tmp}/push-file.XXXXXX")
-  sed -f "$SED_SCRIPT" "$file" > "$TMP_FILE"
-
-  if ! cmp -s "$file" "$TMP_FILE"; then
-    mv "$TMP_FILE" "$file"
-    UPDATED=$((UPDATED + 1))
-    ok "Updated: $file"
-  else
-    rm -f "$TMP_FILE"
-    log "No replacement needed: $file"
-  fi
-
-  PROCESSED=$((PROCESSED + 1))
-done
+if [[ ${#CHANGED_FILES[@]} -gt 0 && -x "$SANITIZE_REPLACE" ]]; then
+  FILE_LIST="$(mktemp "${TMPDIR:-/tmp}/push-files.XXXXXX")"
+  printf '%s\n' "${CHANGED_FILES[@]}" >"$FILE_LIST"
+  REPLACE_LOG="$(SANITIZE_EXTRA_RULES="$REPLACE_FILE" bash "$SANITIZE_REPLACE" --files-from "$FILE_LIST" 2>&1)"
+  printf '%s\n' "$REPLACE_LOG"
+  UPDATED=$(printf '%s\n' "$REPLACE_LOG" | grep -c '已替换' || true)
+  SKIPPED=$(printf '%s\n' "$REPLACE_LOG" | grep -c '跳过' || true)
+  rm -f "$FILE_LIST"
+  PROCESSED=${#CHANGED_FILES[@]}
+elif [[ ${#CHANGED_FILES[@]} -gt 0 ]]; then
+  warn "未执行内容替换。"
+fi
 
 printf '\n%sReplacement summary%s\n' "$C_BOLD" "$C_RESET"
 printf '  Rules loaded : %d\n' "$RULE_COUNT"
@@ -244,6 +200,17 @@ printf '\n%sStaged files%s\n' "$C_BOLD" "$C_RESET"
 git diff --cached --name-only | sed 's/^/  - /'
 
 log "Commit message: $COMMIT_MESSAGE"
+# commit message 也可能带上代号（AI / diff 带进来的）—— 提交前统一脱敏
+if [[ -x "$SANITIZE_REPLACE" ]]; then
+  COMMIT_MESSAGE="$(printf '%s\n' "$COMMIT_MESSAGE" \
+    | SANITIZE_EXTRA_RULES="$REPLACE_FILE" bash "$SANITIZE_REPLACE" --stdin 2>/dev/null)"
+fi
+
+# 提交前再跑一次闸门（不依赖钩子是否装好）
+if [[ -x "$SANITIZE_CHECK" ]]; then
+  bash "$SANITIZE_CHECK" --staged || die "内部标识符闸门拦截了本次提交，请按提示处理后再试。"
+fi
+
 git commit -m "$COMMIT_MESSAGE"
 
 if git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
