@@ -15,6 +15,7 @@ howgit/
 ├── How-to-understand-git-pull-rebase.md   # 理解 git pull --rebase:跟 merge 的区别、内部机制、何时用何时不能用
 ├── why-to-using-githubapps.md                  # 为什么用 GitHub Apps —— App 是什么、跟 OAuth/PAT/Webhook 区别、GitHub→GitLab 触发场景
 ├── github-repo-role-permissions.md        # GitHub 仓库角色权限详解
+├── codeowners-guide.md                  # CODEOWNERS 完全指南 —— 文件放哪、语法、ruleset 门禁、单人仓库死锁
 ├── gh-user-guide.md                       # GitHub CLI (gh) 实用指南 —— PR/Issue/CI 全流程,终端内完成不打开浏览器
 └── README.md
 ```
@@ -27,6 +28,7 @@ howgit/
 - `How-to-understand-git-pull-rebase.md`: `git pull --rebase` 是什么 —— 跟默认 merge 模式的对比、内部 transplant 步骤、何时该用 / 绝对不能用、出错怎么 recover、跟 `--autostash` / `pull.rebase=true` 等常见组合
 - `why-to-using-githubapps.md`: **为什么用 GitHub Apps** —— GitHub App 是什么(first-class actor + 1h token + fine-grained permission)、跟 OAuth App / PAT / Webhook 的根本区别,以及"GitHub 变更 → GitLab pipeline" 的 3 条真实路径(自建 App / GitLab external repo / pull mirror)。**关键澄清:GitHub App 装不到 GitLab 上**,装在 GitHub 自己的 repo/org 上
 - `github-repo-role-permissions.md`: GitHub 仓库角色权限(RBAC)详解
+- `codeowners-guide.md`: **CODEOWNERS 完全指南** —— 文件放在 `.github/`(优先级最高)、`docs/`(最低,且会被站点构建吃掉)还是仓库根;GitHub 与 GitLab 位置优先级不同;pattern 语法与三个不支持的写法(`!`取反 / `[a-z]` 字符范围 / `\#` 转义);如何与 branch protection / ruleset 的 `require_code_owner_review` 组合;**单人仓库开了这个门禁必然死锁**(PR 作者不能批准自己的 PR)
 
 ## 子目录内容
 
@@ -54,3 +56,5 @@ howgit/
 - `gh-user-guide.md` §3.1 (创建 PR) ↔ `How-to-get-commitid.md` (rebase 后拿 commit id) —— PR 流程的上下游
 - `why-to-using-githubapps.md` (App 权限,bot) ↔ `github-repo-role-permissions.md` (collaborator 权限,人) — 互补,两个一起看
 - `why-to-using-githubapps.md` §3.4 / §4.1 (webhook) ↔ `docs/webhook.md` (裸 webhook 的 chatgpt 风格教程) — 前者讲 App 自带 webhook 带身份,后者只讲裸 webhook
+- `codeowners-guide.md` §6.2 (ruleset API 写法) ↔ `gcp/ucp/argocd-topics/git-apps/14-rulesets-and-gitapp-gate.md` —— 后者把 `require_code_owner_review` 当成独立 rule type,实际它是 `pull_request` 规则的参数
+- `codeowners-guide.md` §2.3 (平台对照) ↔ `github-repo-role-permissions.md` —— 前者管"谁审",后者管"谁能做什么"
