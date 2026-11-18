@@ -8,11 +8,12 @@
 #   scripts/sanitize-replace.sh --paths                        打印路径重命名计划（NUL 分隔）
 #   scripts/sanitize-replace.sh --list-rules                   打印合并后的规则表
 #
-# 规则来源（按顺序取先出现的，denylist 优先）：
-#   1. .git/sanitize-denylist.txt        格式 <代号><TAB><替换建议>   （唯一事实来源）
-#   2. .git/sanitize-residual.txt        格式 <代号><TAB><替换建议>   （已知残留，一并脱敏）
-#   3. $SANITIZE_EXTRA_RULES             默认 ~/.config/push-replace/replace.txt
-#                                       格式 <old> <new>
+# 规则来源（与 scripts/sanitize-rules.sh 一致）：
+#   1. 全局表  ~/.config/push-replace/replace.txt（唯一事实来源）
+#   2. 可选的仓库本地表 .git/sanitize-denylist.txt / .git/sanitize-residual.txt
+# 表格式：<代号> <替换值> [仓库范围] [策略]
+#   仓库范围：all（默认）| <仓库名> | <仓库名1,仓库名2>
+#   策略    ：block（默认，命中即阻断）| allow（只统计，不阻断）
 #
 # 替换只在「有意义的位置」发生，与 sanitize-check.sh 的 HARD 判定保持一致：
 #   - 前一个字符不是 字母 / 数字 / + / =
@@ -59,65 +60,35 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ ! -f "$DENYLIST" ]]; then
-    echo "ℹ️  sanitize-replace: 本机清单 $DENYLIST 不存在，本次不做替换。" >&2
-    exit 0
-fi
+# ── 规则表 ─────────────────────────────────────────────────────────────
+# 规则来源与格式见 scripts/sanitize-rules.sh（check / replace 共用同一份解析）
+# 规则文件：old <TAB> new <TAB> policy（block=需清洗替换值 / allow=原样保留）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/sanitize-rules.sh
+. "$SCRIPT_DIR/sanitize-rules.sh"
 
-# ── 规则文件：old <TAB> new <TAB> source ────────────────────────────────
+rules_load
+
 RULES_FILE="$(mktemp "${TMPDIR:-/tmp}/sanitize-rules.XXXXXX")"
 PERL_SCRIPT="$(mktemp "${TMPDIR:-/tmp}/sanitize-replace.XXXXXX.pl")"
 cleanup() { rm -f "$RULES_FILE" "$PERL_SCRIPT"; }
 trap cleanup EXIT
 
-while IFS= read -r line || [[ -n "$line" ]]; do
-    line="${line%$'\r'}"
-    line="${line%%#*}"
-    line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-    [[ -z "$line" ]] && continue
-    tok="${line%%$'\t'*}"
-    sug="${line#*$'\t'}"
-    [[ "$sug" = "$line" ]] && sug=""
-    [[ -z "$tok" ]] && continue
-    if [[ -z "$sug" ]]; then
-        echo "⚠️  sanitize-replace: 清单条目「$tok」没有替换建议，跳过自动替换（闸门仍会拦截）。" >&2
+i=0
+while [ $i -lt ${#RULE_OLD[@]} ]; do
+    old="${RULE_OLD[$i]}"
+    new="${RULE_NEW[$i]}"
+    policy="${RULE_POLICY[$i]}"
+    i=$((i + 1))
+    [ -z "$old" ] && continue
+    if [ -z "$new" ]; then
+        echo "⚠️  sanitize-replace: 规则「$old」没有替换值，跳过自动替换。" >&2
         continue
     fi
-    printf '%s\t%s\tdenylist\n' "$tok" "$sug" >> "$RULES_FILE"
-done < "$DENYLIST"
+    printf '%s\t%s\t%s\n' "$old" "$new" "$policy" >> "$RULES_FILE"
+done
 
-if [[ -f "$RESIDUAL_FILE" ]]; then
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        line="${line%$'\r'}"
-        line="${line%%#*}"
-        line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-        [[ -z "$line" ]] && continue
-        tok="${line%%$'\t'*}"
-        sug="${line#*$'\t'}"
-        [[ "$sug" = "$line" ]] && sug=""
-        [[ -z "$tok" ]] && continue
-        if [[ -z "$sug" ]]; then
-            echo "⚠️  sanitize-replace: 残留条目「$tok」没有替换建议，跳过自动替换。" >&2
-            continue
-        fi
-        printf '%s\t%s\tresidual\n' "$tok" "$sug" >> "$RULES_FILE"
-    done < "$RESIDUAL_FILE"
-fi
-
-if [[ -f "$EXTRA_RULES" ]]; then
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        line="${line%$'\r'}"
-        [[ -z "${line//[[:space:]]/}" ]] && continue
-        [[ "${line#\#}" != "$line" ]] && continue
-        old="${line%%[[:space:]]*}"
-        new="${line#"$old"}"
-        new="$(printf '%s' "$new" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-        [[ -z "$old" ]] && continue
-        printf '%s\t%s\textra\n' "$old" "$new" >> "$RULES_FILE"
-    done < "$EXTRA_RULES"
-fi
-
-if [[ ! -s "$RULES_FILE" ]]; then
+if [ ! -s "$RULES_FILE" ]; then
     echo "ℹ️  sanitize-replace: 没有任何可用规则，本次不做替换。" >&2
     exit 0
 fi
@@ -145,10 +116,10 @@ while (my $line = <$rf>) {
     my ($old, $new, $src) = split(/\t/, $line, 3);
     next unless defined $old && length $old;
     $new = '' unless defined $new;
-    $src = 'extra' unless defined $src;
+    $src = 'block' unless defined $src;
     my $key = lc $old;
     if (exists $owner{$key}) {
-        push @conflicts, "$old —— denylist 的替换建议已覆盖 $src 规则";
+        push @conflicts, "$old —— 优先级更高的规则已覆盖 $src 规则";
         next;
     }
     $owner{$key} = $src;
@@ -158,7 +129,7 @@ close $rf;
 
 # ── 用 denylist 规则清洗「替换值」本身 ──────────────────────────────────
 # 例：replace.txt 里某条规则的「替换值」本身含有清单代号 —— 会被就地清洗掉
-my @deny = grep { $_->[2] eq 'denylist' } @rules;
+my @deny = grep { $_->[2] eq 'block' } @rules;
 for my $r (@rules) {
     for my $d (@deny) {
         next if lc($d->[0]) eq lc($r->[0]);
@@ -332,7 +303,7 @@ case "$MODE" in
             #   - 运行中自修改会让 shell 重新读取自己而报语法错
             #   - 扫描端也跳过它们（两边一致，避免「拦你但改不了」的死锁）
             case "$(basename "$f")" in
-                sanitize-replace.sh|sanitize-check.sh|install-sanitize-hooks.sh)
+                sanitize-replace.sh|sanitize-check.sh|sanitize-rules.sh|install-sanitize-hooks.sh)
                     echo "·  $f  闸门工具脚本本身，跳过"
                     continue
                     ;;

@@ -35,74 +35,31 @@ DENYLIST="$ROOT/.git/sanitize-denylist.txt"
 RESIDUAL_FILE="$ROOT/.git/sanitize-residual.txt"
 EXTRA_RULES="${SANITIZE_EXTRA_RULES:-$HOME/.config/push-replace/replace.txt}"
 
-# ── 读取清单 ────────────────────────────────────────────────────────
-# load_list <文件> <分隔方式> → 填充 BLOCK_TOKENS / BLOCK_SUGGESTS 或 RES_*
+# ── 载入规则表 ──────────────────────────────────────────────────────────
+# 规则来源与格式见 scripts/sanitize-rules.sh（check / replace 共用同一份解析）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/sanitize-rules.sh
+. "$SCRIPT_DIR/sanitize-rules.sh"
+
+rules_load
+
 BLOCK_TOKENS=()
 BLOCK_SUGGESTS=()
 RES_TOKENS=()
 RES_SUGGESTS=()
+i=0
+while [ $i -lt ${#RULE_OLD[@]} ]; do
+    if [ "${RULE_POLICY[$i]}" = "allow" ]; then
+        RES_TOKENS+=("${RULE_OLD[$i]}")
+        RES_SUGGESTS+=("${RULE_NEW[$i]}")
+    else
+        BLOCK_TOKENS+=("${RULE_OLD[$i]}")
+        BLOCK_SUGGESTS+=("${RULE_NEW[$i]}")
+    fi
+    i=$((i + 1))
+done
 
-load_denylist() {
-    local line tok sug
-    while IFS= read -r line || [ -n "$line" ]; do
-        line="${line%$'\r'}"
-        line="${line%%#*}"
-        line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-        [ -z "$line" ] && continue
-        tok="${line%%$'\t'*}"
-        sug="${line#*$'\t'}"
-        [ "$sug" = "$line" ] && sug=""
-        [ -z "$tok" ] && continue
-        BLOCK_TOKENS+=("$tok")
-        BLOCK_SUGGESTS+=("$sug")
-    done < "$DENYLIST"
-}
-
-load_residual() {
-    local line tok sug
-    [ -f "$RESIDUAL_FILE" ] || return 0
-    while IFS= read -r line || [ -n "$line" ]; do
-        line="${line%$'\r'}"
-        line="${line%%#*}"
-        line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-        [ -z "$line" ] && continue
-        tok="${line%%$'\t'*}"
-        sug="${line#*$'\t'}"
-        [ "$sug" = "$line" ] && sug=""
-        [ -z "$tok" ] && continue
-        RES_TOKENS+=("$tok")
-        RES_SUGGESTS+=("$sug")
-    done < "$RESIDUAL_FILE"
-}
-
-# 补充规则文件：<old> <new>（空白分隔）
-load_extra() {
-    local line old new
-    [ -f "$EXTRA_RULES" ] || return 0
-    while IFS= read -r line || [ -n "$line" ]; do
-        line="${line%$'\r'}"
-        [ -z "${line//[[:space:]]/}" ] && continue
-        [ "${line#\#}" != "$line" ] && continue
-        old="${line%%[[:space:]]*}"
-        new="${line#"$old"}"
-        new="$(printf '%s' "$new" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-        [ -z "$old" ] && continue
-        BLOCK_TOKENS+=("$old")
-        BLOCK_SUGGESTS+=("$new")
-    done < "$EXTRA_RULES"
-}
-
-if [ ! -f "$DENYLIST" ]; then
-    echo "ℹ️  sanitize-check: 本机清单 $DENYLIST 不存在，本次跳过。" >&2
-    echo "ℹ️  需要启用时，在本机创建该文件（切勿提交到仓库）。" >&2
-    exit 0
-fi
-
-load_denylist
-load_residual
-load_extra
-
-if [ ${#BLOCK_TOKENS[@]} -eq 0 ]; then
+if [ ${#BLOCK_TOKENS[@]} -eq 0 ] && [ ${#RES_TOKENS[@]} -eq 0 ]; then
     exit 0
 fi
 
@@ -132,6 +89,15 @@ suggest_for() {
         if [ "$(printf '%s' "${BLOCK_TOKENS[$i]}" | tr 'A-Z' 'a-z')" = "$want" ]; then
             if [ -n "${BLOCK_SUGGESTS[$i]}" ]; then
                 printf '%s' "${BLOCK_SUGGESTS[$i]}"
+                return 0
+            fi
+            break
+        fi
+    done
+    for i in "${!RES_TOKENS[@]}"; do
+        if [ "$(printf '%s' "${RES_TOKENS[$i]}" | tr 'A-Z' 'a-z')" = "$want" ]; then
+            if [ -n "${RES_SUGGESTS[$i]}" ]; then
+                printf '%s' "${RES_SUGGESTS[$i]}"
                 return 0
             fi
             break
@@ -228,15 +194,18 @@ new_diff() {
     esac
 }
 
-# ── 本次涉及的路径 ───────────────────────────────────────────────────
+# ── 本次涉及的新路径 ─────────────────────────────────────────────────
+# 只看「新增 / 重命名」的路径：已经存在并已推送过的路径不再追究
+# （哪怕这次只是改了内容或权限，路径本身也不是新的）
 # new_paths <mode> [rev] [exclude_sha]
 new_paths() {
     local mode="$1" rev="${2:-}" excl_sha="${3:-}"
     local excl="--remotes"
     case "$mode" in
-        staged)   git diff --cached --name-only --diff-filter=ACMR 2>/dev/null ;;
-        commit)   git show --name-only --format= "$rev" 2>/dev/null ;;
-        worktree) { git diff --name-only --diff-filter=ACMR 2>/dev/null
+        staged)   git diff --cached --name-only --diff-filter=AR 2>/dev/null ;;
+        commit)   git show --name-status --format= "$rev" 2>/dev/null \
+                     | awk '$1 ~ /^[AR]/ { print $NF }' ;;
+        worktree) { git diff --name-only --diff-filter=AR 2>/dev/null
                     git ls-files --others --exclude-standard 2>/dev/null; } ;;
         push)     local c
                   case "$excl_sha" in
@@ -244,7 +213,8 @@ new_paths() {
                       *) excl="$excl $excl_sha" ;;
                   esac
                   for c in $(git rev-list "$rev" --not $excl 2>/dev/null); do
-                      git diff-tree --no-commit-id --name-only -r "$c" 2>/dev/null
+                      git diff-tree --no-commit-id --name-status -r "$c" 2>/dev/null \
+                        | awk '$1 ~ /^[AR]/ { print $NF }'
                   done ;;
         *)        return 0 ;;
     esac
