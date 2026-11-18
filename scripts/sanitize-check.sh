@@ -52,12 +52,36 @@ if [ ${#TOKENS[@]} -eq 0 ]; then
   exit 0
 fi
 
+# ── 残留清单（已知但尚未处理）：只报告，不阻断 ──────────────────────────
+# .git/sanitize-residual.txt，格式与 denylist 相同
+# 用途：仓库里已经存在的代号（历史遗留）先只做统计，方便摸清待处理范围；
+#       等某个代号清零后再挪进 denylist，就能立刻生效。
+RESIDUAL_FILE="$ROOT/.git/sanitize-residual.txt"
+RES_TOKENS=()
+if [ -f "$RESIDUAL_FILE" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    line="${line%%#*}"
+    line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    [ -z "$line" ] && continue
+    tok="${line%%$'\t'*}"
+    [ -z "$tok" ] && continue
+    RES_TOKENS+=("$tok")
+  done < "$RESIDUAL_FILE"
+fi
+
 # ── 构造正则 ────────────────────────────────────────────────────────
 TOK_RE=""
 for t in "${TOKENS[@]}"; do
   esc="$(printf '%s' "$t" | sed 's/[][\.*^$(){}?+|/]/\\&/g')"
   [ -n "$TOK_RE" ] && TOK_RE="$TOK_RE|"
   TOK_RE="$TOK_RE$esc"
+done
+RES_TOK_RE=""
+for t in "${RES_TOKENS[@]}"; do
+  esc="$(printf '%s' "$t" | sed 's/[][\.*^$(){}?+|/]/\\&/g')"
+  [ -n "$RES_TOK_RE" ] && RES_TOK_RE="$RES_TOK_RE|"
+  RES_TOK_RE="$RES_TOK_RE$esc"
 done
 RE_HARD="(?<![A-Za-z0-9+=])($TOK_RE)"
 RE_SOFT="($TOK_RE)"
@@ -71,8 +95,10 @@ RE_PATH="(?<![A-Za-z0-9])($TOK_RE)"
 #    —— 证书 / JAR / 压缩包里的随机字节不算命中，也不要去替换（会把示例改坏）
 
 PATFILE="$(mktemp)"
-trap 'rm -f "$PATFILE"' EXIT
+RES_PATFILE="$(mktemp)"
+trap 'rm -f "$PATFILE" "$RES_PATFILE"' EXIT
 for t in "${TOKENS[@]}"; do printf '%s\n' "$t" >> "$PATFILE"; done
+for t in "${RES_TOKENS[@]}"; do printf '%s\n' "$t" >> "$RES_PATFILE"; done
 
 # ── 提示文案 ────────────────────────────────────────────────────────
 suggest_for() {
@@ -130,13 +156,13 @@ add_path_hits() {
 # ── 扫描单个文件 ────────────────────────────────────────────────────
 # 输出：HARD<TAB>代号   或   SOFT<TAB>命中数
 scan_file() {
-  local file="$1" mode="$2" rev="${3:-HEAD}"
+  local file="$1" mode="$2" rev="${3:-HEAD}" tokre="${4:-$TOK_RE}"
   case "$mode" in
     staged)   git cat-file blob ":$file" 2>/dev/null ;;
     commit)   git cat-file blob "$rev:$file" 2>/dev/null ;;
     worktree) cat -- "$file" 2>/dev/null ;;
     *)        return 0 ;;
-  esac | SCAN_RE_TOK="$TOK_RE" perl -0777 -ne '
+  esac | SCAN_RE_TOK="$tokre" perl -0777 -ne '
       # base64 片段判定：命中处左右连续 base64 字符构成的片段过长且斜杠稀疏 → 随机字节
       sub in_blob {
         my ($t, $s, $e) = @_;
@@ -167,6 +193,29 @@ scan_file() {
       if (@h) { print "HARD\t$_\n" for @h; }
       else { print "SOFT\t$total\n" if $total; }
     ' 2>/dev/null
+}
+
+# ── 残留统计（只报数，不阻断）──────────────────────────────────────────
+# 用途：仓库里已经存在的代号（历史遗留）先只做统计，方便摸清待处理范围；
+#       等某个代号清零后挪进 denylist，就能立刻生效。
+RESIDUAL_COUNT=0
+RESIDUAL_FILES=0
+
+scan_residual() {
+  local mode="$1" rev="${2:-}" f n
+  [ ${#RES_TOKENS[@]} -eq 0 ] && return 0
+  local -a files=()
+  case "$mode" in
+    staged)   while IFS= read -r f; do [ -n "$f" ] && files+=("$f"); done < <(git grep -l -I -i -F -f "$RES_PATFILE" --cached 2>/dev/null) ;;
+    commit)   while IFS= read -r f; do [ -n "$f" ] && files+=("$f"); done < <(git grep -l -I -i -F -f "$RES_PATFILE" "$rev" 2>/dev/null | sed "s|^${rev}:||") ;;
+    worktree) while IFS= read -r f; do [ -n "$f" ] && files+=("$f"); done < <(git grep -l -I -i -F -f "$RES_PATFILE" 2>/dev/null) ;;
+    *)        return 0 ;;
+  esac
+  RESIDUAL_FILES=${#files[@]}
+  for f in "${files[@]}"; do
+    n=$(scan_file "$f" "$mode" "$rev" "$RES_TOK_RE" 2>/dev/null | awk -F'\t' '$1=="HARD"{c++} END{print c+0}')
+    RESIDUAL_COUNT=$((RESIDUAL_COUNT + n))
+  done
 }
 
 # ── 汇总 ────────────────────────────────────────────────────────────
@@ -214,6 +263,13 @@ finalize() {
   if [ "$SOFT_COUNT" -gt 0 ]; then
     echo "ℹ️  sanitize-check: 另有 $SOFT_COUNT 处命中位于 base64/二进制随机字节中，已忽略。" >&2
   fi
+  if [ "$RESIDUAL_COUNT" -gt 0 ]; then
+    {
+      echo "ℹ️  sanitize-check: 另有 $RESIDUAL_COUNT 处命中属于已知残留"
+      echo "    （.git/sanitize-residual.txt，$RESIDUAL_FILES 个文件），未阻断。"
+      echo "    push 流程会自动脱敏被改动文件里的这些代号；清零后可挪进 denylist 生效。"
+    } >&2
+  fi
   exit 0
 }
 
@@ -233,6 +289,7 @@ case "$MODE" in
       collect "$(scan_file "$f" staged)" "$f"
     done
     add_path_hits staged
+    scan_residual staged
     ;;
 
   --commit)
@@ -240,6 +297,7 @@ case "$MODE" in
       collect "$(scan_file "$f" commit "$REV")" "$f"
     done
     add_path_hits commit "$REV"
+    scan_residual commit "$REV"
     ;;
 
   --worktree)
@@ -247,6 +305,7 @@ case "$MODE" in
       collect "$(scan_file "$f" worktree)" "$f"
     done
     add_path_hits worktree
+    scan_residual worktree
     ;;
 
   --message)
@@ -285,6 +344,34 @@ case "$MODE" in
       }
       print "$_\n" for @h;
     ' "$MSG_FILE" 2>/dev/null)
+    if [ ${#RES_TOKENS[@]} -gt 0 ]; then
+      RESIDUAL_COUNT=$(SCAN_RE_TOK="$RES_TOK_RE" perl -0777 -ne '
+        sub in_blob {
+          my ($t, $s, $e) = @_;
+          my $l = $s;
+          $l-- while $l > 0 && substr($t, $l-1, 1) =~ /[A-Za-z0-9+\/=]/;
+          my $r = $e;
+          my $len = length($t);
+          $r++ while $r < $len && substr($t, $r, 1) =~ /[A-Za-z0-9+\/=]/;
+          my $run = substr($t, $l, $r - $l);
+          my $n = length($run);
+          return 0 if $n <= 24;
+          my $slashes = ($run =~ tr/\///);
+          return ($slashes * 8) < $n ? 1 : 0;
+        }
+        my $alt = $ENV{SCAN_RE_TOK};
+        my $c = 0;
+        while (/((?:$alt))/gi) {
+          my $s = $-[0]; my $e = $+[0];
+          my $prev = $s > 0 ? substr($_, $s-1, 1) : "";
+          next if $prev =~ /[A-Za-z0-9+=]/;
+          next if in_blob($_, $s, $e);
+          $c++;
+        }
+        print "$c\n";
+      ' "$MSG_FILE" 2>/dev/null)
+      RESIDUAL_FILES=0
+    fi
     ;;
 
   --push)
@@ -297,6 +384,8 @@ case "$MODE" in
       for f in $(candidates_for "$local_sha"); do
         collect "$(scan_file "$f" commit "$local_sha")" "$f"
       done
+      add_path_hits commit "$local_sha"
+      scan_residual commit "$local_sha"
     done
     ;;
 

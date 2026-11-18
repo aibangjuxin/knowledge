@@ -8,15 +8,15 @@
 #   scripts/sanitize-replace.sh --paths                        打印路径重命名计划（NUL 分隔）
 #   scripts/sanitize-replace.sh --list-rules                   打印合并后的规则表
 #
-# 规则来源（前者为唯一事实来源，后者是本机补充）：
-#   1. .git/sanitize-denylist.txt        格式 <代号><TAB><替换建议>
-#   2. $SANITIZE_EXTRA_RULES             默认 ~/.config/push-replace/replace.txt
+# 规则来源（按顺序取先出现的，denylist 优先）：
+#   1. .git/sanitize-denylist.txt        格式 <代号><TAB><替换建议>   （唯一事实来源）
+#   2. .git/sanitize-residual.txt        格式 <代号><TAB><替换建议>   （已知残留，一并脱敏）
+#   3. $SANITIZE_EXTRA_RULES             默认 ~/.config/push-replace/replace.txt
 #                                       格式 <old> <new>
-#   同一代号两边都有时，以 denylist 为准。
 #
 # 替换只在「有意义的位置」发生，与 sanitize-check.sh 的 HARD 判定保持一致：
-#   - 前一个字符不是 字母 / 数字 / + / / / =
-#   - 命中处向右的连续 base64 片段不超过 20 字符（避免改坏证书 / JAR / 压缩包）
+#   - 前一个字符不是 字母 / 数字 / + / =
+#   - 命中处不在长 base64 片段里（避免改坏证书 / JAR / 压缩包）
 #
 # 退出码：0 = 成功；1 = 出错。
 
@@ -26,11 +26,19 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "sanitize-replace:
 cd "$ROOT" || exit 1
 
 DENYLIST="$ROOT/.git/sanitize-denylist.txt"
+RESIDUAL_FILE="$ROOT/.git/sanitize-residual.txt"
+# 本机配置（不提交）：rename=0 可关闭「路径重命名」
+CONF_FILE="$ROOT/.git/sanitize.conf"
+RENAME=1
+if [ -f "$CONF_FILE" ]; then
+  # 注意：BSD sed 不支持 BRE 的 \| ，这里用 grep -E + cut
+  conf_rename="$(grep -E '^[[:space:]]*rename[[:space:]]*=' "$CONF_FILE" 2>/dev/null | head -1 | cut -d= -f2 | tr -d '[:space:]')"
+  [ "$conf_rename" = "0" ] && RENAME=0
+fi
 EXTRA_RULES="${SANITIZE_EXTRA_RULES:-$HOME/.config/push-replace/replace.txt}"
 MODE="files"
 FILES=()
 FILES_FROM=""
-RENAME=1
 
 usage() {
     sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
@@ -77,6 +85,24 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     fi
     printf '%s\t%s\tdenylist\n' "$tok" "$sug" >> "$RULES_FILE"
 done < "$DENYLIST"
+
+if [[ -f "$RESIDUAL_FILE" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%$'\r'}"
+        line="${line%%#*}"
+        line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        [[ -z "$line" ]] && continue
+        tok="${line%%$'\t'*}"
+        sug="${line#*$'\t'}"
+        [[ "$sug" = "$line" ]] && sug=""
+        [[ -z "$tok" ]] && continue
+        if [[ -z "$sug" ]]; then
+            echo "⚠️  sanitize-replace: 残留条目「$tok」没有替换建议，跳过自动替换。" >&2
+            continue
+        fi
+        printf '%s\t%s\tresidual\n' "$tok" "$sug" >> "$RULES_FILE"
+    done < "$RESIDUAL_FILE"
+fi
 
 if [[ -f "$EXTRA_RULES" ]]; then
     while IFS= read -r line || [[ -n "$line" ]]; do
