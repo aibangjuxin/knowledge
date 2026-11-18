@@ -68,6 +68,28 @@ git ls-files -z | xargs -0 grep -lIF -f .git/sanitize-residual.txt
 因此：不要为了清理这类代号去做「删库重建 + 改名」级别的操作——代价远大于收益。
 真正需要紧急处置的是**凭据类内容**（密码、token、私钥、真实账号），那种才走删库重建。
 
+### 提交 / 推送闸门（自动执行）
+
+`scripts/sanitize-check.sh` 读取本机的 `.git/sanitize-denylist.txt`，
+在 **commit 前**和 **push 前**自动扫描，命中就阻断操作并给出替换建议。
+
+```bash
+# 安装钩子（换机器 / 重新 clone 后需重装）
+bash scripts/install-sanitize-hooks.sh
+
+# 手动扫描
+bash scripts/sanitize-check.sh --staged      # 暂存区
+bash scripts/sanitize-check.sh --commit HEAD # 某次提交
+bash scripts/sanitize-check.sh --worktree    # 工作区
+```
+
+- **清单是唯一事实来源**：往 `.git/sanitize-denylist.txt` 加一行
+  `<代号><TAB><替换建议>`，闸门立即生效，无需改动脚本。
+- 钩子装在 `.git/hooks/`（不随仓库提交）；脚本本身不含任何代号。
+- 紧急跳过：`SKIP_SANITIZE=1 git push ...`（会打印醒目告警）。
+- 命中判定：代号出现在标识符 / 域名 / 路径等**有意义位置**才算命中；
+  base64 / 证书 / JAR 里的随机字节只做汇总提示，不阻断。
+
 ### 残留处理
 
 `.git/sanitize-residual.txt` 中的代号量大且属另一类客户代号，同样属于低敏感，
