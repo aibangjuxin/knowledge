@@ -59,10 +59,16 @@ for t in "${TOKENS[@]}"; do
   [ -n "$TOK_RE" ] && TOK_RE="$TOK_RE|"
   TOK_RE="$TOK_RE$esc"
 done
-RE_HARD="(?<![A-Za-z0-9+/=])($TOK_RE)"
+RE_HARD="(?<![A-Za-z0-9+=])($TOK_RE)"
 RE_SOFT="($TOK_RE)"
 # 路径判定：代号前后不能是字母数字（docs/<代号>-notes 命中，my<代号>-notes 不命中）
 RE_PATH="(?<![A-Za-z0-9])($TOK_RE)"
+
+# ── 命中判定（check 与 replace 必须完全一致，否则会反复拦截）───────────
+# 1) 左边界：代号前一个字符不能是 字母/数字/+/=
+#    —— 路径里的 / 允许，它属于「有意义的位置」（docs/<代号>/... 要能查出来）
+# 2) base64 排除：命中处若落在长 base64 片段里（长度 > 24 且 '/' 密度低）则只算软命中
+#    —— 证书 / JAR / 压缩包里的随机字节不算命中，也不要去替换（会把示例改坏）
 
 PATFILE="$(mktemp)"
 trap 'rm -f "$PATFILE"' EXIT
@@ -130,17 +136,36 @@ scan_file() {
     commit)   git cat-file blob "$rev:$file" 2>/dev/null ;;
     worktree) cat -- "$file" 2>/dev/null ;;
     *)        return 0 ;;
-  esac | SCAN_RE_HARD="$RE_HARD" SCAN_RE_SOFT="$RE_SOFT" perl -0777 -ne '
-      my $hard = $ENV{SCAN_RE_HARD};
-      my $soft = $ENV{SCAN_RE_SOFT};
-      my @h;
-      while (/(?:$hard)/gi) { push @h, $1; }
-      if (@h) { print "HARD\t$_\n" for @h; }
-      else {
-        my $c = 0;
-        while (/(?:$soft)/gi) { $c++; }
-        print "SOFT\t$c\n" if $c;
+  esac | SCAN_RE_TOK="$TOK_RE" perl -0777 -ne '
+      # base64 片段判定：命中处左右连续 base64 字符构成的片段过长且斜杠稀疏 → 随机字节
+      sub in_blob {
+        my ($t, $s, $e) = @_;
+        my $l = $s;
+        $l-- while $l > 0 && substr($t, $l-1, 1) =~ /[A-Za-z0-9+\/=]/;
+        my $r = $e;
+        my $len = length($t);
+        $r++ while $r < $len && substr($t, $r, 1) =~ /[A-Za-z0-9+\/=]/;
+        my $run = substr($t, $l, $r - $l);
+        my $n = length($run);
+        return 0 if $n <= 24;
+        my $slashes = ($run =~ tr/\///);
+        return ($slashes * 8) < $n ? 1 : 0;
       }
+      my $alt = $ENV{SCAN_RE_TOK};
+      my $total = 0;
+      my @h;
+      while (/((?:$alt))/gi) {
+        my $s = $-[0];
+        my $e = $+[0];
+        my $tok = $1;
+        $total++;
+        my $prev = $s > 0 ? substr($_, $s-1, 1) : "";
+        next if $prev =~ /[A-Za-z0-9+=]/;   # 不是有意义的位置
+        next if in_blob($_, $s, $e);       # base64 / 证书里的随机字节
+        push @h, $tok;
+      }
+      if (@h) { print "HARD\t$_\n" for @h; }
+      else { print "SOFT\t$total\n" if $total; }
     ' 2>/dev/null
 }
 
@@ -195,6 +220,13 @@ finalize() {
 MODE="${1:---worktree}"
 REV="${2:-HEAD}"
 
+# 紧急跳过：SKIP_SANITIZE=1 对所有模式生效（提交 / 推送 / message 扫描）
+if [ "${SKIP_SANITIZE:-0}" = "1" ]; then
+  echo "⚠️  SKIP_SANITIZE=1 —— 本次内部标识符检查被跳过。" >&2
+  echo "⚠️  请确认本次改动不会把内部代号推到公开仓库！" >&2
+  exit 0
+fi
+
 case "$MODE" in
   --staged)
     for f in $(git grep -l -I -i -F -f "$PATFILE" --cached 2>/dev/null); do
@@ -226,17 +258,36 @@ case "$MODE" in
     while IFS= read -r tok; do
       [ -z "$tok" ] && continue
       HARD_LINES+=("commit message"$'\t'"$tok")
-    done < <(SCAN_RE_HARD="$RE_HARD" perl -0777 -ne '
-      my $hard = $ENV{SCAN_RE_HARD};
-      while (/(?:$hard)/gi) { print "$1\n"; }
+    done < <(SCAN_RE_TOK="$TOK_RE" perl -0777 -ne '
+      sub in_blob {
+        my ($t, $s, $e) = @_;
+        my $l = $s;
+        $l-- while $l > 0 && substr($t, $l-1, 1) =~ /[A-Za-z0-9+\/=]/;
+        my $r = $e;
+        my $len = length($t);
+        $r++ while $r < $len && substr($t, $r, 1) =~ /[A-Za-z0-9+\/=]/;
+        my $run = substr($t, $l, $r - $l);
+        my $n = length($run);
+        return 0 if $n <= 24;
+        my $slashes = ($run =~ tr/\///);
+        return ($slashes * 8) < $n ? 1 : 0;
+      }
+      my $alt = $ENV{SCAN_RE_TOK};
+      my @h;
+      while (/((?:$alt))/gi) {
+        my $s = $-[0];
+        my $e = $+[0];
+        my $tok = $1;
+        my $prev = $s > 0 ? substr($_, $s-1, 1) : "";
+        next if $prev =~ /[A-Za-z0-9+=]/;
+        next if in_blob($_, $s, $e);
+        push @h, $tok;
+      }
+      print "$_\n" for @h;
     ' "$MSG_FILE" 2>/dev/null)
     ;;
 
   --push)
-    if [ "${SKIP_SANITIZE:-0}" = "1" ]; then
-      echo "⚠️  SKIP_SANITIZE=1 —— 本次 push 跳过内部标识符检查。" >&2
-      exit 0
-    fi
     while read -r local_ref local_sha remote_ref remote_sha; do
       [ -z "${local_sha:-}" ] && continue
       case "$local_sha" in

@@ -101,7 +101,7 @@ cat > "$PERL_SCRIPT" <<'PERL_EOF'
 use strict;
 use warnings;
 
-my $MAX_RUN = 20;   # 向右连续 base64 片段超过这个长度 → 视为随机字节，不替换
+my $MAX_RUN = 24;   # 命中处所在的连续 base64 片段超过这个长度 → 视为随机字节，不替换
 
 my $rules_file = $ARGV[0] // '';
 my $mode       = $ARGV[1] // 'file';
@@ -154,13 +154,31 @@ if ($mode eq 'list') {
 }
 
 # ── 内容替换 ───────────────────────────────────────────────────────────
+#
+# 命中判定与 sanitize-check.sh 完全一致：
+#   1) 左边界：代号前一个字符不能是 字母/数字/+/=（路径里的 / 允许）
+#   2) base64 排除：命中处落在长 base64 片段里 → 不替换（否则会把证书 / JAR 改坏）
+sub in_blob {
+    my ($t, $s, $e) = @_;
+    my $l = $s;
+    $l-- while $l > 0 && substr($t, $l-1, 1) =~ /[A-Za-z0-9+\/=]/;
+    my $r = $e;
+    my $len = length($t);
+    $r++ while $r < $len && substr($t, $r, 1) =~ /[A-Za-z0-9+\/=]/;
+    my $run = substr($t, $l, $r - $l);
+    my $n = length($run);
+    return 0 if $n <= 24;
+    my $slashes = ($run =~ tr/\///);
+    return ($slashes * 8) < $n ? 1 : 0;
+}
+
 sub apply_rules {
     my ($text) = @_;
     my %hits;
     my %skipped;
     for my $r (@rules) {
         my ($old, $new) = @$r;
-        my $re = qr/(?<![A-Za-z0-9+\/=])\Q$old\E/;
+        my $re = qr/(?<![A-Za-z0-9+=])\Q$old\E/;
         # 注意：s///e 的回调里不能写 return（会直接从 apply_rules 返回），
         #       所以用三元表达式表达「替换 / 跳过」两个分支。
         $text =~ s{$re}{
@@ -168,10 +186,7 @@ sub apply_rules {
             my $m = $&;
             my $s = $-[0];
             my $e = $+[0];
-            my $len = length($text);
-            my $run = $e;
-            while ($run < $len && substr($text, $run, 1) =~ /[A-Za-z0-9+\/=]/) { $run++; }
-            if (($run - $s) > $MAX_RUN) {
+            if (in_blob($text, $s, $e)) {
                 $skipped{$old}++;   # base64 / 证书里的随机字节，原样保留
                 $m;
             } else {
@@ -325,3 +340,6 @@ case "$MODE" in
         fi
         ;;
 esac
+
+# 正常结束一律返回 0：调用方（如 set -e 的 push 脚本）会把非 0 当成失败
+exit 0

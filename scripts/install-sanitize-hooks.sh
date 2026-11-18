@@ -60,6 +60,7 @@ CM_HOOK="$HOOKS/commit-msg"
 CM_ORIG="$HOOKS/commit-msg.orig"
 
 if [ -f "$CM_HOOK" ] && ! grep -q "sanitize-check.sh --message" "$CM_HOOK" 2>/dev/null; then
+    # 有原有 commit-msg → 备份后把脱敏闸门接到前面
     if [ ! -f "$CM_ORIG" ]; then
         cp "$CM_HOOK" "$CM_ORIG"
         chmod +x "$CM_ORIG"
@@ -79,6 +80,19 @@ exit 0
 HOOK
     chmod +x "$CM_HOOK"
     echo "✅ 已安装：$CM_HOOK（脱敏闸门 + 原有检查）"
+elif [ ! -f "$CM_HOOK" ]; then
+    # 没有原有 commit-msg → 只装脱敏闸门
+    cat > "$CM_HOOK" <<'HOOK'
+#!/bin/sh
+# commit-msg — 内部标识符闸门（由 scripts/install-sanitize-hooks.sh 生成）
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || ROOT=""
+if [ -n "$ROOT" ] && [ -x "$ROOT/scripts/sanitize-check.sh" ]; then
+    "$ROOT/scripts/sanitize-check.sh" --message "$1" || exit 1
+fi
+exit 0
+HOOK
+    chmod +x "$CM_HOOK"
+    echo "✅ 已安装：$CM_HOOK（脱敏闸门）"
 fi
 
 echo "✅ 已安装："

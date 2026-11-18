@@ -164,7 +164,7 @@ SKIPPED=0
 if [[ ${#CHANGED_FILES[@]} -gt 0 && -x "$SANITIZE_REPLACE" ]]; then
   FILE_LIST="$(mktemp "${TMPDIR:-/tmp}/push-files.XXXXXX")"
   printf '%s\n' "${CHANGED_FILES[@]}" >"$FILE_LIST"
-  REPLACE_LOG="$(SANITIZE_EXTRA_RULES="$REPLACE_FILE" bash "$SANITIZE_REPLACE" --files-from "$FILE_LIST" 2>&1)"
+  REPLACE_LOG="$(SANITIZE_EXTRA_RULES="$REPLACE_FILE" bash "$SANITIZE_REPLACE" --files-from "$FILE_LIST" 2>&1)" || true
   printf '%s\n' "$REPLACE_LOG"
   UPDATED=$(printf '%s\n' "$REPLACE_LOG" | grep -c '已替换' || true)
   SKIPPED=$(printf '%s\n' "$REPLACE_LOG" | grep -c '跳过' || true)

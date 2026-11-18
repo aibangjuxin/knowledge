@@ -71,7 +71,7 @@ git ls-files -z | xargs -0 grep -lIF -f .git/sanitize-residual.txt
 ### 提交 / 推送闸门（自动执行）
 
 `scripts/sanitize-check.sh` 读取本机的 `.git/sanitize-denylist.txt`，
-在 **commit 前**和 **push 前**自动扫描，命中就阻断操作并给出替换建议。
+在 **commit 前**、**commit message**、**push 前**自动扫描，命中就阻断操作并给出替换建议。
 
 ```bash
 # 安装钩子（换机器 / 重新 clone 后需重装）
@@ -81,14 +81,40 @@ bash scripts/install-sanitize-hooks.sh
 bash scripts/sanitize-check.sh --staged      # 暂存区
 bash scripts/sanitize-check.sh --commit HEAD # 某次提交
 bash scripts/sanitize-check.sh --worktree    # 工作区
+bash scripts/sanitize-check.sh --message F   # commit message 文件
+
+# 自动脱敏（按清单把代号换成占位符）
+scripts/sanitize-replace.sh --file PATH       # 替换文件内容
+scripts/sanitize-replace.sh --stdin < F       # 替换 stdin（用于 commit message）
+scripts/sanitize-replace.sh --list-rules      # 查看合并后的规则表
 ```
 
 - **清单是唯一事实来源**：往 `.git/sanitize-denylist.txt` 加一行
   `<代号><TAB><替换建议>`，闸门立即生效，无需改动脚本。
 - 钩子装在 `.git/hooks/`（不随仓库提交）；脚本本身不含任何代号。
-- 紧急跳过：`SKIP_SANITIZE=1 git push ...`（会打印醒目告警）。
+- 紧急跳过：`SKIP_SANITIZE=1 git push ...`（对所有扫描模式生效，会打印醒目告警）。
 - 命中判定：代号出现在标识符 / 域名 / 路径等**有意义位置**才算命中；
   base64 / 证书 / JAR 里的随机字节只做汇总提示，不阻断。
+- 扫描范围：文件**内容** + 文件**路径**（文件名 / 目录名同样会公开）。
+
+### push 流程与清单的关系（必读）
+
+本机 alias `pushc`（= `bash push-llama.sh`）与 `push.sh` 的完整流程：
+
+```
+按清单替换内容 → 按清单重命名路径 → git add → 生成 commit message
+→ 脱敏 commit message → 闸门复核(--staged) → commit → push → pre-push 闸门
+```
+
+- 替换规则来自两处，**清单优先**：
+  1. `.git/sanitize-denylist.txt`（唯一事实来源，`<代号><TAB><替换建议>`）
+  2. `~/.config/push-replace/replace.txt`（本机补充规则，`<old> <new>`）
+
+  同一代号两边都有时以清单为准；补充规则里的「替换值」本身若含代号，会被就地清洗。
+- 替换与扫描用的是**同一套命中判定**（左边界 + base64 片段排除），
+  所以「扫出来的」一定能「替换掉」，不会出现反复拦截。
+- 新增代号只要加进清单，push 流程立即生效，无需改脚本。
+- 推 `git push --force` 仍然危险（见下文「历史与 Git 操作」）：先确认闸门已跑过。
 
 ### 残留处理
 
