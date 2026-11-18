@@ -2,15 +2,22 @@
 # sanitize-check.sh — 内部标识符扫描闸门
 #
 # 用法：
-#   sanitize-check.sh --staged          扫描暂存区（pre-commit 钩子调用）
-#   sanitize-check.sh --push            扫描待推送的提交（pre-push 钩子调用，refs 从 stdin 读）
-#   sanitize-check.sh --commit <REV>    扫描某次提交的整棵树
-#   sanitize-check.sh --worktree        扫描工作区
+#   sanitize-check.sh --staged          扫描暂存区新增内容（pre-commit 钩子调用）
+#   sanitize-check.sh --push            扫描待推送的新提交（pre-push 钩子调用，refs 从 stdin 读）
+#   sanitize-check.sh --commit <REV>    扫描某次提交新增的内容
+#   sanitize-check.sh --worktree        扫描工作区新增的内容
 #   sanitize-check.sh --message <FILE>  扫描 commit message（commit-msg 钩子调用）
 #
-# 标识符清单：本机 .git/sanitize-denylist.txt（不随仓库分发）
-#   每行格式： <代号>  或  <代号><TAB><替换建议>
-#   —— 清单是唯一事实来源：改这个文件即可改变闸门行为，无需改本脚本。
+# 判定范围：**只管本次新增 / 推送的内容**。
+#   已经推送过的历史内容不再追究（只做统计报告，不阻断）——
+#   否则仓库里遗留的代号会让每一次推送都被拦死。
+#
+# 合规标准（命中即阻断）：
+#   1. .git/sanitize-denylist.txt          本机清单，唯一事实来源
+#   2. ~/.config/push-replace/replace.txt  本机补充规则（可用 SANITIZE_EXTRA_RULES 覆盖）
+#
+# 只报告不阻断：
+#   3. .git/sanitize-residual.txt          已知残留 = 明确允许保留的代号
 #
 # 命中判定：代号**前一个字符不是字母/数字**才算真命中。
 #   这样能挡掉真实用法（形如 <前缀>-<业务名>、X-<前缀>-<字段>、<前缀>.<域名>），
@@ -25,68 +32,125 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 cd "$ROOT" || exit 0
 
 DENYLIST="$ROOT/.git/sanitize-denylist.txt"
+RESIDUAL_FILE="$ROOT/.git/sanitize-residual.txt"
+EXTRA_RULES="${SANITIZE_EXTRA_RULES:-$HOME/.config/push-replace/replace.txt}"
 
 # ── 读取清单 ────────────────────────────────────────────────────────
-if [ ! -f "$DENYLIST" ]; then
-  echo "ℹ️  sanitize-check: 本机清单 $DENYLIST 不存在，本次跳过。" >&2
-  echo "ℹ️  需要启用时，在本机创建该文件（切勿提交到仓库）。" >&2
-  exit 0
-fi
-
-TOKENS=()
-SUGGESTS=()
-while IFS= read -r line || [ -n "$line" ]; do
-  line="${line%$'\r'}"
-  line="${line%%#*}"
-  line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-  [ -z "$line" ] && continue
-  tok="${line%%$'\t'*}"
-  sug="${line#*$'\t'}"
-  [ "$sug" = "$line" ] && sug=""
-  [ -z "$tok" ] && continue
-  TOKENS+=("$tok")
-  SUGGESTS+=("$sug")
-done < "$DENYLIST"
-
-if [ ${#TOKENS[@]} -eq 0 ]; then
-  exit 0
-fi
-
-# ── 残留清单（已知但尚未处理）：只报告，不阻断 ──────────────────────────
-# .git/sanitize-residual.txt，格式与 denylist 相同
-# 用途：仓库里已经存在的代号（历史遗留）先只做统计，方便摸清待处理范围；
-#       等某个代号清零后再挪进 denylist，就能立刻生效。
-RESIDUAL_FILE="$ROOT/.git/sanitize-residual.txt"
+# load_list <文件> <分隔方式> → 填充 BLOCK_TOKENS / BLOCK_SUGGESTS 或 RES_*
+BLOCK_TOKENS=()
+BLOCK_SUGGESTS=()
 RES_TOKENS=()
-if [ -f "$RESIDUAL_FILE" ]; then
-  while IFS= read -r line || [ -n "$line" ]; do
-    line="${line%$'\r'}"
-    line="${line%%#*}"
-    line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-    [ -z "$line" ] && continue
-    tok="${line%%$'\t'*}"
-    [ -z "$tok" ] && continue
-    RES_TOKENS+=("$tok")
-  done < "$RESIDUAL_FILE"
+RES_SUGGESTS=()
+
+load_denylist() {
+    local line tok sug
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%$'\r'}"
+        line="${line%%#*}"
+        line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        [ -z "$line" ] && continue
+        tok="${line%%$'\t'*}"
+        sug="${line#*$'\t'}"
+        [ "$sug" = "$line" ] && sug=""
+        [ -z "$tok" ] && continue
+        BLOCK_TOKENS+=("$tok")
+        BLOCK_SUGGESTS+=("$sug")
+    done < "$DENYLIST"
+}
+
+load_residual() {
+    local line tok sug
+    [ -f "$RESIDUAL_FILE" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%$'\r'}"
+        line="${line%%#*}"
+        line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        [ -z "$line" ] && continue
+        tok="${line%%$'\t'*}"
+        sug="${line#*$'\t'}"
+        [ "$sug" = "$line" ] && sug=""
+        [ -z "$tok" ] && continue
+        RES_TOKENS+=("$tok")
+        RES_SUGGESTS+=("$sug")
+    done < "$RESIDUAL_FILE"
+}
+
+# 补充规则文件：<old> <new>（空白分隔）
+load_extra() {
+    local line old new
+    [ -f "$EXTRA_RULES" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%$'\r'}"
+        [ -z "${line//[[:space:]]/}" ] && continue
+        [ "${line#\#}" != "$line" ] && continue
+        old="${line%%[[:space:]]*}"
+        new="${line#"$old"}"
+        new="$(printf '%s' "$new" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+        [ -z "$old" ] && continue
+        BLOCK_TOKENS+=("$old")
+        BLOCK_SUGGESTS+=("$new")
+    done < "$EXTRA_RULES"
+}
+
+if [ ! -f "$DENYLIST" ]; then
+    echo "ℹ️  sanitize-check: 本机清单 $DENYLIST 不存在，本次跳过。" >&2
+    echo "ℹ️  需要启用时，在本机创建该文件（切勿提交到仓库）。" >&2
+    exit 0
+fi
+
+load_denylist
+load_residual
+load_extra
+
+if [ ${#BLOCK_TOKENS[@]} -eq 0 ]; then
+    exit 0
 fi
 
 # ── 构造正则 ────────────────────────────────────────────────────────
-TOK_RE=""
-for t in "${TOKENS[@]}"; do
-  esc="$(printf '%s' "$t" | sed 's/[][\.*^$(){}?+|/]/\\&/g')"
-  [ -n "$TOK_RE" ] && TOK_RE="$TOK_RE|"
-  TOK_RE="$TOK_RE$esc"
-done
-RES_TOK_RE=""
-for t in "${RES_TOKENS[@]}"; do
-  esc="$(printf '%s' "$t" | sed 's/[][\.*^$(){}?+|/]/\\&/g')"
-  [ -n "$RES_TOK_RE" ] && RES_TOK_RE="$RES_TOK_RE|"
-  RES_TOK_RE="$RES_TOK_RE$esc"
-done
-RE_HARD="(?<![A-Za-z0-9+=])($TOK_RE)"
-RE_SOFT="($TOK_RE)"
-# 路径判定：代号前后不能是字母数字（docs/<代号>-notes 命中，my<代号>-notes 不命中）
-RE_PATH="(?<![A-Za-z0-9])($TOK_RE)"
+# 分支顺序 = 代号长度降序 → 同一位置总是最长匹配先命中，
+# 报告出来的「命中标识符」与实际替换的单位一致
+build_alt() {
+    local out="" t esc
+    for t in $(printf '%s\n' "$@" | awk 'NF{ print length($0) "\t" $0 }' | sort -rn | cut -f2-); do
+        esc="$(printf '%s' "$t" | sed 's/[][\.*^$(){}?+|/]/\\&/g')"
+        [ -n "$out" ] && out="$out|"
+        out="$out$esc"
+    done
+    printf '%s' "$out"
+}
+BLOCK_RE="$(build_alt "${BLOCK_TOKENS[@]}")"
+RES_RE=""
+if [ ${#RES_TOKENS[@]} -gt 0 ]; then
+    RES_RE="$(build_alt "${RES_TOKENS[@]}")"
+fi
+
+# ── 提示文案 ────────────────────────────────────────────────────────
+suggest_for() {
+    local want="$1" i
+    want="$(printf '%s' "$want" | tr 'A-Z' 'a-z')"
+    for i in "${!BLOCK_TOKENS[@]}"; do
+        if [ "$(printf '%s' "${BLOCK_TOKENS[$i]}" | tr 'A-Z' 'a-z')" = "$want" ]; then
+            if [ -n "${BLOCK_SUGGESTS[$i]}" ]; then
+                printf '%s' "${BLOCK_SUGGESTS[$i]}"
+                return 0
+            fi
+            break
+        fi
+    done
+    printf '语义清晰的通用占位符（如 example-... / internal-...）'
+}
+
+# ── 工具脚本本身：跳过 ───────────────────────────────────────────────────
+# scripts/sanitize-*.sh 是闸门工具，它们：
+#   - 运行中自修改会让 shell 重新读自己而报语法错（所以替换时要跳过）
+#   - 如果里面残留了代号，会造成「拦你但改不了」的死锁
+# 所以两边（扫描 / 替换）都跳过它们；工具脚本必须保持不含任何代号。
+is_tooling_file() {
+    case "$1" in
+        scripts/sanitize-*.sh|scripts/install-sanitize-hooks.sh) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 
 # ── 命中判定（check 与 replace 必须完全一致，否则会反复拦截）───────────
 # 1) 左边界：代号前一个字符不能是 字母/数字/+/=
@@ -94,76 +158,9 @@ RE_PATH="(?<![A-Za-z0-9])($TOK_RE)"
 # 2) base64 排除：命中处若落在长 base64 片段里（长度 > 24 且 '/' 密度低）则只算软命中
 #    —— 证书 / JAR / 压缩包里的随机字节不算命中，也不要去替换（会把示例改坏）
 
-PATFILE="$(mktemp)"
-RES_PATFILE="$(mktemp)"
-trap 'rm -f "$PATFILE" "$RES_PATFILE"' EXIT
-for t in "${TOKENS[@]}"; do printf '%s\n' "$t" >> "$PATFILE"; done
-for t in "${RES_TOKENS[@]}"; do printf '%s\n' "$t" >> "$RES_PATFILE"; done
-
-# ── 提示文案 ────────────────────────────────────────────────────────
-suggest_for() {
-  local want="$1" i
-  for i in "${!TOKENS[@]}"; do
-    # 大小写不敏感匹配：文件里可能是全小写 / 首字母大写 / 全大写等变体
-    if [ "$(printf '%s' "${TOKENS[$i]}" | tr 'A-Z' 'a-z')" = "$(printf '%s' "$want" | tr 'A-Z' 'a-z')" ]; then
-      if [ -n "${SUGGESTS[$i]}" ]; then
-        printf '%s' "${SUGGESTS[$i]}"
-        return 0
-      fi
-      break
-    fi
-  done
-  printf '语义清晰的通用占位符（如 example-... / internal-...）'
-}
-
-# ── 候选文件查找 ────────────────────────────────────────────────────
-# git grep <tree-ish> 返回的路径带 "<rev>:" 前缀，必须剥掉，
-# 否则取内容会失败 → 扫描静默变成「假通过」。
-candidates_for() {
-  local rev="$1"
-  git grep -l -I -i -F -f "$PATFILE" "$rev" 2>/dev/null | sed "s|^${rev}:||"
-}
-
-# ── 路径清单：与内容扫描同口径 ──────────────────────────────────────────
-# staged   → 索引（git grep --cached 扫的就是整个索引）
-# commit   → 该提交的整棵树
-# worktree → 已跟踪 + 未跟踪（未忽略）
-paths_for() {
-  local mode="$1" rev="${2:-}"
-  case "$mode" in
-    staged)   git ls-files ;;
-    commit)   git ls-tree -r --name-only "$rev" 2>/dev/null ;;
-    worktree) { git ls-files; git ls-files --others --exclude-standard; } ;;
-    *)        return 0 ;;
-  esac
-}
-
-# 代号可能出现在「路径」里而不只是内容里（文件名 / 目录名同样会公开）
-add_path_hits() {
-  local mode="$1" rev="${2:-}" p tok
-  while IFS= read -r p; do
-    [ -z "$p" ] && continue
-    while IFS= read -r tok; do
-      [ -z "$tok" ] && continue
-      HARD_LINES+=("$p"$'\t'"$tok")
-    done < <(printf '%s' "$p" | SCAN_RE_PATH="$RE_PATH" perl -ne '
-      my $re = $ENV{SCAN_RE_PATH};
-      while (/(?:$re)/gi) { print "$1\n"; }
-    ' 2>/dev/null)
-  done < <(paths_for "$mode" "$rev")
-}
-
-# ── 扫描单个文件 ────────────────────────────────────────────────────
-# 输出：HARD<TAB>代号   或   SOFT<TAB>命中数
-scan_file() {
-  local file="$1" mode="$2" rev="${3:-HEAD}" tokre="${4:-$TOK_RE}"
-  case "$mode" in
-    staged)   git cat-file blob ":$file" 2>/dev/null ;;
-    commit)   git cat-file blob "$rev:$file" 2>/dev/null ;;
-    worktree) cat -- "$file" 2>/dev/null ;;
-    *)        return 0 ;;
-  esac | SCAN_RE_TOK="$tokre" perl -0777 -ne '
-      # base64 片段判定：命中处左右连续 base64 字符构成的片段过长且斜杠稀疏 → 随机字节
+# ── 扫描「本次新增的内容」──────────────────────────────────────────────
+# STDIN: unified diff（-U0）；输出：HARD<TAB>文件<TAB>代号
+PERL_SCAN_DIFF='
       sub in_blob {
         my ($t, $s, $e) = @_;
         my $l = $s;
@@ -177,147 +174,132 @@ scan_file() {
         my $slashes = ($run =~ tr/\///);
         return ($slashes * 8) < $n ? 1 : 0;
       }
-      my $alt = $ENV{SCAN_RE_TOK};
-      my $total = 0;
-      my @h;
-      while (/((?:$alt))/gi) {
-        my $s = $-[0];
-        my $e = $+[0];
-        my $tok = $1;
-        $total++;
-        my $prev = $s > 0 ? substr($_, $s-1, 1) : "";
-        next if $prev =~ /[A-Za-z0-9+=]/;   # 不是有意义的位置
-        next if in_blob($_, $s, $e);       # base64 / 证书里的随机字节
-        push @h, $tok;
+      my %added;
+      my $cur = "";
+      while (<STDIN>) {
+        if (/^diff --git /) { $cur = ""; next; }
+        if (/^\+\+\+ (?:b\/)?(.*)$/) { $cur = $1; next; }
+        next unless /^\+/;
+        next if $cur eq "" || $cur eq "/dev/null";
+        my $line = substr($_, 1);
+        $line =~ s/\n$//;
+        push @{ $added{$cur} }, $line;
       }
-      if (@h) { print "HARD\t$_\n" for @h; }
-      else { print "SOFT\t$total\n" if $total; }
-    ' 2>/dev/null
+      my $alt = $ENV{SCAN_RE_TOK};
+      for my $f (sort keys %added) {
+        my $text = join("\n", @{ $added{$f} });
+        while ($text =~ /((?:$alt))/gi) {
+          my $s = $-[0];
+          my $e = $+[0];
+          my $tok = $1;
+          my $prev = $s > 0 ? substr($text, $s-1, 1) : "";
+          next if $prev =~ /[A-Za-z0-9+=]/;
+          next if in_blob($text, $s, $e);
+          print "HARD\t$f\t$tok\n";
+        }
+      }
+'
+
+# ── 本次涉及的新增内容（diff）────────────────────────────────────────
+# new_diff <mode> [rev] [exclude_sha]
+new_diff() {
+    local mode="$1" rev="${2:-}" excl_sha="${3:-}"
+    local excl="--remotes"
+    case "$mode" in
+        staged)   git diff --cached -U0 --no-color 2>/dev/null ;;
+        commit)   git show --format= -U0 --no-color "$rev" 2>/dev/null ;;
+        worktree) { git diff -U0 --no-color 2>/dev/null
+                    git ls-files --others --exclude-standard -z 2>/dev/null \
+                      | tr '\0' '\n' | while IFS= read -r u; do
+                          [ -n "$u" ] || continue
+                          printf 'diff --git a/%s b/%s\n+++ b/%s\n' "$u" "$u" "$u"
+                          sed -e 's/^/+/' -- "$u" 2>/dev/null
+                        done; } ;;
+        push)     local c
+                  # 只看「尚未出现在任何远端」的提交 = 本次真正要推送的新内容
+                  case "$excl_sha" in
+                      ""|0000000000000000000000000000000000000000) ;;
+                      *) excl="$excl $excl_sha" ;;
+                  esac
+                  for c in $(git rev-list "$rev" --not $excl 2>/dev/null); do
+                      git show --format= -U0 --no-color "$c" 2>/dev/null
+                  done ;;
+        *)        return 0 ;;
+    esac
 }
 
-# ── 残留统计（只报数，不阻断）──────────────────────────────────────────
-# 用途：仓库里已经存在的代号（历史遗留）先只做统计，方便摸清待处理范围；
-#       等某个代号清零后挪进 denylist，就能立刻生效。
-RESIDUAL_COUNT=0
-RESIDUAL_FILES=0
-
-scan_residual() {
-  local mode="$1" rev="${2:-}" f n
-  [ ${#RES_TOKENS[@]} -eq 0 ] && return 0
-  local -a files=()
-  case "$mode" in
-    staged)   while IFS= read -r f; do [ -n "$f" ] && files+=("$f"); done < <(git grep -l -I -i -F -f "$RES_PATFILE" --cached 2>/dev/null) ;;
-    commit)   while IFS= read -r f; do [ -n "$f" ] && files+=("$f"); done < <(git grep -l -I -i -F -f "$RES_PATFILE" "$rev" 2>/dev/null | sed "s|^${rev}:||") ;;
-    worktree) while IFS= read -r f; do [ -n "$f" ] && files+=("$f"); done < <(git grep -l -I -i -F -f "$RES_PATFILE" 2>/dev/null) ;;
-    *)        return 0 ;;
-  esac
-  RESIDUAL_FILES=${#files[@]}
-  for f in "${files[@]}"; do
-    n=$(scan_file "$f" "$mode" "$rev" "$RES_TOK_RE" 2>/dev/null | awk -F'\t' '$1=="HARD"{c++} END{print c+0}')
-    RESIDUAL_COUNT=$((RESIDUAL_COUNT + n))
-  done
+# ── 本次涉及的路径 ───────────────────────────────────────────────────
+# new_paths <mode> [rev] [exclude_sha]
+new_paths() {
+    local mode="$1" rev="${2:-}" excl_sha="${3:-}"
+    local excl="--remotes"
+    case "$mode" in
+        staged)   git diff --cached --name-only --diff-filter=ACMR 2>/dev/null ;;
+        commit)   git show --name-only --format= "$rev" 2>/dev/null ;;
+        worktree) { git diff --name-only --diff-filter=ACMR 2>/dev/null
+                    git ls-files --others --exclude-standard 2>/dev/null; } ;;
+        push)     local c
+                  case "$excl_sha" in
+                      ""|0000000000000000000000000000000000000000) ;;
+                      *) excl="$excl $excl_sha" ;;
+                  esac
+                  for c in $(git rev-list "$rev" --not $excl 2>/dev/null); do
+                      git diff-tree --no-commit-id --name-only -r "$c" 2>/dev/null
+                  done ;;
+        *)        return 0 ;;
+    esac
 }
 
 # ── 汇总 ────────────────────────────────────────────────────────────
 HARD_LINES=()
-SOFT_COUNT=0
 
-collect() {
-  local out="$1" f="$2"
-  local kind val
-  while IFS=$'\t' read -r kind val; do
-    [ -z "$kind" ] && continue
-    if [ "$kind" = "HARD" ]; then
-      HARD_LINES+=("$f"$'\t'"$val")
-    else
-      SOFT_COUNT=$((SOFT_COUNT + val))
-    fi
-  done <<EOF
-$out
-EOF
+# 内容命中（新增部分）→ 阻断
+collect_new_content() {
+    local mode="$1" rev="${2:-}" excl="${3:-}"
+    local kind file tok
+    while IFS=$'\t' read -r kind file tok; do
+        [ "$kind" = "HARD" ] || continue
+        [ -z "$file" ] && continue
+        is_tooling_file "$file" && continue
+        HARD_LINES+=("$file"$'\t'"$tok")
+    done < <(new_diff "$mode" "$rev" "$excl" | SCAN_RE_TOK="$BLOCK_RE" perl -ne "$PERL_SCAN_DIFF" 2>/dev/null)
 }
 
-finalize() {
-  if [ ${#HARD_LINES[@]} -gt 0 ]; then
-    {
-      echo ""
-      echo "❌ 操作被拦截：检测到内部标识符。"
-      echo ""
-      for l in "${HARD_LINES[@]}"; do
-        echo "   位置：${l%%$'\t'*}"
-        echo "   命中标识符：${l#*$'\t'}"
-        echo "   建议替换为：$(suggest_for "${l#*$'\t'}")"
-        echo ""
-      done
-      echo "   规则：代号出现在标识符 / 域名 / 路径等有意义位置才算命中。"
-      echo "         （base64 / 证书 / JAR 里的随机字节不算，会单独汇总）"
-      echo ""
-      echo "   ✅ 处理方式：按上面的建议替换后重新提交。"
-      echo "      可直接跑 scripts/sanitize-replace.sh 自动替换后再提交。"
-      echo "   📖 完整规则见 AGENTS.md「内容脱敏约定」。"
-      echo ""
-      echo "   ℹ️  如确需临时跳过：SKIP_SANITIZE=1 <本次命令>"
-    } >&2
-    exit 1
-  fi
-  if [ "$SOFT_COUNT" -gt 0 ]; then
-    echo "ℹ️  sanitize-check: 另有 $SOFT_COUNT 处命中位于 base64/二进制随机字节中，已忽略。" >&2
-  fi
-  if [ "$RESIDUAL_COUNT" -gt 0 ]; then
-    {
-      echo "ℹ️  sanitize-check: 另有 $RESIDUAL_COUNT 处命中属于已知残留"
-      echo "    （.git/sanitize-residual.txt，$RESIDUAL_FILES 个文件），未阻断。"
-      echo "    push 流程会自动脱敏被改动文件里的这些代号；清零后可挪进 denylist 生效。"
-    } >&2
-  fi
-  exit 0
+# 路径命中 → 阻断
+collect_new_paths() {
+    local mode="$1" rev="${2:-}" excl="${3:-}" p tok
+    while IFS= read -r p; do
+        [ -z "$p" ] && continue
+        is_tooling_file "$p" && continue
+        while IFS= read -r tok; do
+            [ -z "$tok" ] && continue
+            HARD_LINES+=("$p"$'\t'"$tok")
+        done < <(printf '%s' "$p" | SCAN_RE_PATH="$RE_PATH" perl -ne '
+          my $re = $ENV{SCAN_RE_PATH};
+          while (/(?:$re)/gi) { print "$1\n"; }
+        ' 2>/dev/null)
+    done < <(new_paths "$mode" "$rev" "$excl")
 }
 
-MODE="${1:---worktree}"
-REV="${2:-HEAD}"
-
-# 紧急跳过：SKIP_SANITIZE=1 对所有模式生效（提交 / 推送 / message 扫描）
-if [ "${SKIP_SANITIZE:-0}" = "1" ]; then
-  echo "⚠️  SKIP_SANITIZE=1 —— 本次内部标识符检查被跳过。" >&2
-  echo "⚠️  请确认本次改动不会把内部代号推到公开仓库！" >&2
-  exit 0
-fi
-
-case "$MODE" in
-  --staged)
-    for f in $(git grep -l -I -i -F -f "$PATFILE" --cached 2>/dev/null); do
-      collect "$(scan_file "$f" staged)" "$f"
+# 历史内容里的命中 → 只统计，不阻断（已经推送过的不追究）
+HIST_COUNT=0
+HIST_FILES=0
+report_history() {
+    local rev="$1" f n
+    [ ${#BLOCK_TOKENS[@]} -eq 0 ] && return 0
+    local -a files=()
+    while IFS= read -r f; do [ -n "$f" ] && files+=("$f"); done < <(git grep -l -I -i -F -f "$PATFILE" "$rev" 2>/dev/null | sed "s|^${rev}:||")
+    HIST_FILES=${#files[@]}
+    for f in "${files[@]}"; do
+        is_tooling_file "$f" && continue
+        n=$(git show "$rev:$f" 2>/dev/null | SCAN_RE_TOK="$BLOCK_RE" perl -0777 -ne "$PERL_SCAN_TEXT" 2>/dev/null \
+            | awk -F'\t' '$1=="HARD"{c++} END{print c+0}')
+        HIST_COUNT=$((HIST_COUNT + n))
     done
-    add_path_hits staged
-    scan_residual staged
-    ;;
+}
 
-  --commit)
-    for f in $(candidates_for "$REV"); do
-      collect "$(scan_file "$f" commit "$REV")" "$f"
-    done
-    add_path_hits commit "$REV"
-    scan_residual commit "$REV"
-    ;;
-
-  --worktree)
-    for f in $(git grep -l -I -i -F -f "$PATFILE" 2>/dev/null); do
-      collect "$(scan_file "$f" worktree)" "$f"
-    done
-    add_path_hits worktree
-    scan_residual worktree
-    ;;
-
-  --message)
-    MSG_FILE="${2:-}"
-    if [ -z "$MSG_FILE" ] || [ ! -f "$MSG_FILE" ]; then
-      echo "用法: $0 --message <FILE>" >&2
-      exit 0
-    fi
-    while IFS= read -r tok; do
-      [ -z "$tok" ] && continue
-      HARD_LINES+=("commit message"$'\t'"$tok")
-    done < <(SCAN_RE_TOK="$TOK_RE" perl -0777 -ne '
+# 单个文件内容的命中统计
+PERL_SCAN_TEXT='
       sub in_blob {
         my ($t, $s, $e) = @_;
         my $l = $s;
@@ -332,7 +314,6 @@ case "$MODE" in
         return ($slashes * 8) < $n ? 1 : 0;
       }
       my $alt = $ENV{SCAN_RE_TOK};
-      my @h;
       while (/((?:$alt))/gi) {
         my $s = $-[0];
         my $e = $+[0];
@@ -340,59 +321,103 @@ case "$MODE" in
         my $prev = $s > 0 ? substr($_, $s-1, 1) : "";
         next if $prev =~ /[A-Za-z0-9+=]/;
         next if in_blob($_, $s, $e);
-        push @h, $tok;
+        print "HARD\t$tok\n";
       }
-      print "$_\n" for @h;
-    ' "$MSG_FILE" 2>/dev/null)
-    if [ ${#RES_TOKENS[@]} -gt 0 ]; then
-      RESIDUAL_COUNT=$(SCAN_RE_TOK="$RES_TOK_RE" perl -0777 -ne '
-        sub in_blob {
-          my ($t, $s, $e) = @_;
-          my $l = $s;
-          $l-- while $l > 0 && substr($t, $l-1, 1) =~ /[A-Za-z0-9+\/=]/;
-          my $r = $e;
-          my $len = length($t);
-          $r++ while $r < $len && substr($t, $r, 1) =~ /[A-Za-z0-9+\/=]/;
-          my $run = substr($t, $l, $r - $l);
-          my $n = length($run);
-          return 0 if $n <= 24;
-          my $slashes = ($run =~ tr/\///);
-          return ($slashes * 8) < $n ? 1 : 0;
-        }
-        my $alt = $ENV{SCAN_RE_TOK};
-        my $c = 0;
-        while (/((?:$alt))/gi) {
-          my $s = $-[0]; my $e = $+[0];
-          my $prev = $s > 0 ? substr($_, $s-1, 1) : "";
-          next if $prev =~ /[A-Za-z0-9+=]/;
-          next if in_blob($_, $s, $e);
-          $c++;
-        }
-        print "$c\n";
-      ' "$MSG_FILE" 2>/dev/null)
-      RESIDUAL_FILES=0
+'
+
+finalize() {
+    if [ ${#HARD_LINES[@]} -gt 0 ]; then
+        {
+            echo ""
+            echo "❌ 操作被拦截：本次新增的内容里有内部标识符。"
+            echo ""
+            for l in "${HARD_LINES[@]}"; do
+                echo "   位置：${l%%$'\t'*}"
+                echo "   命中标识符：${l#*$'\t'}"
+                echo "   建议替换为：$(suggest_for "${l#*$'\t'}")"
+                echo ""
+            done
+            echo "   规则：代号出现在标识符 / 域名 / 路径等有意义位置才算命中。"
+            echo "         （base64 / 证书 / JAR 里的随机字节不算，会单独汇总）"
+            echo ""
+            echo "   ✅ 处理方式：按上面的建议替换后重新提交。"
+            echo "      可直接跑 scripts/sanitize-replace.sh 自动替换后再提交。"
+            echo "   📖 完整规则见 AGENTS.md「内容脱敏约定」。"
+            echo ""
+            echo "   ℹ️  如确需临时跳过：SKIP_SANITIZE=1 <本次命令>"
+        } >&2
+        exit 1
     fi
-    ;;
-
-  --push)
-    while read -r local_ref local_sha remote_ref remote_sha; do
-      [ -z "${local_sha:-}" ] && continue
-      case "$local_sha" in
-        0*) continue ;;
-      esac
-      git cat-file -e "$local_sha^{commit}" 2>/dev/null || continue
-      for f in $(candidates_for "$local_sha"); do
-        collect "$(scan_file "$f" commit "$local_sha")" "$f"
-      done
-      add_path_hits commit "$local_sha"
-      scan_residual commit "$local_sha"
-    done
-    ;;
-
-  *)
-    echo "用法: $0 [--staged|--push|--commit REV|--worktree|--message FILE]" >&2
+    if [ "$HIST_COUNT" -gt 0 ]; then
+        {
+            echo "ℹ️  sanitize-check: 历史内容里还有 $HIST_COUNT 处命中（$HIST_FILES 个文件），"
+            echo "    已经推送过的部分不再追究，未阻断。"
+        } >&2
+    fi
     exit 0
-    ;;
+}
+
+MODE="${1:---worktree}"
+REV="${2:-HEAD}"
+
+# 紧急跳过：SKIP_SANITIZE=1 对所有模式生效（提交 / 推送 / message 扫描）
+if [ "${SKIP_SANITIZE:-0}" = "1" ]; then
+    echo "⚠️  SKIP_SANITIZE=1 —— 本次内部标识符检查被跳过。" >&2
+    echo "⚠️  请确认本次改动不会把内部代号推到公开仓库！" >&2
+    exit 0
+fi
+
+# 路径判定用的正则 + 全树扫描用的 pattern 文件
+RE_PATH="(?<![A-Za-z0-9])($BLOCK_RE)"
+PATFILE="$(mktemp)"
+trap 'rm -f "$PATFILE"' EXIT
+for t in "${BLOCK_TOKENS[@]}"; do printf '%s\n' "$t" >> "$PATFILE"; done
+
+case "$MODE" in
+    --staged)
+        collect_new_content staged
+        collect_new_paths staged
+        ;;
+
+    --commit)
+        collect_new_content commit "$REV"
+        collect_new_paths commit "$REV"
+        report_history "$REV"
+        ;;
+
+    --worktree)
+        collect_new_content worktree
+        collect_new_paths worktree
+        ;;
+
+    --message)
+        MSG_FILE="${2:-}"
+        if [ -z "$MSG_FILE" ] || [ ! -f "$MSG_FILE" ]; then
+            echo "用法: $0 --message <FILE>" >&2
+            exit 0
+        fi
+        while IFS= read -r tok; do
+            [ -z "$tok" ] && continue
+            HARD_LINES+=("commit message"$'\t'"$tok")
+        done < <(SCAN_RE_TOK="$BLOCK_RE" perl -0777 -ne "$PERL_SCAN_TEXT" "$MSG_FILE" 2>/dev/null)
+        ;;
+
+    --push)
+        while read -r local_ref local_sha remote_ref remote_sha; do
+            [ -z "${local_sha:-}" ] && continue
+            case "$local_sha" in
+                0*) continue ;;
+            esac
+            git cat-file -e "$local_sha^{commit}" 2>/dev/null || continue
+            collect_new_content push "$local_sha" "$remote_sha"
+            collect_new_paths push "$local_sha" "$remote_sha"
+        done
+        ;;
+
+    *)
+        echo "用法: $0 [--staged|--push|--commit REV|--worktree|--message FILE]" >&2
+        exit 0
+        ;;
 esac
 
 finalize

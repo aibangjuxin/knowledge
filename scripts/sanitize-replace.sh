@@ -171,6 +171,16 @@ for my $r (@rules) {
 # 长代号优先：先替换「前缀+编号」这类复合代号，再替换其中的短代号，避免拆成两截
 @rules = sort { length($b->[0]) <=> length($a->[0]) } @rules;
 
+# 单次扫描用的组合正则（分支顺序 = 长度降序 → 同一位置总是最长匹配先命中）
+# %map 要在「替换值清洗」之后建，否则拿到的是清洗前的值
+my %map;
+my $ALT = "";
+for my $r (@rules) {
+    $map{lc $r->[0]} = $r->[1];
+    $ALT .= ($ALT ? "|" : "") . quotemeta($r->[0]);
+}
+my $COMBINED = qr/(?<![A-Za-z0-9+=])((?:$ALT))/;
+
 for my $c (@conflicts) { print STDERR "⚠️  sanitize-replace: $c\n"; }
 
 if ($mode eq 'list') {
@@ -202,25 +212,27 @@ sub apply_rules {
     my ($text) = @_;
     my %hits;
     my %skipped;
-    for my $r (@rules) {
-        my ($old, $new) = @$r;
-        my $re = qr/(?<![A-Za-z0-9+=])\Q$old\E/;
-        # 注意：s///e 的回调里不能写 return（会直接从 apply_rules 返回），
-        #       所以用三元表达式表达「替换 / 跳过」两个分支。
-        $text =~ s{$re}{
-            # 先把匹配信息存下来：下面的内层正则会覆盖 $& / $-[0] / $+[0]
-            my $m = $&;
-            my $s = $-[0];
-            my $e = $+[0];
-            if (in_blob($text, $s, $e)) {
-                $skipped{$old}++;   # base64 / 证书里的随机字节，原样保留
-                $m;
-            } else {
-                $hits{$old}++;
-                $new;
-            }
-        }ge;
-    }
+    # 单次扫描：扫描指针不会回头看已替换的内容，
+    # 所以「替换值里恰好含有另一个代号」不会被二次改写
+    # （例：replace.txt 里的一条规则的替换值本身就含代号，不会被再改一次）
+    # 注意：s///e 的回调里不能写 return（会直接从 apply_rules 返回），
+    #       所以用三元表达式表达「替换 / 跳过」两个分支。
+    $text =~ s{$COMBINED}{
+        # 先把匹配信息存下来：下面的内层正则会覆盖 $& / $-[0] / $+[0]
+        my $m = $&;
+        my $s = $-[0];
+        my $e = $+[0];
+        my $tok = $1;
+        my $key = lc $tok;
+        my $new = exists $map{$key} ? $map{$key} : $tok;
+        if (in_blob($text, $s, $e)) {
+            $skipped{$tok}++;   # base64 / 证书里的随机字节，原样保留
+            $m;
+        } else {
+            $hits{$tok}++;
+            $new;
+        }
+    }ge;
     return ($text, \%hits, \%skipped);
 }
 
@@ -316,10 +328,12 @@ case "$MODE" in
         fi
         for f in "${FILES[@]}"; do
             [[ -f "$f" ]] || { echo "·  $f  不存在，跳过" >&2; continue; }
-            # 不改闸门脚本本身：运行中自修改会让 shell 重新读取自己而报语法错
+            # 不改闸门工具脚本本身：
+            #   - 运行中自修改会让 shell 重新读取自己而报语法错
+            #   - 扫描端也跳过它们（两边一致，避免「拦你但改不了」的死锁）
             case "$(basename "$f")" in
-                sanitize-replace.sh|sanitize-check.sh)
-                    echo "·  $f  闸门脚本本身，跳过"
+                sanitize-replace.sh|sanitize-check.sh|install-sanitize-hooks.sh)
+                    echo "·  $f  闸门工具脚本本身，跳过"
                     continue
                     ;;
             esac
