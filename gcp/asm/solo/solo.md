@@ -58,6 +58,8 @@ gcp/asm/solo/
 ├── solo-architecture.html        ← 深色主题 SVG 架构图(mmx architecture-design skill 风格)
 ├── install/
 │   └── install.md                ← 全量安装 4 步 + 卸载 + 验证清单
+├── upgrade/
+│   └── image-upgrade.md          ← 镜像替换 / 版本升级 6 种方式 + 「改 revision 够不够」的结论
 └── yamls/
     ├── 00-istiooperator.yaml           ← IstioOperator ambient profile 控制面声明
     ├── 01-namespace-ambient-label.yaml ← 三 ns + ambient/none 标签
@@ -114,8 +116,8 @@ gcp/asm/solo/
 graph LR
     Client[客户端<br/>HTTPS · 域名请求]
     Edge[边界接入<br/>NGINX on GCE / PSC / ILB]
-    GW[L1 平台 Gateway<br/>abjx-gw-int · Istio GatewayClass]
-    LS[L2 ListenerSet<br/>abjx-listenerset-int · TLS Terminate]
+    GW[L1 平台 Gateway<br/>clienta-gw-int · Istio GatewayClass]
+    LS[L2 ListenerSet<br/>clienta-listenerset-int · TLS Terminate]
     HR[L3 HTTPRoute<br/>tenant-runtime · parentRef → ListenerSet]
     Svc[L3 Service<br/>ClusterIP · port 80]
     zt[节点 ztunnel<br/>DaemonSet · HBONE :15008]
@@ -179,7 +181,7 @@ graph LR
 | **Gateway API CRD / gatewayClassName** | Istio GW Class 实现,工作方式不变 |
 | **HTTPRoute(`parentRefs → ListenerSet`)** | 仍是同一套 Gateway API 路由链 |
 | **`tls.mode: Terminate` 在 ListenerSet** | 段 1 TLS 终结方式不变 |
-| **wildcard TLS Secret 在 `abjx-listenerset-int`** | 同样证书,不同位置,同样作用 |
+| **wildcard TLS Secret 在 `clienta-listenerset-int`** | 同样证书,不同位置,同样作用 |
 
 > 👉 结论:"下一个服务接入" 改的 YAML 数量 — 从 background.md 的 4 个 Service/Deployment/HTTPRoute/DestinationRule,**降到 3 个 Service/Deployment/HTTPRoute**,DR 永远消失。
 
@@ -249,7 +251,7 @@ containers:
 
 ### 5.1 ⚠️ Gateway NS 也进了 ambient,导致 TLS 终结行为变化
 
-**现象**:`abjx-gw-int` 也打了 `istio.io/dataplane-mode=ambient`,结果 ListenerSet 上的 TLS 终结点(Gateway Pod 内的 Envoy sidecar)被 ztunnel 干扰。
+**现象**:`clienta-gw-int` 也打了 `istio.io/dataplane-mode=ambient`,结果 ListenerSet 上的 TLS 终结点(Gateway Pod 内的 Envoy sidecar)被 ztunnel 干扰。
 
 **修法**:**L1/L2 平台 NS 显式打 `=none`,只让 L3 租户 NS 进 ambient**。这是本探索的标准姿势,见 `yamls/01-namespace-ambient-label.yaml`。
 
@@ -297,7 +299,7 @@ containers:
 - [ ] `kubectl get pods -n istio-system -l app=ztunnel -o wide` — **每节点都有 ztunnel**
 - [ ] `kubectl get pods -n kube-system -l k8s-app=istio-cni-node -o wide` — **CNI DaemonSet 每节点都有**
 - [ ] `kubectl exec -n tenant-runtime deploy/tenant-app -c tenant-app -- netstat -an | grep 15008` — **本机 ztunnel 实际抓到流量**
-- [ ] `kubectl get listenerset -n abjx-listenerset-int -o jsonpath='{.items[*].status.conditions[?(@.type=="Programmed")].status}'` — **返回 `True`**
+- [ ] `kubectl get listenerset -n clienta-listenerset-int -o jsonpath='{.items[*].status.conditions[?(@.type=="Programmed")].status}'` — **返回 `True`**
 - [ ] `kubectl get httproute -n tenant-runtime ... -o jsonpath='{.status.parents[*].conditions[?(@.type=="Accepted")].status}'` — **Accepted=true**
 - [ ] `kubectl describe pod -n tenant-runtime <pod> | grep istio-proxy` — **期望空**(确认无 sidecar)
 - [ ] `curl -k ... https://app1.teamlevel.example.uk:8443/ -I` — **200 OK**

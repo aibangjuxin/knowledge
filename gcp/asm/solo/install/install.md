@@ -77,6 +77,19 @@ kubectl apply --server-side \
   -y
 ```
 
+> ⚠️ **镜像仓库请先核实（2026-11 复核）**：Solo 官方文档说明 **Istio 1.29 及以后**的 Solo 镜像在
+> `us-docker.pkg.dev/soloio-img/istio`（Helm OCI 仓库 `us-docker.pkg.dev/soloio-img/istio-helm`），
+> 镜像名为 `pilot` / `proxyv2` / `install-cni` / `ztunnel`。
+> 而上面命令用的 `gcr.io/istio-release` **只有社区镜像，实测 `ztunnel:1.30.2-solo-fips` 返回 404**。
+>
+> 以**集群实际镜像**为准：
+>
+> ```bash
+> kubectl get pods -n istio-system -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[*].image'
+> ```
+>
+> 详见 [`upgrade/image-upgrade.md`](../upgrade/image-upgrade.md) §2.2（镜像仓库与 tag 命名）。
+
 或者用我们仓库预制的 YAML:
 
 ```bash
@@ -99,8 +112,8 @@ kubectl get ns tenant-runtime --show-labels
 kubectl apply -f ../yamls/02-gateway-agentgateway.yaml
 
 # 验证(listener 必须 Programmed=True)
-kubectl get gateway -n abjx-gw-int
-kubectl get listenerset -n abjx-listenerset-int
+kubectl get gateway -n clienta-gw-int
+kubectl get listenerset -n clienta-listenerset-int
 ```
 
 ### 1.5 租户侧:HTTPRoute + Service/Deployment + PeerAuthentication
@@ -239,7 +252,7 @@ kubectl get pods -n istio-system
 | `ztunnel` DaemonSet | `istio-system` (默认) | 安装器(istioctl/Helm) | 每节点 1 份 | HBONE 抓包,节点级 mTLS 加密(SPIFFE) |
 | `istio-cni-node` DaemonSet | `kube-system` | 安装器(istioctl/Helm) | 每节点 1 份 | 接管 pod 的 iptables 流量,ambient 模式只创建初始 redirect |
 | `istiod` Deployment | `istio-system` | 安装器(istioctl/Helm) | 单实例/HPA | xDS 配置中心,证书签发 |
-| AgentGateway(本探索选) | `abjx-gw-int` | 平台 | 受 listener 控制 | L7 TLS 终结 / 流量分发(传统 sidecar 形态) |
+| AgentGateway(本探索选) | `clienta-gw-int` | 平台 | 受 listener 控制 | L7 TLS 终结 / 流量分发(传统 sidecar 形态) |
 
 > 后文 `solo-architecture.html` 给了一张完整组件图。
 
@@ -282,7 +295,7 @@ kubectl exec -n tenant-runtime deploy/tenant-app -c tenant-app -- \
 
 ```bash
 # 4) ListenerSet 必须 Programmed
-kubectl get listenerset -n abjx-listenerset-int -o jsonpath='{.items[*].status.conditions[?(@.type=="Programmed")].status}'
+kubectl get listenerset -n clienta-listenerset-int -o jsonpath='{.items[*].status.conditions[?(@.type=="Programmed")].status}'
 
 # 5) HTTPRoute 必须 Accepted(不是 404,而是真的能被路由)
 kubectl get httproute -n tenant-runtime app1.teamlevel.example.uk \
@@ -290,13 +303,19 @@ kubectl get httproute -n tenant-runtime app1.teamlevel.example.uk \
 # 期望:true
 
 # 6) e2e:从集群外(或者 kubectl port-forward 到 gateway)打真实域名
-kubectl port-forward -n abjx-gw-int svc/istio-ingressgateway 8443:443 &
+kubectl port-forward -n clienta-gw-int svc/istio-ingressgateway 8443:443 &
 HOST=app1.teamlevel.example.uk
 curl -k --resolve "$HOST:8443:127.0.0.1" "https://$HOST:8443/" -I
 # 期望:HTTP/2 200
 ```
 
 ---
+
+## 3B. 升级 / 换镜像
+
+> 装完之后想把镜像换成新版本（patch 升级、只换单个组件、自建镜像、canary 灰度），
+> 见 **[`upgrade/image-upgrade.md`](../upgrade/image-upgrade.md)**。
+> 其中「改一下 `istio.io/rev` 是不是就换镜像了」的答案在 §4。
 
 ## 4. 卸载 (Lab tear-down)
 
@@ -330,7 +349,7 @@ kubectl delete -f ../yamls/03-httproute.yaml
 kubectl delete -f ../yamls/02-gateway-agentgateway.yaml
 kubectl delete -f ../yamls/01-namespace-ambient-label.yaml
 
-kubectl delete namespace istio-system tenant-runtime abjx-gw-int abjx-listenerset-int --ignore-not-found
+kubectl delete namespace istio-system tenant-runtime clienta-gw-int clienta-listenerset-int --ignore-not-found
 kubectl delete -n kube-system ds istio-cni-node --ignore-not-found
 ```
 

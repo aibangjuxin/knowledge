@@ -1,3 +1,7 @@
+> 📌 **相关文档**：本文只讲 Solo 发行版的 **tag 命名规则**（`-solo` / `-fips` / `-distroless`）。
+> 要在集群里**把 old image 换成新的**（含「改 istio revision 够不够」的结论），见
+> [`upgrade/image-upgrade.md`](./upgrade/image-upgrade.md)。
+
 https://docs.solo.io/istio/1.30.x/ambient/about/images/overview/
 
 
