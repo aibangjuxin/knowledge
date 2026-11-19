@@ -17,6 +17,7 @@ howgit/
 ├── github-repo-role-permissions.md        # GitHub 仓库角色权限详解
 ├── codeowners-guide.md                  # CODEOWNERS 完全指南 —— 文件放哪、语法、ruleset 门禁、单人仓库死锁
 ├── gh-user-guide.md                       # GitHub CLI (gh) 实用指南 —— PR/Issue/CI 全流程,终端内完成不打开浏览器
+├── lazygit-guide.md                       # LazyGit 实战指南 —— 终端 Git TUI 快捷键、"某段命令/配置对应的 commit" 检索、git-delta、备选工具对比
 └── README.md
 ```
 
@@ -29,6 +30,7 @@ howgit/
 - `why-to-using-githubapps.md`: **为什么用 GitHub Apps** —— GitHub App 是什么(first-class actor + 1h token + fine-grained permission)、跟 OAuth App / PAT / Webhook 的根本区别,以及"GitHub 变更 → GitLab pipeline" 的 3 条真实路径(自建 App / GitLab external repo / pull mirror)。**关键澄清:GitHub App 装不到 GitLab 上**,装在 GitHub 自己的 repo/org 上
 - `github-repo-role-permissions.md`: GitHub 仓库角色权限(RBAC)详解
 - `codeowners-guide.md`: **CODEOWNERS 完全指南** —— 文件放在 `.github/`(优先级最高)、`docs/`(最低,且会被站点构建吃掉)还是仓库根;GitHub 与 GitLab 位置优先级不同;pattern 语法与三个不支持的写法(`!`取反 / `[a-z]` 字符范围 / `\#` 转义);如何与 branch protection / ruleset 的 `require_code_owner_review` 组合;**单人仓库开了这个门禁必然死锁**(PR 作者不能批准自己的 PR)
+- `lazygit-guide.md`: **LazyGit 实战指南** —— macOS 已安装 lazygit 0.66.3 + git-delta 0.20.1;TUI 面板布局与 Files/Commits/Branches/Remotes/Stash 快捷键速查;**「某个 git 命令 / 一段配置有没有对应 commit」的两套解法**(lazygit 按文件看 + `git log -S/-G/--grep`、`git blame -L` 按字符串查);git-delta 配置;gitui/tig/fzf 备选工具对比;常见坑(含本仓库自带 push 闸门,别用 lazygit 的 push 覆盖它)
 
 ## 子目录内容
 
