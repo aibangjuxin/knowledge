@@ -207,14 +207,26 @@ spec:
         path: '{{.path.path}}'
         helm:
           valueFiles:
-          - '${{.valuesPath}}'
+          - '{{.valuesPath}}'
       destination:
         server: https://kubernetes.default.svc
         namespace: '{{.namespace}}'
 ```
 
-**注意 `valueFiles` 里的 `${{` 写法**——这是 Helm 变量和 Argo CD 模板变量的
-转义约定：双写 `$` 表示"这是 Helm 的模板，不是 Argo CD 的"。
+**`valueFiles` 里的路径就写 `{{.valuesPath}}`**，由 ApplicationSet controller
+替换成实际路径（如 `envs/dev/values.yaml`），再交给 repo-server 去读文件。
+
+> ⚠️ **不要写 `${{.valuesPath}}`。**
+> `$` 不会被当成「转义符」——ApplicationSet controller 的 Go template 引擎
+> 只认 `{{ ... }}` 这一段，前面的 `$` 是普通文本，会原样留下：
+>
+> ```
+> '${{.valuesPath}}'  →  '$envs/dev/values.yaml'   ← 路径多了个 $，文件找不到
+> ```
+>
+> `$` 在上游 `valueFiles` 里只有**一个**含义：多源引用
+> （`ref: values` 定义的 `$values/xxx.yaml`），跟转义无关。
+> 详见 [`appset-helm-Rendering.md`](./appset-helm-Rendering.md) §1.1。
 
 > ⚠️ **`syncPolicy.automated.prune` / `selfHeal` 不能模板化。**
 > ApplicationSet CRD 里这两个字段的类型是 `boolean`
@@ -223,9 +235,14 @@ spec:
 > “must be of type boolean” 拒绝。
 >
 > **后果**：无法用一个 ApplicationSet + 模板区分「dev 自动 selfHeal、prod 不自动」。
-> **解法**：同步策略不同的环境**拆成不同的 ApplicationSet**，
+> **解法 A**：同步策略不同的环境**拆成不同的 ApplicationSet**，
 > 用 git 文件生成器的 `selector`（JMESPath，如 `env == "prod"`）过滤环境清单。
 > 完整示例见 [`examples/applicationset-matrix.yaml`](./examples/applicationset-matrix.yaml) 末尾「变体」。
+>
+> **解法 B**：`spec.templatePatch`（需要 `goTemplate: true`）——
+> 它渲染的是 YAML 文本片段而不是强类型字段，所以 `prune: {{ .prune }}` 可以work。
+> 上游例子见 [Template 文档](https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/Template/)。
+> ⚠️ `templatePatch` **不能改 `spec.project`**，且能注入任意内容 → 参数来源必须可信。
 
 ### 3.3 方案 C：Merge generator（基础 + 覆盖）
 
@@ -492,7 +509,7 @@ kubectl -n argocd get applications -o jsonpath='{range .items[?(@.spec.project==
 | `goTemplate` 下参数取不到 | 用了 `{{.path}}` 而非 `{{.path.path}}` | Go template 是结构化访问，需要完整路径 |
 | Merge generator 报错 | 多个生成器写在了同一个数组元素里 | 每个生成器独立成 `- xxx:` 元素 |
 | Matrix 结果数量爆炸 | 子生成器组合数太大 | 检查 Git 目录数 × 集群数 |
-| `valuesFiles` 里的 `{{.xxx}}` 被 Argo CD 渲染掉了 | Argo CD 与 Helm 模板变量冲突 | 用 `${{.xxx}}`（双写 `$`） |
+| `valueFiles` 里的路径多了个 `$`（`$envs/dev/values.yaml`） | 误用了 `${{.xxx}}` 当转义 | `$` 不是转义符，直接写 `{{.xxx}}`；见 [`appset-helm-Rendering.md`](./appset-helm-Rendering.md) §1.1 |
 | AppSet 状态正常但 Application 没创建 | ApplicationSet 控制器无权访问 Git 仓库 | 检查 Repository Secret；见 [`07-repository-githubapp.md`](./07-repository-githubapp.md) |
 | 删了 AppSet，集群资源全没了 | 生成的 Application 没设 `preserveResourcesOnDeletion` | 加该字段；**已经删了只能从 Git 重新 apply 恢复** |
 | 生成的 Application 没权限操作 | Argo CD RBAC 没给对应组权限 | 在 `argocd-rbac-cm` 加 `p, <group>, applications, *, <project>/*, allow` |
@@ -507,6 +524,8 @@ kubectl -n argocd get applications -o jsonpath='{range .items[?(@.spec.project==
 |---|---|
 | AppProject 与 RBAC 的三层边界 | [`04-appproject-rbac.md`](./04-appproject-rbac.md) |
 | Git 仓库凭据（Git generator 依赖） | [`07-repository-githubapp.md`](./07-repository-githubapp.md) |
+| **ApplicationSet 本身由 Helm 渲染（CP 仓库 → 租户仓库）** | [`appset-helm-Rendering.md`](./appset-helm-Rendering.md) |
+| **跨仓库渲染的原理（是 Helm 的能力还是 Argo CD 的？）** | [`helm-cross-repository.md`](./helm-cross-repository.md) |
 | `Application` 字段详解 | [`../argocd-application-guide.md`](../argocd-application-guide.md) |
 | `ApplicationSet` vs `Application` 概念对比（更简短） | [`../argocd-applicationset-vs-application.md`](../argocd-applicationset-vs-application.md) |
 | 已有 Application 示例 | [`../examples/argocd-application/09-applicationset-team.yaml`](../examples/argocd-application/09-applicationset-team.yaml) |

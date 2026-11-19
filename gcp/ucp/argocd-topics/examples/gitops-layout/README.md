@@ -11,6 +11,7 @@
 > |---|---|---|
 > | **本文件** | 整体骨架、目录结构、工具箱、开关语义、操作顺序 | **先看这份** |
 > | [`bootstrap-flow.md`](./bootstrap-flow.md) | ⭐ **完整流程图**：从 PR 到集群的七个阶段（全链路 mermaid） | 想理解「整条链路怎么跑」 |
+| [**交互图解：Bootstrap 全链路**](../../../diagrams/argocd-bootstrap-flow.html) | 同一张流程图的**可交互版**：两道门 + 八个阶段 + 手工点火 + 自愈回路 | 想一眼看明白整条链路 |
 > | [`bootstrap/README.md`](./bootstrap/README.md) | **引导层**详解：bootstrap 到底是什么、为什么需要它、每个文件的作用、常见失败 | 想改 `bootstrap/` |
 > | [`bootstrap/clusters/README.md`](./bootstrap/clusters/README.md) | **集群清单**详解：命名约定、多 GCP Project、每集群独立配置、OPA / Gateway 落位、演进路线 | 想加集群 / 改组件 |
 

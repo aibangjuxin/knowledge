@@ -1,0 +1,42 @@
+{{- /*
+  mode C：CP chart 直接渲染「Cluster Application」，不用 ApplicationSet。
+
+  适用：集群数量少且基本不变，想在 CP 仓库里一眼看到「一集群一 Application」。
+  代价：集群清单要在 CP 仓库写死一份（tenant 仓库里还有一份）→ 两处维护。
+
+  顺序要求（关键）：
+    这个 Application 负责「建集群 + 把集群注册进 Argo CD（cluster secret）」，
+    它成功之后，ApplicationSet 生成的那些往该集群投递的 Application 才能 sync。
+    否则报 "cluster not found" / destination 解析失败。
+*/ -}}
+{{- range $c := .Values.clusters }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cluster-{{ $c.name }}
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform-cp
+    platform.cp/cluster: {{ $c.name }}
+spec:
+  project: platform-cp
+  source:
+    repoURL: https://github.com/example/tenant-cluster.git
+    targetRevision: main
+    path: "clusters/{{ $c.name }}/bootstrap"
+    helm:
+      valueFiles:
+        - "values.yaml"
+  destination:
+    # 集群引导本身跑在控制面集群里（它要创建的是「别的集群」）
+    server: https://kubernetes.default.svc
+    namespace: cluster-bootstrap
+  syncPolicy:
+    automated:
+      prune: false          # 引导程序别自动删集群资源
+      selfHeal: false
+    syncOptions:
+    - CreateNamespace=true
+  preserveResourcesOnDeletion: true
+{{- end }}

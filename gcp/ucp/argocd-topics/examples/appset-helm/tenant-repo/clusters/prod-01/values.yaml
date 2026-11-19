@@ -1,0 +1,9 @@
+# 生产集群的 Helm 覆盖值（路径：clusters/prod-01/values.yaml）
+replicaCount: 3
+image:
+  repository: example/nginx
+  tag: "1.27"
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi

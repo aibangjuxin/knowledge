@@ -1,0 +1,6 @@
+# 集群元信息 —— ApplicationSet 的 file generator 读这个文件。
+name: prod-01
+server: https://example-prod-01.k8s.example.internal
+namespace: platform
+env: prod
+gcpProject: example-project

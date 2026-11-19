@@ -1,0 +1,15 @@
+# chart 自带的默认值。
+# 集群级覆盖在 clusters/<cluster>/values.yaml 里，
+# 由 Application 的 source.helm.valueFiles 追加进来（后者优先级更高）。
+replicaCount: 1
+image:
+  repository: example/nginx
+  tag: "1.27"
+  pullPolicy: IfNotPresent
+service:
+  type: ClusterIP
+  port: 80
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi

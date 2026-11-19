@@ -35,7 +35,11 @@ git-apps/ 8 篇（自研 GitHub App / CR Check 专题）
 | OIDC / LDAP 怎么打通 SSO？组怎么进 Token？怎么禁用 admin？ | [03](./03-dex-ldap-sso.md) |
 | AppProject 边界、RBAC 角色、K8s ServiceAccount？ | [04](./04-appproject-rbac.md) |
 | ApplicationSet 批量分发怎么写？各 generator 边界？ | [05](./05-appset.md) |
+| **ApplicationSet 本身用 Helm 渲染（CP 仓库 → 租户仓库）怎么做？** | **[appset-helm-Rendering](./appset-helm-Rendering.md)** |
+| **跨 Git 仓库渲染到底是 Helm 的能力还是 Argo CD 的？怎么实现的？** | **[helm-cross-repository](./helm-cross-repository.md)** |
 | ApplicationSet 和 Application 到底什么关系？ | [对比速查：ApplicationSet vs Application](../argocd-applicationset-vs-application.md) |
+| **想看图：AppProject / ApplicationSet / Application 三者关系** | **[交互图解：三个核心 CRD](../diagrams/argocd-core-crds.html)** |
+| **想看图：从 PR 到集群的 Bootstrap 全链路** | **[交互图解：Bootstrap 全链路](../diagrams/argocd-bootstrap-flow.html)** |
 | **先搞懂所有核心概念和 `bootstrap/` 目录是干嘛的** | [**argo-concept-sheet.md**](./argo-concept-sheet.md) |
 | 用了 OPA/Gatekeeper 会影响 Argo CD 吗？ | [06](./06-opa-gatekeeper-impact.md) |
 | GitHub App 凭据怎么配？**想改分支改哪里？** | [07](./07-repository-githubapp.md) |
@@ -160,6 +164,57 @@ Argo CD RBAC（谁能操作 Application）
 含：`goTemplate` + `missingkey=error` 的必要性、
 **`template.spec.project` 必须显式写**（否则落到 `default` 最宽松项目）、
 Merge 生成器的数组结构陷阱、批量改分支的正确入口。
+
+---
+
+### [appset-helm-Rendering · ApplicationSet 的 Helm 渲染](./appset-helm-Rendering.md)
+
+「ApplicationSet 由 CP 仓库的 Helm chart 渲染出来，生成器指向租户仓库」这条链路。
+
+| 环节 | 谁渲染 | 语法 |
+|---|---|---|
+| CP chart → ApplicationSet | Argo CD repo-server（Helm） | `{{ .Values.x }}` |
+| ApplicationSet → Application | AppSet controller（Go template） | `{{ .x }}` |
+| Application → 目标清单 | repo-server（Helm） | 目标 chart 的语法 |
+
+含：两层模板引擎打架时**用 Helm 字符串字面量 `{{`{{ .x }}`}}` 转义**、
+**YAML 注释里的 `{{ }}` 也会被 Helm 解析**（实测坑）、
+`${{ }}` **不是**上游的转义约定（唯一语义是多源 `$values/...`）、
+`pathParamPrefix` 与 file generator 的字段平铺规则、
+值文件路径相对 `source.path` 且不得出仓库根、
+CP 仓库 = 策略执行面的安全边界。
+
+配套示例：[`examples/appset-helm/`](./examples/appset-helm/)（含 `render-check.sh` 本地验证转义）。
+
+---
+
+### [helm-cross-repository · 跨仓库渲染的原理](./helm-cross-repository.md)
+
+「跨 Git 仓库」不是 Helm 的能力，是 Argo CD 在调用 Helm 之前替它做完的事。
+
+| 跨法 | 跨的是什么 | 谁实现 |
+|---|---|---|
+| AppSet `git` 生成器 | **参数**（集群清单） | AppSet controller → repo-server Git API |
+| 多源 `sources` + `ref` | **值文件**（Helm values） | repo-server（`$values/...`） |
+| 同仓库相对路径 `../../` | 值文件 | repo-server（最简单，推荐优先） |
+| `Chart.yaml` `dependencies` | 依赖 chart | **Helm 原生**（但那是 chart 仓库，不是 Git 仓库） |
+
+含：多源 checkout 与值文件解析的源码链路、`$values` 前缀语义、
+ref 源的六条限制、跨仓库的信任边界、以及**本地怎么复现**跨源取值。
+
+**⭐ 新增：跨仓库的凭据模型（§3）+ broker 心智模型（§1.2）**
+
+> 「CP 仓库没权限读 tenant 仓库」—— **问错了主体**。
+> 权限属于 **Argo CD 的 Repository CR**，不属于仓库；
+> 凭据**按仓库 URL 匹配**（project 作用域优先、全局兜底）；
+> 没配凭据 → **匿名 clone** → 那才是 public 才够用的场景。
+> **tenant 仓库不需要是 public。**
+
+心智模型：**Git 仓库 = 被读取的数据源；`argocd` 命名空间 = 控制面（状态 + 凭据 + 边界）；
+仓库之间没有直接交互，"关系"只是一串由 Argo CD 解析的指针。**
+由此直接推出：能 push CP 仓库 = 能在 Argo CD 里创建任意 Application = admin 权限。
+
+还含混淆代理（confused deputy）风险分析与 6 条缓解手段。
 
 ---
 

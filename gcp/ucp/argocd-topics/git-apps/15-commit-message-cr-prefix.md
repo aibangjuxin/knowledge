@@ -558,17 +558,17 @@ $ git commit -m "release: example-gcp-v0.1.0: github app"
 
 ```bash
 # ① 建一个不合规的分支
-git checkout -b feature/example-0001-test-cr-prefix
+git checkout -b feature/CAEP-0001-test-cr-prefix
 echo "x" > README.tmp && git add README.tmp
 git commit -m "test: 不带 CR 前缀"          # ← 本地 hook 应直接拒绝
 # 若你还没装 hook，绕过它：
 SKIP_CR_PREFIX=1 git commit -m "test: 不带 CR 前缀"
-git push -u origin feature/example-0001-test-cr-prefix
-#   → 预期：push 报错，且 origin/feature/example-0001-test-cr-prefix 没有这个 commit
+git push -u origin feature/CAEP-0001-test-cr-prefix
+#   → 预期：push 报错，且 origin/feature/CAEP-0001-test-cr-prefix 没有这个 commit
 
 # ② 改成合规的再推
 git commit --amend -m "CR123456 test: 带 CR 前缀"
-git push -u origin feature/example-0001-test-cr-prefix
+git push -u origin feature/CAEP-0001-test-cr-prefix
 #   → 预期：正常推送
 
 # ③ 开 PR，标题故意不带前缀

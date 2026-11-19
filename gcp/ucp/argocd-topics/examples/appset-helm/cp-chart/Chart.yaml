@@ -1,0 +1,5 @@
+apiVersion: v2
+name: platform-cp
+description: Argo CD 控制面（CP）chart —— 渲染 AppProject / ApplicationSet / Cluster Application
+type: application
+version: 0.1.0

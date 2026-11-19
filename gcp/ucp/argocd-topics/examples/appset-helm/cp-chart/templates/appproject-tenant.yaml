@@ -1,0 +1,32 @@
+{{- /*
+  AppProject：给每个租户一条边界。
+  CP 仓库改了这里 = 改了租户能做什么，所以 CP 仓库的写权限要收紧。
+*/ -}}
+{{- range $t := .Values.tenants }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: {{ $t.project }}
+  namespace: argocd
+spec:
+  description: "Tenant {{ $t.id }} 的资源边界"
+  sourceRepos:
+    - {{ $t.repoURL | quote }}
+  destinations:
+    - server: '*'
+      namespace: '*'
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  roles:
+    - groups:
+        - tenant-{{ $t.id }}-team
+      server: '*'
+      namespace: '*'
+      sourceRepos:
+        - {{ $t.repoURL | quote }}
+{{- end }}

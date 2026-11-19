@@ -13,7 +13,8 @@
 #    ⑦ check-doc-links.py      文档里的链接还能不能跳
 #    ⑧ validate-rulesets.py    Ruleset 与 CR Check 的三条契约是否自洽
 #    ⑨ simulate-commit-gate.py commit message 的三层判定模拟
-#    ⑩ YAML 语法               所有 yaml 能不能解析
+#    ⑩ YAML 语法               所有 yaml 能不能解析（Helm 模板除外）
+#    ⑪ helm-render            Helm chart 能不能渲染 + 转义写没写对
 #
 #  用法：
 #    ./ci-check.sh              # 跑全部
@@ -121,12 +122,21 @@ run_check "simulate-commit-gate" "commit message 三层判定模拟" \
 run_check "check-doc-links" "文档链接与锚点" \
   python3 "$EXAMPLES_DIR/check-doc-links.py"
 
+# Helm chart 的 templates/*.yaml 渲染前不是合法 YAML（里面有 {{ }}），
+# 所以不走 YAML 语法检查，改成「能不能 helm template 出来」。
+if command -v helm >/dev/null 2>&1; then
+  run_check "helm-render" "Helm chart 能渲染 + 转义没写错" \
+    "$EXAMPLES_DIR/appset-helm/render-check.sh"
+else
+  skip_check "helm-render" "没有 helm"
+fi
+
 head2 "YAML 语法"
 hr
 # 用 yamlmin 逐个解析（零依赖，不依赖 PyYAML）
 # 这里是 bash 里嵌 python：用 heredoc 把脚本喂给 python3，
 # 目录树作为 argv[1] 传进去（不是环境变量，避免转义问题）。
-yaml_bad="$(python3 - "$TOPICS_DIR" <<'PYEOF'
+yaml_out="$(python3 - "$TOPICS_DIR" <<'PYEOF'
 import os, sys
 root = sys.argv[1]
 lib = os.path.join(root, "examples", "lib")
@@ -137,21 +147,34 @@ if not os.path.isdir(lib):
 sys.path.insert(0, lib)
 import yamlmin
 bad = 0
+total = 0
 for base, dirs, files in os.walk(root):
     dirs[:] = [d for d in dirs if d not in (".git", "node_modules")]
     for name in files:
         if not name.endswith((".yaml", ".yml")):
             continue
         path = os.path.join(base, name)
+        # Helm chart 的模板：渲染前不是合法 YAML（里面有 {{ }}），
+        # 交给「helm-render」那一步检查
+        parent = os.path.dirname(path)
+        if os.path.basename(parent) == "templates" and \
+           os.path.exists(os.path.join(os.path.dirname(parent), "Chart.yaml")):
+            continue
+        total += 1
         try:
             yamlmin.load_all_files(path)
         except Exception as exc:
             bad += 1
             print(f"  {os.path.relpath(path, root)}: {exc}", file=sys.stderr)
 print(bad)
+print(total)
 PYEOF
 )"
-yaml_total="$(find "$TOPICS_DIR" -name '*.yaml' -o -name '*.yml' 2>/dev/null | grep -v '/.git/' | wc -l | tr -d ' ')"
+yaml_bad="$(printf '%s\n' "$yaml_out" | sed -n 1p)"
+yaml_total="$(printf '%s\n' "$yaml_out" | sed -n 2p)"
+if [[ ! "$yaml_total" =~ ^[0-9]+$ ]]; then
+  yaml_total="$(find "$TOPICS_DIR" -name '*.yaml' -o -name '*.yml' 2>/dev/null | grep -v '/.git/' | wc -l | tr -d ' ')"
+fi
 if [[ "$yaml_bad" == "0" ]]; then
   printf '%s✓ 通过%s  %s 个 YAML 全部可解析\n' "$C_GRN" "$C_RST" "$yaml_total"
   PASSED=$((PASSED + 1))

@@ -1,0 +1,5 @@
+apiVersion: v2
+name: nginx
+description: 示例应用（tenant 仓库里的应用 chart）
+type: application
+version: 0.1.0

@@ -1,0 +1,88 @@
+{{- /*
+  CP 仓库里的 chart 渲染出 ApplicationSet。
+
+  ⚠️ 本文件里出现两套 {{ }}：
+     ① {{ $t.xxx }}   —— Helm 语法，由 CP chart 自己消化
+     ② {{`{{ .xxx }}`}} —— Helm 字符串字面量，渲染后原样留给 ApplicationSet controller
+
+  写错的后果：
+     - 不转义：Helm 会把 {{ .app.path.basename }} 当成自己的表达式
+       → 渲染成空串，或者直接报 "nil pointer evaluating interface {}.app"
+     - 转义过头（写成 {{`{{ .xxx }}`}}` 这种多一层反引号）：ApplicationSet
+       controller 拿到 {{`{{ .xxx }}`}} → 找不到变量 → missingkey=error 报错
+*/ -}}
+{{- range $t := .Values.tenants }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: {{ $t.id }}-cluster-apps
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: platform-cp
+    platform.cp/tenant: {{ $t.id }}
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+    # ⚠️ 必须用 matrix 包裹：并列写两个生成器 ≠ 笛卡尔积，
+    #    而是「各自单独跑一遍模板」（模板里另一半变量取不到 → missingkey=error）。
+    #    matrix 才会把「应用 × 集群」展开成 N×M 个 Application。
+    - matrix:
+        generators:
+          # ① 应用清单：tenant 仓库里 apps/* 每个目录 = 一个应用
+          - git:
+              repoURL: {{ $t.repoURL | quote }}
+              revision: {{ $t.revision | default "main" | quote }}
+              pathParamPrefix: app
+              directories:
+                - path: {{ $t.appsPath | default "apps/*" | quote }}
+
+          # ② 集群清单：tenant 仓库里 clusters/*/cluster.yaml 每个文件 = 一个集群
+          - git:
+              repoURL: {{ $t.repoURL | quote }}
+              revision: {{ $t.revision | default "main" | quote }}
+              pathParamPrefix: cluster
+              files:
+                - path: {{ $t.clustersPath | default "clusters/*/cluster.yaml" | quote }}
+
+  template:
+    metadata:
+      # 下面这行用的是 Helm 字符串字面量写法（反引号包住），
+      # 渲染后仍然是 AppSet 模板，原样交给 ApplicationSet controller。
+      name: '{{`{{ .app.path.basename }}-{{ .cluster.path.basename }}`}}'
+      labels:
+        platform.cp/tenant: {{ $t.id }}
+    spec:
+      # ⭐ project 硬编码在 CP 侧（管理员控制），绝不从 tenant 仓库读
+      project: {{ $t.project | quote }}
+
+      source:
+        repoURL: {{ $t.repoURL | quote }}
+        targetRevision: {{ $t.revision | default "main" | quote }}
+        # path 由「应用清单」子生成器给出
+        path: '{{`{{ .app.path.path }}`}}'
+        helm:
+          # 值文件路径相对于 source.path（= apps/<app>/）；
+          # 只要还在同一个仓库根内，允许用 ../ 跨目录取（仓库根是安全边界）
+          valueFiles:
+            - '../../clusters/{{`{{ .cluster.path.basename }}`}}/values.yaml'
+
+      destination:
+        # .server / .namespace 来自 cluster.yaml 的顶层字段（file generator 会把
+        # 文件里的 key 平铺到参数最外层；pathParamPrefix 只影响 .path.* 系列）
+        # ↑ 注意：这一行里不能出现裸的大括号，Helm 会把注释也当模板解析
+        server: '{{`{{ .server }}`}}'
+        namespace: '{{`{{ .namespace }}`}}'
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+
+      # 删 Application 时保留集群里的资源
+      preserveResourcesOnDeletion: true
+{{- end }}

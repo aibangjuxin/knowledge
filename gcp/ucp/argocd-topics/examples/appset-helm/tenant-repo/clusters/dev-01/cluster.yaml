@@ -1,0 +1,12 @@
+# 集群元信息 —— ApplicationSet 的 file generator 读这个文件。
+#
+# ⚠️ 文件里的 key 会被平铺成 ApplicationSet 参数的最外层：
+#    .name / .server / .namespace / .env ...
+#    （pathParamPrefix 只影响 .path.* 系列，见 applicationset-cluster-apps.yaml）
+name: dev-01
+server: https://example-dev-01.k8s.example.internal
+namespace: platform
+env: dev
+# project 不在这里写 —— project 属于「谁有权管这个集群」的边界，
+# 由 CP 侧的 AppSet template 硬编码，租户改不了。
+gcpProject: example-project

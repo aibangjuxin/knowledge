@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Argo CD 概念图解 · Diagrams</title>
+<style>
+  :root{--bg:#020617;--panel:#0b1220;--line:#1e293b;--fg:#e2e8f0;--dim:#94a3b8;--cyan:#22d3ee;--green:#34d399}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+  main{max-width:860px;margin:0 auto;padding:3rem 1.25rem 4rem}
+  h1{font-size:2rem;margin:0 0 .4rem;letter-spacing:0}
+  p.sub{color:var(--dim);margin:0 0 2rem}
+  a.card{display:block;text-decoration:none;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:1.1rem 1.2rem;margin-bottom:.9rem;transition:border-color .15s}
+  a.card:hover{border-color:var(--cyan)}
+  a.card b{color:var(--cyan);font-size:1.1rem}
+  a.card span{display:block;color:var(--dim);font-size:.95rem;margin-top:.3rem}
+</style>
+</head>
+<body>
+<main>
+  <h1>Argo CD 概念图解</h1>
+  <p class="sub">可交互的 SVG 图：可缩放、可看路径、浅色 / 深色主题、可导出图片</p>
+
+  <a class="card" href="argocd-core-crds.html">
+    <b>AppProject / ApplicationSet / Application 到底怎么连？</b>
+    <span>逻辑引用 vs ownerReference、两个 controller 各自负责哪一段、删掉会级联删什么</span>
+  </a>
+
+  <a class="card" href="argocd-bootstrap-flow.html">
+    <b>从 PR 到集群：Bootstrap 全链路怎么跑？</b>
+    <span>两道门（CR Check + 人工）+ 八个阶段 + 只有两处手工点火 + 自愈/回滚回路</span>
+  </a>
+</main>
+</body>
+</html>

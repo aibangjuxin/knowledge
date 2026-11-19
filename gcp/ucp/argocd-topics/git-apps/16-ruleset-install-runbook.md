@@ -504,15 +504,15 @@ gh api repos/<org>/<repo>/rules/branches/main | jq -r '.[] |
 
 ```bash
 # ① 建一个不合规的分支
-git checkout -b feature/example-0001-verify-ruleset
+git checkout -b feature/CAEP-0001-verify-ruleset
 echo x > README.tmp && git add README.tmp
 git commit -m "test: 不带 CR 前缀"        # 若装了 hook，这里就会被拦
-git push -u origin feature/example-0001-verify-ruleset
+git push -u origin feature/CAEP-0001-verify-ruleset
 #   期望：push 被拒（ref 不更新）
 
 # ② 改成合规的再推
 git commit --amend -m "CR123456 test: 带 CR 前缀"
-git push -u origin feature/example-0001-verify-ruleset
+git push -u origin feature/CAEP-0001-verify-ruleset
 #   期望：正常推送
 
 # ③ 开 PR，标题故意不带前缀

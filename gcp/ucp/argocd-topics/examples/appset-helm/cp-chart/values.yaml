@@ -1,0 +1,21 @@
+# CP（控制面）自己的 values。
+#
+# ⚠️ 这个文件是「管理员控制面」的一部分：
+#    ApplicationSet 的 project / source repo 都从这里取，
+#    绝不让租户仓库（tenant repo）来决定 project。
+tenants:
+  - id: tenant-a
+    repoURL: https://github.com/example/tenant-cluster.git
+    revision: main
+    project: tenant-a
+    appsPath: "apps/*"
+    clustersPath: "clusters/*/cluster.yaml"
+
+# 集群引导（bootstrap）用的固定清单 —— 只有 mode C 才需要它。
+# 用 mode A/B（ApplicationSet + Git generator）时，集群清单在 tenant 仓库里，
+# 这里就不必再写一遍。
+clusters:
+  - name: dev-01
+    server: https://example-dev-01.k8s.example.internal
+    namespace: platform
+    env: dev

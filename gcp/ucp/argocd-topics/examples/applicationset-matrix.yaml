@@ -148,11 +148,11 @@ spec:
         targetRevision: main
         path: '{{.path.path}}'
         helm:
-          # ⚠️ 注意 '${{' 的双 $ 写法：
-          #    这是「把 $ 传给 Helm 自己处理」，
-          #    避免 Argo CD 的 Go template 把它当自己的变量渲染掉。
+          # valueFiles 里的路径由 ApplicationSet controller 替换成实际路径
+          #（相对 source.path）。不要写 '${{...}}' —— $ 不是转义符，
+          #  它会被原样留在路径里（详见 ../../appset-helm-Rendering.md §1.1）。
           valueFiles:
-          - '${{.valuesPath}}'
+          - '{{.valuesPath}}'
 
       destination:
         server: https://kubernetes.default.svc
@@ -305,7 +305,7 @@ spec:
         path: '{{.path.path}}'
         helm:
           valueFiles:
-          - '${{.valuesPath}}'
+          - '{{.valuesPath}}'
 
       destination:
         server: https://kubernetes.default.svc

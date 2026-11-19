@@ -360,7 +360,7 @@ API 形态：
 | 14 | `commit_message_pattern` | commit message 必须匹配模式 | ★ Conventional Commits | 规范 |
 | 15 | `commit_author_email_pattern` | 作者邮箱模式 | 可选 | 规范 |
 | 16 | `committer_email_pattern` | 提交者邮箱模式 | 可选 | 规范 |
-| 17 | `branch_name_pattern` | 分支名必须匹配 | ★ `feature/example-xxxx-*` | 规范 |
+| 17 | `branch_name_pattern` | 分支名必须匹配 | ★ `feature/CAEP-xxxx-*` | 规范 |
 | 18 | `tag_name_pattern` | tag 名必须匹配 | ★ `vX.Y.Z` | 规范 |
 | 19 | `workflows` | 限制可用的 GitHub Actions workflow | 可选 | 规范 |
 | 20 | `file_path_restriction` | 禁改指定路径 | ★ 禁删 release 目录 | push |
@@ -590,7 +590,7 @@ Merge 按钮禁用 → 全员合不了
 
 | 分支 | 角色 | 谁能改 | 合并方式 | 目标环境 | 受哪条 ruleset |
 |---|---|---|---|---|---|
-| `feature/example-xxxx-*` | 开发 | 开发者自由 push | — | dev | **R4**（只做规范：分支名 / commit message） |
+| `feature/CAEP-xxxx-*` | 开发 | 开发者自由 push | — | dev | **R4**（只做规范：分支名 / commit message） |
 | `dev` | 集成 | 走 PR，1 reviewer | squash | dev | **R2** |
 | `release/prd` | 预发候选 | 走 PR，2 reviewer | squash | prd | **R3** |
 | `release/prod` | 生产候选 | 走 PR，2 reviewer + CR | squash | prod | **R3 + R1**（叠加取最严） |
@@ -609,7 +609,7 @@ Merge 按钮禁用 → 全员合不了
 > **② 分支命名两套并存**
 > legacy 用 `release/vX.Y.Z`，`cr-check/config/policy.yaml` 用 `release/prd` / `release/prod`，
 > legacy 的主分支叫 `main`，cr-check 的 `branchEnvMap` 里也有 `main: prd`。
-> → **必须定死一套字面量**（建议：`main` / `release/prd` / `release/prod` / `dev` / `feature/example-*`），
+> → **必须定死一套字面量**（建议：`main` / `release/prd` / `release/prod` / `dev` / `feature/CAEP-*`），
 > 并让 `policy.yaml`、ruleset 的 `ref_name`、CODEOWNERS 三处用同一套。
 > 否则会出现"App 判的分支"和"Ruleset 管的分支"对不上的静默缺口。
 
@@ -816,7 +816,7 @@ Merge 按钮禁用 → 全员合不了
 
 | legacy 步骤 | legacy 的人工门禁 | **由谁自动执行** | 对应 ruleset 规则 |
 |---|---|---|---|
-| 3 · 建 `feature/example-xxxx-*` | 分支命名规范 | **R4** | `branch_name_pattern` |
+| 3 · 建 `feature/CAEP-xxxx-*` | 分支命名规范 | **R4** | `branch_name_pattern` |
 | 4 · commit | Conventional Commits | **R4** | `commit_message_pattern` |
 | 4 · commit-msg hook | 本地 hook | **R4**（服务端强制，不依赖本地） | `commit_message_pattern` |
 | 5 · 本地自测 | unit + lint | CI（Actions） | `required_status_checks`（CI 那个） |

@@ -1,0 +1,14 @@
+# 该集群的 Helm 覆盖值。
+#
+# 路径：clusters/dev-01/values.yaml
+# Application 的 source.path = apps/nginx，所以引用它要写
+#   ../../clusters/dev-01/values.yaml
+# （Argo CD 只要求结果落在同一个仓库根内）
+replicaCount: 1
+image:
+  repository: example/nginx
+  tag: "1.27"
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
