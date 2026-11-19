@@ -16,11 +16,11 @@
 |:---|:---|
 | Q1 能否强制「不同 hostname 且不同 Zone」？ | **能**，但必须用 `requiredDuringSchedulingIgnoredDuringExecution` + `topologyKey: topology.kubernetes.io/zone`。代价是**硬约束**：Pod 数一旦超过 Zone 数，第 4 个 Pod 永久 `Pending`。 |
 | Q2 「≥3 个 Pod 且分布在 3 个 Zone」是合理需求吗？ | **需求本身合理**，但**不要用无上界的硬约束来表达**。应该表达为「Zone 拓扑约束（可降级）+ 副本数下限 ≥ Zone 数 + PDB 保护」。 |
-| Q3 3 个 Pod 扩容到第 4 个会不会失败？ | 用 **required 反亲和实现 → 会失败（死锁，Pod 永远 Pending）**；用 **`topologySpreadConstraints`（`maxSkew:1` + `minDomains`）→ 不会失败**，第 4 个会落在已占用的 Zone 的另一个 Node 上，skew 仍然 ≤ 1。 |
+| Q3 3 个 Pod 扩容到第 4 个会不会失败？ | 用 **required 反亲和实现 → 会失败（死锁，Pod 永远 Pending）**；用 **`topologySpreadConstraints`（`maxSkew:1` + `DoNotSchedule`）→ 不会失败**，第 4 个会落在已占用的 Zone 的另一个 Node 上，skew 仍然 ≤ 1。 |
 | PDB 能解决「两个 Pod 落在同一 Zone」吗？ | **不能**。PDB 只约束「自愿中断」，且只看 Ready Pod 的**全局数量**，完全不感知 Zone / 拓扑。你遇到的是**非自愿故障（Pod 挂掉）**，PDB 根本不参与。 |
 | 现有配置最大的隐患是什么？ | `required` 与 `preferred` 两条规则**用了两套不同的 labelSelector**（`api-type=critical` vs `app=nginx`），管的根本不是同一批 Pod；且 `required` 的 hostname 反亲和是**跨服务**的，隐含「节点总数 ≥ 所有 critical Pod 总数」的下限，容易被低估。 |
 
-**一句话方案**：把「Zone 分布」从 `preferred` 升级为 `topologySpreadConstraints`（带 `minDomains` 的优雅降级），
+**一句话方案**：把「Zone 分布」从 `preferred` 升级为 `topologySpreadConstraints`（`maxSkew: 1` + `DoNotSchedule`），
 把「Node 分布」的 `required` 反亲和**收窄到单个服务**，再叠加 `minAvailable` PDB。详见 [§5 推荐落地方案](#5-推荐落地方案prd)。
 
 ---
@@ -200,7 +200,7 @@ affinity:
 - **Deployment 永远不 `Available`**：`kubectl rollout status` 卡住，CI/CD 发布流水线被拖死。
 - **不可自愈**：Node 扩容也救不了——新 Node 仍然在已有的 3 个 Zone 里，Zone 维度的约束依然不满足。
   唯一解法是**新增一个 Zone**（新建 zonal node pool）。
-- **GKE 节点升级会被卡**：升级期间被 drain 的 Zone 暂时不可用，`minDomains` 之类的降级机制在这里不存在（required 规则没有降级语义）。
+- **GKE 节点升级会被卡**：升级期间被 drain 的 Zone 暂时不可用，`required` 规则**没有降级语义**（`minDomains` 只对 `topologySpreadConstraints` 生效，对 `required` 反亲和无效）。
 
 > 结论：required zone 反亲和适合**副本数固定且 ≤ Zone 数**的静态场景，
 > **不适合任何带 HPA 的服务**。PRD 环境的 critical 服务通常都有 HPA，所以这条路子不能直接用。
@@ -226,7 +226,7 @@ PRD 环境下，一个跨 3 Zone 的关键服务，「任一 Zone 整体故障�
 | 约束 | 表达形式 | 验证方式 |
 |:---|:---|:---|
 | 副本数下限 ≥ Zone 数 | `replicas: 3` 或 `HPA.minReplicas: 3` | `kubectl get deploy -o jsonpath='{.spec.replicas}'` |
-| Zone 分布（Zone 故障域隔离） | `topologySpreadConstraints`（Zone）+ `maxSkew: 1` + `minDomains: 3` | 统计各 Zone Pod 数 |
+| Zone 分布（Zone 故障域隔离） | `topologySpreadConstraints`（Zone）+ `maxSkew: 1` + `DoNotSchedule` | 统计各 Zone Pod 数 |
 | Node 分布（Node 故障域隔离） | `required` hostname 反亲和（**selector 收窄到单服务**） | 统计各 Node Pod 数 |
 | 自愿中断保护 | `PDB.minAvailable: 2`（3 副本时允许同时驱逐 1 个） | `kubectl get pdb` |
 
@@ -245,8 +245,8 @@ PRD 环境下，一个跨 3 Zone 的关键服务，「任一 Zone 整体故障�
 - 每个 Zone 至少有 1 个 Node 能容纳一个 Pod。
 - Node 资源足够（requests 有配额、有节点余量）。
 
-如果只有 2 个 Zone 有 Node，那 `minDomains: 3` 的约束会被**跳过**（降级），Pod 会挤在 2 个 Zone。
-这是**期望行为**（避免 Pending），但需要靠监控发现「集群实际上只有 2 个 Zone 可用」。
+如果只有 2 个 Zone 有 Node，skew 会在**这 2 个 Zone 之间**计算（1/1、2/1、3/2 …），Pod 不会 Pending，
+但**第 3 个 Zone 实际没有 Pod 级容量**。这不会报错，只会被静默接受 → 必须靠监控发现「集群实际上只有 2 个 Zone 可用」。
 
 ---
 
@@ -259,7 +259,7 @@ PRD 环境下，一个跨 3 Zone 的关键服务，「任一 Zone 整体故障�
 | 现状（preferred zone） | 打分偏好，不保证 | ✅ 可以 | 静默降级 | ❌ 达不到 HA-1 |
 | required zone 反亲和 | 硬保证 | ❌ **Pending 死锁** | 死锁 | ❌ 与 HPA 冲突 |
 | `topologySpread` + `ScheduleAnyway` | 打分偏好（比 preferred AA 信号更强） | ✅ 可以 | 静默降级 | △ 仍是软约束 |
-| **`topologySpread` + `DoNotSchedule` + `minDomains: 3`** | **硬保证（Zone 足够时）** | **✅ 可以**（skew ≤ 1） | **优雅降级**（Zone 数不足时跳过约束） | ✅ **推荐** |
+| **`topologySpread` + `DoNotSchedule` + `maxSkew: 1`** | **硬保证**（只要有 ≥1 个可用 Zone 就生效） | **✅ 可以**（skew ≤ 1） | 在**现有**可用 Zone 间均分；Zone 数不足不报错也不阻塞 | ✅ **推荐** |
 | `nodeAffinity` 限定 Zone 白名单 | 只限定「可去的 Zone」 | ✅ 可以 | 不可调度 | △ 只划边界，不做均衡 |
 
 ### 5.2 用 `matchLabelKeys` 彻底消除标签漂移
@@ -271,7 +271,6 @@ PRD 环境下，一个跨 3 Zone 的关键服务，「任一 Zone 整体故障�
 topologySpreadConstraints:
   - maxSkew: 1
     topologyKey: topology.kubernetes.io/zone
-    minDomains: 3
     whenUnsatisfiable: DoNotSchedule
     matchLabelKeys:
       - app.kubernetes.io/api-type   # 用 Pod 自身的 api-type 标签值作为 peer 选择条件
@@ -322,8 +321,7 @@ spec:
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: topology.kubernetes.io/zone
-          minDomains: 3                     # 至少 3 个 Zone 可用才强制；否则优雅降级
-          whenUnsatisfiable: DoNotSchedule   # Zone 足够时 = 硬保证
+          whenUnsatisfiable: DoNotSchedule   # Zone 够就硬保证；Zone 不够也不会死锁
           labelSelector:
             matchLabels:
               app: example-apiname1          # 与 Pod 模板标签严格一致（别用 api-type，除非你确实想跨服务均衡）
@@ -359,23 +357,27 @@ spec:
 > 前 3 个 Pod 一定落在 3 个不同 Zone；第 4 个开始才可能出现同 Zone（但一定不同 Node，因为有 hostname 反亲和兜底）。
 > 这正好覆盖你「3 副本保 HA-1，扩容到 4+ 不死锁」的全部诉求。
 
-#### `minDomains: 3`
+#### 为什么不设 `minDomains`
 
-**这是让方案可落地的关键开关。**
+`minDomains` 的官方语义是：
 
-- **Zone ≥ 3 且都有可用 Node** → 约束被强制执行（`DoNotSchedule` 生效），Zone 分布是硬保证。
-- **可用 Zone < 3**（节点池升级中、某 Zone 节点被全部 drain、集群只部署了 2 个 Zone）→
-  约束**自动跳过**，Pod 正常调度，不会 Pending。
+> 定义**最少需要的可用域数量**；如果可用域数量 **小于** `minDomains`，**该约束不再生效**。
 
-也就是说：**它把「Zone 隔离」从「可能死锁的硬约束」变成了「有条件保证 + 优雅降级」**。
+也就是说，`minDomains` 是一个**放松**开关，不是**防死锁**开关。而：
 
-> 验证集群是否支持：
-> ```bash
-> gcloud container clusters describe CLUSTER --region REGION --format='value(currentMasterVersion)'
-> # 需要 >= 1.28（特性门控 MinDomainsInPodTopologySpread 自 1.28 起 beta 且默认开启，之后版本转为 GA）
-> ```
-> 若版本 < 1.28：可以先用 `whenUnsatisfiable: ScheduleAnyway` + `weight: 100` 跑通（软保证），
-> 或者先升级集群版本再开启硬保证。
+- `maxSkew: 1` + `DoNotSchedule` **本身就不会因为 Zone 数量不足而死锁**——
+  只要还有 ≥1 个可用 Zone，任意副本数都能被均分（skew 恒 ≤ 1）。
+  → 所以 `minDomains` 在这里**没有任何“防死锁”的必要**。
+- 反过来，**设了 `minDomains: 3` 会削弱保护**：
+  当集群只有 2 个 Zone 可用时，约束被**跳过**，Pod 可能全部挤在同一 Zone——
+  这恰恰是你最初想避免的场景。
+
+> ✅ **结论：`maxSkew: 1` + `DoNotSchedule` 的组合，不要设 `minDomains`。**
+>
+> `minDomains` 唯一合理的用途是：当你的可用域数量会**经常少于**目标域数，且你宁愿「放弃分布约束、也要保证能调度」时。
+> 那属于「可用域数量本身不可控」的场景，应该先去修集群，而不是靠参数放宽。
+>
+> 参考：[kong-spread-ha-review.md](kong-spread-ha-review.md) §8.1 —— 另一份基于真实配置（未设 `minDomains`）的评审结论与此一致。
 
 #### `whenUnsatisfiable: DoNotSchedule` vs `ScheduleAnyway`
 
@@ -383,10 +385,11 @@ spec:
 |:---|:---|:---|
 | 语义 | 不满足 skew 就**不调度**（Pending） | 不满足也调度，但打分偏好 |
 | Zone 足够时 | **硬保证** | 软偏好，可能同 Zone |
-| Zone 不足时 | 配合 `minDomains` 自动降级 | 本来就软 |
+| Zone 不足时 | 在**现有**可用 Zone 间均分（不阻塞） | 本来就软 |
 | 风险 | 配错 selector → 全体 Pending | 达不到 HA-1 |
 
-PRD 推荐 **`DoNotSchedule` + `minDomains`**，把「保证」和「降级」两个诉求分别交给两个参数。
+PRD 推荐 **`DoNotSchedule` + `maxSkew: 1`**，把「保证」交给 `DoNotSchedule`，把「均分」交给 `maxSkew`；
+**不要**再叠加 `minDomains`（那只会放松保护）。
 
 #### `labelSelector` / `matchLabelKeys` 的选择
 
@@ -449,7 +452,7 @@ flowchart TB
     S1["Step 1<br/>补齐 Pod 模板标签<br/>app.kubernetes.io/api-type=critical<br/>（先只打标签，不改调度约束）"] --> S2
     S2["Step 2<br/>收窄 required hostname 的 selector<br/>从 api-type=critical → 本服务 app<br/>消除跨服务节点数下限"] --> S3
     S3["Step 3<br/>加 topologySpreadConstraints<br/>whenUnsatisfiable: ScheduleAnyway<br/>weight: 100（先观察打分效果）"] --> S4
-    S4["Step 4<br/>切 DoNotSchedule + minDomains: 3<br/>并把 replicas / HPA.minReplicas 提到 3<br/>同步加上 PDB minAvailable: 2"]
+    S4["Step 4<br/>切 DoNotSchedule + maxSkew: 1<br/>并把 replicas / HPA.minReplicas 提到 3<br/>同步加上 PDB minAvailable: 2"]
 
     style S0 fill:#fff3e0,stroke:#e65100
     style S4 fill:#e8f5e9,stroke:#2e7d32
@@ -501,9 +504,10 @@ kubectl get events -n <ns> --field-selector reason=FailedScheduling --sort-by=.l
 # 关键词：didn't match pod topology spread constraints → topologySpread 约束太紧
 # 关键词：Insufficient cpu / node(s) had volume node affinity conflict → 真实资源问题
 
-# ── 7. GKE 集群版本（决定 minDomains 是否可用）─────────────────────
+# ── 7. GKE 集群版本（决定 matchLabelKeys 是否可用）──────────────────
 gcloud container clusters describe <CLUSTER> --region <REGION> \
   --format='value(currentMasterVersion)'
+# matchLabelKeys 需要 >= 1.27（alpha 需特性门控）/ 1.28 起 beta 默认开启 / 1.31 GA
 ```
 
 ### 7.1 上线后的持续监控（建议做成告警）
@@ -514,7 +518,7 @@ gcloud container clusters describe <CLUSTER> --region <REGION> \
 | `disruptionsAllowed == 0` | `kube_poddisruptionbudget_status_disruptions_allowed == 0` | PDB 卡住节点升级 |
 | `desiredHealthy > currentHealthy` | `kube_poddisruptionbudget_status_desired_healthy - kube_poddisruptionbudget_status_current_healthy > 0` | 有 Pod 不 Ready |
 | Pending Pod 堆积 | `kube_pod_status_phase{phase="Pending"} > 0` | 反亲和 / topologySpread 过紧 |
-| 可用 Zone 数 < 3 | 统计有 Node 的 Zone 数 | `minDomains` 已降级，Zone 冗余不足 |
+| 可用 Zone 数 < 3 | 统计有 Node 的 Zone 数 | Zone 冗余不足（约束不会报错，需告警才能发现） |
 
 ---
 
@@ -522,11 +526,11 @@ gcloud container clusters describe <CLUSTER> --region <REGION> \
 
 | # | 风险 | 缓解 |
 |:--|:---|:---|
-| R1 | 集群只有 2 个 Zone 有可用 Node | `minDomains` 会自动降级（不 Pending），但**Zone 冗余实际不足** → 用 §7.1 的「可用 Zone 数」告警 |
-| R2 | GKE 节点池升级 / drain 期间某 Zone 暂不可用 | `minDomains` 降级让 Pod 迁往其它 Zone；配合 GKE **surge upgrade** 减少影响 |
+| R1 | 集群只有 2 个 Zone 有可用 Node | 约束仍生效（不会报错也不会阻塞），但**Zone 冗余实际只有 2** → 用 §7.1 的「可用 Zone 数」告警 |
+| R2 | GKE 节点池升级 / drain 期间某 Zone 暂不可用 | skew 在剩余 Zone 间重新计算，Pod 迁往其它 Zone；配合 GKE **surge upgrade** 减少影响 |
 | R3 | PDB + 非 Ready Pod 组合会把节点升级卡死 | 规范 `startupProbe` / `readinessProbe`；升级前跑 PDB 健康检查（见 [pdb-effect.md](pdb-effect.md)） |
 | R4 | `required hostname` 收窄后，跨服务（api-authn ↔ api-cicd）的相关性故障防护减弱 | 若需保留，把「跨服务不共节点」单独提为一个**显式的** anti-affinity 规则，并**按调用链分组**（每组单独评估节点数下限），不要用一个全局 `api-type=critical` 一刀切 |
-| R5 | HPA `maxReplicas` 远大于 Zone 数 | 已由 `topologySpread` + `minDomains` 覆盖；但要监控 Pending 数量 |
+| R5 | HPA `maxReplicas` 远大于 Zone 数 | 已由 `topologySpread` + `maxSkew:1` 覆盖（不会死锁）；但要监控 Pending 数量 |
 | R6 | Zone 内 Node 数不足，无法满足「同 Zone 不同 Node」 | `required hostname` 会让 Pod Pending → 确保每 Zone ≥ 2 个 Node，或给 Node 池配置足够 `maxPods` / 资源余量 |
 | R7 | 单一 zone 级 node pool 承载全部流量 | 建议 3 个 zonal node pool（每 Zone 一个），或 regional node pool + topology spread |
 
@@ -537,7 +541,7 @@ gcloud container clusters describe <CLUSTER> --region <REGION> \
 ```mermaid
 flowchart TB
     Goal["目标：Zone 级 + Node 级双层故障域隔离<br/>且副本数可自由扩容"] --> S1["Step 1: Node 级<br/>required podAntiAffinity<br/>topologyKey: kubernetes.io/hostname<br/>selector 收窄到单服务"]
-    Goal --> S2["Step 2: Zone 级<br/>topologySpreadConstraints<br/>topologyKey: topology.kubernetes.io/zone<br/>maxSkew: 1 / minDomains: 3<br/>whenUnsatisfiable: DoNotSchedule"]
+    Goal --> S2["Step 2: Zone 级<br/>topologySpreadConstraints<br/>topologyKey: topology.kubernetes.io/zone<br/>maxSkew: 1 / whenUnsatisfiable: DoNotSchedule"]
     Goal --> S3["Step 3: 副本下限<br/>replicas: 3 或 HPA.minReplicas: 3<br/>（= Zone 数）"]
     Goal --> S4["Step 4: 自愿中断保护<br/>PDB minAvailable: 2<br/>（= replicas - 1，绝不 = replicas）"]
 
@@ -553,7 +557,7 @@ flowchart TB
 | 想表达的需求 | ❌ 不要这样写 | ✅ 应该这样写 |
 |:---|:---|:---|
 | 副本分布到不同 Node | `required` 反亲和 + 全局 `api-type=critical` selector | `required` 反亲和 + **单服务** selector |
-| 副本分布到不同 Zone | `required` 反亲和 + `topologyKey: zone`（会死锁）<br/>或 `preferred` 反亲和 + zone（不保证） | `topologySpreadConstraints` + `maxSkew:1` + `minDomains:3` |
+| 副本分布到不同 Zone | `required` 反亲和 + `topologyKey: zone`（会死锁）<br/>或 `preferred` 反亲和 + zone（不保证） | `topologySpreadConstraints` + `maxSkew:1` + `DoNotSchedule`（不设 `minDomains`） |
 | 副本数不低于 Zone 数 | 靠人肉记住 | `replicas` / `HPA.minReplicas: 3` |
 | 维护期间不中断 | `Deployment.maxUnavailable`（只管滚动更新） | `PDB.minAvailable: replicas - 1` |
 
