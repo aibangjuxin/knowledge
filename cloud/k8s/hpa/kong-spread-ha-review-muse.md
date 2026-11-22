@@ -467,3 +467,43 @@ kubectl describe pdb -n $NS clienta-int-kdp-prd-kong | grep -E 'Allowed disrupti
 kubectl get node --no-headers | wc -l
 ```
 
+
+
+这份分析报告的核心结论非常扎实，工程逻辑也很清晰（将 minReplicas 从 2 提到 3，配合 PDB maxUnavailable: 1 消除单点风险，这是生产环境中 Kong 这类核心网关的标准最佳实践）。
+
+但如果你拿着这份文档做架构评审，里面有 3 个技术细节不严谨甚至存在潜在生产隐患的地方，建议修正或补充说明：
+
+1. 滚动更新与 PDB 的“叠加效应”（文档漏算的最坏情况）
+
+⚬ 原文问题：结论中提到“任意时刻（包括维护期间）至少 2 个 Pod 可用”，并在 §1 中假设“滚动更新中，旧 Pod 全程在线，容量变化 0”。
+⚬ 实际情况：RollingUpdate（Deployment 控制器控制）和 PDB（只限制外部自愿驱逐如 Node Drain，不管 Deployment 自己的滚动更新）是两套独立机制。
+  ⚬ 如果你在滚动更新的瞬间（新 Pod 刚 Ready 准备删旧 Pod，或者刚起 Surge 还没 Ready），恰好遇上节点缩容/维护（触发 PDB 驱逐），或者旧 Pod 正在经历 terminationGracePeriodSeconds 优雅退出但新 Pod 刚过 Readiness Probe 还没完全预热好，实际有效承载流量的 Pod 可能会短暂波动。
+  ⚬ 更关键的是（HPA + RollingUpdate 交互）：当 minReplicas: 3 且处于滚动更新时，瞬时会有 4 个 Pod 都在跑，此时 HPA 计算平均 CPU/内存利用率的分母变成了 4（如果新旧 Pod 都在分担流量），会导致 HPA 误判负载降低；反之，如果刚扩容完又缩容，ReplicaSet 缩容删除 Pod 时不受 maxUnavailable: 0 保护，而是直接按 topologySpreadConstraints 的逆向逻辑删减，可能打破局部均衡（虽然最终仍满足 maxSkew: 1）。
+
+2. topologySpreadConstraints 在“缩容/删除 Pod”时的盲区（严重隐患）
+
+⚬ 原文问题：默认只要配了 maxSkew: 1，无论是扩缩容还是滚动更新，分布永远是完美的 1/1/1 或 2/1/1。
+⚬ 实际情况：topologySpreadConstraints 只在调度（Create/Schedule）时生效，在删除（Scale Down / RollingUpdate 删旧 Pod）时完全不生效！
+  ⚬ 翻车场景推演（3 副本滚动更新）：
+    1. 更新前：a:1, b:1, c:1（共 3 个旧 Pod）。
+    2. maxSurge: 1 启动第 1 个新 Pod，调度器选了 zone-a，此时分布为 a:2 (1旧1新), b:1 (1旧), c:1 (1旧)。
+    3. 新 Pod Ready 后，Deployment 控制器需要删除 1 个旧 Pod。默认删除策略是按 Pod 创建时间/状态随机挑一个旧 Pod 删掉。
+    4. 如果控制器删掉了 zone-b 的旧 Pod（而不是 zone-a 的旧 Pod），分布就变成了 a:2, b:0, c:1！
+    5. 注意：虽然 a:2, b:0, c:1 的 skew 变成了 2，违反了 maxSkew: 1，但已经运行的 Pod 不会被驱逐，而且下一个 Surge Pod 必须去 zone-b，中间这段时间你就短暂失去了 zone-b 的容灾能力！
+  ⚬ 修复建议：必须在 topologySpreadConstraints 中加上 matchLabelKeys: ["pod-template-hash"]（K8s 1.27+ 特性）。加上它之后，新旧版本的 Pod 会分开计算 Skew，新版本一定会严格按 1/1/1 调度，彻底解决滚动更新期间分布歪斜的问题。
+
+3. “单 Zone 故障”的表述与实际行为偏差
+
+⚬ 原文问题：表格中写“单 Zone 故障后剩 2 个（-33%）”，似乎默认这 2 个剩下的 Pod 依然是“可用”的。
+⚬ 实际情况：
+  1. Kong 网关的无状态/有状态边界：如果是 DB-less 模式，剩 2 个 Pod 确实直接能扛流量；但如果是传统连数据库模式，或者依赖本地缓存/限流计数器（如 rate-limiting 插件的 local 策略），单 Zone 故障后剩余 2 个 Pod 不仅要瞬间承接 +50% 的流量激增（从每人扛 33% 变成每人扛 50%），还会导致局部限流阈值失效。
+  2. 跨 Zone 流量与负载均衡器摘除延迟：云厂商的 LB（如 GCP/AWS/阿里云 SLB）或上游 Ingress 在感知到整个 Zone 失联（黑洞/网络分区而非 Pod 优雅退出）时，健康检查通常有 10~30 秒的探测超时。在这几十秒内，打向故障 Zone 的 33% 流量是直接丢包/502的，并不是无感切换。
+  3. HPA 抢救反噬：单 Zone 故障后，剩下 2 个 Pod 负载飙升，HPA 会立刻尝试扩容第 3 个 Pod。由于故障 Zone 不可用，新 Pod 会被调度到剩下的两个 Zone（变成 2/1/0）。前提是那两个 Zone 里还有空闲的 Node（因为你配了 kubernetes.io/hostname 的硬反亲和 requiredDuringScheduling）。如果集群开启了 Cluster Autoscaler，等新 Node 弹出来通常需要 1~3 分钟，这期间只有 2 个 Pod 硬扛。
+
+总结：给你的评审修改建议
+
+原文的 90% 都是正确的，配置方向完全没问题。只需在文档中补充以下 3 条“防坑补丁”，这份设计文档就无懈可击了：
+
+1. YAML 补丁：在 topologySpreadConstraints 中增加 matchLabelKeys: ["pod-template-hash"]（如果集群版本 ≥ 1.27），防止滚动更新删旧 Pod 时把某一个 Zone 删空。
+2. 前置条件补充：明确写出 Cluster Autoscaler / Node Pool 冗余要求——因为配置了 hostname 硬反亲和，单 Zone 故障后，另外两个 Zone 必须预留足够的闲置 Node 槽位，否则 HPA 扩容出的新 Pod 会直接 Pending。
+3. 术语微调：将“任意时刻至少 2 个 Pod 可用”修正为“在非极端级联故障（如滚动更新与节点维护同时发生）下，至少 2 个 Pod 可用”，避免架构评审时被挑战边界条件。
