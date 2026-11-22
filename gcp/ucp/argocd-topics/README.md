@@ -72,7 +72,7 @@ git-apps/ 8 篇（自研 GitHub App / CR Check 专题）
 > **背景**：新方向 —— **所有 trigger 都走 GitHub**、**GitHub Actions 可能不让用**、
 > **Argo CD 默认 sync on 但有时要手动**、**所有 GCP Project 由 Argo CD 纳管**。
 >
-> **本目录 8 篇按这个顺序读：**
+> **本目录 10 篇按这个顺序读：**
 
 | # | 文档 | 直接回答 |
 |---|---|---|
@@ -83,6 +83,8 @@ git-apps/ 8 篇（自研 GitHub App / CR Check 专题）
 | | [22 · Resource Hooks 与同步阶段](./gh-enterprise/22-resource-hooks-and-sync-phases.md) | 「能不能在集群里做门禁？」PreSync hook + wave + 与 GitHub 侧门禁的取舍 |
 | ★ | **[23 · CD Driver](./gh-enterprise/23-cd-driver-and-argocd-api-sync.md)** | 「CD pipeline 怎么按同步按钮？」幂等键 + API 调用 + 降级策略 + 可观测性 |
 | | [24 · GKE 纳管与 GCP Project 治理](./gh-enterprise/24-gke-fleet-and-gcp-project-governance.md) | 「Project 怎么纳管？」Config Connector + **删除风险护栏** + cluster secret + Workload Identity |
+| ★ | **[26 · Makefile × Argo CD](./gh-enterprise/26-makefile-in-gitops.md)** | 「Makefile 能不能用在 Argo CD 流程里？」四个集成点 + 15 个实用特性 + 6 条红线 + **已落地的 gitops-layout/Makefile** |
+| ★ | **[27 · 集群纳管的模板生成](./gh-enterprise/27-cluster-onboarding-and-fleet-templates.md)** | 「新集群要生成 YAML，Makefile 能简化吗？」fleet 视角 + **对账（drift）** + 纳管 vs 生灭的边界 |
 | | [25 · GitHub Environments 与部署保护](./gh-enterprise/25-github-environments-and-deployment-protection.md) | 「Approve 放哪？」四种保护 + required_deployments + merge queue + 审批链分层 |
 
 ---

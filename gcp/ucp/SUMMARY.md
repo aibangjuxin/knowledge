@@ -140,6 +140,8 @@ ucp/
 | [23-cd-driver-and-argocd-api-sync.md](./argocd-topics/gh-enterprise/23-cd-driver-and-argocd-api-sync.md) | 23 · CD Driver：用 Argo CD API 驱动同步 | ★ **先确认真的需要 driver**（三种"压力"）；driver 架构；Argo CD API 认证与调用；**幂等键设计**；重试/死信/可观测；**降级策略（挂了怎么办）** | ★★ **要写 CD pipeline 时** |
 | [24-gke-fleet-and-gcp-project-governance.md](./argocd-topics/gh-enterprise/24-gke-fleet-and-gcp-project-governance.md) | 24 · GKE 集群纳管与 GCP Project 治理 | 治理边界表；**Config Connector 事实与可用 CRD**；★ **Project 删除风险与五条护栏**；cluster secret 与 skip-reconcile；Workload Identity | ★★ **纳管 GCP 时** |
 | [25-github-environments-and-deployment-protection.md](./argocd-topics/gh-enterprise/25-github-environments-and-deployment-protection.md) | 25 · GitHub Environments 与部署保护 | 三个 environment 别混；四种保护；deployment 对象事实；**与 Notifications 联动**；required_deployments 规则；merge queue 机制；审批链分层 | ★★ **把 Approve 放对位置时** |
+| [26-makefile-in-gitops.md](./argocd-topics/gh-enterprise/26-makefile-in-gitops.md) | 26 · Makefile × Argo CD：在 GitOps 里能做什么、不能做什么 | **Make ↔ Argo CD 概念对照**与最根本差异（时间戳 vs 实际状态）；**四个集成点**（统一入口 / CMP / Hook / 审批证据）；**15 个 Make 特性在 GitOps 里的用途**；6 条红线；★ **已落地的 gitops-layout/Makefile**（实测通过） | ★★ **要做仓库统一入口时** |
+| [27-cluster-onboarding-and-fleet-templates.md](./argocd-topics/gh-enterprise/27-cluster-onboarding-and-fleet-templates.md) | 27 · 集群纳管的模板生成：Makefile 能简化什么 | 现状盘点（**模板生成已存在**）；**4 个增量**（入口 / **fleet 对账** / 批量 / 干跑）；source vs credential 切分；**纳管 vs 生灭的边界**；决策表；★ **已落地并实测的 fleet.py** | ★★ **纳管新集群时** |
 
 ### 3.5 Argo CD 参考手册 ✅
 
@@ -194,7 +196,7 @@ ucp/
 
 ## 4. 本轮新增与勘误
 
-### 4.1 新增（9 个文件，`argocd-topics/gh-enterprise/`）
+### 4.1 新增（11 个文件，`argocd-topics/gh-enterprise/` + Makefile + fleet.py）
 
 | 文件 | 解决什么问题 |
 |---|---|
@@ -207,6 +209,9 @@ ucp/
 | `23-cd-driver-and-argocd-api-sync.md` | **CD pipeline** 的完整设计（幂等、降级、可观测） |
 | `24-gke-fleet-and-gcp-project-governance.md` | **GCP Project 纳管**（Config Connector）+ 护栏 |
 | `25-github-environments-and-deployment-protection.md` | **Approve 放哪** + merge queue |
+| `26-makefile-in-gitops.md` | **Makefile 在 GitOps 里的定位** + 四个集成点 + 15 个实用特性 |
+| `argocd-topics/examples/gitops-layout/Makefile` | ★ **已落地并实测**的仓库统一入口（`make ci` / `make help` / `make sync` / `make new-cluster` / `make fleet-drift`） |
+| `argocd-topics/examples/gitops-layout/fleet.py` | ★ **新增**：fleet 视角的**矩阵（list）**与**对账（drift）**——Git 声明 vs Argo CD 实际注册 |
 
 ### 4.2 勘误（2 处，均已在新文档中标明）
 

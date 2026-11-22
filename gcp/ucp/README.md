@@ -18,9 +18,10 @@
 
 > ### ⭐ 新方向：GitHub-first × 无 Actions × 自动/手动可切
 >
-> 👉 **[`argocd-topics/gh-enterprise/`](./argocd-topics/gh-enterprise/README.md)**（8 篇新专题）
+> 👉 **[`argocd-topics/gh-enterprise/`](./argocd-topics/gh-enterprise/README.md)**（10 篇新专题）
 > —— 整体框架 · 无 Actions 替代方案 · Webhook/Notifications · 同步窗口与开关 ·
-> Resource Hooks · CD Driver · GCP Project 治理 · GitHub Environments
+> Resource Hooks · CD Driver · GCP Project 治理 · GitHub Environments ·
+> **Makefile × Argo CD** · **集群纳管模板生成**
 >
 > 👉 **[`SUMMARY.md`](./SUMMARY.md)** —— 全库逐篇文档索引与解释（不知道该读哪篇时看它）
 
@@ -53,7 +54,9 @@
 | 文档 | 定位 |
 |---|---|
 | **[`SUMMARY.md`](./SUMMARY.md)** | **全库总览**：逐篇文档的标题与内容解释 + 三条阅读路线 + 术语速查 + 待验证清单 |
-| **[`argocd-topics/gh-enterprise/`](./argocd-topics/gh-enterprise/README.md)** | **⭐ 新方向专题（8 篇）**：GitHub-first 总体框架、无 Actions 替代、Webhook 与 Notifications 回写、同步窗口与自动同步开关、Resource Hooks、CD Driver、GCP Project 治理、GitHub Environments |
+| **[`argocd-topics/gh-enterprise/`](./argocd-topics/gh-enterprise/README.md)** | **⭐ 新方向专题（9 篇）**：GitHub-first 总体框架、无 Actions 替代、Webhook 与 Notifications 回写、同步窗口与自动同步开关、Resource Hooks、CD Driver、GCP Project 治理、GitHub Environments、**Makefile × Argo CD** |
+| **[`argocd-topics/examples/gitops-layout/Makefile`](./argocd-topics/examples/gitops-layout/Makefile)** | ★ **仓库统一入口**（实测通过）：`make ci` / `make help` / `make lint` / `make render` / `make sync APP=… REV=… / `make new-cluster` / `make fleet-drift` |
+| **[`argocd-topics/examples/gitops-layout/fleet.py`](./argocd-topics/examples/gitops-layout/fleet.py)** | ★ **fleet 视角**：集群 × 组件矩阵（list）+ **Git 声明 vs Argo CD 实际注册对账（drift）** |
 | **[`argocd-topics/`](./argocd-topics/README.md)** | **✅ 当前有效方案**：Argo CD 生产化落地 11 篇专题 + 7 个可复制示例（无 Crossplane） |
 | [`requirement.md`](./requirement.md) | 平台方 / 开发方边界、ownership 表、跨云控制面原始需求 |
 | [`poc.md`](./poc.md) | Crossplane 最小 PoC：一个控制集群管理其他 Project 的 GKE |

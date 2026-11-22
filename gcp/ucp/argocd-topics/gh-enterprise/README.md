@@ -23,6 +23,8 @@
 | | [22 · Resource Hooks 与同步阶段](./22-resource-hooks-and-sync-phases.md) | 「能不能把校验放到集群里做，而不是只在 GitHub 上做？」<br>含：四个阶段（PreSync/Sync/SyncFail/PostSync）、sync waves、hook 资源与删除策略、<br>★ **PreSync Hook 作为集群内门禁**、与 GitHub 侧门禁的取舍矩阵 |
 | ★ | **[23 · CD Driver：用 API 驱动 Argo CD 同步](./23-cd-driver-and-argocd-api-sync.md)** | 「CD pipeline 怎么替 Argo CD 按下同步按钮？」<br>含：Driver 架构与状态机、Argo CD API 触发同步、**幂等键设计**、<br>RBAC 最小权限、失败重试/死信/**降级策略**（driver 挂了怎么办）、<br>★ **「减少 GKE 压力」到底指什么**（三个可能含义 + 各自解法） |
 | | [24 · GKE 集群纳管与 GCP Project 治理](./24-gke-fleet-and-gcp-project-governance.md) | 「所有 GCP Project 都用 Argo CD 管，怎么做？」<br>含：Crossplane 停用后的三条路（Config Connector / Terraform / 手工）、<br>★ **Project 的删除风险与护栏**、集群注册（v3 形态 cluster secret）、<br>Workload Identity、目录结构与 AppSet 生成、风险清单 |
+| ★ | **[26 · Makefile × Argo CD](./26-makefile-in-gitops.md)** | 「同事提的 Makefile 能不能用？有什么实用功能？」<br>含：Make ↔ Argo CD 概念对照、**四个集成点**（统一入口 / CMP / Hook / 审批证据）、<br>**15 个 Make 特性在 GitOps 里的用途**、6 条红线、★ **已落地的 gitops-layout/Makefile**（实测通过） |
+| ★ | **[27 · 集群纳管的模板生成](./27-cluster-onboarding-and-fleet-templates.md)** | 「Argo CD 当长期 control plane，新集群要生成 YAML，Makefile 能简化吗？」<br>含：现状盘点（**模板生成已存在**）、**4 个增量**（入口 / **fleet 对账** / 批量 / 干跑）、<br>source vs credential 切分、**纳管 vs 生灭的边界**、决策表、★ **已落地并实测的 fleet.py** |
 | | [25 · GitHub Environments 与部署保护](./25-github-environments-and-deployment-protection.md) | 「Approve 这一步放在 GitHub 的哪个位置最合适？」<br>含：Environment / required reviewers / wait timer / custom protection rules、<br>★ `required_deployments` ruleset 规则、**merge queue / merge train** 机制与无 Actions 的可行性、<br>审批链设计、API 端点清单、验证命令 |
 
 ---
@@ -34,7 +36,9 @@
                                             ↓
                     ④ 20（webhook/通知） → ⑤ 22（hook 门禁） → ⑥ 23（CD driver）
                                             ↓
-                    ⑦ 25（GitHub 侧审批）  →  ⑧ 24（GCP/GKE 纳管）
+                    ⑦ 25（GitHub 侧审批）  →  ⑧ 26（Makefile 收口） →  ⑨ 24（GCP/GKE 纳管）
+                                                                          ↓
+                                                                   27（集群纳管模板生成）
 ```
 
 - **只想拿结论** → 只读 [18](./18-framework-github-first-gitops.md) 的 `2 五层模型 + `4 触发矩阵 + `9 待拍板清单。
@@ -48,7 +52,7 @@
 
 | 类型 | 说明 |
 |---|---|
-| **补概念** | 既有文档只在 API 字段表里出现过、从未解释过的：`syncWindows` / `merge_queue` / deployment protection / Config Connector / Notifications |
+| **补概念** | 既有文档只在 API 字段表里出现过、从未解释过的：`syncWindows` / `merge_queue` / deployment protection / Config Connector / Notifications / **Makefile 在 GitOps 里的定位** / **fleet（集群清单）视角与对账** |
 | **纠事实** | v3.5.6 的 `/api/webhook`（既有文档写的 `/api/webhook/github` 已不存在）、`syncWindows` 只在 AppProject 上 |
 | **接场景** | 把「GitHub-first + 无 Actions + 手动/自动可切」这三件事接成一个**能落地的整体方案** |
 
