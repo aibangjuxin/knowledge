@@ -585,7 +585,7 @@ Merge 按钮禁用 → 全员合不了
 
 ### 5.1 分支拓扑与 ruleset 分配
 
-沿用 legacy release workflow 的 4 层分支拓扑（`/Users/lex/git/example-infra-gcp-release/legacy/release-workflow-architecture.html`），
+沿用 legacy release workflow 的 4 层分支拓扑（`/Users/lex/git/caep-infra-gcp-release/legacy/release-workflow-architecture.html`），
 并与 `cr-check/config/policy.yaml` 的 `managedBranches` 对齐：
 
 | 分支 | 角色 | 谁能改 | 合并方式 | 目标环境 | 受哪条 ruleset |
@@ -812,7 +812,7 @@ Merge 按钮禁用 → 全员合不了
 
 ### 5.7 与 legacy「14 步 / 4 Phase Gate」流程的逐条映射
 
-> 来源：`/Users/lex/git/example-infra-gcp-release/legacy/release-workflow-architecture.html`
+> 来源：`/Users/lex/git/caep-infra-gcp-release/legacy/release-workflow-architecture.html`
 
 | legacy 步骤 | legacy 的人工门禁 | **由谁自动执行** | 对应 ruleset 规则 |
 |---|---|---|---|

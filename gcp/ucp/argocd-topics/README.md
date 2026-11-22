@@ -41,6 +41,7 @@ git-apps/ 8 篇（自研 GitHub App / CR Check 专题）
 | **想看图：AppProject / ApplicationSet / Application 三者关系** | **[交互图解：三个核心 CRD](../diagrams/argocd-core-crds.html)** |
 | **想看图：从 PR 到集群的 Bootstrap 全链路** | **[交互图解：Bootstrap 全链路](../diagrams/argocd-bootstrap-flow.html)** |
 | **先搞懂所有核心概念和 `bootstrap/` 目录是干嘛的** | [**argo-concept-sheet.md**](./argo-concept-sheet.md) |
+| **App of Apps 是什么？它和 ApplicationSet 怎么选？** | [**app-of-apps.md**](./app-of-apps.md) |
 | 用了 OPA/Gatekeeper 会影响 Argo CD 吗？ | [06](./06-opa-gatekeeper-impact.md) |
 | GitHub App 凭据怎么配？**想改分支改哪里？** | [07](./07-repository-githubapp.md) |
 | 从零到生产的实施顺序和回滚步骤？ | [08](./08-implementation-playbook.md) |
@@ -60,10 +61,31 @@ git-apps/ 8 篇（自研 GitHub App / CR Check 专题）
 | **Probot 是什么？为什么我们不用它？** | [17](./git-apps/17-probot-apps.md) |
 | **Prow 的 PR 门禁怎么设计的？哪些能直接抄到 CR Check？** | [prow-pulls](./prow-pulls.md) |
 | **Kubernetes SIGs 生态地图？哪些设计范式值得抄？** | [sigs](./sigs.md) |
+| **新方向：GitHub-first / 无 Actions / 自动-手动可切 / GCP 纳管？** | **[gh-enterprise/](./gh-enterprise/README.md)** |
 
 ---
 
 ## 文档清单
+
+### [gh-enterprise/ · Argo CD × GitHub Enterprise 深度定制](./gh-enterprise/README.md)
+
+> **背景**：新方向 —— **所有 trigger 都走 GitHub**、**GitHub Actions 可能不让用**、
+> **Argo CD 默认 sync on 但有时要手动**、**所有 GCP Project 由 Argo CD 纳管**。
+>
+> **本目录 8 篇按这个顺序读：**
+
+| # | 文档 | 直接回答 |
+|---|---|---|
+| ★ | **[18 · 总体框架](./gh-enterprise/18-framework-github-first-gitops.md)** | 「整个方案长什么样？」五层模型 + 三个开关 + GitHub 事件触发矩阵 + M0–M6 里程碑 + 8 个待拍板问题 |
+| ★ | **[19 · 不用 Actions 的替代方案](./gh-enterprise/19-no-actions-alternative-matrix.md)** | 「Action 被禁了怎么办？」四类去处 + 逐条替代矩阵 + 真正消失的两个能力 |
+| ★ | **[20 · Webhook 与 Notifications](./gh-enterprise/20-argocd-webhook-and-notifications.md)** | 「GitHub 推了怎么知道？结果怎么回写？」★ **v3.5.6 路径勘误** + service.github 四种回写通道 |
+| ★ | **[21 · 同步窗口与自动同步开关](./gh-enterprise/21-sync-windows-and-auto-sync.md)** | 「默认 sync on，偶尔手动」三个开关怎么组合 + syncWindows 全字段 + 官方幂等语义 |
+| | [22 · Resource Hooks 与同步阶段](./gh-enterprise/22-resource-hooks-and-sync-phases.md) | 「能不能在集群里做门禁？」PreSync hook + wave + 与 GitHub 侧门禁的取舍 |
+| ★ | **[23 · CD Driver](./gh-enterprise/23-cd-driver-and-argocd-api-sync.md)** | 「CD pipeline 怎么按同步按钮？」幂等键 + API 调用 + 降级策略 + 可观测性 |
+| | [24 · GKE 纳管与 GCP Project 治理](./gh-enterprise/24-gke-fleet-and-gcp-project-governance.md) | 「Project 怎么纳管？」Config Connector + **删除风险护栏** + cluster secret + Workload Identity |
+| | [25 · GitHub Environments 与部署保护](./gh-enterprise/25-github-environments-and-deployment-protection.md) | 「Approve 放哪？」四种保护 + required_deployments + merge queue + 审批链分层 |
+
+---
 
 ### [概念速查表](./argo-concept-sheet.md)
 
@@ -275,6 +297,24 @@ OPA / Diff / 权限 / Redis / HA。
 特性清单、局限性（controller 不能水平扩展 / v4 引入 DB / CRD 需 server-side apply / 双控制环风险）、
 「受治理发布执行器」12 项能力映射表、A/B/C 三个方案、
 复评触发条件清单、部署前验证项。
+
+---
+
+### [app-of-apps · App of Apps 模式说明](./app-of-apps.md)
+
+**直接回答**：「App of Apps 是干什么的？它到底能实现什么？」
+
+**App of Apps = 一个 Argo CD Application 管理一批子 Application。**
+父应用同步的不是业务资源，而是子应用自己的 YAML；子应用再各自同步工作负载。
+
+含：GitOps 的"先有鸡还是先有蛋"死循环怎么被打破、
+**四项具体能力**（一次铺开整套应用 / 矩阵变文件树 / 每环境独立同步策略 / 版本晋级变成 Git 操作）、
+两层同步链路（父应用 InSync ≠ 子应用就绪）、
+官方选型（官方推荐 ApplicationSet，App of Apps 是 *Alternative*）、
+官方 Helm 模板化最小实现、**Imperva Elastic WAF 真实案例**（目录结构 / 多源 `$values` /
+部署顺序 / 分阶段晋级 / 6 条最佳实践）、
+**踩坑清单**（admin-only 权限风险 / finalizer 级联删除 / diff 噪音 / 解决不了的事）、
+本仓库 `bootstrap/` 与该模式的对应关系。
 
 ---
 

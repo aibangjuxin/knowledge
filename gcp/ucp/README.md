@@ -16,6 +16,14 @@
 
 ## 怎么读
 
+> ### ⭐ 新方向：GitHub-first × 无 Actions × 自动/手动可切
+>
+> 👉 **[`argocd-topics/gh-enterprise/`](./argocd-topics/gh-enterprise/README.md)**（8 篇新专题）
+> —— 整体框架 · 无 Actions 替代方案 · Webhook/Notifications · 同步窗口与开关 ·
+> Resource Hooks · CD Driver · GCP Project 治理 · GitHub Environments
+>
+> 👉 **[`SUMMARY.md`](./SUMMARY.md)** —— 全库逐篇文档索引与解释（不知道该读哪篇时看它）
+
 ### 👉 当前有效方案（无 Crossplane）
 
 | 你想做的事 | 看这篇 |
@@ -36,6 +44,7 @@
 | 查 Argo CD 的管理、运维、排障 | [`argocd-admin-guide.md`](./argocd-admin-guide.md) | — |
 | **搞懂并创建一个 `Application`** | [`argocd-application-guide.md`](./argocd-application-guide.md) | [`examples/argocd-application/`](./examples/argocd-application/README.md) |
 | **`ApplicationSet` 和 `Application` 有什么区别** | [`argocd-applicationset-vs-application.md`](./argocd-applicationset-vs-application.md) | [`argocd-topics/05-appset.md`](./argocd-topics/05-appset.md) |
+| **App of Apps 是什么？能实现什么？** | [`argocd-topics/app-of-apps.md`](./argocd-topics/app-of-apps.md) | [`argocd-topics/05-appset.md`](./argocd-topics/05-appset.md) |
 | 查 CLI / REST API | [`argocd-cli-guide.md`](./argocd-cli-guide.md) | [`argocd-api.md`](./argocd-api.md) |
 | 给非工程师讲这件事 | [`eli5/index.html`](./eli5/index.html) | — |
 
@@ -43,6 +52,8 @@
 
 | 文档 | 定位 |
 |---|---|
+| **[`SUMMARY.md`](./SUMMARY.md)** | **全库总览**：逐篇文档的标题与内容解释 + 三条阅读路线 + 术语速查 + 待验证清单 |
+| **[`argocd-topics/gh-enterprise/`](./argocd-topics/gh-enterprise/README.md)** | **⭐ 新方向专题（8 篇）**：GitHub-first 总体框架、无 Actions 替代、Webhook 与 Notifications 回写、同步窗口与自动同步开关、Resource Hooks、CD Driver、GCP Project 治理、GitHub Environments |
 | **[`argocd-topics/`](./argocd-topics/README.md)** | **✅ 当前有效方案**：Argo CD 生产化落地 11 篇专题 + 7 个可复制示例（无 Crossplane） |
 | [`requirement.md`](./requirement.md) | 平台方 / 开发方边界、ownership 表、跨云控制面原始需求 |
 | [`poc.md`](./poc.md) | Crossplane 最小 PoC：一个控制集群管理其他 Project 的 GKE |
