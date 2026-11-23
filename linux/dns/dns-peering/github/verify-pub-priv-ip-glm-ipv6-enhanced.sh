@@ -4,6 +4,25 @@
 # Purpose: Enhanced DNS verification with IPv6, parallel queries, batch processing,
 #          and multiple output formats with improved visual output.
 
+# --- Requires bash >= 4.3 -----------------------------------------------------
+# The script relies on associative arrays (declare -A), namerefs (declare -n) and
+# mapfile. macOS still ships bash 3.2 as /bin/bash, and running the file with
+# `sh` bypasses the shebang — both die with a confusing "syntax error: invalid
+# arithmetic operator" on `declare -A`. Re-exec under a modern bash instead.
+if [ -z "${BASH_VERSION:-}" ] ||
+  [ "$(( ${BASH_VERSINFO[0]:-0} * 100 + ${BASH_VERSINFO[1]:-0} ))" -lt 403 ]; then
+  if [ -z "${_VPP_REEXEC:-}" ]; then
+    for _vpp_bash in /opt/homebrew/bin/bash /usr/local/bin/bash /usr/bin/bash /bin/bash; do
+      if [ -x "$_vpp_bash" ]; then
+        export _VPP_REEXEC=1
+        exec "$_vpp_bash" "$0" "$@"
+      fi
+    done
+  fi
+  echo "ERROR: bash >= 4.3 is required (found: ${BASH_VERSION:-sh})" >&2
+  exit 3
+fi
+
 set -euo pipefail
 
 # ============================================================================
@@ -42,24 +61,27 @@ MAX_PARALLEL=5
 RECORD_TYPES=("A" "AAAA" "CNAME" "MX")
 
 # ANSI color codes
-readonly GREEN='\033[32m'
-readonly YELLOW='\033[33m'
-readonly BLUE='\033[34m'
-readonly CYAN='\033[36m'
-readonly RED='\033[31m'
-readonly MAGENTA='\033[35m'
-readonly WHITE='\033[37m'
-readonly BLACK='\033[30m'
-readonly NC='\033[0m'
-readonly BOLD='\033[1m'
-readonly DIM='\033[2m'
-readonly UNDERLINE='\033[4m'
-readonly BG_BLUE='\033[44m'
-readonly BG_GREEN='\033[42m'
-readonly BG_RED='\033[41m'
-readonly BG_YELLOW='\033[43m'
-readonly BG_CYAN='\033[46m'
-readonly BG_MAGENTA='\033[45m'
+# ANSI-C quoting ($'...') so these hold a real ESC byte instead of the literal
+# 4-character text "\033[1m" — heredocs (cat <<EOF) do not interpret escapes,
+# so with plain quotes the help text printed raw "\033[1m" markers.
+readonly GREEN=$'\033[32m'
+readonly YELLOW=$'\033[33m'
+readonly BLUE=$'\033[34m'
+readonly CYAN=$'\033[36m'
+readonly RED=$'\033[31m'
+readonly MAGENTA=$'\033[35m'
+readonly WHITE=$'\033[37m'
+readonly BLACK=$'\033[30m'
+readonly NC=$'\033[0m'
+readonly BOLD=$'\033[1m'
+readonly DIM=$'\033[2m'
+readonly UNDERLINE=$'\033[4m'
+readonly BG_BLUE=$'\033[44m'
+readonly BG_GREEN=$'\033[42m'
+readonly BG_RED=$'\033[41m'
+readonly BG_YELLOW=$'\033[43m'
+readonly BG_CYAN=$'\033[46m'
+readonly BG_MAGENTA=$'\033[45m'
 
 # Visual elements
 readonly SEPARATOR="═════════════════════════════════════════════════════════════════════"
