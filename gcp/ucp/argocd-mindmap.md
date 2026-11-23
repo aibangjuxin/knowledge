@@ -493,4 +493,4 @@ mindmap
 - 入口：[README.md](./README.md) · 全库总览：[SUMMARY.md](./SUMMARY.md)
 - 专题索引：[argocd-topics/README.md](./argocd-topics/README.md)
 - 新方向专题：[argocd-topics/gh-enterprise/README.md](./argocd-topics/gh-enterprise/README.md)
-- 兄弟目录：Gatekeeper [`../gke/opa-gatekeeper/`](../gke/opa-gatekeeper/README.md) · GKE 运维 [`../gke/`](../gke/README.md)
+- 兄弟目录：Gatekeeper [`../gke/opa-gatekeeper/`](../gke/gke-mindmap.md) · GKE 运维 [`../gke/`](../gke/README.md)
