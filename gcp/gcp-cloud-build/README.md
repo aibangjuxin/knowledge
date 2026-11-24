@@ -11,6 +11,7 @@ GCP 的托管式 CI/CD（serverless）。提交 `cloudbuild.yaml` → Cloud Buil
 | [**`how-to-autofix-cve-with-cloud-build.md`**](how-to-autofix-cve-with-cloud-build.md) | **CVE 自动修复闭环**：Cloud Build 在修复流水线里的角色、改 Dockerfile 的修补映射表、三种落地形态、报告怎么拿、差分判定、12 个 CVE 场景特有的坑 |
 | [**`how-to-explore-go-modules.md`**](how-to-explore-go-modules.md) | **Go 依赖探索手册**：`go mod why -m` 怎么回答「谁 import 了它」/ 模块图 vs 导入图 / 包级反向查找 / 10 个实测坑 / CI 里的依赖审计落点 |
 | [`gcp-cloud-build-concepts.md`](gcp-cloud-build-concepts.md) | 概念与生态全景（英文）：核心概念、GitHub 集成、Pipeline 集成选项、收益与最佳实践 |
+| [**`mindmap.md`**](mindmap.md) | **知识地图**：现有文档覆盖盘点 + **20 个待补知识点**（🔴P0 / 🟡P1 / 🟢P2 分级）+ Mermaid 知识地图 + 三阶段学习路径 + 8 个动手实验 |
 | [`examples/`](examples/)) | 可直接改用的 `cloudbuild.yaml` 模板 |
 
 ## examples/

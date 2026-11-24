@@ -1,5 +1,9 @@
 # Docker 镜像离线打包与压缩
 
+> **本目录定位**：容器镜像的「搬」与「改」两件工具活——
+> [01-offline-image-packaging.md](docs/01-offline-image-packaging.md) 讲**怎么把镜像压小搬走**，
+> [02-crane-cli.md](docs/02-crane-cli.md) 讲**用 crane 在 registry 层直接操作镜像**（不依赖 docker daemon）。
+
 > **一句话结论**:`docker save` 出来的 tar 里面每一层**已经是 gzip 压缩过的 blob**,
 > 所以 `docker save | gzip` 几乎压不动(实测 46MB → 45MB)。
 > 真正能减小体积的做法是:**裁掉不需要的平台 + 把每层换用更强的算法(zstd/xz)重新压缩**。
@@ -12,6 +16,7 @@
 | 文档 | 内容 | 适合谁 |
 |---|---|---|
 | [01-offline-image-packaging.md](docs/01-offline-image-packaging.md) | 原理 + 实测数据 + 打包/传输/加载/部署完整步骤 + 兼容性 + 常见坑 | 要把镜像搬到离线服务器 / 嫌包太大的人 |
+| [02-crane-cli.md](docs/02-crane-cli.md) | **crane 镜像操作 CLI**：22 个子命令地图 + 10 个实战场景（查 digest / 搬镜像保 digest / 多架构裁剪 / 加层 / 改元数据 / 离线导出）+ 12 条实测坑 + 与 docker/skopeo/cosign 选型 | 要在 CI 里搬镜像、查镜像真身、给镜像加层改配置的人 |
 
 配套脚本:[`scripts/repack-oci-layers.py`](scripts/repack-oci-layers.py)
 

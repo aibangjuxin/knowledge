@@ -16,7 +16,7 @@ Analyze the `devops/` knowledge base. Categorize the buildpacks / kubeops / imag
 
 1. **`kubeops/`（5 篇）** — Operator 是什么、Reconcile Loop、GitHub push → K8s 交付、交付范式对比、动手实践
 2. **`buildpacks/`（2 篇）** — CNB 生态与 `imgutil` 镜像操作库
-3. **`docker/`（1 篇）** — 镜像离线打包与压缩（dexidp/dex 实测）
+3. **`docker/`（2 篇）** — 镜像离线打包与压缩（dexidp/dex 实测）+ **crane 镜像操作 CLI**
 4. **`hermes-bot-team/`、`hermes-perf/`（3 篇）** — 4-Bot 团队与性能/Token 消耗治理
 
 ---
@@ -49,6 +49,11 @@ mindmap
       离线打包
       压缩
       dex实测
+    crane 镜像操作
+      查digest
+      搬运保digest
+      加层与改元数据
+      多架构裁剪
     Hermes
       4Bot团队
       使用指南
@@ -76,9 +81,13 @@ mindmap
 - `imgutil.md`：**`buildpacks/imgutil`——CNB 生态的镜像操作库**，
   是"用标准方式操作镜像"（而非手搓 Dockerfile）的入口。
 
-### 3. 镜像离线打包（`docker/`）
+### 3. 镜像离线打包与 registry 层操作（`docker/`）
 `01-offline-image-packaging.md`：**Docker 镜像离线打包与压缩（dexidp/dex 实测）**——
 在无外网环境里把镜像搬过去的完整方案。
+
+`02-crane-cli.md`：**crane 镜像操作 CLI**——不依赖 docker daemon，
+直接对着 registry 的 HTTP API 查 digest / 搬镜像（**保留 digest**）/ 多架构裁剪 / 给镜像加层 / 改元数据。
+与 01 是互补关系：01 在**文件系统层**压小，02 在**registry 层**做搬运与改写。
 
 ### 4. Hermes（`hermes-bot-team/`、`hermes-perf/`）
 - `hermes-bot-team/`：**4-Bot 团队使用指南**（把一个 Agent 拆成 4 个角色协作）；
@@ -97,6 +106,7 @@ mindmap
 
 路线 B · 离线环境搬镜像（1 小时）
   docker/docs/01-offline-image-packaging.md
+  → docker/docs/02-crane-cli.md
   → ../cloud/docker/multistage-builds/distroless.md
   → ../safe/fix-cve/how-to-fix-cve-with-base-image-constraints.md
 
@@ -131,4 +141,5 @@ mindmap
   [kubeops/docs/01-what-is-kubeops.md](./kubeops/docs/01-what-is-kubeops.md) ·
   [kubeops/docs/02-how-it-works.md](./kubeops/docs/02-how-it-works.md) ·
   [docker/docs/01-offline-image-packaging.md](./docker/docs/01-offline-image-packaging.md) ·
+  [docker/docs/02-crane-cli.md](./docker/docs/02-crane-cli.md) ·
   [buildpacks/README.md](./buildpacks/README.md)
