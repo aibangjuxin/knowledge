@@ -1123,6 +1123,7 @@ in_progress ──▶ completed(conclusion)
 
 | 主题 | 文档 |
 |---|---|
+| **上位索引**：性质之上的概念骨架（SSOT / 审计基线 / 可验证交付物 / 权威技术系统 / 数据所有权 / 边界规则 / 寻址） | [software-engineering-concept-map.md](./software-engineering-concept-map.md) |
 | 原子性与幂等性的完整推演（本文 §10 的来源） | [how-to-atomic-idempotency.md](../gcp/ucp/argocd-topics/how-to-atomic-idempotency.md) |
 | push 模型下的六个投递契约（本文 §10.2 的来源） | [git-apps/12-webhook-push-vs-pull.md](../gcp/ucp/argocd-topics/git-apps/12-webhook-push-vs-pull.md) |
 | 门禁服务的 Go 工程实践：数据模型、规则引擎、可观测性、安全、测试 | [git-apps/13-cr-check-go-design.md](../gcp/ucp/argocd-topics/git-apps/13-cr-check-go-design.md) |

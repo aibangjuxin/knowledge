@@ -23,6 +23,7 @@ Java / Go / Node / Python / React 各语言栈如何在多租户平台上跑起�
 5. **其他语言栈** — `go/`（ConfigMap 适配）、`node/`、`python/`、`React/`、`groovy/`、`npm/`、`vscode/`
 6. **Egress 与工程效率** — `develop-process/ob/`（Public Egress + Squid 动态路由）、`dev-tools/orca.md`、`waza/`
 7. **方法论** — `software-properties.md`（**开发者应主动考虑的那几十个"性质"**）
+   + `software-engineering-concept-map.md`（**软件工程概念地图**：SSOT → 审计基线 → 可验证交付物）
 
 ---
 
@@ -172,6 +173,9 @@ mindmap
 - `develop-process/ob/`：**Public Egress Onboarding 架构演进** + **Squid 多上游按目的域名路由**方案；
 - `dev-tools/orca.md`：**Orca — Worktree-Native IDE for Parallel AI Coding Agents**；
 - `waza/install-plan.md`：Waza Skills 的 Hermes 移植；
+- `software-engineering-concept-map.md`：**软件工程概念地图**——性质之上的骨架：
+  单一事实源 / 权威技术系统 / 数据所有权 / 规范表示 / 派生数据 / 数据漂移 / 固定版本 / 寻址 / 边界规则，
+  以及正确性与分布式行为（幂等 / 原子 / 隔离 / 一致性模型 / 收敛 / 对账 / 去重 / 补偿）的专项深挖；
 - `software-properties.md`：**软件系统的关键性质——开发者应该主动考虑的那几十个"性质"**，
   这是本目录里最"元"的一篇。
 
