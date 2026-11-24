@@ -18,7 +18,7 @@ Agent 人格库、Prompt 库、本地知识库检索系统（本地 RAG）、Oll
 1. **Agent 人格库（`/.claude/agents/`，30 篇）** — 按职能分 7 组
 2. **Prompt 库（`prompt/`，6 篇）** — 架构技术合作伙伴（中文/英文）、SRE、PM、增强器
 3. **本地知识库检索系统（`concept/`，5 篇）** — INSTALL / QUICKSTART / USAGE / PROJECT_SUMMARY
-4. **本地模型与 Embedding（`docs/`，8 篇）** — Ollama、batch size 调优、warmup、chunk/overlap
+4. **本地模型与 Embedding（`docs/`，9 篇）** — Ollama、batch size 调优、warmup、chunk/overlap、llama-server 自编译
 
 ---
 
@@ -128,6 +128,9 @@ mindmap
 
 ### 4. 本地模型栈（`docs/`）—— 性能踩坑记录
 - `ollama.md`、`llam-server.md`：服务与升级；
+- `llama-server-install-macos.md`：**macOS 上 `llama-server` 装不起来的根因与解法**——
+  Homebrew 的 `llama.cpp 1.0.0` bottle 链接了 ggml 已废弃的拆分 dylib（`libggml-cpu.1.dylib` 等），
+  `dyld` 直接失败；解法是从上游源码自编译（含两个必须的 cmake 参数）；
 - `ollama-warmup-pattern.md`：**Ollama `/v1/embeddings` Hang Bug —— Warmup Pattern（macOS 实战视角）**；
 - `embedder-batch-size-tuning.md`：**长 Batch 压力探索**，并给出可调参数；
 - `chunk_size_overlap_batch_size_explorer.md`：**Chunk / Batch / Context-Window 三者关系**——
@@ -178,4 +181,5 @@ mindmap
   [concept/INSTALL.md](./concept/INSTALL.md) ·
   [concept/QUICKSTART.md](./concept/QUICKSTART.md) ·
   [docs/ollama-warmup-pattern.md](./docs/ollama-warmup-pattern.md) ·
-  [docs/chunk_size_overlap_batch_size_explorer.md](./docs/chunk_size_overlap_batch_size_explorer.md)
+  [docs/chunk_size_overlap_batch_size_explorer.md](./docs/chunk_size_overlap_batch_size_explorer.md) ·
+  [docs/llama-server-install-macos.md](./docs/llama-server-install-macos.md)

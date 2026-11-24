@@ -15,6 +15,7 @@ ai/
 ├── ollama-warmup-pattern.md            # Ollama /v1/embeddings 冷启动 hang 的 warmup 防御模式
 ├── embedder-batch-size-tuning.md       # Embedder batch_size 调优 (32→40) 实测数据
 ├── llam-server.md                      # llama-server (llama.cpp) 本地推理笔记
+├── llama-server-install-macos.md        # macOS 上装 llama-server: brew bottle 坏了 → 源码自编译
 ├── chunk_size_overlap_batch_size_explorer.md  # chunk/batch/context 关系探索 + 文件大小决策树
 ├── .claude/                            # Claude相关配置或工具
 └── README.md                           # 本说明文件
@@ -30,12 +31,14 @@ ai/
 - `ollama-warmup-pattern.md`: **macOS sleep-wake 后** `/v1/embeddings` hang bug 的3层防御(warmup + retry + timeout)
 - `embedder-batch-size-tuning.md`: `embeddinggemma:300m` 长 batch 负载下 batch_size 调优实测,推荐 `32→40`
 - `llam-server.md`: llama.cpp `llama-server` 本地推理笔记(对比 Ollama)
+- `llama-server-install-macos.md`: **macOS 上 `llama-server` 装不起来的根因与解法**——Homebrew `llama.cpp 1.0.0` 的 bottle 链接了 ggml 已废弃的拆分 dylib(`libggml-cpu.1.dylib` 等),`dyld` 直接失败;给出从上游源码编译的完整命令(含 `-DLLAMA_UI_GZIP=OFF`、`-DCMAKE_INSTALL_RPATH` 两个必须参数)、与 brew 共存、验证与升级流程
 - `chunk_size_overlap_batch_size_explorer.md`: **三参数关系可视化**(context window / chunk / batch),文件大小 → 配置推荐决策树,含100KB/200KB/500KB/1MB 具体数字推导
 
 ## 快速检索
 - AI代理相关: 查看 `ai-agent.md` 和 `agent-tree.md`
 - 提示工程: 查看 `prompt.md`
 - 本地 LLM / Embedding 部署: 查看 `ollama.md` + `debug-ollama.md`
+- llama-server 安装/升级(macOS): 查看 `llama-server-install-macos.md`(brew 装不上时看这篇)
 - Embedding 模型稳定性: 查看 `ollama-warmup-pattern.md`(cold-start)+ `embedder-batch-size-tuning.md`(稳态吞吐)
 - OCR: 查看 `Python-ocr.md`
 

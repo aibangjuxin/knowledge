@@ -1,3 +1,9 @@
+> ⚠️ **本页是早期速记（ggml 0.10.0 时代），部分内容已过时。**
+> 其中 `brew upgrade llama-server` **不是有效的 formula**；
+> 而且 Homebrew 的 `llama.cpp 1.0.0` bottle 里 **`llama-server` 本身是坏的**
+> （ggml ABI 布局对不上，`dyld` 加载失败）。
+> → **macOS 上正确安装/升级看这篇**：[llama-server-install-macos.md](llama-server-install-macos.md)
+
 /opt/homebrew/bin/llama-server
 
 
