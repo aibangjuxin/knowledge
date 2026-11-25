@@ -46,6 +46,7 @@ git-apps/ 8 篇（自研 GitHub App / CR Check 专题）
 | GitHub App 凭据怎么配？**想改分支改哪里？** | [07](./07-repository-githubapp.md) |
 | 从零到生产的实施顺序和回滚步骤？ | [08](./08-implementation-playbook.md) |
 | 出问题了怎么查？ | [09](./09-troubleshooting.md) |
+| **Argo CD 3.5.5 跨项目多集群 GKE Workload Identity 授权怎么落地？（含 CRD PermissionDenied 修复）** | **[argocd-gke-cross-project-multicluster-wi](./argocd-gke-cross-project-multicluster-wi.md)** |
 | 要不要引入 Argo Workflows？结论是什么？ | [10](./10-argo-workflows-evaluation.md) |
 | **Argo Events 是什么？它和 Workflows / Argo CD 什么关系？我们要不要它？** | [argo-event](./argo-event.md) |
 | GitHub App 的 Public Link / Home URL / Webhook URL 是啥关系？源码在哪？ | [11](./git-apps/11-github-app-concepts.md) |

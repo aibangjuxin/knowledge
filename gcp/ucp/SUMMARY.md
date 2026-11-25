@@ -105,6 +105,7 @@ ucp/
 | [appset-helm-Rendering.md](./argocd-topics/appset-helm-Rendering.md) | 06 · ApplicationSet 的 Helm 渲染 | 三层模板引擎边界、**转义写法**、CP→Tenant 仓库拓扑 | AppSet 用 Helm 渲染时 |
 | [helm-cross-repository.md](./argocd-topics/helm-cross-repository.md) | 07 · 跨仓库渲染的原理 | "跨仓库不是 Helm 的能力"；**凭据模型**（按 URL 匹配、project 优先）；broker 心智模型 | 多仓库 GitOps 拓扑 |
 | [argo-event.md](./argocd-topics/argo-event.md) | Argo Events 是什么 | EventBus/EventSource/Sensor/Trigger；**结论：本期不引入** | 有人提议"用事件总线"时 |
+| [argocd-gke-cross-project-multicluster-wi.md](./argocd-topics/argocd-gke-cross-project-multicluster-wi.md) | Argo CD 3.5.5 跨项目多集群 GKE WI 授权实施方案 | 分层授权（GKE IAM 连集群 + K8s RBAC 管资源）、CRD PermissionDenied 修复、**实际身份实测判定**、可执行 YAML 与验收清单 | ★ 落地实施时按它走 |
 
 ### 3.3 GitHub 门禁专题（`argocd-topics/git-apps/）✅
 
