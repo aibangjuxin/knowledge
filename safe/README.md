@@ -1,6 +1,6 @@
 # Safe
 ## 目录结构
-```safe/├── docs/├── Control-and-Compliance/├── cert/├── certs/├── cross-site/├── cwe/├── cyberflows/├── docs/├── gcp-safe/├── get-token/├── how-to-fix-violation/├── responsibilities/├── scripts/├── docs/├── ingress-ssl/├── scripts/├── text/├── ssl/├── tools/├── wiz/├── README.md```
+```safe/├── docs/├── Control-and-Compliance/├── cert/├── certs/├── cross-site/├── cwe/├── cyberflows/├── docs/├── gcp-safe/├── get-token/├── how-to-fix-violation/├── responsibilities/├── scripts/├── docs/├── ingress-ssl/├── scripts/├── text/├── ssl/├── secret-manage/├── tools/├── wiz/├── README.md```
 ## 子目录内容
 - `Control-and-Compliance/`: 子目录: docs
 - `cert/`: 文件: DigiCert-Assessment-Guide.md, DigiCert-EKU-Migration-Plan.md, README.md, check_eku.sh, digicert_impact_assessment.sh ... (共 6 个文件)
@@ -15,5 +15,6 @@
 - `responsibilities/`: 文件: package-depend.md, snoar-code-coverage.md
 - `scripts/`: 脚本目录
 - `ssl/`: 子目录: docs, ingress-ssl, scripts, text
+- `secret-manage/`: Secret Manager 方案探索: README.md, rust-secret-ecosystem.md, rust-toolchain-and-secret-manager.md, vault-rust-init-container-poc.md
 - `tools/`: 文件: jwt.jpeg
 - `wiz/`: 文件: Summary-TODO.md, gemini-wiz.md, wiz-base-information.md, wiz-grok.md

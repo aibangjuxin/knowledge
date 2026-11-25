@@ -18,6 +18,8 @@
 | [**`06-dev-branch-guard-x-cr-prefix-action.md`](./06-dev-branch-guard-x-cr-prefix-action.md)** | ★ **06 ruleset × `cr-prefix` Action 联合工作详解**：两个文件怎么咬合、完整生命周期、线上实测状态、**5 个已确认的缺口** | —— （解读文档） |
 | [**`ruleset-action-sample.md`](./ruleset-action-sample.md)** | ★★ **全套实验手册（A~I 共 10 个实验）**：每条都是真实跑过的输出，含验收清单、清理流程、逃生通道、故障排查表 | —— （实操手册） |
 | [`07-commit-message-cr-prefix-protected.json`](./07-commit-message-cr-prefix-protected.json) | **主分支保护**（PR 必需 + `cr-prefix` check + 禁删/禁强推）：管 `main` `*Release` | 仓库级（所有计划可用） |
+| [**`08-main-ruleset.json`**](./08-main-ruleset.json) | ★ **平台原生格式门禁**：`commit_message_pattern` —— 默认分支的 commit message 必须以 `<工单代号>-<数字>:` 开头（**Enterprise 专属 rule type**，非 Enterprise 会被静默丢弃） | 仓库级 `repos/...`；`conditions` 里加 `repository_name` 即变组织级 |
+| [**`08-main-ruleset.md`**](./08-main-ruleset.md) | ★ **08 的逐字段解读 + 安装（UI 导入 JSON）+「ruleset 顶替 webhook 自检」的边界说明** | —— （解读文档） |
 | [`workflows/cr-prefix-check.yaml`](./workflows/cr-prefix-check.yaml) | ★ **CI 校验器**：commit message + PR 标题必须 `^CR[0-9]{6}` | 装进 `<repo>/.github/workflows/` |
 | [`install-ci-check.sh`](./install-ci-check.sh) | ★ 一键把 CI 校验器装进仓库（建分支 + 提交 + 开 PR） | 需要 `gh auth refresh -s workflow` |
 | [`simulate-commit-gate.py`](./simulate-commit-gate.py) | ★ **三层判定模拟器**（L1 hook / L2 Ruleset / L3 App），不连 GitHub | —— |
@@ -56,6 +58,69 @@ CR_CHECK_APP_ID=<你的 CR Check App ID> \
 > （看 `conditions` 里有没有 `repository_name`）→ 不用手动指定端点。
 > **安装的完整步骤（权限、顺序、验证、回滚）见
 > [`git-apps/16-ruleset-install-runbook.md`](../../git-apps/16-ruleset-install-runbook.md)。**
+
+---
+
+## 2.5 ★ 不想用脚本？UI 后台导入 JSON（点鼠标，10 分钟）
+
+> ★ **JSON 文件自己不会生效。** 把它装到 GitHub 上只有三条路，
+> **导入的是同一份 JSON，没有区别**：
+
+| 路径 | 怎么做 | 适合谁 | 文档 |
+|---|---|---|---|
+| **A · UI 导入** | Settings → Rulesets → **New ruleset → Import a ruleset** → 选 JSON → Review → Create | 一次性、手工、小仓库 | 本文 §2.5 ↓ |
+| **B · API / 脚本** | `POST /repos/.../rulesets` 或本目录的 `apply-rulesets.sh` | ★ 批量、要幂等、要 CI 化 | Runbook §4 |
+| **C · IaC / GitOps** | Terraform / 把 JSON 放仓库里由 CI apply + 漂移检测 | 长期维护 | Runbook §5 / §6 |
+
+### 2.5.1 UI 导入的具体点法
+
+```
+# 仓库级（本目录绝大多数 JSON 的落点）
+仓库 → Settings → Code, planning, and automation → Rulesets
+  → New ruleset（下拉）→ **Import a ruleset**      ★ 导入入口
+  → 选 <你的>.json → Review the imported ruleset → Create
+
+# 组织级（只有 org owner 能改；JSON 的 conditions 必须带 repository_name）
+头像 → Organizations → 选组织 → Settings
+  → Code, planning, and automation → Repository → Rulesets
+  → New ruleset（下拉）→ **Import a ruleset** → 选 <你的>.json → Review → Create
+```
+
+### 2.5.2 ★ 导入后必须做的 3 个核对（不做 = 可能装了个空壳）
+
+```bash
+# ① 规则还在吗？（★ list 接口不返回 rules，必须按 id 查）
+gh api repos/<owner>/<repo>/rulesets | jq -r '.[] | "\(.id)\t\(.name)\t\(.enforcement)"'
+for id in <上面的 id>; do
+  gh api repos/<owner>/<repo>/rulesets/$id | jq -r '"\(.name): rules=\([.rules[]?.type]|join(","))"'
+done
+#    ★ rules= 为空 → 这条 ruleset 是装饰品，一条都不执行
+
+# ② 目标分支真的命中了吗？（★ 权威口径）
+gh api repos/<owner>/<repo>/rules/branches/main | jq -r '.[].type'
+
+# ③ 联调：提一个故意不合规的 PR / push 一个不合规的 commit → 必须被拒
+```
+
+> ★★ **UI 导入最坑的一点：GitHub 不报错，但会把不认识的 rule type 静默丢弃。**
+> 典型例子：`commit_message_pattern`（Enterprise 专属）、`branch_name_pattern`、
+> `merge_queue`、`target: push` 的规则 —— 在个人账号 / Team 组织上导入后
+> **rules 变成空数组，但页面仍显示 `active`** → 什么都不拦。
+> → 导入前先跑探针确认能力：
+> [`examples/rulesets-enterprise/probe-enterprise-capabilities.sh`](../rulesets-enterprise/probe-enterprise-capabilities.sh)
+
+### 2.5.3 导入后建议改的三处
+
+| 位置 | 改成什么 | 为什么 |
+|---|---|---|
+| **Enforcement status** | 先 `Disabled` → 联调通过再 `Active` | 免得一上来卡住所有人 |
+| **`integration_id` / actor id** | 换成真实 ID | JSON 里 `123456`、`42` 都是占位符 |
+| **分支范围 / 规则来源** | 覆盖要管的分支；status check 的来源选自己的 App（不是 "Any source"） | 见 Runbook §2、§3.3 |
+
+> 完整 Runbook（权限、安装顺序、报错对照表、回滚）：
+> [`git-apps/16-ruleset-install-runbook.md`](../../git-apps/16-ruleset-install-runbook.md)。
+> ★ **以 `08-main-ruleset.json` 为例的逐字段解读 + 安装步骤 + 「ruleset 与 webhook 的边界」**：
+> [`08-main-ruleset.md`](./08-main-ruleset.md)。
 
 ---
 
@@ -159,6 +224,9 @@ gh api repos/<owner>/<repo>/rules/branches/main | jq -r '.[].type'   # 目标分
 ```
 
 → 个人账号请走 **CI 路线**（`workflows/cr-prefix-check.yaml` + `required_status_checks`）。
+→ ★ 同理，[`08-main-ruleset.json`](./08-main-ruleset.json) 用的 `commit_message_pattern`
+也是 **Enterprise 专属** → 非 Enterprise 环境请直接用
+[`08-main-ruleset.md`](./08-main-ruleset.md) §5 里的 **Plan B（CI 路线）**。
 
 ---
 
@@ -166,6 +234,8 @@ gh api repos/<owner>/<repo>/rules/branches/main | jq -r '.[].type'   # 目标分
 
 | 主题 | 文档 |
 |---|---|
+| ★ **08 逐字段解读 + UI 导入 + ruleset 与 webhook 的边界** | [`08-main-ruleset.md`](./08-main-ruleset.md) |
+| ★ **企业版能力矩阵**（哪些 rule type 要什么计划） | [`examples/rulesets-enterprise/00-enterprise-capabilities.md`](../rulesets-enterprise/00-enterprise-capabilities.md) |
 | ★ **安装 Runbook**（怎么装、怎么确认生效、怎么回滚） | [`git-apps/16-ruleset-install-runbook.md`](../../git-apps/16-ruleset-install-runbook.md) |
 | ★ Ruleset × GitHub App 完整方案 | [`git-apps/14-rulesets-and-gitapp-gate.md`](../../git-apps/14-rulesets-and-gitapp-gate.md) |
 | CR Check 的 `policy.yaml`（C1/C3 的"右边"） | [`git-apps/cr-check/config/policy.yaml`](../../git-apps/cr-check/config/policy.yaml) |

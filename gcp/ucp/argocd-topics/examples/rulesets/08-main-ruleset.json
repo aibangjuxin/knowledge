@@ -1,0 +1,22 @@
+{
+  "name": "Require ticket prefix in commit messages",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "commit_message_pattern",
+      "parameters": {
+        "name": "APIYUND, AIBNG, TEAMNAME or APPABJX ticket prefix",
+        "operator": "regex",
+        "pattern": "^(APIYUND|AIBNG|TEAMNAME|APPABJX)-[0-9]+:"
+      }
+    }
+  ]
+}

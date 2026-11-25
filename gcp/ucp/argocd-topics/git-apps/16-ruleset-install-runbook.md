@@ -23,6 +23,7 @@
 | [§2](#2-★-安装顺序（六步）与每一步的验收) | ★ **安装顺序（6 步）** 与每一步的验收 |
 | [§2.5](#25-★-实测诊断规则装上了却什么都不拦) | ★ **实测诊断**：装上了却什么都不拦（三个根因 + 两条只读检查） |
 | [§3](#3-路径-a-·-ui-导入-json（点鼠标，10-分钟）) | 路径 A · UI 导入 JSON |
+| [§3.5](#35-★-ruleset-与-webhook-的边界) | ★ **ruleset 与 webhook 的边界**（"用 ruleset 替换 webhook 那套"到底替换了哪一段） |
 | [§4](#4-路径-b-·-gh-api--一键脚本（★-推荐）) | 路径 B · `gh api` / 一键脚本（★ 推荐） |
 | [§5](#5-路径-c-·-iac（声明式）) | 路径 C · IaC（Terraform/local-exec） |
 | [§6](#6-路径-d-·-gitops（配置进仓库--ci-apply）★-最贴合你们) | 路径 D · GitOps（配置进仓库 + CI apply + 漂移检测） |
@@ -63,6 +64,11 @@
 7. **★ 回滚优先用 `disabled` 而不是删除**：规则留着、只是不执行，
    审计记录（`/history`）还在；删了就没痕迹了。
 
+8. **★ ruleset ≠ webhook**：ruleset 是**平台内置的同步门禁**（"允不允许发生"），
+   webhook 是**事件投递通道**（"通知谁"）。
+   ruleset 能顶掉的是"**webhook 自检 + 写 status + required_status_checks 拦**"那一圈往返，
+   webhook 本身（Argo CD 同步、IM 通知）还得留着。详见 §3.5。
+
 ---
 
 ## 1. 先分清两种"装"（组织级 vs 仓库级）
@@ -75,7 +81,7 @@
 | 作用范围 | 一组仓库（`~ALL` / 名单 / 名称模式 / 自定义属性过滤） | 单个仓库 |
 | 谁能改 | ★ **只有 org owner** | repo admin，或有 "edit repository rules" 权限的角色 |
 | 叠加关系 | 仓库级 ruleset 只能**加严**、不能放松（官方明确） | 同左 |
-| 我们的哪几份 | `01-org-baseline`、`07-`、`08-`（含 `repository_name`） | `02`–`06` |
+| 我们的哪几份 | ★ **只有 `01-org-baseline`**（本目录里唯一带 `repository_name` 的） | `02`–`08`（含 `07-`、`08-` —— 它们都**没有** `repository_name` → 仓库级） |
 
 > ★ **本目录的 JSON 是按"scope 由 `conditions` 里有没有 `repository_name` 自动判定"的**：
 > `apply-rulesets.sh` 会逐个文件判断该打到哪个端点，**不需要你手动指定**。
@@ -237,7 +243,7 @@ metadata 规则是在 **push（ref update）** 时才生效：
   → Settings（看不到就是权限不够）
   → 侧栏：Code, planning, and automation → Repository → Rulesets
   → New ruleset（下拉）→ Import a ruleset        ★ 导入入口
-  → 选 07-commit-message-cr-prefix-protected.json
+  → 选 01-org-baseline.json（★ 本目录里**只有它**带 repository_name → 组织级）
   → Review the imported ruleset → Create
 ```
 
@@ -249,6 +255,11 @@ metadata 规则是在 **push（ref update）** 时才生效：
   → 选 04-repo-prod-branches.json
   → Review → Create
 ```
+
+> ★ **`08-main-ruleset.json` 也走这条路**（仓库级）：
+> `conditions` 里只有 `ref_name`（没有 `repository_name`）→ 打到 `repos/...` 端点。
+> 逐字段解读、导入后必做的核对、以及「ruleset 顶替 webhook 自检」的边界，见
+> [`examples/rulesets/08-main-ruleset.md`](../examples/rulesets/08-main-ruleset.md)。
 
 ### 3.3 导入后要改的三处
 
@@ -267,6 +278,47 @@ metadata 规则是在 **push（ref update）** 时才生效：
 | 删除 | 点 ruleset 名字 → 右侧 `...` → **Delete ruleset** |
 | 看谁被规则管着 | 任意有 read 权限的人都能在仓库的 Rulesets 页面看到 active ruleset |
 | 看规则命中统计（Enterprise） | Org → Settings → Repository → **Dashboard**（Rule insights） |
+
+---
+
+## 3.5 ★ ruleset 与 webhook 的边界
+
+> 常见思路：**"把 ruleset 装到 branch 上，就能替掉企业级那套 webhook 的设置。"**
+> 方向对，但要精确到"替换哪一段"——两者根本不是一类东西。
+
+| | **webhook** | **ruleset** |
+|---|---|---|
+| 本质 | **事件投递**（"发生了 push，快来看"） | **平台内置门禁**（"这次 ref 更新不合规，不许动"） |
+| 同步性 | 异步（可能延迟、可能丢） | 同步（判定完才动 ref） |
+| 依赖你的服务在线吗 | ✅ 依赖 | ❌ 不依赖 |
+| 回答的问题 | "发生了什么？" | "允不允许发生？" |
+
+### 3.5.1 真正被替换掉的，是这一段
+
+```
+替换前（自建 webhook 校验）：
+  push → GitHub 更新 ref → webhook 投递 → 你的服务校验 message
+        → 写 failing status → required_status_checks 挡住合并
+        ↑ 往返延迟；服务挂了门禁就形同虚设
+
+替换后（ruleset metadata 规则，如 commit_message_pattern）：
+  push → GitHub 在更新 ref 之前自己判 message
+        → 不合规：直接拒绝更新 ref（连 webhook 都不会发）
+        → 合规：更新 ref → webhook 照常投递（Argo CD 同步不受影响）
+```
+
+### 3.5.2 结论
+
+| 问题 | 答案 |
+|---|---|
+| ruleset 能替代 webhook 吗？ | ❌ 不能（事件通道 vs 判定器） |
+| ruleset 能替代"webhook 自检 + status 拦截"吗？ | ✅ 能，且更好（无延迟、不依赖服务在线、不合规的 commit 连事件都不产生） |
+| 装完 ruleset 后 webhook 要改吗？ | ❌ 不用。**门禁 + 通知**，互补 |
+| 什么时候仍然只能用 webhook + CI？ | **没有 Enterprise**（metadata 规则不可用）→ 只能 `required_status_checks` + Actions |
+
+> ★ **一句话**：ruleset 把"判断"从你的服务挪到了平台；webhook 继续负责"通知"。
+> 完整展开（含 08 的逐字段解读）见
+> [`examples/rulesets/08-main-ruleset.md`](../examples/rulesets/08-main-ruleset.md) §3。
 
 ---
 
@@ -319,9 +371,9 @@ CR_CHECK_APP_ID=<App ID> ./apply-rulesets.sh --owner <org> --repo <repo> \
 gh api -X POST repos/<org>/<repo>/rulesets \
   --input 04-repo-prod-branches.json
 
-# 创建组织级
+# 创建组织级（★ 只有 conditions 里带 repository_name 的那份才是组织级）
 gh api -X POST orgs/<org>/rulesets \
-  --input 07-commit-message-cr-prefix-protected.json
+  --input 01-org-baseline.json
 
 # 查 id
 gh api repos/<org>/<repo>/rulesets \
@@ -583,7 +635,7 @@ git push -u origin feature/CAEP-0001-verify-ruleset
 | 现象 / 报错 | 根因 | 解法 |
 |---|---|---|
 | `404 Not Found`（打 `repos/...` 却失败） | 仓库不存在 / 名字拼错 / 私有仓库没权限 | 检查 owner/repo；确认 token 有该仓库权限 |
-| `404`（打 `orgs/...` 失败） | ★ **scope 用错**：这个 JSON 是仓库级的 | 脚本会自动判定；手动打 API 时注意 01/07/08 → orgs，其余 → repos |
+| `404`（打 `orgs/...` 失败） | ★ **scope 用错**：这个 JSON 是仓库级的 | 脚本会自动判定；手动打 API 时注意 **只有 `01-org-baseline.json` → orgs**，其余（`02`–`08`）→ repos |
 | `403 Forbidden` | 组织级 ruleset 需要 owner；或 token 缺 `admin:org` | `gh auth refresh -s admin:org`；或找 owner |
 | `422 Unprocessable Entity` | ★ **字段名/取值不合法**（如 `operator` 缺、pattern 非法、conditions 组合非法） | `python3 validate-rulesets.py` 先自检；错误信息里有 `path` 字段指到具体位置 |
 | `422` + 提到 `integration_id` | App ID 不是整数 / 该 App 在此仓库不存在 | 用真实 App ID；确认 Installation 包含该仓库 |
@@ -603,6 +655,8 @@ git push -u origin feature/CAEP-0001-verify-ruleset
 | 主题 | 文档 |
 |---|---|
 | Ruleset 概念 / 与 App 的唯一耦合点 / 4 种静默失效 | [`14-rulesets-and-gitapp-gate.md`](./14-rulesets-and-gitapp-gate.md) |
+| ★ **08 逐字段解读 + UI 导入 + ruleset 与 webhook 的边界** | [`examples/rulesets/08-main-ruleset.md`](../examples/rulesets/08-main-ruleset.md) |
+| ★ 企业版能力矩阵（哪些 rule type 要什么计划） | [`examples/rulesets-enterprise/00-enterprise-capabilities.md`](../examples/rulesets-enterprise/00-enterprise-capabilities.md) |
 | 最小示例（commit message 以 `CR123456` 开头） | [`15-commit-message-cr-prefix.md`](./15-commit-message-cr-prefix.md) |
 | ★ 配置 + 脚本 + 校验器 | [`examples/rulesets/`](../examples/rulesets/) |
 | ★ 一键安装脚本 | [`examples/rulesets/apply-rulesets.sh`](../examples/rulesets/apply-rulesets.sh) |

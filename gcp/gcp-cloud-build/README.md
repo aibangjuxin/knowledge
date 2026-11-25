@@ -8,6 +8,7 @@ GCP 的托管式 CI/CD（serverless）。提交 `cloudbuild.yaml` → Cloud Buil
 | :--- | :--- |
 | [`cloudbuild-guide.md`](cloudbuild-guide.md) | **主文档**：是什么 / 能产出什么 / 上手全流程 / API 与 IAM 清单 / Schema 速查 / CLI 速查 / 成本配额 / 安全 / 排错 |
 | [**`how-to-github-trigger-cloud-build.md`**](how-to-github-trigger-cloud-build.md) | **GitHub → Cloud Build 端到端打通**：GitHub App 原理、1st gen / 2nd gen 两条路线选型、源码拉取链路、IAM 身份全景、产物落地（镜像 / JAR）、**GitHub 企业版场景（自建 GHE / 内网打通 / 自签 CA）**、加固清单、排错手册 |
+| [**`how-to-pr-checks-with-cloud-build.md`**](how-to-pr-checks-with-cloud-build.md) | **PR 门禁实战**：仓库里的 `ci-test.yaml` 怎么翻译成 Cloud Build build config、PR trigger 怎么建（`--pull-request-pattern` / `--comment-control`）、**PR 上的 Checks 是怎么自动出现的**（回写机制 + branch protection 硬门禁）、多个 check 怎么拆、PR 安全与排错 |
 | [**`how-to-autofix-cve-with-cloud-build.md`**](how-to-autofix-cve-with-cloud-build.md) | **CVE 自动修复闭环**：Cloud Build 在修复流水线里的角色、改 Dockerfile 的修补映射表、三种落地形态、报告怎么拿、差分判定、12 个 CVE 场景特有的坑 |
 | [**`how-to-explore-go-modules.md`**](how-to-explore-go-modules.md) | **Go 依赖探索手册**：`go mod why -m` 怎么回答「谁 import 了它」/ 模块图 vs 导入图 / 包级反向查找 / 10 个实测坑 / CI 里的依赖审计落点 |
 | [`gcp-cloud-build-concepts.md`](gcp-cloud-build-concepts.md) | 概念与生态全景（英文）：核心概念、GitHub 集成、Pipeline 集成选项、收益与最佳实践 |
@@ -22,6 +23,7 @@ GCP 的托管式 CI/CD（serverless）。提交 `cloudbuild.yaml` → Cloud Buil
 | :--- | :--- |
 | `docker-to-cloudrun.yaml` | Docker 镜像 → Artifact Registry → Cloud Run（最常见） |
 | `nodejs-test-deploy.yaml` | npm ci / lint / test → 镜像 → 推送（多 step 依赖、allowFailure） |
+| `ci-test-pr.yaml` | **PR CI 模板**：装依赖 → helm lint/render → python 测试 → bash 测试（结果回写成 PR 上的 Check） |
 | `java-maven.yaml` | Maven 构建 jar → 发布到 Artifact Registry Maven 仓库 |
 | `golang-binary.yaml` | 编译 Go 静态二进制 → 打包 → 上传 GCS（非镜像类产物） |
 | `terraform-plan-only.yaml` | Terraform **只 plan 不 apply**（IaC 安全基线） |

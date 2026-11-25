@@ -1,0 +1,82 @@
+# ci-test-pr.yaml —— PR CI 模板（Cloud Build build config）
+#
+# 用法：
+#   1) 复制到你的仓库根目录，改名为 ci-test.yaml
+#   2) 建 PR trigger（详见 how-to-pr-checks-with-cloud-build.md §3.1）：
+#        gcloud builds triggers create github \
+#          --name=pr-ci-test --region=asia-northeast1 \
+#          --repository=projects/<PROJECT_ID>/locations/<REGION>/connections/<CONN>/repositories/<REPO> \
+#          --pull-request-pattern='^main$' \
+#          --build-config=ci-test.yaml \
+#          --service-account=projects/<PROJECT_ID>/serviceAccounts/gcb-ci@<PROJECT_ID>.iam.gserviceaccount.com \
+#          --comment-control=COMMENTS_DISABLED \
+#          --include-logs-with-status \
+#          --no-require-approval
+#   3) 本地自测：gcloud builds submit --config ci-test.yaml --region=asia-northeast1
+#
+# 关键点：
+#   · steps[].name 是 builder 镜像（不是步骤名）
+#   · step 之间只有 /workspace 共享，依赖装进 /workspace/.ci-deps，PATH 要每步带上
+steps:
+  # ── 0) 安装测试依赖 ───────────────────────────────
+  - name: 'ubuntu:22.04'
+    id: 'install-deps'
+    entrypoint: bash
+    args:
+      - 'scripts/utils/install_ci_dependencies.sh'
+    env:
+      - 'CI_DEPS_PREFIX=/workspace/.ci-deps'
+      - 'HOME=/workspace/.ci-home'
+    timeout: '600s'
+
+  # ── 1) Helm lint + render ─────────────────────────
+  - name: 'ubuntu:22.04'
+    id: 'helm-lint-render'
+    entrypoint: bash
+    args: ['-c', 'make test-helm']
+    env:
+      - 'PATH=/workspace/.ci-deps/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+      - 'HOME=/workspace/.ci-home'
+      - 'CI=true'
+    waitFor: ['install-deps']
+    timeout: '900s'
+
+  # ── 2) 集群 onboarding 测试 ───────────────────────
+  - name: 'ubuntu:22.04'
+    id: 'cluster-onboarding'
+    entrypoint: bash
+    args: ['-c', 'make test-python']
+    env:
+      - 'PATH=/workspace/.ci-deps/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+      - 'HOME=/workspace/.ci-home'
+      - 'CI=true'
+    waitFor: ['install-deps']
+    timeout: '1200s'
+
+  # ── 3) bootstrap 脚本测试 ─────────────────────────
+  - name: 'ubuntu:22.04'
+    id: 'bootstrap-tests'
+    entrypoint: bash
+    args: ['-c', 'make test-bash']
+    env:
+      - 'PATH=/workspace/.ci-deps/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+      - 'HOME=/workspace/.ci-home'
+      - 'CI=true'
+    waitFor: ['install-deps']
+    timeout: '900s'
+
+# ── 全局 ─────────────────────────────────────────────
+timeout: '1800s'
+serviceAccount: 'projects/$PROJECT_ID/serviceAccounts/gcb-ci@$PROJECT_ID.iam.gserviceaccount.com'
+
+substitutions:
+  _HELM_CHART_DIR: 'charts/'
+  _CLUSTER_NAME: 'example-cluster'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  diskSizeGb: '30'
+  logging: 'CLOUD_LOGGING_ONLY'
+  env:
+    - 'CI=true'
+    - 'HELM_CHART_DIR=${_HELM_CHART_DIR}'
