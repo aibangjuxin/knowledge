@@ -285,7 +285,8 @@ env HOME=~/.local/state/rex-markdown-browser/home \
 | `mdview: 没找到 terminal-browser` | 没装 cask，且无 `programs.json` | `brew install --cask terminal-browser` |
 | `mdview: 找不到 rex CLI，无法开分屏` | 没装 Rex，或 `rex` 不在 PATH 且无 `programs.json` | 见 §3 的方案 A / B |
 | `mdview: rex 开分屏失败（服务器在跑吗？）` | Rex server 没起 | 启动 Rex Beta.app，或 `rex server start` |
-| `mdview: 不在 Rex 终端里` | 当前终端没有 `REX_SESSION`（在 Terminal.app / iTerm2 里跑） | 正常降级：当前终端全屏渲染，`Ctrl+Q` 退出 |
+| `mdview: 不在 Rex 终端里` | 当前终端拿不到 session（Terminal.app / iTerm2 里跑） | 正常降级：当前终端全屏渲染，`Ctrl+Q` 退出。
+> Rex 0.1.0-preview.25 起不再注入 `REX_SESSION`，但 `mdview` 会回退到 `rex whoami --json`，在 Rex 里仍能开分屏 |
 | `Unsupported terminal: this terminal cannot display graphics` | 当前终端不支持 kitty graphics | 换 Ghostty/Kitty/WezTerm，或直接在 Rex 窗格里跑 |
 | 渲染出来是空白 | `terminal-browser` 启动即退 | 看 `~/Library/Application Support/Rex Markdown/handler.log` 和 `ps aux \| grep terminal-browser` |
 | 滚动卡顿掉帧 | `render.fps` 不是 30 | `terminal-browser config set render.fps 30`（需带隔离环境变量，见 §6 第 7 条） |

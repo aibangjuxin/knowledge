@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+# mdview — 在终端里直接看 Markdown
+#
+#   mdview FILE.md          在 Rex 右侧开一个分屏，用 terminal-browser 渲染（焦点留在当前 pane）
+#   mdview DIR|              浏览目录下的所有 .md（fzf + glow 预览，Enter 打开分屏）
+#   mdview -c FILE.md       在当前 pane 用 glow 直接渲染（不另开分屏）
+#   mdview -l DIR           只列出目录下的 .md（树状）
+#
+# 必需：bash、node(路径转 file:// URL)、terminal-browser(渲染器)
+# 可选：rex(分屏模式)、glow(-c 模式/预览)、bat(-c 后备)、fzf(目录浏览)
+# 详见 mdview-setup-and-dependencies.md
+set -uo pipefail
+
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+MD_ROOT="$HOME/.local/state/rex-markdown-browser"
+SUPPORT_DIR="$HOME/Library/Application Support/Rex Markdown"
+
+# ── 浏览器可执行文件 ───────────────────────────────────────────────
+# 从 Rex Markdown 安装器写的 programs.json 里取绝对路径
+programs_json_get() {
+  [ -f "$SUPPORT_DIR/programs.json" ] || return 1
+  node -e 'try{const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(d[process.argv[2]]||"")}catch(e){}' \
+    "$SUPPORT_DIR/programs.json" "$1"
+}
+
+browser_bin() {
+  # type -P：只查 PATH 里的可执行文件，不会误命中 shell 函数/别名
+  if type -P terminal-browser >/dev/null 2>&1; then
+    type -P terminal-browser
+    return 0
+  fi
+  programs_json_get browser
+}
+
+# rex CLI：先找 PATH，再退到 programs.json 记录的绝对路径
+# （Rex Beta.app 把 rex 装在 ~/Library/Application Support/com.superlogical.rex/ 下，
+#  默认不在 PATH 里，只靠 command -v rex 会让分屏模式静默降级）
+rex_bin() {
+  if type -P rex >/dev/null 2>&1; then
+    type -P rex
+    return 0
+  fi
+  programs_json_get rex
+}
+
+# ── 隔离的浏览器环境（和 Pi 预览用同一套 profile/daemon）────────────
+browser_env_args() {
+  printf '%s\n' \
+    "HOME=$MD_ROOT/home" \
+    "TERMINAL_BROWSER_NO_TELEMETRY=1" \
+    "TERMINAL_BROWSER_PRESENT=animation" \
+    "TERMINAL_BROWSER_APPDATA=$MD_ROOT/profiles" \
+    "TERMINAL_BROWSER_CONFIG_DIR=$MD_ROOT/config" \
+    "XDG_DATA_HOME=$MD_ROOT/data" \
+    "XDG_STATE_HOME=$MD_ROOT/state" \
+    "XDG_CACHE_HOME=$MD_ROOT/cache" \
+    "XDG_RUNTIME_DIR=$MD_ROOT/run"
+}
+
+file_url() {
+  node -e 'const {pathToFileURL}=require("url");console.log("terminal-browser-file://file"+pathToFileURL(process.argv[1]).pathname)' "$1"
+}
+
+# ── 在 Rex 右侧开分屏渲染 ──────────────────────────────────────────
+open_pane() {
+  local file="$1"
+  [ -f "$file" ] || { echo "mdview: 找不到文件：$file" >&2; return 1; }
+  file="$(cd "$(dirname "$file")" && pwd)/$(basename "$file")"
+  local browser; browser="$(browser_bin)"
+  [ -n "$browser" ] || { echo "mdview: 没找到 terminal-browser" >&2; return 1; }
+  local url; url="$(file_url "$file")"
+  local dir; dir="$(dirname "$file")"
+  local base; base="$(basename "$file")"
+
+  local -a fallback_env=()
+  while IFS= read -r kv; do fallback_env+=("$kv"); done < <(browser_env_args)
+  fallback_render() {
+    exec /usr/bin/env "${fallback_env[@]}" "$browser" open --no-merge "$url"
+  }
+
+  local rex_path; rex_path="$(rex_bin)"
+
+  # 不在 Rex 里跑 → 退化成当前终端全屏预览
+  if [ -z "${REX_SESSION:-}" ]; then
+    echo "mdview: 不在 Rex 终端里，直接在当前终端渲染（Ctrl+Q 退出）" >&2
+    fallback_render
+  fi
+
+  # 在 Rex 里但找不到 rex CLI → 同样降级，但要说明原因
+  if [ -z "$rex_path" ]; then
+    echo "mdview: 找不到 rex CLI，无法开分屏（安装 Rex Beta.app，或把 rex 加进 PATH）" >&2
+    echo "mdview: 改为在当前终端渲染（Ctrl+Q 退出）" >&2
+    fallback_render
+  fi
+
+  local -a env_pairs=()
+  while IFS= read -r kv; do env_pairs+=("$kv"); done < <(browser_env_args)
+
+  local args=(run --session "$REX_SESSION")
+  [ -n "${REX_BLOCK:-}" ] && args+=(--block "$REX_BLOCK")
+  args+=(--split right --ratio 45 --focus=false --shell=none --cwd "$dir" --label "MD" --json --)
+
+  if ! "$rex_path" "${args[@]}" /usr/bin/env "${env_pairs[@]}" "$browser" open --no-merge "$url"; then
+    echo "mdview: rex 开分屏失败（服务器在跑吗？'rex server status'）" >&2
+    return 1
+  fi
+}
+
+# ── 当前 pane 用 glow 渲染 ─────────────────────────────────────────
+open_inline() {
+  local file="$1"
+  [ -f "$file" ] || { echo "mdview: 找不到文件：$file" >&2; return 1; }
+  if type -P glow >/dev/null 2>&1; then
+    exec glow --style=dark --pager "$file"
+  fi
+  exec bat --language=md --style=numbers --color=always --paging=always "$file"
+}
+
+# ── 列出目录下的 .md ──────────────────────────────────────────────
+list_md() {
+  local dir="${1:-.}"
+  find "$dir" -type f \( -name '*.md' -o -name '*.markdown' \) \
+    -not -path '*/.git/*' -not -path '*/node_modules/*' | sort
+}
+
+# ── fzf 浏览目录 ──────────────────────────────────────────────────
+browse_dir() {
+  local dir="${1:-.}"
+  local files
+  files="$(find "$dir" -type f \( -name '*.md' -o -name '*.markdown' \) \
+            -not -path '*/.git/*' -not -path '*/node_modules/*' -exec sh -c \
+            'for f; do case "$f" in /*) echo "$f";; *) echo "$PWD/$f";; esac; done' _ {} + | sort)"
+  if [ -z "$files" ]; then echo "mdview: $dir 下没有 .md 文件" >&2; return 1; fi
+  if ! type -P fzf >/dev/null 2>&1; then
+    printf '%s\n' "$files"
+    return 0
+  fi
+  local preview="glow --style=dark --width 120"
+  type -P glow >/dev/null 2>&1 || preview="cat"
+  printf '%s\n' "$files" | fzf \
+    --preview "$preview {}" \
+    --preview-window 'right:62%:wrap' \
+    --border 'rounded' --height '90%' \
+    --bind "enter:execute(bash '$SELF' --pane {1})+abort,ctrl-o:execute(bash '$SELF' --pane {1})+abort" \
+    --header "mdview · Enter 在 Rex 右侧分屏预览 · Esc 退出"
+}
+
+# ── 参数解析 ──────────────────────────────────────────────────────
+MODE="auto"; TARGET=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -c|--cat)   MODE="cat"; shift ;;
+    -l|--list)  MODE="list"; shift ;;
+    --pane)     MODE="pane"; shift ;;
+    -d|--dir)   MODE="browse"; shift ;;
+    -h|--help)  awk 'NR>1 && /^#/ {sub(/^# ?/,""); print; next} NR>1 {exit}' "$0"; exit 0 ;;
+    *)          TARGET="$1"; shift ;;
+  esac
+done
+
+case "$MODE" in
+  cat)  [[ -n "$TARGET" ]] || { echo "用法: mdview -c FILE.md" >&2; exit 1; }
+        open_inline "$TARGET" ;;
+  list) list_md "${TARGET:-.}" ;;
+  pane) [[ -n "$TARGET" ]] || { echo "用法: mdview --pane FILE.md" >&2; exit 1; }
+        open_pane "$TARGET" ;;
+  browse)
+        [[ -n "$TARGET" ]] || TARGET="."
+        browse_dir "$TARGET" ;;
+  auto)
+        if [[ -z "$TARGET" ]]; then TARGET="."
+        fi
+        if [ -d "$TARGET" ]; then
+          browse_dir "$TARGET"
+        else
+          open_pane "$TARGET"
+        fi ;;
+esac

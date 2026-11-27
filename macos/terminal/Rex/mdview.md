@@ -59,6 +59,9 @@
 
 环境变量依赖：`REX_SESSION`、`REX_BLOCK`（Rex 启动子进程时注入，用来定位「发起调用的那个 pane」）。缺失 → 走降级分支。
 
+> **2026-11 起**：Rex 0.1.0-preview.25 不再注入 `REX_SESSION`（只留 `REX_BLOCK`）。
+> `mdview` 已改为：`REX_SESSION` 缺失时自动回退到 `rex whoami --json` 取 `session_id` / `block_id`，分屏模式照常工作。
+
 > 完整依赖清单、跨机安装步骤与排错表见 **[mdview-setup-and-dependencies.md](./mdview-setup-and-dependencies.md)**；
 > 一键自检：`./mdview-doctor`。
 

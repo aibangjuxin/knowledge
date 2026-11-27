@@ -61,6 +61,31 @@ file_url() {
   node -e 'const {pathToFileURL}=require("url");console.log("terminal-browser-file://file"+pathToFileURL(process.argv[1]).pathname)' "$1"
 }
 
+# ── 定位当前 Rex 会话 / pane ───────────────────────────────────────
+# Rex 0.1.0-preview.25 起不再向子进程注入 REX_SESSION（仍注入 REX_BLOCK），
+# 所以缺失时回退到 "rex whoami --json" 拿 session_id / block_id。
+resolve_rex_ids() {
+  REX_ID_SESSION="${REX_SESSION:-}"
+  REX_ID_BLOCK="${REX_BLOCK:-}"
+  [ -n "$REX_ID_SESSION" ] && return 0
+  local rex_path; rex_path="$(rex_bin)"
+  [ -n "$rex_path" ] || return 0
+  local json ids
+  json="$("$rex_path" whoami --json 2>/dev/null)" || return 0
+  [ -n "$json" ] || return 0
+  ids="$(printf '%s' "$json" | node -e '
+let s = "";
+process.stdin.on("data", (d) => (s += d)).on("end", () => {
+  try {
+    const j = JSON.parse(s);
+    if (j.session_id) console.log("REX_ID_SESSION=" + j.session_id);
+    if (j.block_id) console.log("REX_ID_BLOCK=" + j.block_id);
+  } catch (e) {}
+});' 2>/dev/null)" || return 0
+  [ -n "$ids" ] && eval "$ids"
+  return 0
+}
+
 # ── 在 Rex 右侧开分屏渲染 ──────────────────────────────────────────
 open_pane() {
   local file="$1"
@@ -79,9 +104,10 @@ open_pane() {
   }
 
   local rex_path; rex_path="$(rex_bin)"
+  resolve_rex_ids
 
   # 不在 Rex 里跑 → 退化成当前终端全屏预览
-  if [ -z "${REX_SESSION:-}" ]; then
+  if [ -z "$REX_ID_SESSION" ]; then
     echo "mdview: 不在 Rex 终端里，直接在当前终端渲染（Ctrl+Q 退出）" >&2
     fallback_render
   fi
@@ -96,8 +122,8 @@ open_pane() {
   local -a env_pairs=()
   while IFS= read -r kv; do env_pairs+=("$kv"); done < <(browser_env_args)
 
-  local args=(run --session "$REX_SESSION")
-  [ -n "${REX_BLOCK:-}" ] && args+=(--block "$REX_BLOCK")
+  local args=(run --session "$REX_ID_SESSION")
+  [ -n "$REX_ID_BLOCK" ] && args+=(--block "$REX_ID_BLOCK")
   args+=(--split right --ratio 45 --focus=false --shell=none --cwd "$dir" --label "MD" --json --)
 
   if ! "$rex_path" "${args[@]}" /usr/bin/env "${env_pairs[@]}" "$browser" open --no-merge "$url"; then

@@ -98,7 +98,10 @@ rex whoami --json | head -20     # 确认 session_id / block_id / endpoint 都�
 xcode-select -p
 ```
 
-> 在 Rex 里跑 Pi 时，进程环境里会有 `REX_SESSION` / `REX_BLOCK`，扩展靠它们定位"发起点击的那个 pane"。不在 Rex 里跑 Pi 时扩展会自动跳过（不报错）。
+> 在 Rex 里跑 Pi 时，进程环境里会有 `REX_BLOCK`（以及 `REX_SERVER` / `REX_BIN_DIR`）。
+> **注意：Rex 0.1.0-preview.25 起不再注入 `REX_SESSION`** —— 所以扩展与 `mdview` 都改成：
+> 环境变量缺失时回退到 `rex whoami --json`（它仍然返回 `session_id` / `block_id` / `endpoint`）。
+> 不在 Rex 里跑 Pi 时扩展会自动跳过（不报错）。
 
 ### 步骤 1：装 terminal-browser
 
@@ -270,10 +273,11 @@ printf '# Rex Markdown 测试\n\n这是一个 [内链](README.md) 和一个 [网
 
 node --input-type=module -e '
 import { createTickets } from "/Users/lex/.pi/tools/rex-markdown/bridge.mjs";
+const rex = JSON.parse(execFileSync("rex", ["whoami", "--json"], { encoding: "utf8" }));
 const t = createTickets({
-  session: process.env.REX_SESSION,
-  block: process.env.REX_BLOCK,
-  server: "unix:///Users/lex/Library/Application%20Support/rex/server.sock",
+  session: process.env.REX_SESSION || rex.session_id,
+  block: process.env.REX_BLOCK || rex.block_id,
+  server: rex.endpoint,
 });
 console.log(t.link("/tmp/rexmd/demo.md"));
 ' > /tmp/rexmd/url.txt
@@ -352,7 +356,8 @@ env HOME=~/.local/state/rex-markdown-browser/home \
 
 | 现象 | 排查 |
 | --- | --- |
-| 链接不可点击 | 没跑 `/reload`；或 Pi 不在 Rex 里（无 `REX_SESSION`/`REX_BLOCK`）；或 Pi 提示 "Rex Markdown requires a local Rex terminal"（当前是远程 Rex server） |
+| 链接不可点击 | 没跑 `/reload`；或 Pi 不在 Rex 里；或 Pi 提示 "Rex Markdown requires a local Rex terminal"（当前是远程 Rex server） |
+| **2026-11 起突然全部不可点击** | Rex 升级到 0.1.0-preview.25 后不再注入 `REX_SESSION`，旧版扩展直接 return → 不改写任何链接。修复：扩展改成用 `rex whoami --json` 兜底（见 `~/.pi/agent/extensions/rex-markdown.ts`），改完跑 `/reload` |
 | **Agent 输出的路径点了没反应** | Agent 把路径写成了行内代码 / 纯文本 / 代码块，而不是 `[文字](路径)` 语法 → 扩展根本没得可改写。**详见第十四节** |
 | 提示 handler 未安装 | 跑 `node ~/.pi/tools/rex-markdown/install.mjs` |
 | 预览开了但空白/报错 | 看 `~/Library/Application Support/Rex Markdown/handler.log`，以及 Rex 分屏的启动报错；浏览器日志在 `~/.local/state/rex-markdown-browser/state` |
@@ -790,7 +795,7 @@ dist/core/agent-session.js:3132   await this.extendResourcesFromExtensions("relo
 
 ### 14.6 验收清单
 
-- [ ] `env | grep REX_SESSION` 有输出
+- [ ] `rex whoami --json` 能拿到 `session_id` / `block_id`（`env | grep REX` 现在只有 `REX_BLOCK`，正常）
 - [ ] `ls ~/Library/Application\ Support/"Rex Markdown"/tickets/` 有新 ticket
 - [ ] `tail ~/Library/Application\ Support/"Rex Markdown"/handler.log` 有 split 记录
 - [ ] Agent 输出的 `[x.md](x.md)` hover 显示 `rex-md://open/<64位hex>`
