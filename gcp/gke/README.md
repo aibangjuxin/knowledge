@@ -44,3 +44,4 @@ gke/
 - 控制平面 / GitOps: 查看 `docs/` 目录中的 `universal-control-plane-argocd-crossplane.md`
 - Serverless: 查看 `docs/` 目录中的 `knative-on-gke.md`
 - Namespace 内服务互调(版本解耦 + mTLS/证书): 查看 `docs/` 目录中的 `intra-namespace-call.md`
+- GCP 认证/授权(gcloud auth login 自动化): 查看 `gcloud-auth-login.md`(认证方式全景) 与 `gcloud-auth-login-docker.md`(Docker Jumpbox 模式实战)
