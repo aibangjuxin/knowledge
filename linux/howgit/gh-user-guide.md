@@ -85,6 +85,15 @@ gh pr create \
   --head docs/cr-prefix-lab \
   --title "CH113456 docs: sync docs to feature resolve only testing" \
   --body "sync docs to feature resolve only testing"
+
+
+我的branch 比如lex 提交一个pull request to main
+gh pr create \
+  --base main \
+  --head lex \
+  --title "CH113456 docs: sync docs to feature resolve only testing" \
+  --body "sync docs to feature resolve only testing"
+
 ```
 
 要点：

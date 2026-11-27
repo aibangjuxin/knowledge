@@ -1,0 +1,1 @@
+pbpaste > /Users/lex/git/knowledge/gcp/gke/docs/kubectl-auth-whoami.md
