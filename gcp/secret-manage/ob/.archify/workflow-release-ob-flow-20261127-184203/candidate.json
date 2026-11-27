@@ -1,0 +1,85 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "SMS Secret Onboarding 发布与运行流程",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "output": "docker/release-ob-flow.html"
+  },
+  "lanes": [
+    { "id": "host", "label": "宿主机（操作者 / 开发机）" },
+    { "id": "auth", "label": "授权容器 jumpbox（gcloud CLI）" },
+    { "id": "runtime", "label": "运行容器 sms-secret-onboarding" },
+    { "id": "gcp", "label": "Google Cloud（Secret Manager / IAM）" },
+    { "id": "failure", "label": "失败与降级", "variant": "exception" }
+  ],
+  "phases": [
+    { "id": "prepare", "label": "准备：构建 + 授权", "fromCol": 0, "toCol": 1, "variant": "emphasis" },
+    { "id": "launch", "label": "启动：docker run", "fromCol": 2, "toCol": 3 },
+    { "id": "execute", "label": "执行：步骤 + 落地", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "groups": [
+    { "id": "auth_group", "label": "凭据准备", "lane": "auth", "fromCol": 1, "toCol": 2, "variant": "security" },
+    { "id": "pipeline_group", "label": "Pipeline 步骤", "lane": "runtime", "fromCol": 4, "toCol": 5, "variant": "emphasis" },
+    { "id": "failure_group", "label": "失败分支", "lane": "failure", "fromCol": 2, "toCol": 4, "variant": "security" }
+  ],
+  "mainPath": ["source", "build", "run", "entry", "main", "step_ob"],
+  "nodes": [
+    { "id": "source", "lane": "host", "col": 0, "type": "frontend", "label": "源码与配置", "sublabel": "app/ + config/*.json", "width": 124 },
+    { "id": "build", "lane": "host", "col": 1, "type": "backend", "label": "docker build", "sublabel": "分层 COPY + pip", "tag": "immutable", "width": 132 },
+    { "id": "run", "lane": "host", "col": 2, "type": "frontend", "label": "docker run", "sublabel": "挂载 config + 凭据", "tag": "一次性容器", "width": 126 },
+    { "id": "auth", "lane": "auth", "col": 1, "type": "security", "label": "gcloud 授权", "sublabel": "application-default login", "tag": "一次性", "width": 138 },
+    { "id": "adc", "lane": "auth", "col": 2, "type": "database", "label": "ADC 凭据文件", "sublabel": "ADC json", "width": 112 },
+    { "id": "entry", "lane": "runtime", "col": 3, "type": "backend", "label": "entrypoint.sh", "sublabel": "解 bundle + 打印环境", "width": 122 },
+    { "id": "main", "lane": "runtime", "col": 4, "type": "backend", "label": "main.py", "sublabel": "合并配置 + 调度步骤", "tag": "唯一入口", "width": 126 },
+    { "id": "step_ob", "lane": "runtime", "col": 5, "type": "messagebus", "label": "onboarding 步骤", "sublabel": "RT GSA + 空 secret", "yOffset": -46, "width": 132 },
+    { "id": "step_create", "lane": "runtime", "col": 5, "type": "messagebus", "label": "create 步骤", "sublabel": "写 version + accessor", "yOffset": 46, "width": 128 },
+    { "id": "sm", "lane": "gcp", "col": 5, "type": "cloud", "label": "Secret Manager", "sublabel": "secret + version + IAM", "width": 134 },
+    { "id": "wrong_auth", "lane": "failure", "col": 2, "type": "security", "label": "凭据类型不匹配", "sublabel": "只写 credentials.db", "tag": "降级模拟模式", "width": 122 },
+    { "id": "cfg_err", "lane": "failure", "col": 4, "type": "security", "label": "配置错误", "sublabel": "JSON 非法 / 字段缺失", "tag": "exit 2", "width": 116 }
+  ],
+  "edges": [
+    { "id": "e_copy", "from": "source", "to": "build", "label": "COPY", "variant": "emphasis" },
+    { "id": "e_auth_run", "from": "source", "to": "auth", "label": "auth.sh", "variant": "dashed" },
+    { "id": "e_image", "from": "build", "to": "run", "label": "镜像", "variant": "emphasis" },
+    { "id": "e_adc", "from": "auth", "to": "adc", "label": "产出", "variant": "security" },
+    { "id": "e_mount", "from": "adc", "to": "run", "label": "凭据挂载", "variant": "security", "fromSide": "top", "toSide": "bottom" },
+    { "id": "e_entry", "from": "run", "to": "entry", "label": "ENTRYPOINT", "variant": "emphasis" },
+    { "id": "e_main", "from": "entry", "to": "main", "label": "exec main.py" },
+    { "id": "e_step", "from": "main", "to": "step_ob", "label": "子进程", "variant": "emphasis" },
+    { "id": "e_next", "from": "step_ob", "to": "step_create", "label": "依次" },
+    { "id": "e_sm", "from": "step_create", "to": "sm", "label": "API 写入", "variant": "emphasis" },
+    { "id": "e_wrong", "from": "adc", "to": "wrong_auth", "label": "缺 ADC", "variant": "security", "role": "error" },
+    { "id": "e_cfg", "from": "main", "to": "cfg_err", "label": "exit 2", "variant": "security", "role": "error" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "不可变镜像",
+      "items": [
+        "镜像只含代码与依赖，配置和凭据全部运行时注入",
+        "版本写入 OCI label，运行时用 RELEASE_VERSION 传业务版本",
+        "同一镜像靠 -e 与 -v 跑不同环境，无需重新构建"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "凭据要点",
+      "items": [
+        "Python SDK 只读 ADC json，不读 gcloud CLI 的 credentials.db",
+        "授权必须用 gcloud auth application-default login",
+        "凭据目录只读挂载；密钥绝不用 -e 传，docker inspect 可见"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "退出码与降级",
+      "items": [
+        "0 成功，1 执行异常，2 配置或参数错误，130 被中断",
+        "未检测到 ADC 时降级为模拟模式，流程仍返回 0 但无真实变更",
+        "配置缺失用 --strict-config 强制报错，不静默回退内置默认"
+      ]
+    }
+  ]
+}

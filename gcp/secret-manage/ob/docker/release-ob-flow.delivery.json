@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "eaa5e3af-4e41-4817-a0c3-14faa5df6f32",
+  "status": "current",
+  "command": "deliver",
+  "type": "workflow",
+  "input": "/Users/lex/git/knowledge/gcp/secret-manage/ob/.archify/workflow-release-ob-flow-20261127-184203/candidate.json",
+  "output": "/Users/lex/git/knowledge/gcp/secret-manage/ob/docker/release-ob-flow.html",
+  "specification": {
+    "sha256": "61a137b4f6f1262a4209fec350ca7cb6523d6ecce86bc8f31ca94accef3b832a",
+    "bytes": 5620
+  },
+  "artifact": {
+    "sha256": "58e90dd9c73785024908a8fcc101ca9b793d7fbd2694a4e5dc5ce4ae4ab6b109",
+    "bytes": 771320
+  }
+}

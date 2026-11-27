@@ -28,7 +28,10 @@ ROLE_SECRET_VIEWER = "roles/secretmanager.viewer"
 ROLE_IAM_SERVICE_ACCOUNT_USER = "roles/iam.serviceAccountUser"
 ROLE_IAM_SERVICE_ACCOUNT_ADMIN = "roles/iam.serviceAccountAdmin"
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.abspath(__file__))          # app/
+APP_DIR = HERE
+CONFIG_DIR = os.path.join(HERE, "config")                   # app/config/
+STEPS_DIR = os.path.join(HERE, "steps")                     # app/steps/
 
 
 # ---------------------------------------------------------------- 日志
@@ -151,6 +154,78 @@ def resolve_project(cfg, args):
     )
 
 
+# ---------------------------------------------------------------- ADC 探测
+
+def detect_adc():
+    """
+    探测 Application Default Credentials 是否可用。
+
+    关键点（实测）：
+      * gcloud auth login            → 写 $CLOUDSDK_CONFIG/credentials.db
+      * gcloud auth application-default login → 写 $CLOUDSDK_CONFIG/application_default_credentials.json
+      * Python SDK (google-auth)      → 只读 ADC json，不读 credentials.db
+      * GOOGLE_APPLICATION_CREDENTIALS → 优先级最高，直接指定 ADC json 路径
+
+    所以：**只跑 gcloud auth login，Python 脚本仍然拿不到凭据**。
+    """
+    env_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if env_path:
+        if os.path.exists(env_path):
+            return {
+                "found": True,
+                "source": "GOOGLE_APPLICATION_CREDENTIALS",
+                "path": env_path,
+            }
+        return {
+            "found": False,
+            "source": "GOOGLE_APPLICATION_CREDENTIALS",
+            "path": env_path,
+            "reason": "环境变量指向的文件不存在",
+        }
+
+    cfg_dir = os.environ.get("CLOUDSDK_CONFIG") or os.path.join(
+        os.path.expanduser("~"), ".config", "gcloud"
+    )
+    adc = os.path.join(cfg_dir, "application_default_credentials.json")
+    if os.path.exists(adc):
+        return {"found": True, "source": "ADC file", "path": adc}
+
+    # 退化：metadata server（GCE/GKE/Cloud Run 上由 google-auth 自动探测）
+    return {
+        "found": False,
+        "source": "none",
+        "path": None,
+        "reason": "未找到 ADC（无 GOOGLE_APPLICATION_CREDENTIALS，且 {} 不存在）".format(adc),
+        "adcPath": adc,
+        "gcloudDb": os.path.join(cfg_dir, "credentials.db"),
+    }
+
+
+def print_adc_hint(log):
+    """ADC 不可用时，打印怎么修。"""
+    info = detect_adc()
+    log.info("ADC 探测: found={} source={} path={}".format(
+        info["found"], info["source"], info.get("path")
+    ))
+    if info["found"]:
+        return info
+
+    log.warn("未检测到 Application Default Credentials：{}".format(
+        info.get("reason", "")
+    ))
+    if info.get("gcloudDb") and os.path.exists(info["gcloudDb"]):
+        log.warn(
+            "发现 {} 存在，但 Python SDK 不会读它（gcloud CLI 专用）。".format(
+                info["gcloudDb"]
+            )
+        )
+    log.warn("修复方式（三选一）：")
+    log.warn("  1) 生成 ADC：gcloud auth application-default login --no-launch-browser")
+    log.warn("  2) 指定 ADC：export GOOGLE_APPLICATION_CREDENTIALS=/path/to/adc.json")
+    log.warn("  3) 用 SA key：export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json")
+    return info
+
+
 # ---------------------------------------------------------------- SM 客户端
 
 class SecretManagerClient:
@@ -182,6 +257,10 @@ class SecretManagerClient:
             self.log.info(
                 "SecretManager 模式: REAL (project={})".format(project_id)
             )
+            adc = detect_adc()
+            self.log.info(
+                "ADC 来源: {} ({})".format(adc["source"], adc.get("path"))
+            )
         except Exception as e:  # 没装 SDK / 没有凭据 / 网络问题
             self._mode = "simulate"
             self.log.warn(
@@ -189,6 +268,7 @@ class SecretManagerClient:
                     type(e).__name__, e
                 )
             )
+            print_adc_hint(self.log)
 
     # ---- 内部 ----
 
@@ -333,8 +413,8 @@ def resolve_change_file(cfg):
     name = cfg.get("changeFileName")
     if not name:
         return None
-    for base in (HERE, os.getcwd()):
+    for base in (CONFIG_DIR, os.getcwd(), HERE):
         p = os.path.join(base, name)
         if os.path.exists(p):
             return p
-    return os.path.join(HERE, name)
+    return os.path.join(CONFIG_DIR, name)

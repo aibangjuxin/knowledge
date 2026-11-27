@@ -11,14 +11,30 @@
 
 ```
 ob/
-├── common.py                  # 公共库：配置加载 / 参数解析 / 日志 / SM 客户端封装
-├── secret_api_onboarding.py   # 脚本 1：API 级 onboarding（建 RT GSA + 空 secret + IAM）
-├── secret_api_create.py       # 脚本 2：创建/写入 secret（建 secret + 写 version + 绑 accessor）
-├── ob.example.json            # 脚本 1 的配置示例
-├── secret.create.json         # 脚本 2 的配置示例
-├── requirements.txt           # 依赖说明（零依赖也能跑）
+├── app/                       # ← 镜像里的一切（代码）
+│   ├── main.py                # ★ 统一入口（orchestrator），容器 ENTRYPOINT
+│   ├── common.py              # 公共库：配置加载 / 参数解析 / 日志 / SM 客户端 / ADC 探测
+│   ├── steps/
+│   │   ├── secret_api_onboarding.py   # 步骤 1：API 级 onboarding
+│   │   └── secret_api_create.py       # 步骤 2：创建/写入 secret
+│   ├── config/
+│   │   ├── ob.example.json            # 步骤 1 的配置示例
+│   │   └── secret.create.json         # 步骤 2 的配置示例
+│   └── requirements.txt       # 依赖说明（零依赖也能跑）
+│
+├── docker/                    # ← 构建 + 运行工具（不进镜像）
+│   ├── Dockerfile
+│   ├── entrypoint.sh
+│   ├── build.sh               # 构建（layered / bundle）
+│   ├── auth.sh                # 授权（产出 Python SDK 可用的 ADC）
+│   ├── run.sh                 # 运行封装
+│   └── README.md              # ★ Docker 化方案 + 流程评估
+│
 └── README.md
 ```
+
+> **Docker 化方案、流程评估、完整 docker run 命令**见
+> [docker/README.md](docker/README.md)。
 
 ---
 
@@ -29,12 +45,18 @@ ob/
 ```bash
 cd /Users/lex/git/knowledge/gcp/secret-manage/ob
 
-# 脚本 1：Onboarding
-python3 secret_api_onboarding.py --config ob.example.json
+# ===== 方式 1：统一入口（main.py，容器里用的就是这个）=====
+python3 app/main.py run --config-dir app/config          # 跑全部步骤
+python3 app/main.py run --config-dir app/config --dry-run
+python3 app/main.py list                                  # 有哪些步骤
+python3 app/main.py env                                   # 解析后的最终配置
 
-# 脚本 2：创建 secret
-python3 secret_api_create.py --config secret.create.json
+# ===== 方式 2：单独跑某一步（调试用）=====
+python3 app/steps/secret_api_onboarding.py --config app/config/ob.example.json
+python3 app/steps/secret_api_create.py     --config app/config/secret.create.json
 ```
+
+> 两条路径**行为一致** —— 步骤脚本只认 `--config <file>`，环境变量覆盖由 main 负责物化。
 
 **不需要 pip install 任何东西**——没装 GCP SDK 时会自动降级成「模拟模式」，
 把所有将要执行的 API 调用打印出来。
@@ -277,10 +299,29 @@ python3 secret_api_create.py --config secret.create.json --project my-proj
 
 ---
 
-## 8. 相关文档
+## 8. Docker 化
+
+见 [docker/README.md](docker/README.md)。要点：
+
+- 入口是 `app/main.py`（容器 ENTRYPOINT），步骤是 `app/steps/` 下独立脚本
+- 镜像 immutable：代码进镜像，配置靠 `-v` 挂载 / `-e` 覆盖
+- ⚠️ **Python SDK 只读 ADC json，不读 gcloud CLI 的 `credentials.db`** →
+  授权要用 `gcloud auth application-default login`（`./docker/auth.sh` 已封装）
+
+```bash
+./docker/build.sh --version 0.1.0    # 构建
+./docker/auth.sh                     # 授权（一次性）
+./docker/run.sh --dry-run            # 干跑
+```
+
+---
+
+## 9. 相关文档
 
 - [../onboarding.md](../onboarding.md) — SMS Onboarding 完整流程（含 Mermaid 时序图）
 - [../gcp-secret.md](../gcp-secret.md) — Secret Manager 基础
 - [../gcp-secret-manage-rotate.md](../gcp-secret-manage-rotate.md) — 密钥轮换
 - [../add-sa-to-manager.md](../add-sa-to-manager.md) — SA 授权
 - [../../gke/gcloud-auth-login-docker.md](../../gke/gcloud-auth-login-docker.md) — Docker 里跑 gcloud 的凭据方案
+- [docker/README.md](docker/README.md) — Docker 化方案：main.py 入口 / immutable 镜像 / ADC 凭据
+- [docker/release-ob-flow.html](docker/release-ob-flow.html) — 发布与运行流程图（交互式 HTML）

@@ -18,7 +18,10 @@ secret_api_create.py —— 创建/写入 Secret Manager Secret（POC）
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 允许以脚本方式直接运行：把 app/ 加进 sys.path 才能 import common
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 
 from common import (  # noqa: E402
     ConfigError,
