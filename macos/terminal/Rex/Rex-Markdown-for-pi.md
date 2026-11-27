@@ -112,11 +112,11 @@ HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install --cask term
 
 ### 步骤 2：下载源码
 
-上游假设目录是 `~/dotfiles/tools/rex-markdown/`，本机改成 `~/.pi/tools/rex-markdown/`：
+上游假设目录是 `~/dotfiles/tools/rex-markdown/`，本机改成 `~/.local/share/rex-markdown/`：
 
 ```bash
-mkdir -p ~/.pi/tools/rex-markdown
-cd ~/.pi/tools/rex-markdown
+mkdir -p ~/.local/share/rex-markdown
+cd ~/.local/share/rex-markdown
 for f in Handler.swift README.md bridge.mjs bridge.test.mjs install.mjs open.mjs; do
   curl -sSL -o "$f" \
     "https://raw.githubusercontent.com/jal-co/jalco-dotfiles/main/tools/rex-markdown/$f"
@@ -155,7 +155,7 @@ curl -sSL -o ~/.pi/agent/extensions/rex-markdown.ts \
 
 ```diff
 -      ctx.ui.notify("Rex Markdown needs its URL handler installed from ~/dotfiles/tools/rex-markdown/install.mjs", "warning");
-+      ctx.ui.notify("Rex Markdown needs its URL handler installed from ~/.pi/tools/rex-markdown/install.mjs", "warning");
++      ctx.ui.notify("Rex Markdown needs its URL handler installed from ~/.local/share/rex-markdown/install.mjs", "warning");
 ```
 
 **改动点 3** —— 让 Pi 运行时能解析 `marked`：
@@ -174,7 +174,7 @@ ln -sfn /Users/lex/.local/lib/node_modules/@earendil-works/pi-coding-agent/node_
 ### 步骤 4：跑安装器
 
 ```bash
-node ~/.pi/tools/rex-markdown/install.mjs
+node ~/.local/share/rex-markdown/install.mjs
 ```
 
 它会：
@@ -225,7 +225,7 @@ Reload 会重新注册 markdown transformer 并签发新的 ticket。**没 reloa
 ### 1. 单元/集成测试
 
 ```bash
-cd ~/.pi/tools/rex-markdown && node --test bridge.test.mjs
+cd ~/.local/share/rex-markdown && node --test bridge.test.mjs
 ```
 
 结果（13/13 通过）：
@@ -272,7 +272,7 @@ mkdir -p /tmp/rexmd
 printf '# Rex Markdown 测试\n\n这是一个 [内链](README.md) 和一个 [网页链接](https://example.com)。\n' > /tmp/rexmd/demo.md
 
 node --input-type=module -e '
-import { createTickets } from "/Users/lex/.pi/tools/rex-markdown/bridge.mjs";
+import { createTickets } from "/Users/lex/.local/share/rex-markdown/bridge.mjs";
 const rex = JSON.parse(execFileSync("rex", ["whoami", "--json"], { encoding: "utf8" }));
 const t = createTickets({
   session: process.env.REX_SESSION || rex.session_id,
@@ -282,7 +282,7 @@ const t = createTickets({
 console.log(t.link("/tmp/rexmd/demo.md"));
 ' > /tmp/rexmd/url.txt
 
-cd ~/.pi/tools/rex-markdown && node open.mjs "$(cat /tmp/rexmd/url.txt)"
+cd ~/.local/share/rex-markdown && node open.mjs "$(cat /tmp/rexmd/url.txt)"
 ```
 
 输出类似：
@@ -324,7 +324,7 @@ env HOME=~/.local/state/rex-markdown-browser/home \
 
 | 路径 | 说明 |
 | --- | --- |
-| `~/.pi/tools/rex-markdown/{bridge,open,install}.mjs`、`Handler.swift`、`bridge.test.mjs` | 源码 |
+| `~/.local/share/rex-markdown/{bridge,open,install}.mjs`、`Handler.swift`、`bridge.test.mjs` | 源码 |
 | `~/.pi/agent/extensions/rex-markdown.ts` | Pi 扩展（改过 2 处路径） |
 | `~/Applications/Rex Markdown.app` | macOS URL handler（Swift 编译 + ad-hoc 签名） |
 | `~/Library/Application Support/Rex Markdown/programs.json` | 记录 node / rex / terminal-browser 路径（0600） |
@@ -359,12 +359,12 @@ env HOME=~/.local/state/rex-markdown-browser/home \
 | 链接不可点击 | 没跑 `/reload`；或 Pi 不在 Rex 里；或 Pi 提示 "Rex Markdown requires a local Rex terminal"（当前是远程 Rex server） |
 | **2026-11 起突然全部不可点击** | Rex 升级到 0.1.0-preview.25 后不再注入 `REX_SESSION`，旧版扩展直接 return → 不改写任何链接。修复：扩展改成用 `rex whoami --json` 兜底（见 `~/.pi/agent/extensions/rex-markdown.ts`），改完跑 `/reload` |
 | **Agent 输出的路径点了没反应** | Agent 把路径写成了行内代码 / 纯文本 / 代码块，而不是 `[文字](路径)` 语法 → 扩展根本没得可改写。**详见第十四节** |
-| 提示 handler 未安装 | 跑 `node ~/.pi/tools/rex-markdown/install.mjs` |
+| 提示 handler 未安装 | 跑 `node ~/.local/share/rex-markdown/install.mjs` |
 | 预览开了但空白/报错 | 看 `~/Library/Application Support/Rex Markdown/handler.log`，以及 Rex 分屏的启动报错；浏览器日志在 `~/.local/state/rex-markdown-browser/state` |
 | 滚动预览很卡/掉帧 | `render.fps` 必须是 30；`terminal-browser config get render.fps`（用上面的 env）确认 |
 | 点了没反应 | ticket 可能已被清理（Pi reload/shutdown 会删）；重新输出一遍消息 |
 | 报 "Invalid Rex Markdown link" / ENOENT ticket | 链接被改写了或 ticket 已失效 |
-| `node` / `rex` / `terminal-browser` 路径变了 | 重跑 `node ~/.pi/tools/rex-markdown/install.mjs`（路径写死在 programs.json 和 Info.plist 里） |
+| `node` / `rex` / `terminal-browser` 路径变了 | 重跑 `node ~/.local/share/rex-markdown/install.mjs`（路径写死在 programs.json 和 Info.plist 里） |
 | 协议没注册 | 重跑安装器；它会 `lsregister -f` 并 `LSSetDefaultHandlerForURLScheme` |
 
 ---
@@ -386,7 +386,7 @@ rm -rf ~/.local/state/rex-markdown-browser
 
 # 4. 可选：卸载浏览器与软链
 brew uninstall --cask terminal-browser
-rm -rf ~/.pi/tools/rex-markdown
+rm -rf ~/.local/share/rex-markdown
 rm -rf ~/.pi/node_modules/@earendil-works
 ```
 
@@ -434,7 +434,7 @@ rm -rf ~/.pi/node_modules/@earendil-works
 判断某个路径会不会被改写（在目标项目目录下执行）：
 
 ```bash
-cd <你的项目目录> && node -e 'import("/Users/lex/.pi/tools/rex-markdown/bridge.mjs").then(m=>{
+cd <你的项目目录> && node -e 'import("/Users/lex/.local/share/rex-markdown/bridge.mjs").then(m=>{
   for(const p of process.argv.slice(1)) console.log(p.padEnd(45), "→", m.resolveMarkdownPath(p, process.cwd()) ?? "不改写")
 })' "REX-MARKDOWN-DEMO.md" "./nope.md" "/abs/path.md" "https://a.com/b.md"
 ```
@@ -480,7 +480,7 @@ https://a.com/b.md                    → 不改写
 
 ```bash
 node --input-type=module -e '
-import { createTickets } from "/Users/lex/.pi/tools/rex-markdown/bridge.mjs";
+import { createTickets } from "/Users/lex/.local/share/rex-markdown/bridge.mjs";
 const t = createTickets({
   session: process.env.REX_SESSION,
   block: process.env.REX_BLOCK,
@@ -495,7 +495,7 @@ console.log(t.link("/Users/lex/git/go/REX-MARKDOWN-DEMO.md"));
 ```bash
 open "rex-md://open/<上面的token>"        # 走 macOS 协议分发
 # 或
-node ~/.pi/tools/rex-markdown/open.mjs "rex-md://open/<上面的token>"
+node ~/.local/share/rex-markdown/open.mjs "rex-md://open/<上面的token>"
 ```
 
 ---
@@ -552,7 +552,7 @@ Pi 源码依据：`dist/modes/interactive/components/markdown-transform.js` + �
 | --- | --- |
 | 收录页（含简介） | https://github.com/beejmaxx/awesome-rex |
 | 上游源码 | https://github.com/jal-co/jalco-dotfiles/tree/main/tools/rex-markdown |
-| 上游 README | `~/.pi/tools/rex-markdown/README.md` |
+| 上游 README | `~/.local/share/rex-markdown/README.md` |
 | terminal-browser | https://terminal-browser.com/ · `brew install --cask terminal-browser` |
 | Rex 官方文档 | https://www.superlogical.com/rex/docs |
 | Pi 扩展 API（`registerMarkdownTransformer`） | `@earendil-works/pi-coding-agent` → `dist/core/extensions/types.d.ts` |
@@ -566,7 +566,7 @@ Pi 源码依据：`dist/modes/interactive/components/markdown-transform.js` + �
 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install --cask terminal-browser
 
 # 2. 源码
-mkdir -p ~/.pi/tools/rex-markdown && cd ~/.pi/tools/rex-markdown
+mkdir -p ~/.local/share/rex-markdown && cd ~/.local/share/rex-markdown
 for f in Handler.swift README.md bridge.mjs bridge.test.mjs install.mjs open.mjs; do
   curl -sSL -o "$f" "https://raw.githubusercontent.com/jal-co/jalco-dotfiles/main/tools/rex-markdown/$f"
 done
@@ -583,10 +583,10 @@ ln -sfn /Users/lex/.local/lib/node_modules/@earendil-works/pi-coding-agent/node_
   ~/.pi/node_modules/@earendil-works/pi-tui
 
 # 5. 安装器（编译 Swift handler + 注册 rex-md: 协议）
-node ~/.pi/tools/rex-markdown/install.mjs
+node ~/.local/share/rex-markdown/install.mjs
 
 # 6. 改测试文件里的 2 处路径，然后跑测试
-cd ~/.pi/tools/rex-markdown && node --test bridge.test.mjs
+cd ~/.local/share/rex-markdown && node --test bridge.test.mjs
 
 # 7. 协议调度验证
 open "rex-md://open/$(printf '0%.0s' {1..64})"; sleep 3
@@ -649,7 +649,7 @@ tail -20 ~/Library/Application\ Support/"Rex Markdown"/handler.log
 
 # 4) 直接验证某个写法会不会被改写（最直接）
 node --input-type=module -e '
-import { rewriteMarkdown, resolveMarkdownPath } from "/Users/lex/.pi/tools/rex-markdown/bridge.mjs";
+import { rewriteMarkdown, resolveMarkdownPath } from "/Users/lex/.local/share/rex-markdown/bridge.mjs";
 import { createRequire } from "node:module";
 const require = createRequire("/Users/lex/.pi/node_modules/@earendil-works/pi-coding-agent/package.json");
 const { lexer } = require("marked");
@@ -739,7 +739,7 @@ description: Make Markdown file references clickable so the Rex Markdown extensi
 # 输出： OK → /绝对路径   会被改写
 #        SKIP             不会被改写，别写成链接
 set -uo pipefail
-BRIDGE="$HOME/.pi/tools/rex-markdown/bridge.mjs"
+BRIDGE="$HOME/.local/share/rex-markdown/bridge.mjs"
 [ -f "$BRIDGE" ] || { echo "SKIP   找不到 bridge.mjs：$BRIDGE" >&2; exit 1; }
 [ "$#" -eq 0 ] && { echo "用法: bash $0 <路径...>" >&2; exit 1; }
 node --input-type=module -e '

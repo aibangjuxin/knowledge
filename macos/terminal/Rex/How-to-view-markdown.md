@@ -372,7 +372,7 @@ mdview -l ~/git/knowledge/macos/terminal/Rex
 | `Unsupported terminal: this terminal cannot display graphics` | 终端不支持 kitty graphics（Terminal.app 不支持）→ 换 Ghostty/Kitty，或直接在 Rex 窗格里跑 |
 | 分屏开了但空白 | `tail ~/Library/Application\ Support/"Rex Markdown"/handler.log`；`ps aux | grep terminal-browser` |
 | 滚动卡顿 | `render.fps` 必须是 30：`terminal-browser config get render.fps` |
-| `mdview: 没找到 terminal-browser` | 重装 cask，或重跑 `node ~/.pi/tools/rex-markdown/install.mjs` 刷新 `programs.json` |
+| `mdview: 没找到 terminal-browser` | 重装 cask，或重跑 `node ~/.local/share/rex-markdown/install.mjs` 刷新 `programs.json` |
 | fzf 预览空白 | 管道里 glow 需要 ANSI 输出：`glow -s dark --width 120 {}` |
 | 链接/相对路径找不到 | `mdview` 内部会把路径转成绝对路径；跨项目直接给绝对路径最稳 |
 | 不知道缺什么 | 跑 `./mdview-doctor`（一键列出缺失依赖） |

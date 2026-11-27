@@ -326,7 +326,7 @@ env HOME=~/.local/state/rex-markdown-browser/home \
 | `mdview: 不在 Rex 终端里，直接在当前终端渲染` | 没有 `REX_SESSION`（在 Terminal.app / iTerm 里跑）→ 降级，全屏预览，`Ctrl+Q` 退出 |
 | `mdview: 找不到 rex CLI，无法开分屏` | `rex` 不在 PATH 且没有 `programs.json` → 见 [mdview-setup-and-dependencies.md](./mdview-setup-and-dependencies.md) §3 |
 | `mdview: rex 开分屏失败（服务器在跑吗？）` | Rex server 没起 → 启动 Rex Beta.app 或 `rex server start` |
-| `mdview: 没找到 terminal-browser` | 装 cask，或重跑 `node ~/.pi/tools/rex-markdown/install.mjs` 刷新 `programs.json` |
+| `mdview: 没找到 terminal-browser` | 装 cask，或重跑 `node ~/.local/share/rex-markdown/install.mjs` 刷新 `programs.json` |
 | `Unsupported terminal: this terminal cannot display graphics` | 当前终端不支持 kitty graphics（Terminal.app 不支持）→ 换 Ghostty/Kitty，或直接在 Rex 窗格里跑 |
 | 分屏开了但空白 | 看 `~/Library/Application Support/Rex Markdown/handler.log` 与 `ps aux | grep terminal-browser` |
 | 滚动卡顿掉帧 | `render.fps` 必须是 30 |
@@ -355,7 +355,7 @@ env HOME=~/.local/state/rex-markdown-browser/home \
 | `macos/terminal/Rex/mdview-doctor` | 依赖自检脚本（一键核对本机能否跑通） |
 | `macos/terminal/Rex/mdview-setup-and-dependencies.md` | 依赖清单 + 跨机安装指南 + 排错表 |
 | `~/.local/bin/mdview` | 指向脚本本体的软链（PATH 里） |
-| `~/.pi/tools/rex-markdown/bridge.mjs` | 上游实现，含 `browserEnvironment()` / `browserArguments()`，mdview 的隔离环境与之对齐 |
-| `~/.pi/tools/rex-markdown/open.mjs` | 上游的 ticket dispatcher；mdview **不走**这条路 |
+| `~/.local/share/rex-markdown/bridge.mjs` | 上游实现，含 `browserEnvironment()` / `browserArguments()`，mdview 的隔离环境与之对齐 |
+| `~/.local/share/rex-markdown/open.mjs` | 上游的 ticket dispatcher；mdview **不走**这条路 |
 | `~/Library/Application Support/Rex Markdown/programs.json` | 记录 node / rex / terminal-browser 的绝对路径 |
 | `~/.local/state/rex-markdown-browser/` | 隔离的浏览器 HOME / profile / config / cache / daemon |
