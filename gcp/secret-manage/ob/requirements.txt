@@ -1,0 +1,24 @@
+# ---------------------------------------------------------------------------
+# POC 依赖说明
+#
+# 重要：这两个脚本「零第三方依赖也能跑」！
+#   没装 google-cloud-secretmanager 时，SecretManagerClient 会自动降级为
+#   「模拟模式」，把所有将要执行的 API 调用打印出来，方便本地/CI 演练。
+#
+# 想接真实 GCP API 时再装下面这些：
+# ---------------------------------------------------------------------------
+
+# 真实调用 Secret Manager 需要（可选）
+google-cloud-secretmanager>=2.16.0
+
+# 如果你打算用 REST 风格调用（可选，POC 里没用到）
+requests>=2.31.0
+
+# 读取 changeFileName 指向的 yaml 元数据需要（可选，没装会自动跳过 yaml 解析）
+PyYAML>=6.0
+
+# 认证（可选）：
+#   1) Application Default Credentials（推荐）
+#      export GOOGLE_APPLICATION_CREDENTIALS=/path/to/adc.json
+#   2) gcloud auth application-default login
+#   3) gcloud-jumpbox 方式挂载（见 ../../gke/gcloud-auth-login-docker.md）
