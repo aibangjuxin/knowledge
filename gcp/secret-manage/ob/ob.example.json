@@ -1,17 +1,17 @@
 {
-  "targetEnv": "dev",
+  "targetEnv": "env",
   "region": "uk",
   "teamName": "team123",
   "apiName": "testapi",
   "ticketNum": "Number-32614",
   "keyNameList": [
-    "agent-almjiratoken",
-    "agent-dspusername",
-    "agent-dsppassword"
+    "agent-jiratoken",
+    "agent-username",
+    "agent-password"
   ],
   "iamEnable": false,
   "eimAppId": "1111111",
-  "changeFileName": "dev-uk/apis/testapi/secrets.yaml",
+  "changeFileName": "env-uk/apis/testapi/secrets.yaml",
   "updateSecretAccess": false,
   "triggerJobTimeout": 1800,
   "sourceVersion": 2,
