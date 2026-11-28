@@ -396,7 +396,7 @@ rm -rf ~/.pi/node_modules/@earendil-works
 
 ### 10.1 结论
 
-**不需要做任何额外处理**。只要链接满足下面的条件，Pi 渲染每一条新消息时都会自动把它改写成 `rex-md://open/<ticket>`，终端里直接可点。你要做的只是让 Agent 在消息里写出 `.md` 链接。
+**不需要做任何额外处理**。只要链接满足下面的条件，Pi 渲染每一条新消息时都会自动把它改写成 `rex-md://open/<ticket>`，终端里直接可点。你要做的只是让 Agent 在消息里写出 `.md`（或 `.html`）链接。
 
 > ⚠️ **反过来说**：Agent 如果把路径写成行内代码、纯文本或塞在代码块里，扩展就一个都扫不到 → 一个都不会可点。
 > 这一条是实际踩过的坑，完整排查与自动化改造见 **[第十四节](#十四-让-agent-稳定输出可点链接2026-11-12-补充)**。
@@ -419,6 +419,19 @@ rm -rf ~/.pi/node_modules/@earendil-works
 - **`~/xxx`** → 相对 home 展开
 - **`file://` URL** → 只认本机（host 为空或 `localhost`）；远程 `file://remote/...` 忽略
 - **网页链接** → 永远不改写，保持普通链接（点了开浏览器）
+
+### 10.2.1 HTML 也能预览（本地改动）
+
+白名单已放宽到 `.md` / `.markdown` / `.html` / `.htm`——`terminal-browser` 本来就是完整浏览器，
+内联 SVG 的架构图（Archify 产出那种单文件 HTML）可以直接在 Rex 分屏里看。
+
+```
+[架构图](file:///Users/lex/git/knowledge/gcp/secret-manage/ob/docker/release-ob-flow.html)
+```
+
+分屏标题会显示 `HTML`（Markdown 仍显示 `Markdown`）。
+非白名单（`.json` / `.py` / `.go` …）照旧不预览。
+根因、改动与回滚见 **[Rex-Markdown-html-preview.md](./Rex-Markdown-html-preview.md)**。
 
 ### 10.3 怎么一眼看出可不可点
 
@@ -787,7 +800,8 @@ dist/core/agent-session.js:3132   await this.extendResourcesFromExtensions("relo
 
 | 限制 | 说明 |
 | --- | --- |
-| 只支持 `.md` / `.markdown` | `.go` / `.sh` / `.pdf` / `.txt` 一律不能预览 |
+| 只支持 `.md` / `.markdown` / `.html` / `.htm` | `.go` / `.sh` / `.pdf` / `.txt` 一律不能预览 |
+| 改了 `bridge.mjs` 要 `/reload` 才生效 | 已加 `?v=` cache-buster，`/reload` 即可；详见 [HTML 预览文档](./Rex-Markdown-html-preview.md) |
 | 指向目录的链接不生效 | 要预览目录得指它的 `README.md` |
 | 链接必须指向**真实存在**的文件 | 不存在就不改写（避免死链） |
 | 相对路径绑定 Pi 启动 cwd | 跨项目用 `file://` 绝对 URL |
@@ -801,6 +815,7 @@ dist/core/agent-session.js:3132   await this.extendResourcesFromExtensions("relo
 - [ ] Agent 输出的 `[x.md](x.md)` hover 显示 `rex-md://open/<64位hex>`
 - [ ] 点击 → Rex 右侧开 “Markdown” 分屏 → 渲染正常
 - [ ] `bash ~/.pi/agent/skills/rex-md-links/check.sh <路径>` 返回 `OK`
+- [ ] `bash ~/.pi/agent/skills/rex-md-links/check.sh <某个 .html>` 也返回 `OK`（HTML 白名单已放开）
 - [ ] **重启 Pi 后**，新会话里的 Agent 已经会自动写可点链接
 
 ### 14.7 本次追加改造的命令流水

@@ -5,6 +5,7 @@ Rex（Superlogical 的 macOS 终端工作区）相关笔记。
 | 文档 | 说明 |
 | --- | --- |
 | [Rex-Markdown-for-pi.md](./Rex-Markdown-for-pi.md) | 安装 Rex Markdown for Pi：Pi 里点击本地 Markdown 链接 → Rex 右侧分屏渲染预览。含完整安装步骤、路径适配、验证、故障排查与卸载 |
+| [Rex-Markdown-html-preview.md](./Rex-Markdown-html-preview.md) | 让 Pi 消息里的 **HTML 链接也能在 Rex 里预览**（放宽 bridge 白名单 + bridge 加载 cache-buster）：根因、两处正则、Node ESM 缓存这个坑、验证清单与回滚 |
 | [Rex-Markdown-tools-migration.md](./Rex-Markdown-tools-migration.md) | 把运行时从 Pi 已废弃的 `~/.pi/tools/` 迁到 `~/.local/share/rex-markdown/`：两个症状的源码级根因、五个关键坑、执行流水与验证清单、回滚方法 |
 | [How-to-view-markdown.md](./How-to-view-markdown.md) | 不开 Pi，直接在终端里读 / 预览 Markdown：glow、bat、fzf 实时预览，以及自建 `mdview`（Rex 右侧分屏渲染 + 目录浏览） |
 | [mdview.md](./mdview.md) | `mdview` 命令的技术说明：它是我写的胶水脚本，底层调用 Rex CLI + terminal-browser，附逐段执行流程、完整命令、安全模型、排错 |
