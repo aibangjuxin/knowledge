@@ -286,3 +286,4 @@ mindmap
   [cloud-armor/cloud-armor-mindmap.md](./cloud-armor/cloud-armor-mindmap.md) ·
   [gke/gke-mindmap.md](./gke/gke-mindmap.md)
 - 上级：[../knowledge-mindmap.md](../knowledge-mindmap.md)
+- 同构参考（Go 仓库按同一命名与六段式结构组织）：[../../go/go-mindmap.md](../../go/go-mindmap.md)
